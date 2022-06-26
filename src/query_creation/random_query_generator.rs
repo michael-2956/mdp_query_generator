@@ -1,0 +1,1 @@
+// query generation code till be here

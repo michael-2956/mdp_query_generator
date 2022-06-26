@@ -1,6 +1,6 @@
 use sqlparser::{ast::{SelectItem, Expr, BinaryOperator}};
 
-use equivalence_testing::query_creation_helpers::{create_select, create_compound_identifier, create_table};
+use equivalence_testing::query_creation::helpers::{create_select, create_compound_identifier, create_table};
 
 fn main() {
     let q1 = create_select(
