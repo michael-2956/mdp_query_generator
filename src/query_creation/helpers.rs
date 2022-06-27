@@ -30,11 +30,11 @@ pub fn create_compound_identifier(name_with_dots: &str) -> Expr {
     }).collect::<Vec<_>>())
 }
 
-pub fn create_select(projection: Vec<SelectItem>, from: Vec<TableWithJoins>, selection: Option<Expr>) -> Query {
+pub fn create_select(projection: Vec<SelectItem>, from: Vec<TableWithJoins>, selection: Option<Expr>, distinct: bool) -> Query {
     Query {
         with: None,
         body: SetExpr::Select(Box::new(Select {
-            distinct: false,
+            distinct: distinct,
             top: None,
             projection: projection,
             into: None,
