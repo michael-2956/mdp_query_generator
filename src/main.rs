@@ -45,7 +45,7 @@ fn main() {
     //SELECT DISTINT X.A FROM R X, R Y WHERE X.A=Y.A
     let q3 = create_select(
         vec![SelectItem::UnnamedExpr(create_compound_identifier("R.A"))],
-        vec![create_table("R X, R Y")],
+        vec![create_table("R X"),create_table("R Y"),],
         Some(Expr::BinaryOp {
             left: Box::new(create_compound_identifier("X.A")),
             op: BinaryOperator::Eq,
