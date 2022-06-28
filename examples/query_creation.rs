@@ -1,6 +1,8 @@
-use sqlparser::{ast::{SelectItem, Expr, BinaryOperator}};
+use sqlparser::ast::{BinaryOperator, Expr, SelectItem};
 
-use equivalence_testing::query_creation::helpers::{create_select, create_compound_identifier, create_table};
+use equivalence_testing::query_creation::helpers::{
+    create_compound_identifier, create_select, create_table,
+};
 
 fn main() {
     // SELECT R.A FROM R WHERE R.A NOT IN (SELECT S.A FROM S)
@@ -13,11 +15,11 @@ fn main() {
                 vec![SelectItem::UnnamedExpr(create_compound_identifier("S.A"))],
                 vec![create_table("S", None)],
                 None,
-                false
+                false,
             )),
             negated: true,
         }),
-        false
+        false,
     );
     println!("Query 1: {:#?}", q1.to_string());
 
@@ -32,13 +34,13 @@ fn main() {
                 Some(Expr::BinaryOp {
                     left: Box::new(create_compound_identifier("S.A")),
                     op: BinaryOperator::Eq,
-                    right: Box::new(create_compound_identifier("R.A"))
+                    right: Box::new(create_compound_identifier("R.A")),
                 }),
-                false
+                false,
             )),
-            negated: true
+            negated: true,
         }),
-        false
+        false,
     );
     println!("Query 2: {:#?}", q2.to_string());
 
@@ -49,9 +51,9 @@ fn main() {
         Some(Expr::BinaryOp {
             left: Box::new(create_compound_identifier("X.A")),
             op: BinaryOperator::Eq,
-            right: Box::new(create_compound_identifier("Y.A"))
+            right: Box::new(create_compound_identifier("Y.A")),
         }),
-        true
+        true,
     );
     println!("Query 3: {:#?}", q3.to_string());
 
@@ -60,7 +62,7 @@ fn main() {
         vec![SelectItem::UnnamedExpr(create_compound_identifier("R.A"))],
         vec![create_table("R", None)],
         None,
-        true
+        true,
     );
     println!("Query 4: {:#?}", q4.to_string());
 }

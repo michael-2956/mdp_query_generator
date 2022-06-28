@@ -1,4 +1,7 @@
-use sqlparser::{ast::{Query, Select, SetExpr, TableWithJoins, TableFactor, Ident, ObjectName, SelectItem, Expr, TableAlias}};
+use sqlparser::ast::{
+    Expr, Ident, ObjectName, Query, Select, SelectItem, SetExpr, TableAlias, TableFactor,
+    TableWithJoins,
+};
 
 pub fn create_table(name: &str, alias_name: Option<&str>) -> TableWithJoins {
     let name = name.to_string();
@@ -8,14 +11,14 @@ pub fn create_table(name: &str, alias_name: Option<&str>) -> TableWithJoins {
             alias: alias_name.map(|name| TableAlias {
                 name: Ident {
                     value: name.to_string(),
-                    quote_style: None
+                    quote_style: None,
                 },
                 columns: Vec::<_>::new(),
             }),
             args: None,
-            with_hints: Vec::<_>::new()
+            with_hints: Vec::<_>::new(),
         },
-        joins: Vec::<_>::new()
+        joins: Vec::<_>::new(),
     }
 }
 
@@ -24,19 +27,29 @@ pub fn create_identifier(name: &str) -> Expr {
     let name = name.to_string();
     Expr::Identifier(Ident {
         value: name.to_string(),
-        quote_style: None
+        quote_style: None,
     })
 }
 
 pub fn create_compound_identifier(name_with_dots: &str) -> Expr {
     let name_with_dots = name_with_dots.to_string();
-    Expr::CompoundIdentifier(name_with_dots.split('.').map(|name| Ident {
-        value: name.to_string(),
-        quote_style: None
-    }).collect::<Vec<_>>())
+    Expr::CompoundIdentifier(
+        name_with_dots
+            .split('.')
+            .map(|name| Ident {
+                value: name.to_string(),
+                quote_style: None,
+            })
+            .collect::<Vec<_>>(),
+    )
 }
 
-pub fn create_select(projection: Vec<SelectItem>, from: Vec<TableWithJoins>, selection: Option<Expr>, distinct: bool) -> Query {
+pub fn create_select(
+    projection: Vec<SelectItem>,
+    from: Vec<TableWithJoins>,
+    selection: Option<Expr>,
+    distinct: bool,
+) -> Query {
     Query {
         with: None,
         body: SetExpr::Select(Box::new(Select {

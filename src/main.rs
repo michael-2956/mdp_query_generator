@@ -1,6 +1,8 @@
-use sqlparser::{ast::{SelectItem, Expr}};
+use sqlparser::ast::{Expr, SelectItem};
 
-use equivalence_testing::query_creation::helpers::{create_select, create_compound_identifier, create_table};
+use equivalence_testing::query_creation::helpers::{
+    create_compound_identifier, create_select, create_table,
+};
 
 fn main() {
     // SELECT R.A FROM R WHERE R.A NOT IN (SELECT S.A FROM S)
@@ -13,11 +15,11 @@ fn main() {
                 vec![SelectItem::UnnamedExpr(create_compound_identifier("S.A"))],
                 vec![create_table("S", None)],
                 None,
-                false
+                false,
             )),
             negated: true,
         }),
-        false
+        false,
     );
     println!("Query: {:#?}", q1.to_string());
 }
