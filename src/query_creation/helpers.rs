@@ -1,11 +1,17 @@
-use sqlparser::{ast::{Query, Select, SetExpr, TableWithJoins, TableFactor, Ident, ObjectName, SelectItem, Expr}};
+use sqlparser::{ast::{Query, Select, SetExpr, TableWithJoins, TableFactor, Ident, ObjectName, SelectItem, Expr, TableAlias}};
 
-pub fn create_table(name: &str) -> TableWithJoins {
+pub fn create_table(name: &str, alias_name: Option<&str>) -> TableWithJoins {
     let name = name.to_string();
     TableWithJoins {
         relation: TableFactor::Table {
             name: ObjectName(vec![Ident::new(name)]),
-            alias: None,
+            alias: alias_name.map(|name| TableAlias {
+                name: Ident {
+                    value: name.to_string(),
+                    quote_style: None
+                },
+                columns: Vec::<_>::new(),
+            }),
             args: None,
             with_hints: Vec::<_>::new()
         },
