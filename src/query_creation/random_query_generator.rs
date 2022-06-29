@@ -1,3 +1,7 @@
+use sqlparser::ast::Query;
+
+use super::helpers::create_select;
+
 pub struct QueryGeneratorParams {
     /// max number of tables (counting repetitions) mentioned
     /// in a well-defined SELECT-FROM-WHERE block, including
@@ -63,7 +67,12 @@ pub struct QueryGenerator {
 }
 
 impl QueryGenerator {
-    fn new(params: QueryGeneratorParams) -> Self {
+    pub fn new(params: QueryGeneratorParams) -> Self {
         QueryGenerator { params: params }
     }
+
+    pub fn generate(&self) -> Query {
+        todo!();
+    }
 }
+ 
