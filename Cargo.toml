@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 sqlparser = { path = "../sqlparser-rs" }
+rand = "0.8.5"
