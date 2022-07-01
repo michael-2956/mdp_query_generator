@@ -29,6 +29,9 @@ pub struct QueryGeneratorParams {
     pub select_asterisk_prob: f64,
     /// probability of generating expression with alias in SELECT
     pub select_expr_with_alias_prob: f64,
+    /// probability of generating qualified wildcard in SELECT
+    /// under condition that wildcard in not generated
+    pub select_expr_qualified_wildcard_prob: f64,
     /// probability of generating (n+1)th attribute after
     /// generating the nth one in SELECT
     pub select_next_attr_prob: f64,
@@ -59,6 +62,7 @@ impl Default for QueryGeneratorParams {
             from_nest_prob: 0.5,
             distinct_prob: 0.4,
             select_asterisk_prob: 0.1,
+            select_expr_qualified_wildcard_prob: 0.3,
             select_expr_with_alias_prob: 0.4,
             select_next_attr_prob: 0.7,
             select_same_column_prob: 0.1,
@@ -124,11 +128,12 @@ impl QueryGenerator {
 
     fn generate_query(&mut self, query_info: &mut QueryInfo) -> Query {
         let from = self.generate_from(query_info);
-        let projection = self.generate_projection(query_info /*, &from*/);
+        let projection = self.generate_projection(query_info);
+        let distinct = self.generate_distinct(query_info);
         Query {
             with: None,
             body: SetExpr::Select(Box::new(Select {
-                distinct: false,
+                distinct: distinct,
                 top: None,
                 projection: projection,
                 into: None,
@@ -246,27 +251,38 @@ impl QueryGenerator {
     }
 
     fn generate_select_item(&mut self, query_info: &mut QueryInfo) -> SelectItem {
-        let expr = Expr::Identifier(Ident {
-            value: self.generate_column_name(query_info).to_string(),
-            quote_style: None,
-        });
-        if self.rng.gen_bool(self.params.select_expr_with_alias_prob) {
-            SelectItem::ExprWithAlias {
-                expr: expr,
-                alias: Ident {
-                    value: self.generate_select_alias(query_info).to_string(),
-                    quote_style: None,
-                },
-            }
+        if self
+            .rng
+            .gen_bool(self.params.select_expr_qualified_wildcard_prob)
+        {
+            let name = ObjectName(vec![Ident::new(
+                query_info.table_names[self.rng.gen_range(0..query_info.table_names.len())].clone(),
+            )]);
+            SelectItem::QualifiedWildcard(name)
         } else {
-            SelectItem::UnnamedExpr(expr)
+            let expr = Expr::Identifier(Ident {
+                value: self.generate_column_name(query_info).to_string(),
+                quote_style: None,
+            });
+            if self.rng.gen_bool(self.params.select_expr_with_alias_prob) {
+                SelectItem::ExprWithAlias {
+                    expr: expr,
+                    alias: Ident {
+                        value: self.generate_select_alias(query_info).to_string(),
+                        quote_style: None,
+                    },
+                }
+            } else {
+                SelectItem::UnnamedExpr(expr)
+            }
         }
     }
 
     fn generate_column_name(&mut self, query_info: &mut QueryInfo) -> String {
         let columns_num = query_info.select_column_names.len();
         let name = if columns_num != 0 && self.rng.gen_bool(self.params.select_same_column_prob) {
-            let column_name = query_info.select_column_names[self.rng.gen_range(0..columns_num)].clone();
+            let column_name =
+                query_info.select_column_names[self.rng.gen_range(0..columns_num)].clone();
             column_name.to_string()
         } else {
             let new_name = format!("AT{columns_num}");
@@ -284,5 +300,9 @@ impl QueryGenerator {
             new_name
         };
         name.to_string()
+    }
+
+    fn generate_distinct(&mut self, query_info: &mut QueryInfo) -> bool {
+        self.rng.gen_bool(self.params.distinct_prob)
     }
 }
