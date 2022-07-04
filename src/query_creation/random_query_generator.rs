@@ -27,9 +27,16 @@ pub struct QueryGeneratorParams {
     pub distinct_prob: f64,
     /// probability of generating * in SELECT
     pub select_asterisk_prob: f64,
+    /// probability of generating expression with alias in SELECT
+    pub select_expr_with_alias_prob: f64,
+    /// probability of generating qualified wildcard in SELECT
+    /// under condition that wildcard in not generated
+    pub select_expr_qualified_wildcard_prob: f64,
     /// probability of generating (n+1)th attribute after
     /// generating the nth one in SELECT
     pub select_next_attr_prob: f64,
+    /// probability of generating column with existing name
+    pub select_same_column_prob: f64,
     /// probability of generating a subcondition after
     /// generating a condition on WHERE
     pub where_subcond_prob: f64,
@@ -55,7 +62,10 @@ impl Default for QueryGeneratorParams {
             from_nest_prob: 0.5,
             distinct_prob: 0.4,
             select_asterisk_prob: 0.1,
-            select_next_attr_prob: 0.2,
+            select_expr_qualified_wildcard_prob: 0.3,
+            select_expr_with_alias_prob: 0.4,
+            select_next_attr_prob: 0.7,
+            select_same_column_prob: 0.1,
             where_subcond_prob: 0.3,
             where_nest_prob: 0.5,
             where_isull_prob: 0.2,
@@ -70,27 +80,39 @@ pub struct QueryGenerator {
 }
 
 struct QueryInfo {
-    /// number of table mentions including
-    /// repetitions
+    /// global number of table mentions
+    /// including repetitions
     table_mentions_num: u32,
-    /// list of table names used
-    table_names: Vec<String>,
-    /// used for alias name generation
-    free_alias_index: u32,
     /// Remember to increase this value before
     /// and after generating a subquery, to
     /// control the maximum level of nesting
     /// allowed
     current_nest_level: u32,
+    /// tables used in from
+    from_tables: Vec<String>,
+    /// list of aliased table names used in FROM
+    from_aliased_table_names: Vec<String>,
+    /// used for table alias name generation in FROM
+    from_free_alias_index: u32,
+    /// Increased when new attribute in SELECT is added
+    select_attrs_num: u32,
+    /// list of column names in SELECT
+    select_column_names: Vec<String>,
+    /// used for table alias name generation in SELECT
+    select_free_alias_index: u32,
 }
 
 impl QueryInfo {
     fn new() -> QueryInfo {
         QueryInfo {
             table_mentions_num: 0,
-            table_names: Vec::<_>::new(),
-            free_alias_index: 0,
             current_nest_level: 1,
+            from_tables: Vec::<_>::new(),
+            from_aliased_table_names: Vec::<_>::new(),
+            from_free_alias_index: 0,
+            select_attrs_num: 0,
+            select_free_alias_index: 0,
+            select_column_names: Vec::<_>::new(),
         }
     }
 }
@@ -109,12 +131,14 @@ impl QueryGenerator {
 
     fn generate_query(&mut self, query_info: &mut QueryInfo) -> Query {
         let from = self.generate_from(query_info);
+        let projection = self.generate_projection(query_info);
+        let distinct = self.rng.gen_bool(self.params.distinct_prob);
         Query {
             with: None,
             body: SetExpr::Select(Box::new(Select {
-                distinct: false,
+                distinct: distinct,
                 top: None,
-                projection: vec![SelectItem::Wildcard], // SELECT *
+                projection: projection,
                 into: None,
                 from: from,
                 lateral_views: Vec::<_>::new(),
@@ -187,23 +211,25 @@ impl QueryGenerator {
         &mut self,
         query_info: &mut QueryInfo,
     ) -> (ObjectName, Option<TableAlias>) {
-        let tables_num = query_info.table_names.len();
+        let tables_num = query_info.from_tables.len();
         let (name, alias) =
             if tables_num != 0 && self.rng.gen_bool(self.params.from_same_table_prob) {
-                let table_name = query_info.table_names[self.rng.gen_range(0..tables_num)].clone();
+                let table_name = query_info.from_tables[self.rng.gen_range(0..tables_num)].clone();
                 (table_name, Some(self.generate_table_alias(query_info)))
             } else {
                 let new_name = format!("R{tables_num}");
-                query_info.table_names.push(new_name);
+                query_info.from_tables.push(new_name);
                 (format!("R{tables_num}"), None)
             };
+
+        query_info.from_aliased_table_names.push(name.clone());
 
         (ObjectName(vec![Ident::new(name)]), alias)
     }
 
     fn generate_table_alias(&mut self, query_info: &mut QueryInfo) -> TableAlias {
-        let alias = format!("A{}", query_info.free_alias_index);
-        query_info.free_alias_index += 1;
+        let alias = format!("A{}", query_info.from_free_alias_index);
+        query_info.from_free_alias_index += 1;
         TableAlias {
             name: Ident {
                 value: alias,
@@ -211,5 +237,75 @@ impl QueryGenerator {
             },
             columns: Vec::<_>::new(),
         }
+    }
+
+    fn generate_projection(&mut self, query_info: &mut QueryInfo) -> Vec<SelectItem> {
+        if self.rng.gen_bool(self.params.select_asterisk_prob) {
+            vec![SelectItem::Wildcard]
+        } else {
+            let mut select_attrs = Vec::<_>::new();
+            select_attrs.push(self.generate_select_item(query_info));
+            while self.rng.gen_bool(self.params.select_next_attr_prob)
+                && query_info.select_attrs_num < self.params.max_select_attrs
+            {
+                query_info.select_attrs_num += 1;
+                select_attrs.push(self.generate_select_item(query_info));
+            }
+            select_attrs
+        }
+    }
+
+    fn generate_select_item(&mut self, query_info: &mut QueryInfo) -> SelectItem {
+        if self
+            .rng
+            .gen_bool(self.params.select_expr_qualified_wildcard_prob)
+        {
+            let name = ObjectName(vec![Ident::new(
+                query_info.from_aliased_table_names[self
+                    .rng
+                    .gen_range(0..query_info.from_aliased_table_names.len())]
+                .clone(),
+            )]);
+            SelectItem::QualifiedWildcard(name)
+        } else {
+            let col_ident = Expr::Identifier(Ident {
+                value: self.generate_column_name(query_info).to_string(),
+                quote_style: None,
+            });
+            if self.rng.gen_bool(self.params.select_expr_with_alias_prob) {
+                SelectItem::ExprWithAlias {
+                    expr: col_ident,
+                    alias: Ident {
+                        value: self.generate_select_alias(query_info).to_string(),
+                        quote_style: None,
+                    },
+                }
+            } else {
+                SelectItem::UnnamedExpr(col_ident)
+            }
+        }
+    }
+
+    fn generate_column_name(&mut self, query_info: &mut QueryInfo) -> String {
+        let columns_num = query_info.select_column_names.len();
+        let name = if columns_num != 0 && self.rng.gen_bool(self.params.select_same_column_prob) {
+            let column_name =
+                query_info.select_column_names[self.rng.gen_range(0..columns_num)].clone();
+            column_name
+        } else {
+            let new_name = format!("AT{columns_num}");
+            query_info.select_column_names.push(new_name.clone());
+            new_name
+        };
+        name.to_string()
+    }
+
+    fn generate_select_alias(&mut self, query_info: &mut QueryInfo) -> String {
+        let name = {
+            let new_name = format!("A{}", query_info.select_free_alias_index);
+            query_info.select_free_alias_index += 1;
+            new_name
+        };
+        name.to_string()
     }
 }
