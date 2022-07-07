@@ -1,103 +1,220 @@
 digraph G {
 
-Query -> "generate FROM"
-"generate FROM" -> "relation with joins"
-"relation with joins" -> "table"
-"table" -> "relation with joins"
-"relation with joins" -> "from-subquery"
-"from-subquery" -> "relation with joins"
-"from-subquery" [shape=rectangle]
+Query -> "FROM"
+Query[shape=rectangle, label="Query\nmodif.=[SINGLE VALUE?, SINGLE COLUMN?, TYPES]", shape="octagon"]
 
-"relation with joins" -> "generate SELECT"
+"FROM" -> FROM_table
+FROM_table [label="Table"]
+"FROM" -> FROM_subquery
+FROM_subquery [shape=rectangle, label="Query"]
 
-"generate SELECT" -> DISTINCT
-"generate SELECT" -> "non-DISTINCT"
-DISTINCT -> "generate projection"
-"non-DISTINCT" -> "generate projection"
+FROM_table -> "multiple relations" -> FROM_table
+FROM_subquery -> "multiple relations" -> FROM_subquery
 
-"generate projection" -> wildcard
-"generate projection" -> value
-value -> "qualified wildcard"
-"qualified wildcard" -> value
-value -> "select-expression"
-"select-expression" -> "unnamed expression"
-"unnamed expression" -> value
-"select-expression" -> "expression with alias"
-"expression with alias" -> value
+"multiple relations" -> "EXIT FROM"
 
-value -> "generate WHERE"
-wildcard -> "generate WHERE"
+"EXIT FROM" -> WHERE_ref -> val3_ref -> WHERE_ref_exit -> SELECT
+WHERE_ref [label="WHERE"]
+val3_ref [shape=rectangle, label="3VL Value"]
+WHERE_ref -> val2_ref -> WHERE_ref_exit
+val2_ref [shape=rectangle, label="2VL Value"]
+WHERE_ref_exit [label="EXIT WHERE"]
+"EXIT FROM" -> SELECT
 
-"generate WHERE" -> EXISTS
-EXISTS -> "negation"
-EXISTS -> "no-negation"
-"negation" -> "where-subquery"
-"no-negation" -> "where-subquery"
-"where-subquery" -> EXIT
-"where-subquery" [shape=rectangle]
-"generate WHERE" -> "condition"
-"generate WHERE" -> "ISNULL"
+subgraph where_values {
+    val2 [shape=rectangle, label="2VL Value"]
+    
+    val2 -> IsNull -> ANY_ref_IsNull -> val2_exit
+    IsNull -> IsNull_not_val2 -> ANY_ref_IsNull
+    ANY_ref_IsNull [label="TYPES: ALL", shape="rectangle"]
+    IsNull_not_val2 [label="NOT"]
+    IsNull[label="IS NULL"]
+    
+    val2 -> IsDistinctFrom -> ANY_ref_IsDistinctFrom_left
+    ANY_ref_IsDistinctFrom_left [label="TYPES: ALL", shape="rectangle"]
+    ANY_ref_IsDistinctFrom_left -> IsDistinctNOT -> DISTINCT
+    ANY_ref_IsDistinctFrom_left -> DISTINCT
+    DISTINCT -> ANY_ref_IsDistinctFrom_right
+    ANY_ref_IsDistinctFrom_right [label="TYPES: null, SAME TYPE", shape="rectangle"]
+    ANY_ref_IsDistinctFrom_right -> val2_exit
+    IsDistinctFrom[label="IS DISTINCT FROM"]
+    IsDistinctNOT [label="NOT"]
+    
+    val2 -> Exists -> Query_ref_Exists -> val2_exit
+    Exists -> Exists_not_val2 -> Query_ref_Exists
+    Query_ref_Exists [label="Query", shape="rectangle"]
+    Exists_not_val2 [label="NOT"]
+    Exists[label="EXISTS"]
+    
+    val2 -> BinaryBooleanOpV2 -> ANY_ref_BinaryBooleanOpV2_left
+    ANY_ref_BinaryBooleanOpV2_left [label="TYPES: 2VL VALUE", shape="rectangle"]
+    ANY_ref_BinaryBooleanOpV2_left -> BinaryBooleanOpV2AND
+    BinaryBooleanOpV2AND -> ANY_ref_BinaryBooleanOpV2_right
+    ANY_ref_BinaryBooleanOpV2_left -> BinaryBooleanOpV2OR
+    BinaryBooleanOpV2OR -> ANY_ref_BinaryBooleanOpV2_right
+    ANY_ref_BinaryBooleanOpV2_left -> BinaryBooleanOpV2XOR
+    BinaryBooleanOpV2XOR -> ANY_ref_BinaryBooleanOpV2_right
+    ANY_ref_BinaryBooleanOpV2_right [label="TYPES: null, SAME TYPE", shape="rectangle"]
+    ANY_ref_BinaryBooleanOpV2_right -> val2_exit
+    BinaryBooleanOpV2AND [label="AND"]
+    BinaryBooleanOpV2OR [label="OR"]
+    BinaryBooleanOpV2XOR [label="XOR"]
+    BinaryBooleanOpV2[label="bool op."]
+    
+    val2 -> Nested_val2 -> ANY_ref_Nested_val2 -> val2_exit
+    Nested_val2[label="([expr])"]
+    ANY_ref_Nested_val2 [label="TYPES: 2VL Value", shape="rectangle"]
+    
+    val2 -> UnaryNot_val2 -> ANY_ref_UnaryNot_val2 -> val2_exit
+    UnaryNot_val2[label="NOT"]
+    ANY_ref_UnaryNot_val2 [label="TYPES: 2VL Value", shape="rectangle"]
 
-"condition" -> "left column"
-"condition" -> "left value"
-"condition" -> "left numeric\nexpression"
+    val2_exit [shape=rectangle, label="EXIT 2VL Value"]
+    
+    val3 [shape=rectangle, label="3VL Value"]
 
-"numeric expression" -> "ne left column"
-"numeric expression" -> "ne left value"
-"numeric expression" -> "ne left numeric\nsubexpression"
-"ne left numeric\nsubexpression" [shape=rectangle]
+    val3 -> InList -> ANY_ref_InList_left
+    ANY_ref_InList_left [label="TYPES: ALL", shape="rectangle"]
+    ANY_ref_InList_left -> InListNot -> InListIn
+    ANY_ref_InList_left -> InListIn
+    InListIn -> ANY_ref_InList_right
+    ANY_ref_InList_right [label="list expr\nTYPES: null, SAME TYPE", shape="rectangle"]
+    ANY_ref_InList_right -> val3_exit
+    InListIn [label="IN"]
+    InList[label="IN [list expr]"]
+    InListNot [label="NOT"]
+    
+    val3 -> InSubquery -> ANY_ref_InSubquery_left
+    ANY_ref_InSubquery_left [label="TYPES: null, numeric, boolean, array, string", shape="rectangle"]
+    ANY_ref_InSubquery_left -> InSubqueryNot -> InSubqueryIn
+    ANY_ref_InSubquery_left -> InSubqueryIn
+    InSubqueryIn -> ANY_ref_InSubquery_right
+    ANY_ref_InSubquery_right [label="Query\nmodif.: SINGLE COLUMN\nTYPES: null, SAME TYPE", shape="rectangle"]
+    ANY_ref_InSubquery_right -> val3_exit
+    InSubqueryIn [label="IN"]
+    InSubquery[label="IN [subquery]"]
+    InSubqueryNot [label="NOT"]
+    
+    val3 -> Between -> ANY_ref_Between
+    ANY_ref_Between [label="TYPES: null, numeric, list expr, string", shape="rectangle"]
+    ANY_ref_Between -> BetweenBetween
+    BetweenBetween [label="BETWEEN"]
+    BetweenBetween -> BetweenBetweenLeft
+    BetweenBetweenLeft [label="TYPES: null, SAME TYPE", shape="rectangle"]
+    BetweenBetweenLeft -> BetweenBetweenAnd
+    BetweenBetweenAnd [label="AND"]
+    BetweenBetweenAnd -> BetweenBetweenRight
+    BetweenBetweenRight [label="TYPES: null, SAME TYPE", shape="rectangle"]
+    BetweenBetweenRight -> val3_exit
+    Between[label="BETWEEN . AND ."]
+    
+    val3 -> BinaryComp -> ANY_ref_BinaryComp_left
+    ANY_ref_BinaryComp_left [label="TYPES: ALL", shape="rectangle"]
+    ANY_ref_BinaryComp_left -> BinaryCompLess
+    BinaryCompLess -> ANY_ref_BinaryComp_right
+    ANY_ref_BinaryComp_left -> BinaryCompEqual
+    BinaryCompEqual -> ANY_ref_BinaryComp_right
+    ANY_ref_BinaryComp_left -> BinaryCompLessEqual
+    BinaryCompLessEqual -> ANY_ref_BinaryComp_right
+    ANY_ref_BinaryComp_left -> BinaryCompUnEqual
+    BinaryCompUnEqual -> ANY_ref_BinaryComp_right
+    ANY_ref_BinaryComp_right [label="TYPES: null, SAME TYPE", shape="rectangle"]
+    ANY_ref_BinaryComp_right -> val3_exit
+    BinaryCompLess [label="<"]
+    BinaryCompEqual [label="="]
+    BinaryCompLessEqual [label="<="]
+    BinaryCompUnEqual [label="<>"]
+    BinaryComp[label="CMP"]
+    
+    val3 -> BinaryStringLike -> ANY_ref_BinaryStringLike_left
+    ANY_ref_BinaryStringLike_left [label="TYPES: null, string", shape="rectangle"]
+    ANY_ref_BinaryStringLike_left -> BinaryStringLikeNot -> BinaryStringLikeIn
+    ANY_ref_BinaryStringLike_left -> BinaryStringLikeIn
+    BinaryStringLikeIn -> ANY_ref_BinaryStringLike_right
+    ANY_ref_BinaryStringLike_right [label="TYPES: null, string", shape="rectangle"]
+    ANY_ref_BinaryStringLike_right -> val3_exit
+    BinaryStringLikeIn [label="LIKE"]
+    BinaryStringLike[label="LIKE"]
+    BinaryStringLikeNot [label="NOT"]
+    
+    val3 -> BinaryBooleanOpV3 -> ANY_ref_BinaryBooleanOpV3_left
+    ANY_ref_BinaryBooleanOpV3_left [label="TYPES: ALL", shape="rectangle"]
+    ANY_ref_BinaryBooleanOpV3_left -> BinaryBooleanOpV3AND
+    BinaryBooleanOpV3AND -> ANY_ref_BinaryBooleanOpV3_right
+    ANY_ref_BinaryBooleanOpV3_left -> BinaryBooleanOpV3OR
+    BinaryBooleanOpV3OR -> ANY_ref_BinaryBooleanOpV3_right
+    ANY_ref_BinaryBooleanOpV3_left -> BinaryBooleanOpV3XOR
+    BinaryBooleanOpV3XOR -> ANY_ref_BinaryBooleanOpV3_right
+    ANY_ref_BinaryBooleanOpV3_right [label="TYPES: null, SAME TYPE", shape="rectangle"]
+    ANY_ref_BinaryBooleanOpV3_right -> val3_exit
+    BinaryBooleanOpV3AND [label="AND"]
+    BinaryBooleanOpV3OR [label="OR"]
+    BinaryBooleanOpV3XOR [label="XOR"]
+    BinaryBooleanOpV3[label="bool op."]
+    
+    val3 -> Nested_val3 -> ANY_ref_Nested_val3 -> val3_exit
+    Nested_val3[label="([expr])"]
+    ANY_ref_Nested_val3 [label="TYPES: 3VL Value", shape="rectangle"]
+    
+    val3 -> UnaryNot_val3 -> ANY_ref_UnaryNot_val3 -> val3_exit
+    UnaryNot_val3[label="NOT"]
+    ANY_ref_UnaryNot_val3 [label="TYPES: 3VL Value", shape="rectangle"]
+    
+    val3_exit [shape=rectangle, label="EXIT 3VL Value"]
+    
+    val2_exit -> numeric [color=none]  # just a link for graph ordering
+    numeric -> numericLeft
+    numericLeft -> "+"
+    numericLeft -> "-"
+    numericLeft -> "*"
+    numericLeft -> "/"
+    "+" -> numericRight -> numericExit
+    "-" -> numericRight -> numericExit
+    "*" -> numericRight -> numericExit
+    "/" -> numericRight -> numericExit
+    numeric [shape=rectangle, label="numeric"]
+    numericLeft [label="TYPES: numeric"]
+    numericRight [label="TYPES: numeric"]
+    numericExit [label="numeric EXIT"]
+    
+    val3_exit -> col_spec [color=none]  # just a link for graph ordering
+    col_spec[label="column specifier\ntypes=[numeric?, 2VL Value?, 3VL Value?, array?, string?]", shape="octagon"]
+    col_spec -> "Qualified column name"
+    col_spec -> "Unqualified column name"
+    "Qualified column name" -> col_spec_exit
+    "Unqualified column name" -> col_spec_exit
+    col_spec_exit[label="EXIT column specifier", shape="rectangle"]
+}
 
-"ne left column" -> "+"
-"ne left value" -> "+"
-"ne left numeric\nsubexpression" -> "+"
-"ne left column" -> "-"
-"ne left value" -> "-"
-"ne left numeric\nsubexpression" -> "-"
-"ne left column" -> "*"
-"ne left value" -> "*"
-"ne left numeric\nsubexpression" -> "*"
-"ne left column" -> "/"
-"ne left value" -> "/"
-"ne left numeric\nsubexpression" -> "/"
+subgraph where_types {
+    TYPE_generic [label="TYPE(S) (generic):\ntypes=[null?, numeric?, 2VL Value?, 3VL Value?, array?, list expr?, string?]", shape="octagon"]
+    TYPE_generic -> TYPE_generic_column -> TYPE_generic_exit
+    TYPE_generic_column [label="column specifier\nTYPES: [...types]", shape="rectangle"]
+    TYPE_generic -> TYPE_generic_query_single -> TYPE_generic_exit
+    TYPE_generic_query_single [label="Query\nmodif.: SINGLE VALUE\nTYPES: [...types]", shape="rectangle"]
+    TYPE_generic -> TYPE_generic_null -> TYPE_generic_exit
+    TYPE_generic_null [label="null?"]
+    TYPE_generic -> TYPE_generic_numeric -> TYPE_generic_exit
+    TYPE_generic_numeric [label="numeric?", shape="rectangle"]
+    TYPE_generic -> TYPE_generic_2vl -> TYPE_generic_exit
+    TYPE_generic_2vl [label="2VL Value?", shape="rectangle"]
+    TYPE_generic -> TYPE_generic_3vl -> TYPE_generic_exit
+    TYPE_generic_3vl [label="3VL Value?", shape="rectangle"]
+    TYPE_generic -> TYPE_generic_array -> TYPE_generic_exit
+    TYPE_generic_array [label="array?\nTYPES: [...types]", shape="rectangle"]
+    TYPE_generic -> TYPE_generic_list_expr -> TYPE_generic_exit
+    TYPE_generic_list_expr [label="list expr?\nTYPES: [...types]", shape="rectangle"]
+    TYPE_generic -> TYPE_generic_string -> TYPE_generic_exit
+    TYPE_generic_string [label="string?", shape="rectangle"]
+    TYPE_generic_exit [label="EXIT GENERIC TYPE(S)", shape="rectangle"]
+    
+    TYPE_generic_exit -> ANY [color=none]
+    
+    ANY [label="TYPES: ALL", shape="rectangle"]
+    ANY -> ANY_types
+    ANY_types [label="GENERIC TYPES\ntypes=[null, numeric, 2VL Value, 3VL Value, array, list expr, string]", shape="octagon"]
+    ANY_types -> ANY_exit
+    ANY_exit [label="EXIT TYPES: ALL", shape="rectangle"]
+}
 
-"+" -> "ne right column"
-"+" -> "ne right value"
-"+" -> "ne right numeric\nsubexpression"
-"-" -> "ne right column"
-"-" -> "ne right value"
-"-" -> "ne right numeric\nsubexpression"
-"*" -> "ne right column"
-"*" -> "ne right value"
-"*" -> "ne right numeric\nsubexpression"
-"/" -> "ne right column"
-"/" -> "ne right value"
-"/" -> "ne right numeric\nsubexpression"
-
-"ne right column" -> "ne EXIT"
-"ne right value" -> "ne EXIT"
-"ne right numeric\nsubexpression" -> "ne EXIT"
-"ne right numeric\nsubexpression" [shape=rectangle]
-
-"left column" -> "<"
-"left value" -> "<"
-"left numeric\nexpression" -> "<"
-"left column" -> "<="
-"left value" -> "<="
-"left numeric\nexpression" -> "<="
-"left column" -> "="
-"left value" -> "="
-"left numeric\nexpression" -> "="
-"<" -> "right column"
-"<" -> "right value"
-"<" -> "right numeric\nexpression"
-"<=" -> "right column"
-"<=" -> "right value"
-"<=" -> "right numeric\nexpression"
-"=" -> "right column"
-"=" -> "right value"
-"=" -> "right numeric\nexpression"
-
-"right column" -> EXIT
-"right value" -> EXIT
-"right numeric\nexpression" -> EXIT
 }
