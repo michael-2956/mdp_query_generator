@@ -1,4 +1,7 @@
 # equivalence_testing
 
-## Query generator graph
-![Query generator graph](query-generator-graph/app-graph.png)
+## FROM + WHERE (unfinished graph)
+![FROM + WHERE](query-generator-graph/app-graph-new.svg)
+
+## Query generator graph (not fully correct)
+![Query generator graph](query-generator-graph/app-graph-notcorrect.svg)
