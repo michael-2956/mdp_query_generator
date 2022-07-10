@@ -12,10 +12,10 @@ IsNull, IsDistinctFrom, Exists
 InList, InSubquery, Between, BinaryComp, BinaryStringLike, BinaryBooleanOp, UnaryNotOp
 
 numeric:
-BinaryNumericOp, UnaryNumericOp, Position, Substring
+BinaryNumericOp, UnaryNumericOp, Position
 
 string:
-BinaryStringConcat, Trim
+BinaryStringConcat, Trim, Substring
 
 other:
 AnyOp, AllOp, Nested

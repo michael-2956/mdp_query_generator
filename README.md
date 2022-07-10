@@ -1,6 +1,6 @@
 # equivalence_testing
 
-## FROM + WHERE (unfinished graph)
+## FROM + WHERE (only WHERE)
 ![FROM + WHERE](query-generator-graph/app-graph-new.svg)
 
 ## Query generator graph (not full)
