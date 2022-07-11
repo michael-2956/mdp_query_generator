@@ -1,7 +1,7 @@
 digraph G {
 
 Query -> "FROM"
-Query[shape=rectangle, label="Query\nmodif.=[SINGLE VALUE?, SINGLE COLUMN?, TYPES]", shape="octagon"]
+Query[shape=rectangle, label="Query\nmodif.=[SINGLE VALUE?, TYPES(ordered)]", shape="octagon"]
 
 "FROM" -> FROM_table
 FROM_table [label="Table"]
@@ -56,18 +56,18 @@ subgraph values {
     InListNot [label="NOT"]
     
     val3 -> InSubquery -> ANY_ref_InSubquery_left
-    ANY_ref_InSubquery_left [label="TYPES: numeric, boolean, array, string", shape="rectangle"]
+    ANY_ref_InSubquery_left [label="TYPES: ALL", shape="rectangle"]
     ANY_ref_InSubquery_left -> InSubqueryNot -> InSubqueryIn
     ANY_ref_InSubquery_left -> InSubqueryIn
     InSubqueryIn -> ANY_ref_InSubquery_right
-    ANY_ref_InSubquery_right [label="Query\nmodif.: SINGLE COLUMN\nTYPES: SAME TYPE", shape="rectangle"]
+    ANY_ref_InSubquery_right [label="Query\nTYPE: SAME TYPE", shape="rectangle"]
     ANY_ref_InSubquery_right -> val3_exit
     InSubqueryIn [label="IN"]
     InSubquery[label="IN [subquery]"]
     InSubqueryNot [label="NOT"]
     
     val3 -> Between -> ANY_ref_Between
-    ANY_ref_Between [label="TYPES: numeric, list expr, string", shape="rectangle"]
+    ANY_ref_Between [label="TYPES: numeric, array, list expr, string", shape="rectangle"]
     ANY_ref_Between -> BetweenBetween
     BetweenBetween [label="BETWEEN"]
     BetweenBetween -> BetweenBetweenLeft
@@ -97,6 +97,25 @@ subgraph values {
     BinaryCompUnEqual [label="<>"]
     BinaryComp[label="CMP"]
     
+    val3 -> AnyAll
+    AnyAll -> AnyAllRecord -> AnyAllSelectOp
+    AnyAll -> AnyAllValue -> AnyAllSelectOp
+    AnyAllSelectOp -> AnyAllLess -> AnyAllSelectIter
+    AnyAllSelectOp -> AnyAllEqual -> AnyAllSelectIter
+    AnyAllSelectOp -> AnyAllLessEqual -> AnyAllSelectIter
+    AnyAllSelectOp -> AnyAllUnEqual -> AnyAllSelectIter
+    AnyAllSelectIter -> AnyAllSubquery -> val3_exit
+    AnyAllSelectIter -> AnyAllArray -> val3_exit
+    AnyAllSelectOp[label="select op."]
+    AnyAllSelectIter[label="select iterable"]
+    AnyAllSubquery [label="Query\nTYPE: SAME TYPE(S)", shape="rectangle"]
+    AnyAllArray [label="array\nTYPE: SAME TYPE(S)", shape="rectangle"]
+    AnyAllLess [label="<"]
+    AnyAllEqual [label="="]
+    AnyAllLessEqual [label="<="]
+    AnyAllUnEqual [label="<>"]
+    AnyAll[label="ANY / ALL"]
+    
     val3 -> BinaryStringLike -> ANY_ref_BinaryStringLike_left
     ANY_ref_BinaryStringLike_left [label="TYPES: string", shape="rectangle"]
     ANY_ref_BinaryStringLike_left -> BinaryStringLikeNot -> BinaryStringLikeIn
@@ -109,7 +128,7 @@ subgraph values {
     BinaryStringLikeNot [label="NOT"]
     
     val3 -> BinaryBooleanOpV3 -> ANY_ref_BinaryBooleanOpV3_left
-    ANY_ref_BinaryBooleanOpV3_left [label="TYPES: ALL", shape="rectangle"]
+    ANY_ref_BinaryBooleanOpV3_left [label="TYPES: 3VL Value", shape="rectangle"]
     ANY_ref_BinaryBooleanOpV3_left -> BinaryBooleanOpV3AND
     BinaryBooleanOpV3AND -> ANY_ref_BinaryBooleanOpV3_right
     ANY_ref_BinaryBooleanOpV3_left -> BinaryBooleanOpV3OR
@@ -122,6 +141,9 @@ subgraph values {
     BinaryBooleanOpV3OR [label="OR"]
     BinaryBooleanOpV3XOR [label="XOR"]
     BinaryBooleanOpV3[label="bool op."]
+    
+    val3 -> true -> val3_exit
+    val3 -> false -> val3_exit
     
     val3 -> Nested_val3 -> ANY_ref_Nested_val3 -> val3_exit
     Nested_val3[label="([expr])"]
@@ -253,22 +275,12 @@ subgraph values {
 
     string_val_exit[label="EXIT string"]
     
-    col_spec[label="column specifier\ntypes = [numeric?, 3VL Value?, string?, array?]", shape="octagon"]
+    col_spec[label="column specifier\ntype = numeric | 3VL Value | string | array", shape="octagon"]
     ANY_exit -> col_spec [color=none]  # just a link for graph ordering
-    col_spec -> "Qualified column name"
-    col_spec -> "Unqualified column name"
-    "Qualified column name" -> col_spec_numeric -> col_spec_exit
-    "Qualified column name" -> col_spec_3vl -> col_spec_exit
-    "Qualified column name" -> col_spec_string -> col_spec_exit
-    "Qualified column name" -> col_spec_array -> col_spec_exit
-    "Unqualified column name" -> col_spec_numeric
-    "Unqualified column name" -> col_spec_3vl
-    "Unqualified column name" -> col_spec_string
-    "Unqualified column name" -> col_spec_array
-    col_spec_numeric[label="numeric?"]
-    col_spec_3vl[label="3VL Value?"]
-    col_spec_string[label="string?"]
-    col_spec_array[label="array?"]
+    col_spec -> "Qualified column name of type: type"
+    col_spec -> "Unqualified column name of type: type"
+    "Qualified column name of type: type" -> col_spec_exit
+    "Unqualified column name of type: type" -> col_spec_exit
     col_spec_exit[label="EXIT column specifier", shape="rectangle"]
     
     array[label="array\ntypes = [numeric?, 3VL Value?, string?, array?]", shape="octagon"]
@@ -281,10 +293,13 @@ subgraph values {
     array -> array_element_string -> array_exit
     array_element_array -> array_element_array
     array -> array_element_array -> array_exit
+    array_element_list_expr -> array_element_list_expr
+    array -> array_element_list_expr -> array_exit
     array_element_num[label="TYPE: numeric?", shape="rectangle"]
     array_element_3vl[label="TYPE: 3VL Value?", shape="rectangle"]
     array_element_string[label="TYPE: string?", shape="rectangle"]
     array_element_array[label="TYPE: array?", shape="rectangle"]
+    array_element_list_expr[label="TYPE: list expr?", shape="rectangle"]
     array_exit[label="EXIT array"]
     
     list_expr[label="list expr\ntypes = [numeric?, 3VL Value?, string?, list expr?]", shape="octagon"]
@@ -307,10 +322,33 @@ subgraph values {
 
 subgraph types {
     TYPE_generic [label="TYPE(S) (generic):\ntypes=[numeric?, 3VL Value?, array?, list expr?, string?]", shape="octagon"]
-    TYPE_generic -> TYPE_generic_column -> TYPE_generic_exit
-    TYPE_generic_column [label="column specifier\nTYPES: [...types]", shape="rectangle"]
-    TYPE_generic -> TYPE_generic_query_single -> TYPE_generic_exit
-    TYPE_generic_query_single [label="Query\nmodif.: SINGLE VALUE\nTYPES: [...types]", shape="rectangle"]
+    
+    TYPE_generic -> TYPE_generic_select_type
+    TYPE_generic_select_type -> TYPE_generic_select_type_numeric
+    TYPE_generic_select_type -> TYPE_generic_select_type_3vl
+    TYPE_generic_select_type -> TYPE_generic_select_type_array
+    TYPE_generic_select_type -> TYPE_generic_select_type_list_expr
+    TYPE_generic_select_type -> TYPE_generic_select_type_string
+    TYPE_generic_select_type_numeric -> TYPE_generic_select_type_end
+    TYPE_generic_select_type_3vl -> TYPE_generic_select_type_end
+    TYPE_generic_select_type_array -> TYPE_generic_select_type_end
+    TYPE_generic_select_type_list_expr -> TYPE_generic_select_type_end
+    TYPE_generic_select_type_string -> TYPE_generic_select_type_end
+    TYPE_generic_select_type_end -> TYPE_generic_column
+    TYPE_generic_select_type_end -> TYPE_generic_query_single
+    TYPE_generic_select_type_end[label=";"]
+    TYPE_generic_select_type_numeric[label="numeric?"]
+    TYPE_generic_select_type_3vl[label="3VL Value?"]
+    TYPE_generic_select_type_array[label="array?"]
+    TYPE_generic_select_type_list_expr[label="list expr?"]
+    TYPE_generic_select_type_string[label="string?"]
+    TYPE_generic_select_type[label="type := "]
+    
+    TYPE_generic_column -> TYPE_generic_exit
+    TYPE_generic_column [label="column specifier\nTYPE: type", shape="rectangle"]
+    TYPE_generic_query_single -> TYPE_generic_exit
+    TYPE_generic_query_single [label="Query\nmodif.: SINGLE VALUE\nTYPE: type", shape="rectangle"]
+
     TYPE_generic -> TYPE_generic_null -> TYPE_generic_exit
     TYPE_generic_null [label="null"]
     TYPE_generic -> TYPE_generic_numeric -> TYPE_generic_exit
@@ -319,11 +357,11 @@ subgraph types {
     TYPE_generic_3vl [label="3VL Value?", shape="rectangle"]
     TYPE_generic -> TYPE_generic_string -> TYPE_generic_exit
     TYPE_generic_string [label="string?", shape="rectangle"]
-    TYPE_generic -> TYPE_generic_array -> TYPE_generic_exit
-    TYPE_generic_array [label="array?\nTYPES: [...types]", shape="rectangle"]
     TYPE_generic -> TYPE_generic_list_expr -> TYPE_generic_exit
     TYPE_generic_list_expr [label="list expr?\nTYPES: [...types]", shape="rectangle"]
     TYPE_generic_exit [label="EXIT GENERIC TYPE(S)", shape="rectangle"]
+    TYPE_generic -> TYPE_generic_array -> TYPE_generic_exit
+    TYPE_generic_array [label="array?\nTYPES: [...types]", shape="rectangle"]
     
     TYPE_generic_exit -> ANY [color=none]
     
@@ -335,3 +373,4 @@ subgraph types {
 }
 
 }
+

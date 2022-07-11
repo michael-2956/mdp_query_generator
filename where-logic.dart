@@ -40,9 +40,10 @@ BinaryOp (And, Or, Xor) (ANY_BOOLEAN ||| SAME TYPE OR NULL) 2
 
 BinaryOp (BitwiseOr, BitwiseAnd, BitwiseXor) (ANY_NUMERIC ||| SAME TYPE OR NULL) 2
 
-AnyOp 1 (array / subquery) (only the right side of BinaryOp)
-
-AllOp 1 (array / subquery) (only the right side of BinaryOp)
+AnyOp 1 (ANY ||| <, =, <=, <> ||| array / subquery (SAME TYPE)) (only the right side of BinaryOp)
+AnyOp 1 (list expr (ANY) ||| <, =, <=, <> ||| array / subquery (SAME TYPE)) (only the right side of BinaryOp)
+AllOp 1 (ANY ||| <, =, <=, <> ||| array / subquery (SAME TYPE)) (only the right side of BinaryOp)
+AllOp 1 (list expr (ANY) ||| <, =, <=, <> ||| array / subquery (SAME TYPE)) (only the right side of BinaryOp)
 
 UnaryOp (Plus, Minus, PGBitwiseNot, PGSquareRoot, PGCubeRoot, PGPostfixFactorial, PGPrefixFactorial, PGAbs) (ANY_NUMERIC) 1
 
