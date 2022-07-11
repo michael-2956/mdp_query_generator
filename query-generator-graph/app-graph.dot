@@ -104,8 +104,13 @@ subgraph values {
     AnyAllSelectOp -> AnyAllEqual -> AnyAllSelectIter
     AnyAllSelectOp -> AnyAllLessEqual -> AnyAllSelectIter
     AnyAllSelectOp -> AnyAllUnEqual -> AnyAllSelectIter
-    AnyAllSelectIter -> AnyAllSubquery -> val3_exit
-    AnyAllSelectIter -> AnyAllArray -> val3_exit
+    AnyAllSelectIter -> AnyAllSubquery -> AnyAllAnyAll
+    AnyAllSelectIter -> AnyAllArray -> AnyAllAnyAll
+    AnyAllAnyAll -> AnyAllAnyAllAny -> val3_exit
+    AnyAllAnyAll -> AnyAllAnyAllAll -> val3_exit
+    AnyAllAnyAll[label="select ANY/ALL"]
+    AnyAllAnyAllAny[label="ANY"]
+    AnyAllAnyAllAll[label="ALL"]
     AnyAllRecord[label="list expr\nTYPES: ALL", shape="rectangle"]
     AnyAllValue[label="TYPES: ALL", shape="rectangle"]
     AnyAllSelectOp[label="select op."]
