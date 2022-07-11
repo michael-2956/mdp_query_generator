@@ -106,6 +106,8 @@ subgraph values {
     AnyAllSelectOp -> AnyAllUnEqual -> AnyAllSelectIter
     AnyAllSelectIter -> AnyAllSubquery -> val3_exit
     AnyAllSelectIter -> AnyAllArray -> val3_exit
+    AnyAllRecord[label="list expr\nTYPES: ALL", shape="rectangle"]
+    AnyAllValue[label="TYPES: ALL", shape="rectangle"]
     AnyAllSelectOp[label="select op."]
     AnyAllSelectIter[label="select iterable"]
     AnyAllSubquery [label="Query\nTYPE: SAME TYPE(S)", shape="rectangle"]
@@ -302,13 +304,14 @@ subgraph values {
     array_element_list_expr[label="TYPE: list expr?", shape="rectangle"]
     array_exit[label="EXIT array"]
     
-    list_expr[label="list expr\ntypes = [numeric?, 3VL Value?, string?, list expr?]", shape="octagon"]
+    list_expr[label="list expr\ntypes = [numeric?, 3VL Value?, string?, list expr?, array?]", shape="octagon"]
     array_exit -> list_expr[color=none]
     list_expr -> list_expr_element
     list_expr_element -> list_expr_element_num -> list_expr_element_exit
     list_expr_element -> list_expr_element_3vl -> list_expr_element_exit
     list_expr_element -> list_expr_element_string -> list_expr_element_exit
     list_expr_element -> list_expr_element_list_expr -> list_expr_element_exit
+    list_expr_element -> list_expr_element_array -> list_expr_element_exit
     list_expr_element_exit -> list_expr_element
     list_expr_element_exit -> list_expr_exit
     list_expr_element[label="list expr element"]
@@ -317,6 +320,7 @@ subgraph values {
     list_expr_element_3vl[label="TYPE: 3VL Value?", shape="rectangle"]
     list_expr_element_string[label="TYPE: string?", shape="rectangle"]
     list_expr_element_list_expr[label="TYPE: list expr?", shape="rectangle"]
+    list_expr_element_array[label="TYPE: array?", shape="rectangle"]
     list_expr_exit[label="EXIT list expr"]
 }
 
