@@ -67,7 +67,7 @@ subgraph values {
     InSubqueryNot [label="NOT"]
     
     val3 -> Between -> ANY_ref_Between
-    ANY_ref_Between [label="TYPES: numeric, array, list expr, string", shape="rectangle"]
+    ANY_ref_Between [label="TYPES: ALL", shape="rectangle"]
     ANY_ref_Between -> BetweenBetween
     BetweenBetween [label="BETWEEN"]
     BetweenBetween -> BetweenBetweenLeft
