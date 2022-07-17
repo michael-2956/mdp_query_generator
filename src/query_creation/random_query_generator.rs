@@ -4,6 +4,12 @@ use sqlparser::ast::{
     TableWithJoins, Value,
 };
 
+mod reader;
+
+use reader::{
+    Graph,
+};
+
 pub struct QueryGeneratorParams {
     /// max number of tables (counting repetitions) mentioned
     /// in a well-defined SELECT-FROM-WHERE block, including
@@ -130,6 +136,8 @@ impl QueryGenerator {
     }
 
     fn generate_query(&mut self, query_info: &mut QueryInfo) -> Query {
+        let mut graph = Graph::new();
+        graph.read("src/query_creation/random_query_generator/graph.dot".to_string());
         let from = self.generate_from(query_info);
         let projection = self.generate_projection(query_info);
         let distinct = self.rng.gen_bool(self.params.distinct_prob);
