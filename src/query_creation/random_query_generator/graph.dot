@@ -1,522 +1,672 @@
+# Structure is ALWAYS as follows:
+# 1. General rule is place function definitions inside their own subgraphs.
+# 2. Functional node begins from the node_name node.
+
+# 3. Function definitions look as follows:
+# 1) Node with parameters:
+# subgraph def_{node_name} {
+#     {node_name} [
+#         TYPES = "[{type_name}, ...]" OR "[any]" OR "[known]" OR "[compatible]",
+#         TYPE = "{type_name}, ..." OR "known",
+#         MOD = "[{mod_name}, ...]",
+#         ...
+#     ]
+#     ...
+# }
+# TYPE, TYPES and MOD in definitions are only for type-checking in definitions.
+# all specified types of modifiers (TYPE, TYPES, MOD) are required to be passed by caller
+# compatible is just the same type for not
+
+# 4. Optional node (with a question mark at the end):
+# {node_name} [OPTIONAL="t"]
+
+# 5. Exit a callable node:
+# EXIT_{node_name} [label="EXIT {node_label}"]
+
+# 6. Call a callable node with params:
+# call{caller_num}_{node_name} [TYPES={...}, MOD={...}, ...]
+# ... -> call...
+# there can be multiple callers, so each caller should have a unique id
+# values of TYPES and MOD are exact mathes to those in definition
+
+# 7. Call a callable node without params:
+# call{caller_num}_{node_name} [...]
+# ... -> call...
+
+# 8. These are ignored:
+# 1) ... -> ... [color=none]
+# 2) Graphviz params in [] (label, shape...)
+
+# 9. Define a node before referencing it:
+# FROM []
+# Query -> FROM
+
+# 10. Don't do this:
+# ... -> ... -> ...
+
 digraph G {
-
-Query -> "FROM"
-Query[shape=rectangle, label="Query\nmodif.=[SINGLE VALUE?, TYPES(ordered)]", shape="octagon"]
-
-"FROM" -> FROM_table
-FROM_table [label="Table"]
-"FROM" -> FROM_subquery
-FROM_subquery [shape=rectangle, label="Query"]
-
-FROM_table -> "multiple relations" -> FROM_table
-FROM_subquery -> "multiple relations" -> FROM_subquery
-
-"multiple relations" -> "EXIT FROM"
-
-"EXIT FROM" -> WHERE_ref -> val3_ref -> WHERE_ref_exit -> SELECT
-WHERE_ref [label="WHERE"]
-WHERE_ref -> "WHERE TRUE" -> SELECT
-val3_ref [shape=rectangle, label="3VL Value"]
-WHERE_ref_exit [label="EXIT WHERE"]
-"EXIT FROM" -> SELECT
-
-subgraph values {
-    val3 [shape=rectangle, label="3VL Value"]
-
-    val3 -> IsNull -> ANY_ref_IsNull -> val3_exit
-    IsNull -> IsNull_not_val2 -> ANY_ref_IsNull
-    ANY_ref_IsNull [label="TYPES: ALL", shape="rectangle"]
-    IsNull_not_val2 [label="NOT"]
-    IsNull[label="IS NULL"]
-
-    val3 -> IsDistinctFrom -> ANY_ref_IsDistinctFrom_left
-    ANY_ref_IsDistinctFrom_left [label="TYPES: ALL", shape="rectangle"]
-    ANY_ref_IsDistinctFrom_left -> IsDistinctNOT -> DISTINCT
-    ANY_ref_IsDistinctFrom_left -> DISTINCT
-    DISTINCT -> ANY_ref_IsDistinctFrom_right
-    ANY_ref_IsDistinctFrom_right [label="TYPES: SAME TYPE", shape="rectangle"]
-    ANY_ref_IsDistinctFrom_right -> val3_exit
-    IsDistinctFrom[label="IS DISTINCT FROM"]
-    IsDistinctNOT [label="NOT"]
-
-    val3 -> Exists -> Query_ref_Exists -> val3_exit
-    Exists -> Exists_not_val3 -> Query_ref_Exists
-    Query_ref_Exists [label="Query", shape="rectangle"]
-    Exists_not_val3 [label="NOT"]
-    Exists[label="EXISTS"]
-
-    val3 -> InList -> ANY_ref_InList_left
-    ANY_ref_InList_left [label="TYPES: ALL", shape="rectangle"]
-    ANY_ref_InList_left -> InListNot -> InListIn
-    ANY_ref_InList_left -> InListIn
-    InListIn -> ANY_ref_InList_right
-    ANY_ref_InList_right [label="list expr\nTYPES: SAME TYPE", shape="rectangle"]
-    ANY_ref_InList_right -> val3_exit
-    InListIn [label="IN"]
-    InList[label="IN [list expr]"]
-    InListNot [label="NOT"]
-
-    val3 -> InSubquery -> ANY_ref_InSubquery_left
-    ANY_ref_InSubquery_left [label="TYPES: ALL", shape="rectangle"]
-    ANY_ref_InSubquery_left -> InSubqueryNot -> InSubqueryIn
-    ANY_ref_InSubquery_left -> InSubqueryIn
-    InSubqueryIn -> ANY_ref_InSubquery_right
-    ANY_ref_InSubquery_right [label="Query\nTYPE: SAME TYPE", shape="rectangle"]
-    ANY_ref_InSubquery_right -> val3_exit
-    InSubqueryIn [label="IN"]
-    InSubquery[label="IN [subquery]"]
-    InSubqueryNot [label="NOT"]
-
-    val3 -> Between -> ANY_ref_Between
-    ANY_ref_Between [label="TYPES: ALL", shape="rectangle"]
-    ANY_ref_Between -> BetweenBetween
-    BetweenBetween [label="BETWEEN"]
-    BetweenBetween -> BetweenBetweenLeft
-    BetweenBetweenLeft [label="TYPES: SAME TYPE", shape="rectangle"]
-    BetweenBetweenLeft -> BetweenBetweenAnd
-    BetweenBetweenAnd [label="AND"]
-    BetweenBetweenAnd -> BetweenBetweenRight
-    BetweenBetweenRight [label="TYPES: SAME TYPE", shape="rectangle"]
-    BetweenBetweenRight -> val3_exit
-    Between[label="BETWEEN . AND ."]
-
-    val3 -> BinaryComp -> ANY_ref_BinaryComp_left
-    ANY_ref_BinaryComp_left [label="TYPES: ALL", shape="rectangle"]
-    ANY_ref_BinaryComp_left -> BinaryCompLess
-    BinaryCompLess -> ANY_ref_BinaryComp_right
-    ANY_ref_BinaryComp_left -> BinaryCompEqual
-    BinaryCompEqual -> ANY_ref_BinaryComp_right
-    ANY_ref_BinaryComp_left -> BinaryCompLessEqual
-    BinaryCompLessEqual -> ANY_ref_BinaryComp_right
-    ANY_ref_BinaryComp_left -> BinaryCompUnEqual
-    BinaryCompUnEqual -> ANY_ref_BinaryComp_right
-    ANY_ref_BinaryComp_right [label="TYPES: SAME TYPE", shape="rectangle"]
-    ANY_ref_BinaryComp_right -> val3_exit
-    BinaryCompLess [label="<"]
-    BinaryCompEqual [label="="]
-    BinaryCompLessEqual [label="<="]
-    BinaryCompUnEqual [label="<>"]
-    BinaryComp[label="CMP"]
-
-    val3 -> AnyAll
-    AnyAll -> AnyAllRecord -> AnyAllSelectOp
-    AnyAll -> AnyAllValue -> AnyAllSelectOp
-    AnyAllSelectOp -> AnyAllLess -> AnyAllSelectIter
-    AnyAllSelectOp -> AnyAllEqual -> AnyAllSelectIter
-    AnyAllSelectOp -> AnyAllLessEqual -> AnyAllSelectIter
-    AnyAllSelectOp -> AnyAllUnEqual -> AnyAllSelectIter
-    AnyAllSelectIter -> AnyAllSubquery -> AnyAllAnyAll
-    AnyAllSelectIter -> AnyAllArray -> AnyAllAnyAll
-    AnyAllAnyAll -> AnyAllAnyAllAny -> val3_exit
-    AnyAllAnyAll -> AnyAllAnyAllAll -> val3_exit
-    AnyAllAnyAll[label="select ANY/ALL"]
-    AnyAllAnyAllAny[label="ANY"]
-    AnyAllAnyAllAll[label="ALL"]
-    AnyAllRecord[label="list expr\nTYPES: ALL", shape="rectangle"]
-    AnyAllValue[label="TYPES: ALL", shape="rectangle"]
-    AnyAllSelectOp[label="select op."]
-    AnyAllSelectIter[label="select iterable"]
-    AnyAllSubquery [label="Query\nTYPE: SAME TYPE(S)", shape="rectangle"]
-    AnyAllArray [label="array\nTYPE: SAME TYPE(S)", shape="rectangle"]
-    AnyAllLess [label="<"]
-    AnyAllEqual [label="="]
-    AnyAllLessEqual [label="<="]
-    AnyAllUnEqual [label="<>"]
-    AnyAll[label="ANY / ALL"]
-
-    val3 -> BinaryStringLike -> ANY_ref_BinaryStringLike_left
-    ANY_ref_BinaryStringLike_left [label="TYPES: string", shape="rectangle"]
-    ANY_ref_BinaryStringLike_left -> BinaryStringLikeNot -> BinaryStringLikeIn
-    ANY_ref_BinaryStringLike_left -> BinaryStringLikeIn
-    BinaryStringLikeIn -> ANY_ref_BinaryStringLike_right
-    ANY_ref_BinaryStringLike_right [label="TYPES: string", shape="rectangle"]
-    ANY_ref_BinaryStringLike_right -> val3_exit
-    BinaryStringLikeIn [label="LIKE"]
-    BinaryStringLike[label="LIKE"]
-    BinaryStringLikeNot [label="NOT"]
-
-    val3 -> BinaryBooleanOpV3 -> ANY_ref_BinaryBooleanOpV3_left
-    ANY_ref_BinaryBooleanOpV3_left [label="TYPES: 3VL Value", shape="rectangle"]
-    ANY_ref_BinaryBooleanOpV3_left -> BinaryBooleanOpV3AND
-    BinaryBooleanOpV3AND -> ANY_ref_BinaryBooleanOpV3_right
-    ANY_ref_BinaryBooleanOpV3_left -> BinaryBooleanOpV3OR
-    BinaryBooleanOpV3OR -> ANY_ref_BinaryBooleanOpV3_right
-    ANY_ref_BinaryBooleanOpV3_left -> BinaryBooleanOpV3XOR
-    BinaryBooleanOpV3XOR -> ANY_ref_BinaryBooleanOpV3_right
-    ANY_ref_BinaryBooleanOpV3_right [label="TYPES: SAME TYPE", shape="rectangle"]
-    ANY_ref_BinaryBooleanOpV3_right -> val3_exit
-    BinaryBooleanOpV3AND [label="AND"]
-    BinaryBooleanOpV3OR [label="OR"]
-    BinaryBooleanOpV3XOR [label="XOR"]
-    BinaryBooleanOpV3[label="bool op."]
-
-    val3 -> true -> val3_exit
-    val3 -> false -> val3_exit
-
-    val3 -> Nested_val3 -> ANY_ref_Nested_val3 -> val3_exit
-    Nested_val3[label="([expr])"]
-    ANY_ref_Nested_val3 [label="TYPES: 3VL Value", shape="rectangle"]
-
-    val3 -> UnaryNot_val3 -> ANY_ref_UnaryNot_val3 -> val3_exit
-    UnaryNot_val3[label="NOT"]
-    ANY_ref_UnaryNot_val3 [label="TYPES: 3VL Value", shape="rectangle"]
-
-    val3_exit [shape=rectangle, label="EXIT 3VL Value"]
-
-    numeric [shape=rectangle, label="numeric"]
-    val3_exit -> numeric [color=none]  # just a link for graph ordering
-
-    numeric -> numeric_literal
-    numeric_literal -> numeric_literal_int
-    numeric_literal -> numeric_literal_float
-    numeric_literal_int -> numeric_exit
-    numeric_literal_float -> numeric_exit
-    numeric_literal_int[label="random int"]
-    numeric_literal_float[label="random float"]
-    numeric_literal[label="literal"]
-
-    numeric -> BinaryNumericOp -> binary_numeric_left
-    binary_numeric_left -> binary_numeric_plus
-    binary_numeric_left -> binary_numeric_minus
-    binary_numeric_left -> "*"
-    binary_numeric_left -> "/"
-    binary_numeric_left -> "|"
-    binary_numeric_left -> "&"
-    binary_numeric_left -> "^"
-    binary_numeric_plus -> numericRight
-    binary_numeric_minus -> numericRight
-    "*" -> numericRight
-    "/" -> numericRight
-    "|" -> numericRight
-    "&" -> numericRight
-    "^" -> numericRight
-    numericRight -> numeric_exit
-    binary_numeric_plus[label="+"]
-    binary_numeric_minus[label="-"]
-    BinaryNumericOp[label="binary op."]
-    binary_numeric_left [label="TYPES: numeric"]
-    numericRight [label="TYPES: numeric"]
-
-    numeric -> UnaryNumericOp
-    UnaryNumericOp -> unary_numeric_plus
-    UnaryNumericOp -> unary_numeric_minus
-    UnaryNumericOp -> "~"
-    UnaryNumericOp -> "|/"
-    UnaryNumericOp -> "||/"
-    UnaryNumericOp -> "!"
-    UnaryNumericOp -> "!!"
-    UnaryNumericOp -> "@"
-    unary_numeric_plus -> unary_numeric
-    unary_numeric_minus -> unary_numeric
-    "~" -> unary_numeric
-    "|/" -> unary_numeric
-    "||/" -> unary_numeric
-    "!" -> unary_numeric
-    "!!" -> unary_numeric
-    "@" -> unary_numeric
-    unary_numeric -> numeric_exit
-    unary_numeric_plus[label="+"]
-    unary_numeric_minus[label="-"]
-    UnaryNumericOp[label="unary op."]
-    unary_numeric [label="TYPES: numeric"]
-
-    numeric -> numeric_string_Position
-    numeric_string_Position -> Any_string_position_left
-    Any_string_position_left -> string_position_in
-    string_position_in -> Any_string_position_right
-    Any_string_position_right -> numeric_exit
-    Any_string_position_left[label="TYPES: string"]
-    string_position_in[label="in"]
-    Any_string_position_right[label="TYPES: string"]
-    numeric_string_Position[label="POSITION([expr] in [expr])"]
-
-    numeric -> Nested_numeric -> ANY_ref_Nested_numeric -> numeric_exit
-    Nested_numeric[label="([expr])"]
-    ANY_ref_Nested_numeric [label="TYPES: numeric", shape="rectangle"]
-
-    numeric_exit [label="numeric EXIT"]
-
-    string_val[label="string", shape="rectangle"]
-    numeric_exit -> string_val [color=none]  # just a link for graph ordering
-
-    string_val -> string_literal -> string_val_exit
-    string_literal[label="random string literal"]
-
-    string_val -> string_trim
-    string_trim -> string_val_trim_s
-    string_trim -> trim_symbols
-    trim_symbols -> BOTH
-    trim_symbols -> LEADING
-    trim_symbols -> TRAILING
-    BOTH -> string_val_trim_s
-    LEADING -> string_val_trim_s
-    TRAILING -> string_val_trim_s
-    string_val_trim_s -> string_val_exit
-
-    string_val -> string_concat
-    string_concat -> string_val_left_c
-    string_val_left_c -> string_concat_concat -> string_val_right_c
-    string_val_right_c -> string_val_exit
-    string_trim[label="TRIM"]
-    trim_symbols[label="TYPES: string"]
-    string_val_trim_s[label="TYPES: string"]
-    string_val_left_c[label="TYPES: string"]
-    string_concat_concat[label="||"]
-    string_val_right_c[label="TYPES: string"]
-    string_val[label="string", shape="rectangle"]
-    string_concat[label="concatenation"]
-
-    string_val -> string_substring
-    string_substring -> string_substr_string
-    string_substr_string -> string_substr_numeric_from_from
-    string_substr_numeric_from_from -> string_substr_numeric_from
-    string_substr_numeric_from -> string_val_exit
-    string_substr_numeric_from -> string_substr_numeric_len_len
-    string_substr_numeric_len_len -> string_substr_numeric_len
-    string_substr_numeric_len -> string_val_exit
-    string_substr_string[label="TYPES: string"]
-    string_substr_numeric_from[label="TYPES: numeric"]
-    string_substr_numeric_from_from[label="from"]
-    string_substr_numeric_len_len[label="length"]
-    string_substr_numeric_len[label="TYPES: numeric"]
-    string_substring[label="substring"]
-
-    string_val_exit[label="EXIT string"]
-
-    col_spec[label="column specifier\ntype = numeric | 3VL Value | string | array", shape="octagon"]
-    ANY_exit -> col_spec [color=none]  # just a link for graph ordering
-    col_spec -> "Qualified column name of type: type"
-    col_spec -> "Unqualified column name of type: type"
-    "Qualified column name of type: type" -> col_spec_exit
-    "Unqualified column name of type: type" -> col_spec_exit
-    col_spec_exit[label="EXIT column specifier", shape="rectangle"]
-
-    array[label="array\ntypes = [numeric?, 3VL Value?, string?, array?]", shape="octagon"]
-    col_spec_exit -> array[color=none]
-    array_element_num -> array_element_num
-    array -> array_element_num -> array_exit
-    array_element_3vl -> array_element_3vl
-    array -> array_element_3vl -> array_exit
-    array_element_string -> array_element_string
-    array -> array_element_string -> array_exit
-    array_element_array -> array_element_array
-    array -> array_element_array -> array_exit
-    array_element_list_expr -> array_element_list_expr
-    array -> array_element_list_expr -> array_exit
-    array_element_num[label="TYPE: numeric?", shape="rectangle"]
-    array_element_3vl[label="TYPE: 3VL Value?", shape="rectangle"]
-    array_element_string[label="TYPE: string?", shape="rectangle"]
-    array_element_array[label="TYPE: array?", shape="rectangle"]
-    array_element_list_expr[label="TYPE: list expr?", shape="rectangle"]
-    array_exit[label="EXIT array"]
-
-    list_expr[label="list expr\ntypes = [numeric?, 3VL Value?, string?, list expr?, array?]", shape="octagon"]
-    array_exit -> list_expr[color=none]
-    list_expr -> list_expr_element
-    list_expr_element -> list_expr_element_num -> list_expr_element_exit
-    list_expr_element -> list_expr_element_3vl -> list_expr_element_exit
-    list_expr_element -> list_expr_element_string -> list_expr_element_exit
-    list_expr_element -> list_expr_element_list_expr -> list_expr_element_exit
-    list_expr_element -> list_expr_element_array -> list_expr_element_exit
-    list_expr_element_exit -> list_expr_element
-    list_expr_element_exit -> list_expr_exit
-    list_expr_element[label="list expr element"]
-    list_expr_element_exit[label="EXIT list expr element"]
-    list_expr_element_num[label="TYPE: numeric?", shape="rectangle"]
-    list_expr_element_3vl[label="TYPE: 3VL Value?", shape="rectangle"]
-    list_expr_element_string[label="TYPE: string?", shape="rectangle"]
-    list_expr_element_list_expr[label="TYPE: list expr?", shape="rectangle"]
-    list_expr_element_array[label="TYPE: array?", shape="rectangle"]
-    list_expr_exit[label="EXIT list expr"]
-}
-
-subgraph types {
-    TYPE_generic [label="TYPE(S) (generic):\ntypes=[numeric?, 3VL Value?, array?, list expr?, string?]", shape="octagon"]
-
-    TYPE_generic -> TYPE_generic_select_type
-    TYPE_generic_select_type -> TYPE_generic_select_type_numeric
-    TYPE_generic_select_type -> TYPE_generic_select_type_3vl
-    TYPE_generic_select_type -> TYPE_generic_select_type_array
-    TYPE_generic_select_type -> TYPE_generic_select_type_list_expr
-    TYPE_generic_select_type -> TYPE_generic_select_type_string
-    TYPE_generic_select_type_numeric -> TYPE_generic_select_type_end
-    TYPE_generic_select_type_3vl -> TYPE_generic_select_type_end
-    TYPE_generic_select_type_array -> TYPE_generic_select_type_end
-    TYPE_generic_select_type_list_expr -> TYPE_generic_select_type_end
-    TYPE_generic_select_type_string -> TYPE_generic_select_type_end
-    TYPE_generic_select_type_end -> TYPE_generic_column
-    TYPE_generic_select_type_end -> TYPE_generic_query_single
-    TYPE_generic_select_type_end[label=";"]
-    TYPE_generic_select_type_numeric[label="numeric?"]
-    TYPE_generic_select_type_3vl[label="3VL Value?"]
-    TYPE_generic_select_type_array[label="array?"]
-    TYPE_generic_select_type_list_expr[label="list expr?"]
-    TYPE_generic_select_type_string[label="string?"]
-    TYPE_generic_select_type[label="type := "]
-
-    TYPE_generic_column -> TYPE_generic_exit
-    TYPE_generic_column [label="column specifier\nTYPE: type", shape="rectangle"]
-    TYPE_generic_query_single -> TYPE_generic_exit
-    TYPE_generic_query_single [label="Query\nmodif.: SINGLE VALUE\nTYPE: type", shape="rectangle"]
-
-    TYPE_generic -> TYPE_generic_null -> TYPE_generic_exit
-    TYPE_generic_null [label="null"]
-    TYPE_generic -> TYPE_generic_numeric -> TYPE_generic_exit
-    TYPE_generic_numeric [label="numeric?", shape="rectangle"]
-    TYPE_generic -> TYPE_generic_3vl -> TYPE_generic_exit
-    TYPE_generic_3vl [label="3VL Value?", shape="rectangle"]
-    TYPE_generic -> TYPE_generic_string -> TYPE_generic_exit
-    TYPE_generic_string [label="string?", shape="rectangle"]
-    TYPE_generic -> TYPE_generic_list_expr -> TYPE_generic_exit
-    TYPE_generic_list_expr [label="list expr?\nTYPES: [...types]", shape="rectangle"]
-    TYPE_generic_exit [label="EXIT GENERIC TYPE(S)", shape="rectangle"]
-    TYPE_generic -> TYPE_generic_array -> TYPE_generic_exit
-    TYPE_generic_array [label="array?\nTYPES: [...types]", shape="rectangle"]
-
-    TYPE_generic_exit -> ANY [color=none]
-
-    ANY [label="TYPES: ALL", shape="rectangle"]
-    ANY -> ANY_types
-    ANY_types [label="TYPES: numeric, 3VL Value, array, list expr, string", shape="rectangle"]
-    ANY_types -> ANY_exit
-    ANY_exit [label="EXIT TYPES: ALL", shape="rectangle"]
-
-
-    "SELECT" -> "GROUPING"
-    "SELECT" -> "NO-GROUPING"
-    "GROUPING" -> GROUPBYClause
-    GROUPBYClause [label = "GROUP BY clause"]
-    HAVINGClause [label = "HAVING clause"]
-    GROUPBYClause -> HAVINGClause -> "generate projection"
-    GROUPBYClause -> "generate projection"
-
-
-    "GROUP BY clause" -> "single grouping element"
-    "GROUP BY clause" -> "concatenated grouping"
-    "concatenated grouping" -> "concatEl"
-    "concatEl" -> "concatenated grouping"
-    "single grouping element" -> "GroupingEl"
-    "GroupingEl" [label="grouping element"]
-    "concatEl" [label="grouping element"]
-    "GroupingEl" -> "EXIT GROUPING"
-    "concatEl" -> "EXIT GROUPING"
-    "EXIT GROUPING" [label = "EXIT GROUP BY clause"]
-
-    "grouping element" -> "grand total"
-    "grouping element" -> "column reference"
-    "grouping element" -> "grouping sets"
-
-    "grouping sets" -> "ordinary grouping sets"
-    "grouping sets" -> "rollup list"
-    "grouping sets" -> "cube list"
-
-    "grouping element" [shape = "rectangle"]
-    "GROUPBYClause" [shape = "rectangle"]
-    HAVING [shape = "rectangle"]
-    "aggregate function" [shape = "rectangle"]
-    "GROUP BY clause" [shape = "rectangle"]
-
-
-
-    "column reference" -> "column name"
-    "ordinary grouping sets" -> set
-    set -> GroupingColumnName
-    GroupingColumnName -> set
-    GroupingColumnName [label = "column name"]
-    GroupingColumnName -> "ordinary grouping sets"
-
-    "rollup list" -> list
-    "cube list" -> list
-    list -> ListColumnName
-    ListColumnName -> list
-    ListColumnName [label = "column name"]
-    list -> "EXIT GROUPING ELEMENT"
-    set -> "EXIT GROUPING ELEMENT"
-    "grand total" -> "EXIT GROUPING ELEMENT"
-    "column name" -> "EXIT GROUPING ELEMENT"
-
-
-
-    HAVING [label = "HAVING clause"]
-    HAVING -> "HAVING conditions"
-    "HAVING conditions" -> BoolNot -> AggrBoolExpr
-    BoolNot [label = "NOT"]
-    "HAVING conditions" -> "atomic condition"
-    "HAVING AggrFunc" [label = "aggregate function"]
-    "atomic condition" ->"HAVING AggrFunc"
-    "atomic condition" -> AggrNot -> "HAVING AggrFunc"
-    AggrNot [label = "NOT"]
-    "HAVING AggrFunc" -> less
-    "HAVING AggrFunc" -> equal
-    "HAVING AggrFunc" -> loe
-    "HAVING AggrFunc" -> noneq
-    "HAVING conditions" -> AggrBoolExpr
-    AggrBoolExpr [label = "Bool Expression"]
-    AggrBoolExpr -> AggrOr -> SecondCond
-    AggrBoolExpr -> AggrAnd -> SecondCond
-    AggrBoolExpr -> AggrXor -> SecondCond
-    AggrOr [label = "OR"]
-    AggrAnd [label = "AND"]
-    AggrXor [label = "XOR"]
-    SecondCond [label = "HAVING conditions"]
-    less [label = "<"]
-    equal [label = "="]
-    loe [label = "<="]
-    noneq [label = "<>"]
-    "num val" [label = "numeric value"]
-    less -> "num val"
-    loe -> "num val"
-    equal -> "num val"
-    noneq -> "num val"
-
-    "num val" -> "EXIT HAVING"
-
-
-
-    "aggregate function" -> COUNT -> arg
-    "aggregate function" -> SUM -> arg
-    "aggregate function" -> AVG -> arg
-    "aggregate function" -> MIN -> arg
-    "aggregate function" -> MAX -> arg
-    arg [label = "function parameter"]
-    arg -> AggrNone
-    AggrNone [label = "None"]
-    arg -> ALL -> AggrExpr
-    arg -> aggrDistinct -> AggrExpr
-    aggrDistinct [label = "DISTINCT"]
-    arg -> AggrExpr
-    AggrExpr [label = "column name"]
-
-    AggrExpr -> "AGGREGATE WITH ALIAS"
-    AggrNone -> "AGGREGATE WITH ALIAS"
-    AggrExpr -> "AGGREGATE WITHOUT ALIAS"
-    AggrNone -> "AGGREGATE WITHOUT ALIAS"
-    "AGGREGATE WITHOUT ALIAS" -> "EXIT AGGREGATE"
-    "AGGREGATE WITH ALIAS" -> "EXIT AGGREGATE"
-
-    "NO-GROUPING" -> selectDistinct
-    "NO-GROUPING" -> "non-DISTINCT"
-    selectDistinct -> "generate projection"
-    "non-DISTINCT" -> "generate projection"
-    selectDistinct [label = "DISTINCT"]
-
-    "generate projection" -> "wildcard"
-    "generate projection" -> "value"
-
-    "value" -> "qualified wildcard"
-    "qualified wildcard" -> "EXIT value"
-    "value" -> "AggrInProjection" -> "select-expression"
-    "value" -> "select-expression"
-    "select-expression" -> "unnamed expression"
-    "unnamed expression" -> "EXIT value"
-    "select-expression" -> "expression with alias"
-    "expression with alias" -> "EXIT value"
-
-    AggrInProjection [label = "Aggregate function"]
-
-    "wildcard" -> "EXIT SELECT"
-    "EXIT value" -> "EXIT SELECT"
-    "EXIT value" -> "value"
-}
+    subgraph def_types {
+        types [TYPES="[numeric, 3VL Value, array, list expr, string]", label="TYPE(S) (generic):\ntypes=[numeric?, 3VL Value?, array?, list expr?, string?]", shape=octagon]
+        EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
+
+        types_select_type[label="type := "]
+        types_select_type_end[label=";"]
+        types -> types_select_type
+        types_select_type_numeric[OPTIONAL="t", label="numeric?"]
+        types_select_type -> types_select_type_numeric
+        types_select_type_numeric -> types_select_type_end
+        types_select_type_3vl[OPTIONAL="t", label="3VL Value?"]
+        types_select_type -> types_select_type_3vl
+        types_select_type_3vl -> types_select_type_end
+        types_select_type_array[OPTIONAL="t", label="array?"]
+        types_select_type -> types_select_type_array
+        types_select_type_array -> types_select_type_end
+        types_select_type_list_expr[OPTIONAL="t", label="list expr?"]
+        types_select_type -> types_select_type_list_expr
+        types_select_type_list_expr -> types_select_type_end
+        types_select_type_string[OPTIONAL="t", label="string?"]
+        types_select_type -> types_select_type_string
+        types_select_type_string -> types_select_type_end
+
+        call0_column_spec [TYPE="known", label="column specifier\nTYPE: type", shape=rectangle]
+        types_select_type_end -> call0_column_spec
+        call0_column_spec -> EXIT_types
+
+        call1_Query [TYPES="[known]", MOD="[single value]", label="Query\nmodif.: SINGLE VALUE\nTYPE: type", shape=rectangle]
+        types_select_type_end -> call1_Query
+        call1_Query -> EXIT_types
+
+        types_null [label="null"]
+        types -> types_null
+        types_null -> EXIT_types
+
+        call0_numeric [OPTIONAL="t", label="numeric?", shape=rectangle]
+        types -> call0_numeric
+        call0_numeric -> EXIT_types
+
+        call1_VAL_3 [OPTIONAL="t", label="3VL Value?", shape=rectangle]
+        types -> call1_VAL_3
+        call1_VAL_3 -> EXIT_types
+
+        call0_string [OPTIONAL="t", label="string?", shape=rectangle]
+        types -> call0_string
+        call0_string -> EXIT_types
+
+        call0_list_expr [OPTIONAL="t", TYPES="[known]", label="list expr?\nTYPES: [...types]", shape=rectangle]
+        types -> call0_list_expr
+        call0_list_expr -> EXIT_types
+
+        call0_array [OPTIONAL="t", TYPES="[known]", label="array?\nTYPES: [...types]", shape=rectangle]
+        types -> call0_array
+        call0_array -> EXIT_types
+    }
+
+    subgraph def_types_all {
+        types_all [label="TYPES: ALL", shape=rectangle]
+        EXIT_types_all [label="EXIT TYPES: ALL", shape=rectangle]
+        EXIT_types -> def_types_all [color=none]
+
+        call0_types [TYPES="[numeric, 3VL Value, array, list expr, string]", label="TYPES: numeric, 3VL Value, array, list expr, string", shape=rectangle]
+        types_all -> call0_types
+        call0_types -> EXIT_types_all
+    }
+
+    subgraph def_numeric {
+        numeric [shape=rectangle, label="numeric"]
+        EXIT_numeric [label="numeric EXIT"]
+        EXIT_VAL_3 -> numeric [color=none]
+
+        numeric_literal[label="literal"]
+        numeric -> numeric_literal
+        numeric_literal_int[label="random int"]
+        numeric_literal -> numeric_literal_int
+        numeric_literal_int -> EXIT_numeric
+        numeric_literal_float[label="random float"]
+        numeric_literal -> numeric_literal_float
+        numeric_literal_float -> EXIT_numeric
+
+        BinaryNumericOp[label="binary op."]
+        numericRight [label="TYPES: numeric", shape=rectangle]
+        numeric -> BinaryNumericOp
+        binary_numeric_left [label="TYPES: numeric", shape=rectangle]
+        BinaryNumericOp -> binary_numeric_left
+        binary_numeric_plus [label="+"]
+        binary_numeric_left -> binary_numeric_plus
+        binary_numeric_plus -> numericRight
+        binary_numeric_minus [label="-"]
+        binary_numeric_left -> binary_numeric_minus
+        binary_numeric_minus -> numericRight
+        binary_numeric_mul [label="*"]
+        binary_numeric_left -> binary_numeric_mul
+        binary_numeric_mul -> numericRight
+        binary_numeric_div [label="/"]
+        binary_numeric_left -> binary_numeric_div
+        binary_numeric_div -> numericRight
+        binary_numeric_bin_or [label="|"]
+        binary_numeric_left -> binary_numeric_bin_or
+        binary_numeric_bin_or -> numericRight
+        binary_numeric_bin_and [label="&"]
+        binary_numeric_left -> binary_numeric_bin_and
+        binary_numeric_bin_and -> numericRight
+        binary_numeric_bin_xor [label="^"]
+        binary_numeric_left -> binary_numeric_bin_xor
+        binary_numeric_bin_xor -> numericRight
+        numericRight -> EXIT_numeric
+
+        UnaryNumericOp [label="unary op."]
+        call1_types [TYPES="[numeric]", label="TYPES: numeric"]
+        numeric -> UnaryNumericOp
+        unary_numeric_plus[label="+"]
+        UnaryNumericOp -> unary_numeric_plus
+        unary_numeric_plus -> call1_types
+        unary_numeric_minus[label="-"]
+        UnaryNumericOp -> unary_numeric_minus
+        unary_numeric_minus -> call1_types
+        unary_numeric_bin_not [label="~"]
+        UnaryNumericOp -> unary_numeric_bin_not
+        unary_numeric_bin_not -> call1_types
+        unary_numeric_sq_root [label="|/"]
+        UnaryNumericOp -> unary_numeric_sq_root
+        unary_numeric_sq_root -> call1_types
+        unary_numeric_cub_root [label="||/"]
+        UnaryNumericOp -> unary_numeric_cub_root
+        unary_numeric_cub_root -> call1_types
+        unary_numeric_postfix_fact [label="!"]
+        UnaryNumericOp -> unary_numeric_postfix_fact
+        unary_numeric_postfix_fact -> call1_types
+        unary_numeric_prefix_fact [label="!!"]
+        UnaryNumericOp -> unary_numeric_prefix_fact
+        unary_numeric_prefix_fact -> call1_types
+        unary_numeric_abs [label="@"]
+        UnaryNumericOp -> unary_numeric_abs
+        unary_numeric_abs -> call1_types
+        call1_types -> EXIT_numeric
+
+        numeric_string_Position[label="POSITION([expr] in [expr])"]
+        numeric -> numeric_string_Position
+        call2_types [TYPES="[string]", label="TYPES: string", shape=rectangle]
+        numeric_string_Position -> call2_types
+        string_position_in [label="in"]
+        call2_types -> string_position_in
+        call3_types [TYPES="[string]", label="TYPES: string", shape=rectangle]
+        string_position_in -> call3_types
+        call3_types -> EXIT_numeric
+
+        Nested_numeric[label="([expr])"]
+        numeric -> Nested_numeric
+        call4_types [TYPES="[numeric]", label="TYPES: numeric", shape=rectangle]
+        Nested_numeric -> call4_types
+        call4_types -> EXIT_numeric
+    }
+
+    subgraph def_string {
+        string [label="string", shape=rectangle]
+        EXIT_string [label="EXIT string"]
+        EXIT_numeric -> string [color=none]
+
+        string_literal [label="random string literal"]
+        string -> string_literal
+        string_literal -> EXIT_string
+
+        string_trim[label="TRIM"]
+        string -> string_trim
+        call5_types [TYPES="[string]", label="TYPES: string"]
+        string_trim -> call5_types
+        call6_types[TYPES="[string]", label="TYPES: string"]
+        string_trim -> call6_types
+        BOTH []
+        call6_types -> BOTH
+        BOTH -> call5_types
+        LEADING []
+        call6_types -> LEADING
+        LEADING -> call5_types
+        TRAILING []
+        call6_types -> TRAILING
+        TRAILING -> call5_types
+        call5_types -> EXIT_string
+
+        string_concat [label="concatenation"]
+        string -> string_concat
+        call7_types [TYPES="[string]", label="TYPES: string"]
+        string_concat -> call7_types
+        string_concat_concat [label="||"]
+        call7_types -> string_concat_concat
+        call8_types[TYPES="[string]", label="TYPES: string"]
+        string_concat_concat -> call8_types
+        call8_types -> EXIT_string
+
+        string_substring[label="substring"]
+        string -> string_substring
+        call9_types[TYPES="[string]", label="TYPES: string"]
+        string_substring -> call9_types
+        string_substr_numeric_from_from[label="from"]
+        call9_types -> string_substr_numeric_from_from
+        call10_types [TYPES="[numeric]", label="TYPES: numeric"]
+        string_substr_numeric_from_from -> call10_types
+        call10_types -> EXIT_string
+        string_substr_numeric_len_len [label="length"]
+        call10_types -> string_substr_numeric_len_len
+        call11_types [TYPES="[numeric]", label="TYPES: numeric"]
+        string_substr_numeric_len_len -> call11_types
+        call11_types -> EXIT_string
+    }
+
+    subgraph def_column_spec {
+        column_spec [TYPE="numeric, 3VL Value, string, array", label="column specifier\ntype = numeric | 3VL Value | string | array", shape=octagon]
+        EXIT_column_spec [label="EXIT column specifier", shape=rectangle]
+        ANY_exit -> column_spec [color=none]
+
+        qualified_name [label="Qualified column name of type: type"]
+        column_spec -> qualified_name
+        qualified_name -> EXIT_column_spec
+        unqualified_name [label="Unqualified column name of type: type"]
+        column_spec -> unqualified_name
+        unqualified_name -> EXIT_column_spec
+    }
+
+    subgraph def_array {
+        array [TYPES="[numeric, 3VL Value, string, array]", label="array\ntypes = [numeric?, 3VL Value?, string?, array?]", shape=octagon]
+        EXIT_array[label="EXIT array"]
+        EXIT_column_spec -> array[color=none]
+
+        call12_types [OPTIONAL="t", TYPES="[numeric]", label="TYPE: numeric?", shape=rectangle]
+        call12_types -> call12_types
+        array -> call12_types
+        call12_types -> EXIT_array
+
+        call13_types [OPTIONAL="t", TYPES="[3VL Value]", label="TYPE: 3VL Value?", shape=rectangle]
+        call13_types -> call13_types
+        array -> call13_types
+        call13_types -> EXIT_array
+
+        call13_types [OPTIONAL="t", TYPES="[string]", label="TYPE: string?", shape=rectangle]
+        call13_types -> call13_types
+        array -> call13_types
+        call13_types -> EXIT_array
+
+        call14_types [OPTIONAL="t", TYPES="[array]", label="TYPE: array?", shape=rectangle]
+        call14_types -> call14_types
+        array -> call14_types
+        call14_types -> EXIT_array
+
+        call15_types[OPTIONAL="t", TYPES="[list expr]", label="TYPE: list expr?", shape=rectangle]
+        call15_types -> call15_types
+        array -> call15_types
+        call15_types -> EXIT_array
+    }
+
+    subgraph def_list_expr {
+        list_expr[TYPES="[numeric, 3VL Value, string, list expr, array]", label="list expr\ntypes = [numeric?, 3VL Value?, string?, list expr?, array?]", shape=octagon]
+        EXIT_list_expr[label="EXIT list expr"]
+        EXIT_array -> list_expr[color=none]
+
+        list_expr_element [label="list expr element"]
+        list_expr_element_exit[label="EXIT list expr element"]
+        list_expr -> list_expr_element
+
+        call16_types [OPTIONAL="t", TYPES="[numeric]", label="TYPE: numeric?", shape=rectangle]
+        list_expr_element -> call16_types
+        call16_types -> list_expr_element_exit
+
+        call17_types [OPTIONAL="t", TYPES="[3VL Value]", label="TYPE: 3VL Value?", shape=rectangle]
+        list_expr_element -> call17_types
+        call17_types -> list_expr_element_exit
+
+        call18_types [OPTIONAL="t", TYPES="[string]", label="TYPE: string?", shape=rectangle]
+        list_expr_element -> call18_types
+        call18_types -> list_expr_element_exit
+
+        call19_types [OPTIONAL="t", TYPES="[list expr]", label="TYPE: list expr?", shape=rectangle]
+        list_expr_element -> call19_types
+        call19_types -> list_expr_element_exit
+
+        call20_types [OPTIONAL="t", TYPES="[array]", label="TYPE: array?", shape=rectangle]
+        list_expr_element -> call20_types
+        call20_types -> list_expr_element_exit
+
+        list_expr_element_exit -> list_expr_element
+        list_expr_element_exit -> EXIT_list_expr
+    }
+
+    subgraph def_VAL_3 {
+        VAL_3 [shape=rectangle, label="3VL Value"]
+        EXIT_VAL_3 [shape=rectangle, label="EXIT 3VL Value"]
+
+        IsNull [label="IS NULL"]
+        call0_types_all [label="TYPES: ALL", shape=rectangle]
+        VAL_3 -> IsNull
+        IsNull -> call0_types_all
+        IsNull_not [label="NOT"]
+        IsNull -> IsNull_not
+        IsNull_not -> call0_types_all
+        call0_types_all -> EXIT_VAL_3
+
+        IsDistinctFrom [label="IS DISTINCT FROM"]
+        call1_types_all [label="TYPES: ALL", shape=rectangle]
+        IsDistinctNOT [label="NOT"]
+        DISTINCT []
+        call21_types [TYPES="[compatible]", label="TYPES: SAME TYPE", shape=rectangle]
+        VAL_3 -> IsDistinctFrom
+        IsDistinctFrom -> call1_types_all
+        call1_types_all -> IsDistinctNOT
+        IsDistinctNOT -> DISTINCT
+        call1_types_all -> DISTINCT
+        DISTINCT -> call21_types
+        call21_types -> EXIT_VAL_3
+
+        Exists_not [label="NOT"]
+        Exists [label="EXISTS"]
+        call2_Query [TYPES="[any]", MOD="[]", label="Query", shape=rectangle]
+        VAL_3 -> Exists
+        Exists -> call2_Query
+        call2_Query -> EXIT_VAL_3
+        Exists -> Exists_not
+        Exists_not -> call2_Query
+
+        InList[label="IN [list expr]"]
+        InListNot [label="NOT"]
+        InListIn [label="IN"]
+        VAL_3 -> InList
+        call2_types_all [label="TYPES: ALL", shape=rectangle]
+        InList -> call2_types_all
+        call2_types_all -> InListNot
+        InListNot -> InListIn
+        call2_types_all -> InListIn
+        call1_list_expr [TYPES="[compatible]", label="list expr\nTYPES: SAME TYPE", shape=rectangle]
+        InListIn -> call1_list_expr
+        call1_list_expr -> EXIT_VAL_3
+
+        InSubquery[label="IN [subquery]"]
+        InSubqueryNot [label="NOT"]
+        InSubqueryIn [label="IN"]
+        call3_types_all [label="TYPES: ALL", shape=rectangle]
+        VAL_3 -> InSubquery
+        InSubquery -> call3_types_all
+        call3_types_all -> InSubqueryNot
+        InSubqueryNot -> InSubqueryIn
+        call3_types_all -> InSubqueryIn
+        call3_Query [TYPES="[compatible]", MOD="[]", label="Query\nTYPE: SAME TYPE", shape=rectangle]
+        InSubqueryIn -> call3_Query
+        call3_Query -> EXIT_VAL_3
+
+        Between[label="BETWEEN . AND ."]
+        BetweenBetween [label="BETWEEN"]
+        BetweenBetweenAnd [label="AND"]
+        VAL_3 -> Between
+        call4_types_all [label="TYPES: ALL", shape=rectangle]
+        Between -> call4_types_all
+        call4_types_all -> BetweenBetween
+        call22_types [TYPES="[compatible]", label="TYPES: SAME TYPE", shape=rectangle]
+        BetweenBetween -> call22_types
+        call22_types -> BetweenBetweenAnd
+        call23_types [TYPES="[compatible]", label="TYPES: SAME TYPE", shape=rectangle]
+        BetweenBetweenAnd -> call23_types
+        call23_types -> EXIT_VAL_3
+
+        BinaryComp[label="CMP"]
+        BinaryCompLess [label="<"]
+        BinaryCompEqual [label="="]
+        BinaryCompLessEqual [label="<="]
+        BinaryCompUnEqual [label="<>"]
+        VAL_3 -> BinaryComp
+        call5_types_all [label="TYPES: ALL", shape=rectangle]
+        BinaryComp -> call5_types_all
+        call24_types [TYPES="[compatible]", label="TYPES: SAME TYPE", shape=rectangle]
+        call5_types_all -> BinaryCompLess
+        BinaryCompLess -> call24_types
+        call5_types_all -> BinaryCompEqual
+        BinaryCompEqual -> call24_types
+        call5_types_all -> BinaryCompLessEqual
+        BinaryCompLessEqual -> call24_types
+        call5_types_all -> BinaryCompUnEqual
+        BinaryCompUnEqual -> call24_types
+        call24_types -> EXIT_VAL_3
+
+        AnyAll[label="ANY / ALL"]
+        AnyAllSelectOp[label="select op."]
+        AnyAllLess [label="<"]
+        AnyAllEqual [label="="]
+        AnyAllLessEqual [label="<="]
+        AnyAllUnEqual [label="<>"]
+        AnyAllSelectIter[label="select iterable"]
+        AnyAllAnyAll[label="select ANY/ALL"]
+        AnyAllAnyAllAny[label="ANY"]
+        AnyAllAnyAllAll[label="ALL"]
+        VAL_3 -> AnyAll
+        call2_list_expr [TYPES="[any]", label="list expr\nTYPES: ALL", shape=rectangle]
+        AnyAll -> call2_list_expr
+        call2_list_expr -> AnyAllSelectOp
+        call6_types_all[label="TYPES: ALL", shape=rectangle]
+        AnyAll -> call6_types_all
+        call6_types_all -> AnyAllSelectOp
+        AnyAllSelectOp -> AnyAllLess
+        AnyAllLess -> AnyAllSelectIter
+        AnyAllSelectOp -> AnyAllEqual
+        AnyAllEqual -> AnyAllSelectIter
+        AnyAllSelectOp -> AnyAllLessEqual
+        AnyAllLessEqual -> AnyAllSelectIter
+        AnyAllSelectOp -> AnyAllUnEqual
+        AnyAllUnEqual -> AnyAllSelectIter
+        call4_Query [TYPES="[compatible]", label="Query\nTYPE: SAME TYPE(S)", shape=rectangle]
+        AnyAllSelectIter -> call4_Query
+        call4_Query -> AnyAllAnyAll
+        call1_array [TYPES="[compatible]", label="array\nTYPE: SAME TYPE(S)", shape=rectangle]
+        AnyAllSelectIter -> call1_array
+        call1_array -> AnyAllAnyAll
+        AnyAllAnyAll -> AnyAllAnyAllAny
+        AnyAllAnyAllAny -> EXIT_VAL_3
+        AnyAllAnyAll -> AnyAllAnyAllAll
+        AnyAllAnyAllAll -> EXIT_VAL_3
+
+# =============================================================================
+# TODO: deal with same type list exprs???
+
+        VAL_3 -> BinaryStringLike -> ANY_ref_BinaryStringLike_left
+        ANY_ref_BinaryStringLike_left [label="TYPES: string", shape=rectangle]
+        ANY_ref_BinaryStringLike_left -> BinaryStringLikeNot -> BinaryStringLikeIn
+        ANY_ref_BinaryStringLike_left -> BinaryStringLikeIn
+        BinaryStringLikeIn -> ANY_ref_BinaryStringLike_right
+        ANY_ref_BinaryStringLike_right [label="TYPES: string", shape=rectangle]
+        ANY_ref_BinaryStringLike_right -> EXIT_VAL_3
+        BinaryStringLikeIn [label="LIKE"]
+        BinaryStringLike[label="LIKE"]
+        BinaryStringLikeNot [label="NOT"]
+
+        VAL_3 -> BinaryBooleanOpV3 -> ANY_ref_BinaryBooleanOpV3_left
+        ANY_ref_BinaryBooleanOpV3_left [label="TYPES: 3VL Value", shape=rectangle]
+        ANY_ref_BinaryBooleanOpV3_left -> BinaryBooleanOpV3AND
+        BinaryBooleanOpV3AND -> ANY_ref_BinaryBooleanOpV3_right
+        ANY_ref_BinaryBooleanOpV3_left -> BinaryBooleanOpV3OR
+        BinaryBooleanOpV3OR -> ANY_ref_BinaryBooleanOpV3_right
+        ANY_ref_BinaryBooleanOpV3_left -> BinaryBooleanOpV3XOR
+        BinaryBooleanOpV3XOR -> ANY_ref_BinaryBooleanOpV3_right
+        ANY_ref_BinaryBooleanOpV3_right [TYPES="[compatible]", label="TYPES: SAME TYPE", shape=rectangle]
+        ANY_ref_BinaryBooleanOpV3_right -> EXIT_VAL_3
+        BinaryBooleanOpV3AND [label="AND"]
+        BinaryBooleanOpV3OR [label="OR"]
+        BinaryBooleanOpV3XOR [label="XOR"]
+        BinaryBooleanOpV3[label="bool op."]
+
+        VAL_3 -> true -> EXIT_VAL_3
+        VAL_3 -> false -> EXIT_VAL_3
+
+        VAL_3 -> Nested_VAL_3 -> ANY_ref_Nested_VAL_3 -> EXIT_VAL_3
+        Nested_VAL_3[label="([expr])"]
+        ANY_ref_Nested_VAL_3 [label="TYPES: 3VL Value", shape=rectangle]
+
+        VAL_3 -> UnaryNot_VAL_3 -> ANY_ref_UnaryNot_VAL_3 -> EXIT_VAL_3
+        UnaryNot_VAL_3[label="NOT"]
+        ANY_ref_UnaryNot_VAL_3 [label="TYPES: 3VL Value", shape=rectangle]
+    }
+
+    subgraph def_Query {
+        Query [TYPES="[any]", MOD="[single value]", label="Query\ntypes(ordered)=[...]\nmodif.=[SINGLE VALUE]", shape=octagon]
+        EXIT_Query [label="EXIT Query"]
+
+        FROM []
+        Query -> FROM
+
+        FROM_multiple_relations [label="multiple relations"]
+
+        Table []
+        FROM -> Table
+        Table -> FROM_multiple_relations
+        FROM_multiple_relations -> Table
+
+        call0_Query [label="Query", shape=rectangle, TYPES="[any]", MOD="[]"]
+        FROM -> call0_Query
+        call0_Query -> FROM_multiple_relations
+        FROM_multiple_relations -> call0_Query
+
+        EXIT_FROM [label="EXIT FROM"]
+        FROM_multiple_relations -> EXIT_FROM
+
+        WHERE [label="WHERE"]
+        EXIT_FROM -> WHERE
+
+        call0_VAL_3 [label="3VL Value", shape=rectangle]
+        WHERE -> call0_VAL_3
+
+        call0_VAL_3 -> SELECT
+    }
+
+    subgraph types {
+        "SELECT" -> "GROUPING"
+        "SELECT" -> "NO-GROUPING"
+        "GROUPING" -> GROUPBYClause
+        GROUPBYClause [label = "GROUP BY clause"]
+        HAVINGClause [label = "HAVING clause"]
+        GROUPBYClause -> HAVINGClause -> "generate projection"
+        GROUPBYClause -> "generate projection"
+
+        "EXIT SELECT" -> "GROUP BY clause" [color=none] # visual
+        "GROUP BY clause" -> "single grouping element"
+        "GROUP BY clause" -> "concatenated grouping"
+        "concatenated grouping" -> "concatEl"
+        "concatEl" -> "concatenated grouping"
+        "single grouping element" -> "GroupingEl"
+        "GroupingEl" [label="grouping element"]
+        "concatEl" [label="grouping element"]
+        "GroupingEl" -> "EXIT GROUPING"
+        "concatEl" -> "EXIT GROUPING"
+        "EXIT GROUPING" [label = "EXIT GROUP BY clause"]
+
+        "EXIT GROUPING" -> "grouping element" [color=none] # visual
+        "grouping element" -> "grand total"
+        "grouping element" -> "column reference"
+        "grouping element" -> "grouping sets"
+
+        "grouping sets" -> "ordinary grouping sets"
+        "grouping sets" -> "rollup list"
+        "grouping sets" -> "cube list"
+
+        "grouping element" [shape = rectangle]
+        "GROUPBYClause" [shape = rectangle]
+        HAVING [shape = rectangle]
+        "aggregate function" [shape = rectangle]
+        "GROUP BY clause" [shape = rectangle]
+
+
+
+        "column reference" -> "column name"
+        "ordinary grouping sets" -> set
+        set -> GroupingColumnName
+        GroupingColumnName -> set
+        GroupingColumnName [label = "column name"]
+        GroupingColumnName -> "ordinary grouping sets"
+
+        "rollup list" -> list
+        "cube list" -> list
+        list -> ListColumnName
+        ListColumnName -> list
+        ListColumnName [label = "column name"]
+        list -> "EXIT GROUPING ELEMENT"
+        set -> "EXIT GROUPING ELEMENT"
+        "grand total" -> "EXIT GROUPING ELEMENT"
+        "column name" -> "EXIT GROUPING ELEMENT"
+
+
+        EXIT_string -> HAVING [color=none]
+        HAVING [label = "HAVING clause"]
+        HAVING -> "HAVING conditions"
+        "HAVING conditions" -> BoolNot -> AggrBoolExpr
+        BoolNot [label = "NOT"]
+        "HAVING conditions" -> "atomic condition"
+        "HAVING AggrFunc" [label = "aggregate function"]
+        "atomic condition" ->"HAVING AggrFunc"
+        "atomic condition" -> AggrNot -> "HAVING AggrFunc"
+        AggrNot [label = "NOT"]
+        "HAVING AggrFunc" -> less
+        "HAVING AggrFunc" -> equal
+        "HAVING AggrFunc" -> loe
+        "HAVING AggrFunc" -> noneq
+        "HAVING conditions" -> AggrBoolExpr
+        AggrBoolExpr [label = "Bool Expression"]
+        AggrBoolExpr -> AggrOr -> SecondCond
+        AggrBoolExpr -> AggrAnd -> SecondCond
+        AggrBoolExpr -> AggrXor -> SecondCond
+        AggrOr [label = "OR"]
+        AggrAnd [label = "AND"]
+        AggrXor [label = "XOR"]
+        SecondCond [label = "HAVING conditions"]
+        less [label = "<"]
+        equal [label = "="]
+        loe [label = "<="]
+        noneq [label = "<>"]
+        "num val" [label = "numeric value"]
+        less -> "num val"
+        loe -> "num val"
+        equal -> "num val"
+        noneq -> "num val"
+
+        "num val" -> "EXIT HAVING"
+
+
+        "EXIT GROUPING ELEMENT" -> "aggregate function" [color=none]
+        "aggregate function" -> COUNT -> arg
+        "aggregate function" -> SUM -> arg
+        "aggregate function" -> AVG -> arg
+        "aggregate function" -> MIN -> arg
+        "aggregate function" -> MAX -> arg
+        arg [label = "function parameter"]
+        arg -> AggrNone
+        AggrNone [label = "None"]
+        arg -> ALL -> AggrExpr
+        arg -> aggrDistinct -> AggrExpr
+        aggrDistinct [label = "DISTINCT"]
+        arg -> AggrExpr
+        AggrExpr [label = "column name"]
+
+        AggrExpr -> "AGGREGATE WITH ALIAS"
+        AggrNone -> "AGGREGATE WITH ALIAS"
+        AggrExpr -> "AGGREGATE WITHOUT ALIAS"
+        AggrNone -> "AGGREGATE WITHOUT ALIAS"
+        "AGGREGATE WITHOUT ALIAS" -> "EXIT AGGREGATE"
+        "AGGREGATE WITH ALIAS" -> "EXIT AGGREGATE"
+
+        "NO-GROUPING" -> selectDistinct
+        "NO-GROUPING" -> "non-DISTINCT"
+        selectDistinct -> "generate projection"
+        "non-DISTINCT" -> "generate projection"
+        selectDistinct [label = "DISTINCT"]
+
+        "generate projection" -> "wildcard"
+        "generate projection" -> "value"
+
+        "value" -> "qualified wildcard"
+        "qualified wildcard" -> "EXIT value"
+        "value" -> "AggrInProjection" -> "select-expression"
+        "value" -> "select-expression"
+        "select-expression" -> "unnamed expression"
+        "unnamed expression" -> "EXIT value"
+        "select-expression" -> "expression with alias"
+        "expression with alias" -> "EXIT value"
+
+        AggrInProjection [label = "Aggregate function"]
+
+        "wildcard" -> "EXIT SELECT"
+        "EXIT value" -> "EXIT SELECT"
+        "EXIT value" -> "value"
+    }
 
 }

@@ -19,7 +19,7 @@ impl Graph {
     pub fn read(&mut self, filename: String) {
         let file = File::open(filename).unwrap();
         let reader = BufReader::new(file);
-        for (index, line) in reader.lines().enumerate() {
+        for (_, line) in reader.lines().enumerate() {
             let line = line.unwrap();
             if self.is_edge(line.to_string()) {
                     self.add(line.to_string());
@@ -45,7 +45,6 @@ impl Graph {
         let mut tmp: String = "".to_string();
         let mut prev_char: char = ' ';
         for (i,c) in line.chars().enumerate() {
-            if
             if word == false && c != '-' {
                 if from == "" {
                     from = tmp;
@@ -116,16 +115,17 @@ impl Graph {
         } else {
             let mut v : Vec<(String, f32)> = Vec::new();
             v.push((reciever, 0.0));
-            self.graph.insert(sender, v);
+            self.graph.insert(sender.clone(), v);
         }
-        self.update_probs(sender.clone());
+        self.update_probs(sender);
     }
 
     fn update_probs (&mut self, key: String) {
-        let value: f32 = 0.5; //1.0 / self.graph[&key].len();
-        for i in &mut self.graph.get_mut(&key) {
-        //update second element in the pair in vector
-        i.1 = value;
-    }
+        let node = self.graph.get_mut(&key).unwrap();
+        let fill_with = 1f32 / (node.len() as f32);
+
+        for out_node in node {
+            out_node.1 = fill_with;
+        }
     }
 }
