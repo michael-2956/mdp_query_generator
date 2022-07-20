@@ -73,7 +73,9 @@ digraph G {
         call0_VAL_3 [label="3VL Value", shape=rectangle]
         WHERE -> call0_VAL_3
 
+        SELECT []
         call0_VAL_3 -> SELECT
+        EXIT_FROM -> SELECT
 
         # =============================================================================
         # TODO: deal with same type list exprs???
