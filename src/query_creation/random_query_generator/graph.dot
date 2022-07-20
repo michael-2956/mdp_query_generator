@@ -45,75 +45,222 @@
 # ... -> ... -> ...
 
 digraph G {
-    subgraph def_types {
-        types [TYPES="[numeric, 3VL Value, array, list expr, string]", label="TYPE(S) (generic):\ntypes=[numeric?, 3VL Value?, array?, list expr?, string?]", shape=octagon]
-        EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
+    subgraph def_Query {
+        Query [TYPES="[any]", MOD="[single value]", label="Query\ntypes(ordered)=[...]\nmodif.=[SINGLE VALUE]", shape=octagon]
+        EXIT_Query [label="EXIT Query"]
 
-        types_select_type[label="type := "]
-        types_select_type_end[label=";"]
-        types -> types_select_type
-        types_select_type_numeric[OPTIONAL="t", label="numeric?"]
-        types_select_type -> types_select_type_numeric
-        types_select_type_numeric -> types_select_type_end
-        types_select_type_3vl[OPTIONAL="t", label="3VL Value?"]
-        types_select_type -> types_select_type_3vl
-        types_select_type_3vl -> types_select_type_end
-        types_select_type_array[OPTIONAL="t", label="array?"]
-        types_select_type -> types_select_type_array
-        types_select_type_array -> types_select_type_end
-        types_select_type_list_expr[OPTIONAL="t", label="list expr?"]
-        types_select_type -> types_select_type_list_expr
-        types_select_type_list_expr -> types_select_type_end
-        types_select_type_string[OPTIONAL="t", label="string?"]
-        types_select_type -> types_select_type_string
-        types_select_type_string -> types_select_type_end
+        FROM []
+        Query -> FROM
 
-        call0_column_spec [TYPE="known", label="column specifier\nTYPE: type", shape=rectangle]
-        types_select_type_end -> call0_column_spec
-        call0_column_spec -> EXIT_types
+        FROM_multiple_relations [label="multiple relations"]
 
-        call1_Query [TYPES="[known]", MOD="[single value]", label="Query\nmodif.: SINGLE VALUE\nTYPE: type", shape=rectangle]
-        types_select_type_end -> call1_Query
-        call1_Query -> EXIT_types
+        Table []
+        FROM -> Table
+        Table -> FROM_multiple_relations
+        FROM_multiple_relations -> Table
 
-        types_null [label="null"]
-        types -> types_null
-        types_null -> EXIT_types
+        call0_Query [label="Query", shape=rectangle, TYPES="[any]", MOD="[]"]
+        FROM -> call0_Query
+        call0_Query -> FROM_multiple_relations
+        FROM_multiple_relations -> call0_Query
 
-        call0_numeric [OPTIONAL="t", label="numeric?", shape=rectangle]
-        types -> call0_numeric
-        call0_numeric -> EXIT_types
+        EXIT_FROM [label="EXIT FROM"]
+        FROM_multiple_relations -> EXIT_FROM
 
-        call1_VAL_3 [OPTIONAL="t", label="3VL Value?", shape=rectangle]
-        types -> call1_VAL_3
-        call1_VAL_3 -> EXIT_types
+        WHERE [label="WHERE"]
+        EXIT_FROM -> WHERE
 
-        call0_string [OPTIONAL="t", label="string?", shape=rectangle]
-        types -> call0_string
-        call0_string -> EXIT_types
+        call0_VAL_3 [label="3VL Value", shape=rectangle]
+        WHERE -> call0_VAL_3
 
-        call0_list_expr [OPTIONAL="t", TYPES="[known]", label="list expr?\nTYPES: [...types]", shape=rectangle]
-        types -> call0_list_expr
-        call0_list_expr -> EXIT_types
+        call0_VAL_3 -> SELECT
 
-        call0_array [OPTIONAL="t", TYPES="[known]", label="array?\nTYPES: [...types]", shape=rectangle]
-        types -> call0_array
-        call0_array -> EXIT_types
+        # =============================================================================
+        # TODO: deal with same type list exprs???
     }
 
-    subgraph def_types_all {
-        types_all [label="TYPES: ALL", shape=rectangle]
-        EXIT_types_all [label="EXIT TYPES: ALL", shape=rectangle]
-        EXIT_types -> def_types_all [color=none]
+    subgraph def_VAL_3 {
+        VAL_3 [shape=rectangle, label="3VL Value"]
+        EXIT_VAL_3 [shape=rectangle, label="EXIT 3VL Value"]
 
-        call0_types [TYPES="[numeric, 3VL Value, array, list expr, string]", label="TYPES: numeric, 3VL Value, array, list expr, string", shape=rectangle]
-        types_all -> call0_types
-        call0_types -> EXIT_types_all
+        IsNull [label="IS NULL"]
+        call0_types_all [label="TYPES: ALL", shape=rectangle]
+        VAL_3 -> IsNull
+        IsNull -> call0_types_all
+        IsNull_not [label="NOT"]
+        IsNull -> IsNull_not
+        IsNull_not -> call0_types_all
+        call0_types_all -> EXIT_VAL_3
+
+        IsDistinctFrom [label="IS DISTINCT FROM"]
+        call1_types_all [label="TYPES: ALL", shape=rectangle]
+        IsDistinctNOT [label="NOT"]
+        DISTINCT []
+        call21_types [TYPES="[compatible]", label="TYPES: SAME TYPE", shape=rectangle]
+        VAL_3 -> IsDistinctFrom
+        IsDistinctFrom -> call1_types_all
+        call1_types_all -> IsDistinctNOT
+        IsDistinctNOT -> DISTINCT
+        call1_types_all -> DISTINCT
+        DISTINCT -> call21_types
+        call21_types -> EXIT_VAL_3
+
+        Exists_not [label="NOT"]
+        Exists [label="EXISTS"]
+        call2_Query [TYPES="[any]", MOD="[]", label="Query", shape=rectangle]
+        VAL_3 -> Exists
+        Exists -> call2_Query
+        call2_Query -> EXIT_VAL_3
+        Exists -> Exists_not
+        Exists_not -> call2_Query
+
+        InList[label="IN [list expr]"]
+        InListNot [label="NOT"]
+        InListIn [label="IN"]
+        VAL_3 -> InList
+        call2_types_all [label="TYPES: ALL", shape=rectangle]
+        InList -> call2_types_all
+        call2_types_all -> InListNot
+        InListNot -> InListIn
+        call2_types_all -> InListIn
+        call1_list_expr [TYPES="[compatible]", label="list expr\nTYPES: SAME TYPE", shape=rectangle]
+        InListIn -> call1_list_expr
+        call1_list_expr -> EXIT_VAL_3
+
+        InSubquery[label="IN [subquery]"]
+        InSubqueryNot [label="NOT"]
+        InSubqueryIn [label="IN"]
+        call3_types_all [label="TYPES: ALL", shape=rectangle]
+        VAL_3 -> InSubquery
+        InSubquery -> call3_types_all
+        call3_types_all -> InSubqueryNot
+        InSubqueryNot -> InSubqueryIn
+        call3_types_all -> InSubqueryIn
+        call3_Query [TYPES="[compatible]", MOD="[]", label="Query\nTYPE: SAME TYPE", shape=rectangle]
+        InSubqueryIn -> call3_Query
+        call3_Query -> EXIT_VAL_3
+
+        Between[label="BETWEEN . AND ."]
+        BetweenBetween [label="BETWEEN"]
+        BetweenBetweenAnd [label="AND"]
+        VAL_3 -> Between
+        call4_types_all [label="TYPES: ALL", shape=rectangle]
+        Between -> call4_types_all
+        call4_types_all -> BetweenBetween
+        call22_types [TYPES="[compatible]", label="TYPES: SAME TYPE", shape=rectangle]
+        BetweenBetween -> call22_types
+        call22_types -> BetweenBetweenAnd
+        call23_types [TYPES="[compatible]", label="TYPES: SAME TYPE", shape=rectangle]
+        BetweenBetweenAnd -> call23_types
+        call23_types -> EXIT_VAL_3
+
+        BinaryComp[label="CMP"]
+        BinaryCompLess [label="<"]
+        BinaryCompEqual [label="="]
+        BinaryCompLessEqual [label="<="]
+        BinaryCompUnEqual [label="<>"]
+        VAL_3 -> BinaryComp
+        call5_types_all [label="TYPES: ALL", shape=rectangle]
+        BinaryComp -> call5_types_all
+        call24_types [TYPES="[compatible]", label="TYPES: SAME TYPE", shape=rectangle]
+        call5_types_all -> BinaryCompLess
+        BinaryCompLess -> call24_types
+        call5_types_all -> BinaryCompEqual
+        BinaryCompEqual -> call24_types
+        call5_types_all -> BinaryCompLessEqual
+        BinaryCompLessEqual -> call24_types
+        call5_types_all -> BinaryCompUnEqual
+        BinaryCompUnEqual -> call24_types
+        call24_types -> EXIT_VAL_3
+
+        AnyAll[label="ANY / ALL"]
+        AnyAllSelectOp[label="select op."]
+        AnyAllLess [label="<"]
+        AnyAllEqual [label="="]
+        AnyAllLessEqual [label="<="]
+        AnyAllUnEqual [label="<>"]
+        AnyAllSelectIter[label="select iterable"]
+        AnyAllAnyAll[label="select ANY/ALL"]
+        AnyAllAnyAllAny[label="ANY"]
+        AnyAllAnyAllAll[label="ALL"]
+        VAL_3 -> AnyAll
+        call2_list_expr [TYPES="[any]", label="list expr\nTYPES: ALL", shape=rectangle]
+        AnyAll -> call2_list_expr
+        call2_list_expr -> AnyAllSelectOp
+        call6_types_all[label="TYPES: ALL", shape=rectangle]
+        AnyAll -> call6_types_all
+        call6_types_all -> AnyAllSelectOp
+        AnyAllSelectOp -> AnyAllLess
+        AnyAllLess -> AnyAllSelectIter
+        AnyAllSelectOp -> AnyAllEqual
+        AnyAllEqual -> AnyAllSelectIter
+        AnyAllSelectOp -> AnyAllLessEqual
+        AnyAllLessEqual -> AnyAllSelectIter
+        AnyAllSelectOp -> AnyAllUnEqual
+        AnyAllUnEqual -> AnyAllSelectIter
+        call4_Query [TYPES="[compatible]", label="Query\nTYPE: SAME TYPE(S)", shape=rectangle]
+        AnyAllSelectIter -> call4_Query
+        call4_Query -> AnyAllAnyAll
+        call1_array [TYPES="[compatible]", label="array\nTYPE: SAME TYPE(S)", shape=rectangle]
+        AnyAllSelectIter -> call1_array
+        call1_array -> AnyAllAnyAll
+        AnyAllAnyAll -> AnyAllAnyAllAny
+        AnyAllAnyAllAny -> EXIT_VAL_3
+        AnyAllAnyAll -> AnyAllAnyAllAll
+        AnyAllAnyAllAll -> EXIT_VAL_3
+
+        BinaryStringLike[label="LIKE"]
+        BinaryStringLikeNot [label="NOT"]
+        BinaryStringLikeIn [label="LIKE"]
+        VAL_3 -> BinaryStringLike
+        call25_types [TYPES="[string]", label="TYPES: string", shape=rectangle]
+        BinaryStringLike -> call25_types
+        call25_types -> BinaryStringLikeNot
+        BinaryStringLikeNot -> BinaryStringLikeIn
+        call25_types -> BinaryStringLikeIn
+        call26_types [TYPES="[string]", label="TYPES: string", shape=rectangle]
+        BinaryStringLikeIn -> call26_types
+        call26_types -> EXIT_VAL_3
+
+        BinaryBooleanOpV3[label="bool op."]
+        BinaryBooleanOpV3AND [label="AND"]
+        BinaryBooleanOpV3OR [label="OR"]
+        BinaryBooleanOpV3XOR [label="XOR"]
+        VAL_3 -> BinaryBooleanOpV3
+        call27_types [TYPES="[3VL Value]", label="TYPES: 3VL Value", shape=rectangle]
+        BinaryBooleanOpV3 -> call27_types
+        call27_types -> BinaryBooleanOpV3AND
+        call28_types [TYPES="[compatible]", label="TYPES: SAME TYPE", shape=rectangle]
+        BinaryBooleanOpV3AND -> call28_types
+        call27_types -> BinaryBooleanOpV3OR
+        BinaryBooleanOpV3OR -> call28_types
+        call27_types -> BinaryBooleanOpV3XOR
+        BinaryBooleanOpV3XOR -> call28_types
+        call28_types -> EXIT_VAL_3
+
+        true []
+        VAL_3 -> true
+        true -> EXIT_VAL_3
+        false []
+        VAL_3 -> false
+        false -> EXIT_VAL_3
+
+        Nested_VAL_3[label="([expr])"]
+        VAL_3 -> Nested_VAL_3
+        call29_types [TYPES="[3VL Value]", label="TYPES: 3VL Value", shape=rectangle]
+        Nested_VAL_3 -> call29_types
+        call29_types -> EXIT_VAL_3
+
+        UnaryNot_VAL_3[label="NOT"]
+        call30_types [TYPES="[3VL Value]", label="TYPES: 3VL Value", shape=rectangle]
+        VAL_3 -> UnaryNot_VAL_3
+        UnaryNot_VAL_3 -> call30_types
+        call30_types -> EXIT_VAL_3
     }
 
     subgraph def_numeric {
         numeric [shape=rectangle, label="numeric"]
-        EXIT_numeric [label="numeric EXIT"]
+        EXIT_numeric [label="EXIT numeric"]
         EXIT_VAL_3 -> numeric [color=none]
 
         numeric_literal[label="literal"]
@@ -251,10 +398,76 @@ digraph G {
         call11_types -> EXIT_string
     }
 
+    subgraph def_types {
+        types [TYPES="[numeric, 3VL Value, array, list expr, string]", label="TYPE(S) (generic):\ntypes=[numeric?, 3VL Value?, array?, list expr?, string?]", shape=octagon]
+        EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
+
+        types_select_type[label="type := "]
+        types_select_type_end[label=";"]
+        types -> types_select_type
+        types_select_type_numeric[OPTIONAL="t", label="numeric?"]
+        types_select_type -> types_select_type_numeric
+        types_select_type_numeric -> types_select_type_end
+        types_select_type_3vl[OPTIONAL="t", label="3VL Value?"]
+        types_select_type -> types_select_type_3vl
+        types_select_type_3vl -> types_select_type_end
+        types_select_type_array[OPTIONAL="t", label="array?"]
+        types_select_type -> types_select_type_array
+        types_select_type_array -> types_select_type_end
+        types_select_type_list_expr[OPTIONAL="t", label="list expr?"]
+        types_select_type -> types_select_type_list_expr
+        types_select_type_list_expr -> types_select_type_end
+        types_select_type_string[OPTIONAL="t", label="string?"]
+        types_select_type -> types_select_type_string
+        types_select_type_string -> types_select_type_end
+
+        call0_column_spec [TYPE="known", label="column specifier\nTYPE: type", shape=rectangle]
+        types_select_type_end -> call0_column_spec
+        call0_column_spec -> EXIT_types
+
+        call1_Query [TYPES="[known]", MOD="[single value]", label="Query\nmodif.: SINGLE VALUE\nTYPE: type", shape=rectangle]
+        types_select_type_end -> call1_Query
+        call1_Query -> EXIT_types
+
+        types_null [label="null"]
+        types -> types_null
+        types_null -> EXIT_types
+
+        call0_numeric [OPTIONAL="t", label="numeric?", shape=rectangle]
+        types -> call0_numeric
+        call0_numeric -> EXIT_types
+
+        call1_VAL_3 [OPTIONAL="t", label="3VL Value?", shape=rectangle]
+        types -> call1_VAL_3
+        call1_VAL_3 -> EXIT_types
+
+        call0_string [OPTIONAL="t", label="string?", shape=rectangle]
+        types -> call0_string
+        call0_string -> EXIT_types
+
+        call0_list_expr [OPTIONAL="t", TYPES="[known]", label="list expr?\nTYPES: [...types]", shape=rectangle]
+        types -> call0_list_expr
+        call0_list_expr -> EXIT_types
+
+        call0_array [OPTIONAL="t", TYPES="[known]", label="array?\nTYPES: [...types]", shape=rectangle]
+        types -> call0_array
+        call0_array -> EXIT_types
+    }
+
+    subgraph def_types_all {
+        types_all [label="TYPES: ALL", shape=rectangle]
+        EXIT_types_all [label="EXIT TYPES: ALL", shape=rectangle]
+        EXIT_types -> types_all [color=none]
+
+        call0_types [TYPES="[numeric, 3VL Value, array, list expr, string]", label="TYPES: numeric, 3VL Value, array, list expr, string", shape=rectangle]
+        types_all -> call0_types
+        call0_types -> EXIT_types_all
+    }
+
     subgraph def_column_spec {
         column_spec [TYPE="numeric, 3VL Value, string, array", label="column specifier\ntype = numeric | 3VL Value | string | array", shape=octagon]
         EXIT_column_spec [label="EXIT column specifier", shape=rectangle]
-        ANY_exit -> column_spec [color=none]
+        EXIT_types_all -> column_spec [color=none]
 
         qualified_name [label="Qualified column name of type: type"]
         column_spec -> qualified_name
@@ -326,208 +539,6 @@ digraph G {
 
         list_expr_element_exit -> list_expr_element
         list_expr_element_exit -> EXIT_list_expr
-    }
-
-    subgraph def_VAL_3 {
-        VAL_3 [shape=rectangle, label="3VL Value"]
-        EXIT_VAL_3 [shape=rectangle, label="EXIT 3VL Value"]
-
-        IsNull [label="IS NULL"]
-        call0_types_all [label="TYPES: ALL", shape=rectangle]
-        VAL_3 -> IsNull
-        IsNull -> call0_types_all
-        IsNull_not [label="NOT"]
-        IsNull -> IsNull_not
-        IsNull_not -> call0_types_all
-        call0_types_all -> EXIT_VAL_3
-
-        IsDistinctFrom [label="IS DISTINCT FROM"]
-        call1_types_all [label="TYPES: ALL", shape=rectangle]
-        IsDistinctNOT [label="NOT"]
-        DISTINCT []
-        call21_types [TYPES="[compatible]", label="TYPES: SAME TYPE", shape=rectangle]
-        VAL_3 -> IsDistinctFrom
-        IsDistinctFrom -> call1_types_all
-        call1_types_all -> IsDistinctNOT
-        IsDistinctNOT -> DISTINCT
-        call1_types_all -> DISTINCT
-        DISTINCT -> call21_types
-        call21_types -> EXIT_VAL_3
-
-        Exists_not [label="NOT"]
-        Exists [label="EXISTS"]
-        call2_Query [TYPES="[any]", MOD="[]", label="Query", shape=rectangle]
-        VAL_3 -> Exists
-        Exists -> call2_Query
-        call2_Query -> EXIT_VAL_3
-        Exists -> Exists_not
-        Exists_not -> call2_Query
-
-        InList[label="IN [list expr]"]
-        InListNot [label="NOT"]
-        InListIn [label="IN"]
-        VAL_3 -> InList
-        call2_types_all [label="TYPES: ALL", shape=rectangle]
-        InList -> call2_types_all
-        call2_types_all -> InListNot
-        InListNot -> InListIn
-        call2_types_all -> InListIn
-        call1_list_expr [TYPES="[compatible]", label="list expr\nTYPES: SAME TYPE", shape=rectangle]
-        InListIn -> call1_list_expr
-        call1_list_expr -> EXIT_VAL_3
-
-        InSubquery[label="IN [subquery]"]
-        InSubqueryNot [label="NOT"]
-        InSubqueryIn [label="IN"]
-        call3_types_all [label="TYPES: ALL", shape=rectangle]
-        VAL_3 -> InSubquery
-        InSubquery -> call3_types_all
-        call3_types_all -> InSubqueryNot
-        InSubqueryNot -> InSubqueryIn
-        call3_types_all -> InSubqueryIn
-        call3_Query [TYPES="[compatible]", MOD="[]", label="Query\nTYPE: SAME TYPE", shape=rectangle]
-        InSubqueryIn -> call3_Query
-        call3_Query -> EXIT_VAL_3
-
-        Between[label="BETWEEN . AND ."]
-        BetweenBetween [label="BETWEEN"]
-        BetweenBetweenAnd [label="AND"]
-        VAL_3 -> Between
-        call4_types_all [label="TYPES: ALL", shape=rectangle]
-        Between -> call4_types_all
-        call4_types_all -> BetweenBetween
-        call22_types [TYPES="[compatible]", label="TYPES: SAME TYPE", shape=rectangle]
-        BetweenBetween -> call22_types
-        call22_types -> BetweenBetweenAnd
-        call23_types [TYPES="[compatible]", label="TYPES: SAME TYPE", shape=rectangle]
-        BetweenBetweenAnd -> call23_types
-        call23_types -> EXIT_VAL_3
-
-        BinaryComp[label="CMP"]
-        BinaryCompLess [label="<"]
-        BinaryCompEqual [label="="]
-        BinaryCompLessEqual [label="<="]
-        BinaryCompUnEqual [label="<>"]
-        VAL_3 -> BinaryComp
-        call5_types_all [label="TYPES: ALL", shape=rectangle]
-        BinaryComp -> call5_types_all
-        call24_types [TYPES="[compatible]", label="TYPES: SAME TYPE", shape=rectangle]
-        call5_types_all -> BinaryCompLess
-        BinaryCompLess -> call24_types
-        call5_types_all -> BinaryCompEqual
-        BinaryCompEqual -> call24_types
-        call5_types_all -> BinaryCompLessEqual
-        BinaryCompLessEqual -> call24_types
-        call5_types_all -> BinaryCompUnEqual
-        BinaryCompUnEqual -> call24_types
-        call24_types -> EXIT_VAL_3
-
-        AnyAll[label="ANY / ALL"]
-        AnyAllSelectOp[label="select op."]
-        AnyAllLess [label="<"]
-        AnyAllEqual [label="="]
-        AnyAllLessEqual [label="<="]
-        AnyAllUnEqual [label="<>"]
-        AnyAllSelectIter[label="select iterable"]
-        AnyAllAnyAll[label="select ANY/ALL"]
-        AnyAllAnyAllAny[label="ANY"]
-        AnyAllAnyAllAll[label="ALL"]
-        VAL_3 -> AnyAll
-        call2_list_expr [TYPES="[any]", label="list expr\nTYPES: ALL", shape=rectangle]
-        AnyAll -> call2_list_expr
-        call2_list_expr -> AnyAllSelectOp
-        call6_types_all[label="TYPES: ALL", shape=rectangle]
-        AnyAll -> call6_types_all
-        call6_types_all -> AnyAllSelectOp
-        AnyAllSelectOp -> AnyAllLess
-        AnyAllLess -> AnyAllSelectIter
-        AnyAllSelectOp -> AnyAllEqual
-        AnyAllEqual -> AnyAllSelectIter
-        AnyAllSelectOp -> AnyAllLessEqual
-        AnyAllLessEqual -> AnyAllSelectIter
-        AnyAllSelectOp -> AnyAllUnEqual
-        AnyAllUnEqual -> AnyAllSelectIter
-        call4_Query [TYPES="[compatible]", label="Query\nTYPE: SAME TYPE(S)", shape=rectangle]
-        AnyAllSelectIter -> call4_Query
-        call4_Query -> AnyAllAnyAll
-        call1_array [TYPES="[compatible]", label="array\nTYPE: SAME TYPE(S)", shape=rectangle]
-        AnyAllSelectIter -> call1_array
-        call1_array -> AnyAllAnyAll
-        AnyAllAnyAll -> AnyAllAnyAllAny
-        AnyAllAnyAllAny -> EXIT_VAL_3
-        AnyAllAnyAll -> AnyAllAnyAllAll
-        AnyAllAnyAllAll -> EXIT_VAL_3
-
-# =============================================================================
-# TODO: deal with same type list exprs???
-
-        VAL_3 -> BinaryStringLike -> ANY_ref_BinaryStringLike_left
-        ANY_ref_BinaryStringLike_left [label="TYPES: string", shape=rectangle]
-        ANY_ref_BinaryStringLike_left -> BinaryStringLikeNot -> BinaryStringLikeIn
-        ANY_ref_BinaryStringLike_left -> BinaryStringLikeIn
-        BinaryStringLikeIn -> ANY_ref_BinaryStringLike_right
-        ANY_ref_BinaryStringLike_right [label="TYPES: string", shape=rectangle]
-        ANY_ref_BinaryStringLike_right -> EXIT_VAL_3
-        BinaryStringLikeIn [label="LIKE"]
-        BinaryStringLike[label="LIKE"]
-        BinaryStringLikeNot [label="NOT"]
-
-        VAL_3 -> BinaryBooleanOpV3 -> ANY_ref_BinaryBooleanOpV3_left
-        ANY_ref_BinaryBooleanOpV3_left [label="TYPES: 3VL Value", shape=rectangle]
-        ANY_ref_BinaryBooleanOpV3_left -> BinaryBooleanOpV3AND
-        BinaryBooleanOpV3AND -> ANY_ref_BinaryBooleanOpV3_right
-        ANY_ref_BinaryBooleanOpV3_left -> BinaryBooleanOpV3OR
-        BinaryBooleanOpV3OR -> ANY_ref_BinaryBooleanOpV3_right
-        ANY_ref_BinaryBooleanOpV3_left -> BinaryBooleanOpV3XOR
-        BinaryBooleanOpV3XOR -> ANY_ref_BinaryBooleanOpV3_right
-        ANY_ref_BinaryBooleanOpV3_right [TYPES="[compatible]", label="TYPES: SAME TYPE", shape=rectangle]
-        ANY_ref_BinaryBooleanOpV3_right -> EXIT_VAL_3
-        BinaryBooleanOpV3AND [label="AND"]
-        BinaryBooleanOpV3OR [label="OR"]
-        BinaryBooleanOpV3XOR [label="XOR"]
-        BinaryBooleanOpV3[label="bool op."]
-
-        VAL_3 -> true -> EXIT_VAL_3
-        VAL_3 -> false -> EXIT_VAL_3
-
-        VAL_3 -> Nested_VAL_3 -> ANY_ref_Nested_VAL_3 -> EXIT_VAL_3
-        Nested_VAL_3[label="([expr])"]
-        ANY_ref_Nested_VAL_3 [label="TYPES: 3VL Value", shape=rectangle]
-
-        VAL_3 -> UnaryNot_VAL_3 -> ANY_ref_UnaryNot_VAL_3 -> EXIT_VAL_3
-        UnaryNot_VAL_3[label="NOT"]
-        ANY_ref_UnaryNot_VAL_3 [label="TYPES: 3VL Value", shape=rectangle]
-    }
-
-    subgraph def_Query {
-        Query [TYPES="[any]", MOD="[single value]", label="Query\ntypes(ordered)=[...]\nmodif.=[SINGLE VALUE]", shape=octagon]
-        EXIT_Query [label="EXIT Query"]
-
-        FROM []
-        Query -> FROM
-
-        FROM_multiple_relations [label="multiple relations"]
-
-        Table []
-        FROM -> Table
-        Table -> FROM_multiple_relations
-        FROM_multiple_relations -> Table
-
-        call0_Query [label="Query", shape=rectangle, TYPES="[any]", MOD="[]"]
-        FROM -> call0_Query
-        call0_Query -> FROM_multiple_relations
-        FROM_multiple_relations -> call0_Query
-
-        EXIT_FROM [label="EXIT FROM"]
-        FROM_multiple_relations -> EXIT_FROM
-
-        WHERE [label="WHERE"]
-        EXIT_FROM -> WHERE
-
-        call0_VAL_3 [label="3VL Value", shape=rectangle]
-        WHERE -> call0_VAL_3
-
-        call0_VAL_3 -> SELECT
     }
 
     subgraph types {
