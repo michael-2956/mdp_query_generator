@@ -44,9 +44,7 @@
 # 10. Don't do this:
 # ... -> ... -> ...
 
-# 11. subgraph ignore {} is completely ignored
-
-# 12. Do NOT use block comments /* */
+# 11. Any subgraphs whose name does not begin with def_ are ignored
 
 digraph G {
     subgraph def_Query {
