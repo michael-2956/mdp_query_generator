@@ -198,24 +198,23 @@ impl<'a> Iterator for DotTokenizer<'a> {
                 },
                 DotToken::Subgraph => {
                     match try_parse_function_def(&mut self.lexer) {
-                        Ok(function_def) => {
-                            if let Some(func @ CodeUnit::Function {..}) = function_def {
-                                if self.in_function_definition {
-                                    break Some(Err(SyntaxError::new(
-                                        format!("nested functional node definitions are not supported")
-                                    )))
-                                } else {
-                                    self.in_function_definition = true;
-                                    break Some(Ok(func))
-                                }
+                        Ok(Some(func @ CodeUnit::Function {..})) => {
+                            if self.in_function_definition {
+                                break Some(Err(SyntaxError::new(
+                                    format!("nested functional node definitions are not supported")
+                                )))
                             } else {
-                                match self.lexer.next()? {
-                                    DotToken::OpenDeclaration => ignore_subgraph = true,
-                                    _ => break Some(Err(SyntaxError::new(
-                                        format!("Expected subgraph body: {}", self.lexer.slice())
-                                    )))
-                                };
+                                self.in_function_definition = true;
+                                break Some(Ok(func))
                             }
+                        },
+                        Ok(_) => {  // there is no function
+                            match self.lexer.next()? {
+                                DotToken::OpenDeclaration => ignore_subgraph = true,
+                                _ => break Some(Err(SyntaxError::new(
+                                    format!("Expected subgraph body: {}", self.lexer.slice())
+                                )))
+                            };
                         },
                         Err(err) => break Some(Err(err)),
                     }
@@ -226,7 +225,7 @@ impl<'a> Iterator for DotTokenizer<'a> {
                             match read_opened_node_specification(&mut self.lexer, &node_name) {
                                 Ok(node_spec) => {
                                     if self.call_ident_regex.is_match(&node_name) {
-                                        let (input_type, modifiers) = match try_parse_function_options(
+                                        let (input_type, modifiers) = match parse_function_options(
                                             &node_name, node_spec, true
                                         ) {
                                             Ok(options) => options,
@@ -323,10 +322,10 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<CodeUn
                                     )
                                 ))
                             } else {
-                                let (input_type, modifiers) = try_parse_function_options(
+                                let (input_type, modifiers) = parse_function_options(
                                     &node_name, read_node_specification(lex, &node_name)?, false
                                 )?;
-                                let exit_node_name = try_parse_function_exit_node_name(lex, &node_name)?;
+                                let exit_node_name = parse_function_exit_node_name(lex, &node_name)?;
                                 Ok(Some(CodeUnit::Function {
                                     source_node_name: node_name,
                                     exit_node_name,
@@ -352,7 +351,7 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<CodeUn
     }
 }
 
-fn try_parse_function_options(node_name: &SmolStr, node_spec: Vec<(SmolStr, DotToken)>, call: bool) -> Result<(FunctionInputsType, Option<Vec<SmolStr>>), SyntaxError> {
+fn parse_function_options(node_name: &SmolStr, node_spec: Vec<(SmolStr, DotToken)>, call: bool) -> Result<(FunctionInputsType, Option<Vec<SmolStr>>), SyntaxError> {
     let mut input_type = FunctionInputsType::None;
     let mut modifiers = Option::<Vec<SmolStr>>::None;
     for (key, token) in node_spec {
@@ -421,7 +420,7 @@ fn try_parse_function_options(node_name: &SmolStr, node_spec: Vec<(SmolStr, DotT
     Ok((input_type, modifiers))
 }
 
-fn try_parse_function_exit_node_name(lex: &mut Lexer<'_, DotToken>, node_name: &SmolStr) -> Result<SmolStr, SyntaxError> {
+fn parse_function_exit_node_name(lex: &mut Lexer<'_, DotToken>, node_name: &SmolStr) -> Result<SmolStr, SyntaxError> {
     let gen_exit_node_format_err = || { SyntaxError::new(
         format!("Exit node should be defined after the {node_name} definition: EXIT_{node_name}[...]")
     )};
