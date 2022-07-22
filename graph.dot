@@ -44,6 +44,10 @@
 # 10. Don't do this:
 # ... -> ... -> ...
 
+# 11. subgraph ignore {} is completely ignored
+
+# 12. Do NOT use block comments /* */
+
 digraph G {
     subgraph def_Query {
         Query [TYPES="[any]", MOD="[single value]", label="Query\ntypes(ordered)=[...]\nmodif.=[SINGLE VALUE]", shape=octagon]
@@ -77,8 +81,9 @@ digraph G {
         call0_VAL_3 -> SELECT
         EXIT_FROM -> SELECT
 
-        # =============================================================================
-        # TODO: deal with same type list exprs???
+        select_all [label="*"]
+        SELECT -> select_all
+        select_all -> EXIT_Query
     }
 
     subgraph def_VAL_3 {
@@ -494,10 +499,10 @@ digraph G {
         array -> call13_types
         call13_types -> EXIT_array
 
-        call13_types [OPTIONAL="t", TYPES="[string]", label="TYPE: string?", shape=rectangle]
-        call13_types -> call13_types
-        array -> call13_types
-        call13_types -> EXIT_array
+        call31_types [OPTIONAL="t", TYPES="[string]", label="TYPE: string?", shape=rectangle]
+        call31_types -> call31_types
+        array -> call31_types
+        call31_types -> EXIT_array
 
         call14_types [OPTIONAL="t", TYPES="[array]", label="TYPE: array?", shape=rectangle]
         call14_types -> call14_types
@@ -543,7 +548,7 @@ digraph G {
         list_expr_element_exit -> EXIT_list_expr
     }
 
-    subgraph types {
+    subgraph ignore {
         "SELECT" -> "GROUPING"
         "SELECT" -> "NO-GROUPING"
         "GROUPING" -> GROUPBYClause

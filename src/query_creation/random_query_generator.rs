@@ -4,13 +4,11 @@ use sqlparser::ast::{
     TableWithJoins, Value,
 };
 
-mod reader;
-
-use reader::{
-    Graph,
-};
+use super::state_generators::MarkovChainGenerator;
 
 pub struct QueryGeneratorParams {
+    /// state generator. Default: MarkovChainGenerator
+    pub state_generator: MarkovChainGenerator,
     /// max number of tables (counting repetitions) mentioned
     /// in a well-defined SELECT-FROM-WHERE block, including
     /// nested subqueries
@@ -56,9 +54,10 @@ pub struct QueryGeneratorParams {
     pub where_negation_prob: f64,
 }
 
-impl Default for QueryGeneratorParams {
-    fn default() -> Self {
+impl QueryGeneratorParams {
+    pub fn from_generator(generator: MarkovChainGenerator) -> Self {
         Self {
+            state_generator: generator,
             max_total_tables: 6,
             max_nest_level: 3,
             max_select_attrs: 3,
@@ -136,8 +135,6 @@ impl QueryGenerator {
     }
 
     fn generate_query(&mut self, query_info: &mut QueryInfo) -> Query {
-        let mut graph = Graph::new();
-        graph.read("src/query_creation/random_query_generator/graph.dot".to_string());
         let from = self.generate_from(query_info);
         let projection = self.generate_projection(query_info);
         let distinct = self.rng.gen_bool(self.params.distinct_prob);

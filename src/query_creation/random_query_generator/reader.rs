@@ -22,7 +22,7 @@ impl Graph {
         for (_, line) in reader.lines().enumerate() {
             let line = line.unwrap();
             if self.is_edge(line.to_string()) {
-                    self.add(line.to_string());
+                self.add(line.to_string());
             }
         }
     }
@@ -38,13 +38,11 @@ impl Graph {
     fn add(&mut self, mut line: String) {
         line = self.clean_code(line);
         line = format!("{}{}", line, ' ');
-        let mut word: bool = true;
-        let mut quotes: bool = false;
+        let word: bool = true;
         let mut from: String = "".to_string();
-        let mut to: String = "".to_string();
+        let mut to: String;
         let mut tmp: String = "".to_string();
-        let mut prev_char: char = ' ';
-        for (i,c) in line.chars().enumerate() {
+        for c in line.chars() {
             if word == false && c != '-' {
                 if from == "" {
                     from = tmp;
@@ -52,7 +50,7 @@ impl Graph {
                     from = self.make_name(from);
                     to = self.make_name(tmp.clone());
                     self.insert(from, to);
-                    from = (tmp.clone());
+                    from = tmp.clone();
                 }
                 tmp = "".to_string();
             }
@@ -61,7 +59,7 @@ impl Graph {
     }
 
 
-    fn clean_code (&mut self, mut arg: String) -> String {
+    fn clean_code(&mut self, mut arg: String) -> String {
         arg = format!("{}{}", arg, ' ');
         let mut content: bool = true;
         let mut avoid_space: bool = false;
@@ -99,7 +97,7 @@ impl Graph {
     }
 
 
-    fn make_name (&mut self, arg: String) -> String {
+    fn make_name(&mut self, arg: String) -> String {
         let mut name : String = "".to_string();
         for c in arg.chars() {
             if !(c=='"') {

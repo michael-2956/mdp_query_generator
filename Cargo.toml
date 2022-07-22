@@ -7,4 +7,8 @@ edition = "2021"
 
 [dependencies]
 sqlparser = { path = "../sqlparser-rs" }
+structopt = "0.3.26"
+smol_str = "0.1.23"
+logos = "0.12.1"
 rand = "0.8.5"
+regex = "1"
