@@ -233,7 +233,7 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                             Err(err) => break Some(Err(err))
                                         };
                                         break Some(Ok(CodeUnit::Call {
-                                            name: node_name,
+                                            name: SmolStr::new(node_name.split_once('_').unwrap().1),
                                             inputs: input_type,
                                             modifiers
                                         }));
@@ -409,7 +409,6 @@ fn try_parse_function_options(node_name: &SmolStr, node_spec: Vec<(SmolStr, DotT
                                                 .map(|el| el.to_owned()).collect::<Vec<_>>();
 
                 if mods.len() > 0 {
-                    println!("Set mods: {:?}", mods);
                     modifiers = Some(mods);
                 }
             } else {

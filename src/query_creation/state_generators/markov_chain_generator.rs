@@ -21,6 +21,7 @@ impl MarkovChain {
 }
 
 pub struct MarkovChainGenerator {
+    #[allow(dead_code)]
     markov_chain: MarkovChain
 }
 
