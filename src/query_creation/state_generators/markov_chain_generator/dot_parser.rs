@@ -1,9 +1,10 @@
-use core::fmt;
-use std::error::Error;
+use std::collections::HashMap;
 
-use logos::{Logos, Lexer, Filter};
+use logos::{Filter, Lexer, Logos};
 use regex::Regex;
 use smol_str::SmolStr;
+
+use super::error::SyntaxError;
 
 #[derive(Logos, Debug, PartialEq)]
 enum DotToken {
@@ -42,7 +43,7 @@ enum DotToken {
 
     #[regex(r"\]")]
     CloseSpecification,
-    
+
     #[regex(r",")]
     Comma,
 
@@ -59,16 +60,18 @@ fn identifier(lex: &mut Lexer<'_, DotToken>) -> SmolStr {
 
 fn quoted_identifier(lex: &mut Lexer<'_, DotToken>) -> SmolStr {
     let quoted_ident = lex.slice();
-    SmolStr::new(quoted_ident.get(1..quoted_ident.len()-1).unwrap())
+    SmolStr::new(quoted_ident.get(1..quoted_ident.len() - 1).unwrap())
 }
 
 fn quoted_identifier_with_brackets(lex: &mut Lexer<'_, DotToken>) -> SmolStr {
     let quoted_ident = lex.slice();
     let opening_bracket_pos = quoted_ident.find('[').unwrap();
     let closing_bracket_pos = quoted_ident.find(']').unwrap();
-    SmolStr::new(quoted_ident.get(
-        opening_bracket_pos+1..closing_bracket_pos
-    ).unwrap())
+    SmolStr::new(
+        quoted_ident
+            .get(opening_bracket_pos + 1..closing_bracket_pos)
+            .unwrap(),
+    )
 }
 
 /// Callback to skip block comments
@@ -81,7 +84,7 @@ fn block_comment(lex: &mut Lexer<'_, DotToken>) -> Filter<()> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum FunctionInputsType {
     Any,
     None,
@@ -98,37 +101,54 @@ impl FunctionInputsType {
             "any" => Some(FunctionInputsType::Any),
             "known" => Some(FunctionInputsType::Known),
             "compatible" => Some(FunctionInputsType::Compatible),
-            _ => None
+            _ => None,
         }
     }
 
     fn get_identifier_names(name_list_str: SmolStr) -> Vec<SmolStr> {
-        name_list_str.split(',').map(
-            |string| SmolStr::new(string.trim())
-        ).collect::<Vec<_>>()
+        name_list_str
+            .split(',')
+            .map(|string| SmolStr::new(string.trim()))
+            .collect::<Vec<_>>()
     }
 }
 
 #[derive(Debug)]
 pub enum CodeUnit {
-    Function {
-        source_node_name: SmolStr,
-        exit_node_name: SmolStr,
-        input_type: FunctionInputsType,
-        modifiers: Option<Vec<SmolStr>>,
-    },
+    Function(Function),
     NodeDef {
         name: SmolStr,
+        optional: bool,
     },
     Call {
+        node_name: SmolStr,
         name: SmolStr,
         inputs: FunctionInputsType,
         modifiers: Option<Vec<SmolStr>>,
+        optional: bool,
     },
     Edge {
         node_name_from: SmolStr,
-        node_name_to: SmolStr,
+        node_to: EdgeVertex,
     },
+    CloseDeclaration,
+}
+
+#[derive(Debug)]
+pub enum EdgeVertex {
+    Node(SmolStr),
+    Call {
+        node_name: SmolStr,
+        call_name: SmolStr,
+    },
+}
+
+#[derive(Debug)]
+pub struct Function {
+    pub source_node_name: SmolStr,
+    pub exit_node_name: SmolStr,
+    pub input_type: FunctionInputsType,
+    pub modifiers: Option<Vec<SmolStr>>,
 }
 
 pub struct DotTokenizer<'a> {
@@ -144,27 +164,8 @@ impl<'a> DotTokenizer<'a> {
             lexer: DotToken::lexer(source),
             digraph_defined: false,
             in_function_definition: false,
-            call_ident_regex: Regex::new(r"^call[0-9]+_[A-Za-z_][A-Za-z0-9_]*$").unwrap()
+            call_ident_regex: Regex::new(r"^call[0-9]+_[A-Za-z_][A-Za-z0-9_]*$").unwrap(),
         }
-    }
-}
-
-#[derive(Debug)]
-pub struct SyntaxError {
-    reason: String,
-}
-
-impl SyntaxError {
-    fn new(reason: String) -> Self {
-        SyntaxError { reason }
-    }
-}
-
-impl Error for SyntaxError { }
-
-impl fmt::Display for SyntaxError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Error: {}", self.reason)
     }
 }
 
@@ -176,11 +177,13 @@ impl<'a> Iterator for DotTokenizer<'a> {
         loop {
             if ignore_subgraph {
                 match self.lexer.next()? {
-                    DotToken::OpenDeclaration => break Some(Err(SyntaxError::new(
-                        format!("Nested braces {{}} in subgraphs are not supported")
-                    ))),
+                    DotToken::OpenDeclaration => {
+                        break Some(Err(SyntaxError::new(format!(
+                            "Nested braces {{}} in subgraphs are not supported"
+                        ))))
+                    }
                     DotToken::CloseDeclaration => ignore_subgraph = false,
-                    _ => continue
+                    _ => continue,
                 }
             }
             match self.lexer.next()? {
@@ -223,7 +226,11 @@ impl<'a> Iterator for DotTokenizer<'a> {
                     match self.lexer.next() {
                         Some(DotToken::OpenSpecification) => {
                             match read_opened_node_specification(&mut self.lexer, &node_name) {
-                                Ok(node_spec) => {
+                                Ok(mut node_spec) => {
+                                    let optional = match node_spec.remove("OPTIONAL") {
+                                        Some(DotToken::QuotedIdentifiers(idents)) => idents == "t",
+                                        _ => false
+                                    };
                                     if self.call_ident_regex.is_match(&node_name) {
                                         let (input_type, modifiers) = match parse_function_options(
                                             &node_name, node_spec, true
@@ -232,12 +239,17 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                             Err(err) => break Some(Err(err))
                                         };
                                         break Some(Ok(CodeUnit::Call {
+                                            node_name: node_name.clone(),
                                             name: SmolStr::new(node_name.split_once('_').unwrap().1),
                                             inputs: input_type,
-                                            modifiers
+                                            modifiers,
+                                            optional,
                                         }));
                                     } else {
-                                        break Some(Ok(CodeUnit::NodeDef { name: node_name }));
+                                        break Some(Ok(CodeUnit::NodeDef {
+                                            name: node_name,
+                                            optional,
+                                        }));
                                     }
                                 },
                                 Err(err) => break Some(Err(err))
@@ -245,9 +257,19 @@ impl<'a> Iterator for DotTokenizer<'a> {
                         },
                         Some(DotToken::Arrow) => {
                             match self.lexer.next() {
-                                Some(DotToken::Identifier(node_name_to)) => break Some(Ok(CodeUnit::Edge {
-                                    node_name_from: node_name, node_name_to
-                                })),
+                                Some(DotToken::Identifier(node_name_to)) => {
+                                    break Some(Ok(CodeUnit::Edge {
+                                        node_name_from: node_name,
+                                        node_to: if self.call_ident_regex.is_match(&node_name_to) {
+                                            EdgeVertex::Call {
+                                                node_name: node_name_to.clone(),
+                                                call_name: SmolStr::new(node_name_to.split_once('_').unwrap().1),
+                                            }
+                                        } else {
+                                            EdgeVertex::Node(node_name_to)
+                                        }
+                                    }))
+                                },
                                 _ => break Some(Err(SyntaxError::new(
                                     format!("Expected an identifier after arrow: {node_name} -> ...")
                                 )))
@@ -266,6 +288,7 @@ impl<'a> Iterator for DotTokenizer<'a> {
                 ))),
                 DotToken::CloseDeclaration => {
                     self.in_function_definition = false;
+                    break Some(Ok(CodeUnit::CloseDeclaration))
                 },
                 any => break Some(Err(SyntaxError::new(
                     format!("Unexpected {:?} : {}", any, self.lexer.slice())
@@ -277,23 +300,17 @@ impl<'a> Iterator for DotTokenizer<'a> {
 
 fn handle_digraph(lex: &mut Lexer<'_, DotToken>) -> Result<(), SyntaxError> {
     match lex.next() {
-        None => Ok(()),  // digraph at the end of file
-        Some(token) => {
-            match token {
-                DotToken::Identifier(_) => {
-                    match lex.next() {
-                        Some(DotToken::OpenDeclaration) => Ok(()),
-                        _ => Err(SyntaxError::new(
-                            format!("expected digraph body")
-                        ))
-                    }
-                },
-                DotToken::OpenDeclaration => Ok(()),
-                _ => Err(SyntaxError::new(
-                    format!("expected digraph identifier or digraph body")
-                ))
-            }
-        }
+        None => Ok(()), // digraph at the end of file
+        Some(token) => match token {
+            DotToken::Identifier(_) => match lex.next() {
+                Some(DotToken::OpenDeclaration) => Ok(()),
+                _ => Err(SyntaxError::new(format!("expected digraph body"))),
+            },
+            DotToken::OpenDeclaration => Ok(()),
+            _ => Err(SyntaxError::new(format!(
+                "expected digraph identifier or digraph body"
+            ))),
+        },
     }
 }
 
@@ -306,124 +323,121 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<CodeUn
             }
             let function_name = match function_name.get(4..) {
                 Some(decl_node_name) => decl_node_name,
-                None => return Err(SyntaxError::new(
-                    format!("subgraph name def_ is forbidden")
-                )),
+                None => return Err(SyntaxError::new(format!("subgraph name def_ is forbidden"))),
             };
             match lex.next() {
-                Some(DotToken::OpenDeclaration) => {
-                    match lex.next() {
-                        Some(DotToken::Identifier(node_name)) => {
-                            if node_name != function_name {
-                                Err(SyntaxError::new(
+                Some(DotToken::OpenDeclaration) => match lex.next() {
+                    Some(DotToken::Identifier(node_name)) => {
+                        if node_name != function_name {
+                            Err(SyntaxError::new(
                                     format!(
                                         "Source node definition should be the first in the subgraph def_{} and should be named {}",
                                         function_name, function_name
                                     )
                                 ))
-                            } else {
-                                let (input_type, modifiers) = parse_function_options(
-                                    &node_name, read_node_specification(lex, &node_name)?, false
-                                )?;
-                                let exit_node_name = parse_function_exit_node_name(lex, &node_name)?;
-                                Ok(Some(CodeUnit::Function {
-                                    source_node_name: node_name,
-                                    exit_node_name,
-                                    input_type,
-                                    modifiers
-                                }))
-                            }
-                        },
-                        _ => Err(SyntaxError::new(
-                            format!("expected source node definition")
-                        )),
+                        } else {
+                            let (input_type, modifiers) = parse_function_options(
+                                &node_name,
+                                read_node_specification(lex, &node_name)?,
+                                false,
+                            )?;
+                            let exit_node_name = parse_function_exit_node_name(lex, &node_name)?;
+                            Ok(Some(CodeUnit::Function(Function {
+                                source_node_name: node_name,
+                                exit_node_name,
+                                input_type,
+                                modifiers,
+                            })))
+                        }
                     }
+                    _ => Err(SyntaxError::new(format!("expected source node definition"))),
                 },
-                _ => Err(SyntaxError::new(
-                    format!("expected subgraph body")
-                ))
+                _ => Err(SyntaxError::new(format!("expected subgraph body"))),
             }
-        },
+        }
         Some(DotToken::OpenDeclaration) => Ok(None),
-        _ => Err(SyntaxError::new(
-            format!("expected subgraph identifier or subgraph body")
-        ))
+        _ => Err(SyntaxError::new(format!(
+            "expected subgraph identifier or subgraph body"
+        ))),
     }
 }
 
-fn parse_function_options(node_name: &SmolStr, node_spec: Vec<(SmolStr, DotToken)>, call: bool) -> Result<(FunctionInputsType, Option<Vec<SmolStr>>), SyntaxError> {
+fn parse_function_options(
+    node_name: &SmolStr,
+    mut node_spec: HashMap<SmolStr, DotToken>,
+    call: bool,
+) -> Result<(FunctionInputsType, Option<Vec<SmolStr>>), SyntaxError> {
     let mut input_type = FunctionInputsType::None;
     let mut modifiers = Option::<Vec<SmolStr>>::None;
-    for (key, token) in node_spec {
-        if (key == "TYPE" || key == "TYPES") && input_type != FunctionInputsType::None {
-            return Err(SyntaxError::new(
-                format!("two {key} definitions in {node_name}[...]")
-            ))
-        }
-        if key == "MOD" && modifiers != None {
-            return Err(SyntaxError::new(
-                format!("two MOD definitions in {node_name}[...]")
-            ))
-        }
-        if key == "TYPE" {
-            if let DotToken::QuotedIdentifiers(idents) = token {
-                if let Some(special_type) = FunctionInputsType::try_extract_special_type(&idents) {
-                    input_type = special_type;
-                } else {
-                    let idents = FunctionInputsType::get_identifier_names(idents);
-                    if call {
-                        match idents.len() {
-                            1 => {
-                                input_type = FunctionInputsType::TypeName(idents[0].clone())
-                            },
-                            _ => return Err(SyntaxError::new(
-                                format!("call..._{node_name}[TYPE=... takes only 1 parameter")
-                            ))
+    if let Some(token) = node_spec.remove("TYPE") {
+        if let DotToken::QuotedIdentifiers(idents) = token {
+            if let Some(special_type) = FunctionInputsType::try_extract_special_type(&idents) {
+                input_type = special_type;
+            } else {
+                let idents = FunctionInputsType::get_identifier_names(idents);
+                if call {
+                    match idents.len() {
+                        1 => input_type = FunctionInputsType::TypeName(idents[0].clone()),
+                        _ => {
+                            return Err(SyntaxError::new(format!(
+                                "call..._{node_name}[TYPE=... takes only 1 parameter"
+                            )))
                         }
-                    } else {
-                        input_type = FunctionInputsType::TypeNameVariants(idents);
                     }
-                }
-            } else {
-                return Err(SyntaxError::new(
-                    format!("{node_name}[TYPE=... should take unbracketed form: TYPE=\".., \"")
-                ))
-            }
-        } else if key == "TYPES" {
-            if let DotToken::QuotedIdentifiersWithBrackets(idents) = token {
-                if let Some(special_type) = FunctionInputsType::try_extract_special_type(&idents) {
-                    input_type = special_type;
                 } else {
-                    input_type = FunctionInputsType::TypeNameList(FunctionInputsType::get_identifier_names(idents));
+                    input_type = FunctionInputsType::TypeNameVariants(idents);
                 }
-            } else {
-                return Err(SyntaxError::new(
-                    format!("{node_name}[TYPES=... should take bracketed form: TYPES=\"[.., ]\"")
-                ))
             }
-        } else if key == "MOD" {
-            if let DotToken::QuotedIdentifiersWithBrackets(value) = token {
-                let mods = FunctionInputsType::get_identifier_names(value)
-                                                .iter().filter(|el| el.len() > 0)
-                                                .map(|el| el.to_owned()).collect::<Vec<_>>();
+        } else {
+            return Err(SyntaxError::new(format!(
+                "{node_name}[TYPE=... should take unbracketed form: TYPE=\".., \""
+            )));
+        }
+    }
+    if let Some(token) = node_spec.remove("TYPES") {
+        if let DotToken::QuotedIdentifiersWithBrackets(idents) = token {
+            if let Some(special_type) = FunctionInputsType::try_extract_special_type(&idents) {
+                input_type = special_type;
+            } else {
+                input_type = FunctionInputsType::TypeNameList(
+                    FunctionInputsType::get_identifier_names(idents),
+                );
+            }
+        } else {
+            return Err(SyntaxError::new(format!(
+                "{node_name}[TYPES=... should take bracketed form: TYPES=\"[.., ]\""
+            )));
+        }
+    }
+    if let Some(token) = node_spec.remove("MOD") {
+        if let DotToken::QuotedIdentifiersWithBrackets(value) = token {
+            let mods = FunctionInputsType::get_identifier_names(value)
+                .iter()
+                .filter(|el| el.len() > 0)
+                .map(|el| el.to_owned())
+                .collect::<Vec<_>>();
 
-                if mods.len() > 0 {
-                    modifiers = Some(mods);
-                }
-            } else {
-                return Err(SyntaxError::new(
-                    format!("{node_name}[MOD=... should take bracketed form: MOD=\"[.., ]\"")
-                ))
+            if mods.len() > 0 {
+                modifiers = Some(mods);
             }
+        } else {
+            return Err(SyntaxError::new(format!(
+                "{node_name}[MOD=... should take bracketed form: MOD=\"[.., ]\""
+            )));
         }
     }
     Ok((input_type, modifiers))
 }
 
-fn parse_function_exit_node_name(lex: &mut Lexer<'_, DotToken>, node_name: &SmolStr) -> Result<SmolStr, SyntaxError> {
-    let gen_exit_node_format_err = || { SyntaxError::new(
-        format!("Exit node should be defined after the {node_name} definition: EXIT_{node_name}[...]")
-    )};
+fn parse_function_exit_node_name(
+    lex: &mut Lexer<'_, DotToken>,
+    node_name: &SmolStr,
+) -> Result<SmolStr, SyntaxError> {
+    let gen_exit_node_format_err = || {
+        SyntaxError::new(format!(
+            "Exit node should be defined after the {node_name} definition: EXIT_{node_name}[...]"
+        ))
+    };
     match lex.next() {
         Some(DotToken::Identifier(name)) => {
             if !name.starts_with("EXIT_") {
@@ -432,53 +446,53 @@ fn parse_function_exit_node_name(lex: &mut Lexer<'_, DotToken>, node_name: &Smol
                 read_node_specification(lex, &name)?;
                 Ok(name)
             }
-        },
-        _ => Err(gen_exit_node_format_err())
+        }
+        _ => Err(gen_exit_node_format_err()),
     }
 }
 
-fn read_node_specification(lex: &mut Lexer<'_, DotToken>, node_name: &SmolStr) -> Result<Vec<(SmolStr, DotToken)>, SyntaxError> {
+fn read_node_specification(
+    lex: &mut Lexer<'_, DotToken>,
+    node_name: &SmolStr,
+) -> Result<HashMap<SmolStr, DotToken>, SyntaxError> {
     match lex.next() {
         Some(DotToken::OpenSpecification) => read_opened_node_specification(lex, node_name),
-        _ => Err(SyntaxError::new(
-            format!("expected source node properties specifier {}[...]", node_name)
-        )),
+        _ => Err(SyntaxError::new(format!(
+            "expected source node properties specifier {}[...]",
+            node_name
+        ))),
     }
 }
 
-fn read_opened_node_specification(lex: &mut Lexer<'_, DotToken>, node_name: &SmolStr) -> Result<Vec<(SmolStr, DotToken)>, SyntaxError> {
-    let mut props = Vec::<_>::new();
+fn read_opened_node_specification(
+    lex: &mut Lexer<'_, DotToken>,
+    node_name: &SmolStr,
+) -> Result<HashMap<SmolStr, DotToken>, SyntaxError> {
+    let mut props = HashMap::<_, _>::new();
     let gen_props_error = || {
-        SyntaxError::new(
-            format!(
-                "expected source node property value: {}[PROP=\"VAL\", ...] or empty brackets: {}[]",
-                node_name,
-                node_name
-            )
-        )
+        SyntaxError::new(format!(
+            "expected source node property value: {}[PROP=\"VAL\", ...] or empty brackets: {}[]",
+            node_name, node_name
+        ))
     };
     loop {
         match lex.next() {
-            Some(DotToken::Identifier(prop_name)) => {
-                match lex.next() {
-                    Some(DotToken::Equals) => {
-                        match lex.next() {
-                            Some(token @ DotToken::QuotedIdentifiersWithBrackets(_)) => {
-                                props.push((prop_name, token));
-                            },
-                            Some(token @ DotToken::QuotedIdentifiers(_)) => {
-                                props.push((prop_name, token));
-                            },
-                            Some(DotToken::Identifier(_)) => continue,
-                            _ => break Err(gen_props_error())
-                        }
-                    },
-                    _ => break Err(gen_props_error())
-                }
-            }
+            Some(DotToken::Identifier(prop_name)) => match lex.next() {
+                Some(DotToken::Equals) => match lex.next() {
+                    Some(token @ DotToken::QuotedIdentifiersWithBrackets(_)) => {
+                        props.insert(SmolStr::new(prop_name.to_uppercase()), token);
+                    }
+                    Some(token @ DotToken::QuotedIdentifiers(_)) => {
+                        props.insert(SmolStr::new(prop_name.to_uppercase()), token);
+                    }
+                    Some(DotToken::Identifier(_)) => continue,
+                    _ => break Err(gen_props_error()),
+                },
+                _ => break Err(gen_props_error()),
+            },
             Some(DotToken::CloseSpecification) => break Ok(props),
             Some(DotToken::Comma) => continue,
-            _ => break Err(gen_props_error())
+            _ => break Err(gen_props_error()),
         }
     }
 }
