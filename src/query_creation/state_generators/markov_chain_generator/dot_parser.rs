@@ -11,7 +11,6 @@ enum DotToken {
     #[regex(r"#[^\n]*", logos::skip)] // Skip # line comments
     #[regex(r"//[^\n]*", logos::skip)] // Skip // line comments
     #[regex(r"/\*", block_comment)] // Skip block comments
-    #[regex(r"\[[\n\r\s]*color[\n\r\s]*=[\n\r\s]*none[\n\r\s]*\]", logos::skip)] // Skip [color=none]
     #[regex(r"[^\S\n\r]+", logos::skip)] // Skip whitespace
     #[regex(r"[\n\r]+", logos::skip)] // Skip newline
     #[error]
@@ -35,7 +34,7 @@ enum DotToken {
     #[regex(r"\{")]
     OpenDeclaration,
 
-    #[regex(r"\}")]
+    #[regex(r"}")]
     CloseDeclaration,
 
     #[regex(r"\[")]
@@ -139,11 +138,10 @@ pub enum EdgeVertex {
     Node(SmolStr),
     Call {
         node_name: SmolStr,
-        call_name: SmolStr,
     },
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Function {
     pub source_node_name: SmolStr,
     pub exit_node_name: SmolStr,
@@ -263,7 +261,6 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                         node_to: if self.call_ident_regex.is_match(&node_name_to) {
                                             EdgeVertex::Call {
                                                 node_name: node_name_to.clone(),
-                                                call_name: SmolStr::new(node_name_to.split_once('_').unwrap().1),
                                             }
                                         } else {
                                             EdgeVertex::Node(node_name_to)
@@ -287,8 +284,10 @@ impl<'a> Iterator for DotTokenizer<'a> {
                     format!("Quoted identifiers are not supported: \"{name}\"")
                 ))),
                 DotToken::CloseDeclaration => {
-                    self.in_function_definition = false;
-                    break Some(Ok(CodeUnit::CloseDeclaration))
+                    if self.in_function_definition {
+                        self.in_function_definition = false;
+                        break Some(Ok(CodeUnit::CloseDeclaration))
+                    }
                 },
                 any => break Some(Err(SyntaxError::new(
                     format!("Unexpected {:?} : {}", any, self.lexer.slice())
