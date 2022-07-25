@@ -16,17 +16,14 @@ struct ProgramArgs {
 
 fn main() {
     let program_args = ProgramArgs::from_args();
-    let query_params = QueryGeneratorParams::from_generator(
-        match MarkovChainGenerator::parse_graph_from_file(program_args.input) {
-            Ok(generator) => generator,
-            Err(err) => {
-                println!("{}", err);
-                return;
-            }
-        },
-    );
-
-    let mut generator = QueryGenerator::new(query_params);
+    let markov_generator = match MarkovChainGenerator::parse_graph_from_file(program_args.input) {
+        Ok(generator) => generator,
+        Err(err) => {
+            println!("{}", err);
+            return;
+        }
+    };
+    let mut generator = QueryGenerator::new(QueryGeneratorParams::from_generator(markov_generator));
 
     for _ in 0..2 {
         let query = generator.generate();

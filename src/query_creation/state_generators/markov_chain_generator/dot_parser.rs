@@ -117,28 +117,20 @@ pub enum CodeUnit {
     Function(Function),
     NodeDef {
         name: SmolStr,
-        optional: bool,
+        option_name: Option<SmolStr>,
     },
     Call {
         node_name: SmolStr,
-        name: SmolStr,
+        func_name: SmolStr,
         inputs: FunctionInputsType,
         modifiers: Option<Vec<SmolStr>>,
-        optional: bool,
+        option_name: Option<SmolStr>,
     },
     Edge {
         node_name_from: SmolStr,
-        node_to: EdgeVertex,
+        node_name_to: SmolStr,
     },
     CloseDeclaration,
-}
-
-#[derive(Debug)]
-pub enum EdgeVertex {
-    Node(SmolStr),
-    Call {
-        node_name: SmolStr,
-    },
 }
 
 #[derive(Clone, Debug)]
@@ -225,9 +217,9 @@ impl<'a> Iterator for DotTokenizer<'a> {
                         Some(DotToken::OpenSpecification) => {
                             match read_opened_node_specification(&mut self.lexer, &node_name) {
                                 Ok(mut node_spec) => {
-                                    let optional = match node_spec.remove("OPTIONAL") {
-                                        Some(DotToken::QuotedIdentifiers(idents)) => idents == "t",
-                                        _ => false
+                                    let option_name = match node_spec.remove("OPTIONAL") {
+                                        Some(DotToken::QuotedIdentifiers(idents)) => Some(idents),
+                                        _ => None
                                     };
                                     if self.call_ident_regex.is_match(&node_name) {
                                         let (input_type, modifiers) = match parse_function_options(
@@ -238,15 +230,15 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                         };
                                         break Some(Ok(CodeUnit::Call {
                                             node_name: node_name.clone(),
-                                            name: SmolStr::new(node_name.split_once('_').unwrap().1),
+                                            func_name: SmolStr::new(node_name.split_once('_').unwrap().1),
                                             inputs: input_type,
                                             modifiers,
-                                            optional,
+                                            option_name,
                                         }));
                                     } else {
                                         break Some(Ok(CodeUnit::NodeDef {
                                             name: node_name,
-                                            optional,
+                                            option_name,
                                         }));
                                     }
                                 },
@@ -257,14 +249,7 @@ impl<'a> Iterator for DotTokenizer<'a> {
                             match self.lexer.next() {
                                 Some(DotToken::Identifier(node_name_to)) => {
                                     break Some(Ok(CodeUnit::Edge {
-                                        node_name_from: node_name,
-                                        node_to: if self.call_ident_regex.is_match(&node_name_to) {
-                                            EdgeVertex::Call {
-                                                node_name: node_name_to.clone(),
-                                            }
-                                        } else {
-                                            EdgeVertex::Node(node_name_to)
-                                        }
+                                        node_name_from: node_name, node_name_to
                                     }))
                                 },
                                 _ => break Some(Err(SyntaxError::new(

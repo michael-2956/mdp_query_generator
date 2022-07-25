@@ -18,7 +18,8 @@
 # compatible is just the same type for not
 
 # 4. Optional node (with a question mark at the end):
-# {node_name} [OPTIONAL="t"]
+# {node_name} [OPTIONAL="option_name"]
+# option_name is the name of an option listed in function args
 
 # 5. Exit a callable node:
 # EXIT_{node_name} [label="EXIT {node_label}"]
@@ -410,19 +411,19 @@ digraph G {
         types_select_type[label="type := "]
         types_select_type_end[label=";"]
         types -> types_select_type
-        types_select_type_numeric[OPTIONAL="t", label="numeric?"]
+        types_select_type_numeric[OPTIONAL="numeric", label="numeric?"]
         types_select_type -> types_select_type_numeric
         types_select_type_numeric -> types_select_type_end
-        types_select_type_3vl[OPTIONAL="t", label="3VL Value?"]
+        types_select_type_3vl[OPTIONAL="3VL Value", label="3VL Value?"]
         types_select_type -> types_select_type_3vl
         types_select_type_3vl -> types_select_type_end
-        types_select_type_array[OPTIONAL="t", label="array?"]
+        types_select_type_array[OPTIONAL="array", label="array?"]
         types_select_type -> types_select_type_array
         types_select_type_array -> types_select_type_end
-        types_select_type_list_expr[OPTIONAL="t", label="list expr?"]
+        types_select_type_list_expr[OPTIONAL="list expr", label="list expr?"]
         types_select_type -> types_select_type_list_expr
         types_select_type_list_expr -> types_select_type_end
-        types_select_type_string[OPTIONAL="t", label="string?"]
+        types_select_type_string[OPTIONAL="string", label="string?"]
         types_select_type -> types_select_type_string
         types_select_type_string -> types_select_type_end
 
@@ -438,23 +439,23 @@ digraph G {
         types -> types_null
         types_null -> EXIT_types
 
-        call0_numeric [OPTIONAL="t", label="numeric?", shape=rectangle]
+        call0_numeric [OPTIONAL="numeric", label="numeric?", shape=rectangle]
         types -> call0_numeric
         call0_numeric -> EXIT_types
 
-        call1_VAL_3 [OPTIONAL="t", label="3VL Value?", shape=rectangle]
+        call1_VAL_3 [OPTIONAL="3VL Value", label="3VL Value?", shape=rectangle]
         types -> call1_VAL_3
         call1_VAL_3 -> EXIT_types
 
-        call0_string [OPTIONAL="t", label="string?", shape=rectangle]
+        call0_string [OPTIONAL="string", label="string?", shape=rectangle]
         types -> call0_string
         call0_string -> EXIT_types
 
-        call0_list_expr [OPTIONAL="t", TYPES="[known]", label="list expr?\nTYPES: [...types]", shape=rectangle]
+        call0_list_expr [OPTIONAL="list expr", TYPES="[known]", label="list expr?\nTYPES: [...types]", shape=rectangle]
         types -> call0_list_expr
         call0_list_expr -> EXIT_types
 
-        call0_array [OPTIONAL="t", TYPES="[known]", label="array?\nTYPES: [...types]", shape=rectangle]
+        call0_array [OPTIONAL="array", TYPES="[known]", label="array?\nTYPES: [...types]", shape=rectangle]
         types -> call0_array
         call0_array -> EXIT_types
     }
@@ -487,30 +488,25 @@ digraph G {
         EXIT_array[label="EXIT array"]
         EXIT_column_spec -> array[color=none]
 
-        call12_types [OPTIONAL="t", TYPES="[numeric]", label="TYPE: numeric?", shape=rectangle]
+        call12_types [OPTIONAL="numeric", TYPES="[numeric]", label="TYPE: numeric?", shape=rectangle]
         call12_types -> call12_types
         array -> call12_types
         call12_types -> EXIT_array
 
-        call13_types [OPTIONAL="t", TYPES="[3VL Value]", label="TYPE: 3VL Value?", shape=rectangle]
+        call13_types [OPTIONAL="3VL Value", TYPES="[3VL Value]", label="TYPE: 3VL Value?", shape=rectangle]
         call13_types -> call13_types
         array -> call13_types
         call13_types -> EXIT_array
 
-        call31_types [OPTIONAL="t", TYPES="[string]", label="TYPE: string?", shape=rectangle]
+        call31_types [OPTIONAL="string", TYPES="[string]", label="TYPE: string?", shape=rectangle]
         call31_types -> call31_types
         array -> call31_types
         call31_types -> EXIT_array
 
-        call14_types [OPTIONAL="t", TYPES="[array]", label="TYPE: array?", shape=rectangle]
+        call14_types [OPTIONAL="array", TYPES="[array]", label="TYPE: array?", shape=rectangle]
         call14_types -> call14_types
         array -> call14_types
         call14_types -> EXIT_array
-
-        call15_types[OPTIONAL="t", TYPES="[list expr]", label="TYPE: list expr?", shape=rectangle]
-        call15_types -> call15_types
-        array -> call15_types
-        call15_types -> EXIT_array
     }
 
     subgraph def_list_expr {
@@ -522,23 +518,23 @@ digraph G {
         list_expr_element_exit[label="EXIT list expr element"]
         list_expr -> list_expr_element
 
-        call16_types [OPTIONAL="t", TYPES="[numeric]", label="TYPE: numeric?", shape=rectangle]
+        call16_types [OPTIONAL="numeric", TYPES="[numeric]", label="TYPE: numeric?", shape=rectangle]
         list_expr_element -> call16_types
         call16_types -> list_expr_element_exit
 
-        call17_types [OPTIONAL="t", TYPES="[3VL Value]", label="TYPE: 3VL Value?", shape=rectangle]
+        call17_types [OPTIONAL="3VL Value", TYPES="[3VL Value]", label="TYPE: 3VL Value?", shape=rectangle]
         list_expr_element -> call17_types
         call17_types -> list_expr_element_exit
 
-        call18_types [OPTIONAL="t", TYPES="[string]", label="TYPE: string?", shape=rectangle]
+        call18_types [OPTIONAL="string", TYPES="[string]", label="TYPE: string?", shape=rectangle]
         list_expr_element -> call18_types
         call18_types -> list_expr_element_exit
 
-        call19_types [OPTIONAL="t", TYPES="[list expr]", label="TYPE: list expr?", shape=rectangle]
+        call19_types [OPTIONAL="list expr", TYPES="[list expr]", label="TYPE: list expr?", shape=rectangle]
         list_expr_element -> call19_types
         call19_types -> list_expr_element_exit
 
-        call20_types [OPTIONAL="t", TYPES="[array]", label="TYPE: array?", shape=rectangle]
+        call20_types [OPTIONAL="array", TYPES="[array]", label="TYPE: array?", shape=rectangle]
         list_expr_element -> call20_types
         call20_types -> list_expr_element_exit
 

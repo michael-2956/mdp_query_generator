@@ -1,8 +1,8 @@
 mod dot_parser;
 mod error;
 use std::{collections::HashMap, fs::File, io::Read, path::PathBuf};
+use rand::{prelude::ThreadRng, thread_rng, Rng};
 
-use logos::source;
 use regex::Regex;
 use smol_str::SmolStr;
 
@@ -11,37 +11,32 @@ use self::{
     error::SyntaxError,
 };
 
+#[derive(Clone, Debug)]
 struct MarkovChain {
     functions: HashMap<SmolStr, Function>,
-}
-
-#[derive(Debug)]
-enum Destination {
-    Node(NodeParams),
-    Call(CallParams),
 }
 
 #[derive(Clone, Debug)]
 struct NodeParams {
     name: SmolStr,
-    optional: bool,
+    call_params: Option<CallParams>,
+    option_name: Option<SmolStr>,
 }
 
 #[derive(Clone, Debug)]
 struct CallParams {
-    name: SmolStr,
+    func_name: SmolStr,
     inputs: FunctionInputsType,
     modifiers: Option<Vec<SmolStr>>,
-    optional: bool,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct Function {
     source_node_name: SmolStr,
     exit_node_name: SmolStr,
     input_type: FunctionInputsType,
     modifiers: Option<Vec<SmolStr>>,
-    chain: HashMap<SmolStr, Vec<(f64, Destination)>>,
+    chain: HashMap<SmolStr, Vec<(f64, NodeParams)>>,
 }
 
 impl Function {
@@ -64,9 +59,6 @@ impl MarkovChain {
         let source = MarkovChain::remove_fake_edges(source);
         let mut functions = MarkovChain::parse_functions(&source)?;
         MarkovChain::fill_probs_equal(&mut functions);
-
-        println!("{:#?}", functions);
-
         Ok(MarkovChain { functions })
     }
 
@@ -79,14 +71,13 @@ impl MarkovChain {
     fn parse_functions(source: &str) -> Result<HashMap<SmolStr, Function>, SyntaxError> {
         let mut functions = HashMap::<_, _>::new();
         let mut node_params = HashMap::<SmolStr, NodeParams>::new();
-        let mut call_params = HashMap::<SmolStr, CallParams>::new();
         let mut current_function = Option::<Function>::None;
         for token in DotTokenizer::from_str(&source) {
             match token? {
                 dot_parser::CodeUnit::Function(definition) => {
                     current_function = Some(Function::new(definition.clone()));
-                    define_node(&mut current_function, &mut node_params, definition.source_node_name, false)?;
-                    define_node(&mut current_function, &mut node_params, definition.exit_node_name, false)?;
+                    define_node(&mut current_function, &mut node_params, definition.source_node_name, None, None)?;
+                    define_node(&mut current_function, &mut node_params, definition.exit_node_name, None, None)?;
                 }
                 dot_parser::CodeUnit::CloseDeclaration => {
                     if let Some(function) = current_function {
@@ -96,43 +87,24 @@ impl MarkovChain {
                         return Err(SyntaxError::new(format!("Unexpected CloseDeclaration")));
                     }
                 }
-                dot_parser::CodeUnit::NodeDef { name, optional } => {
-                    define_node(&mut current_function, &mut node_params, name, optional)?;
+                dot_parser::CodeUnit::NodeDef { name, option_name } => {
+                    define_node(&mut current_function, &mut node_params, name, None, option_name)?;
                 }
                 dot_parser::CodeUnit::Call {
                     node_name,
-                    name,
+                    func_name,
                     inputs,
                     modifiers,
-                    optional,
+                    option_name,
                 } => {
-                    if let Some(ref mut function) = current_function {
-                        function.chain.insert(node_name.clone(), Vec::<_>::new());
-                        call_params.insert(node_name, CallParams {
-                            name, inputs, modifiers, optional
-                        });
-                    } else {
-                        return Err(SyntaxError::new(format!(
-                            "Unexpected NodeDef: {node_name} [...]"
-                        )));
-                    }
+                    define_node(&mut current_function, &mut node_params, node_name, Some(CallParams {
+                        func_name, inputs, modifiers
+                    }), option_name)?;
                 }
                 dot_parser::CodeUnit::Edge {
                     node_name_from,
-                    node_to,
+                    node_name_to,
                 } => {
-                    let (node_name_to, destination) = match node_to {
-                        dot_parser::EdgeVertex::Node(node_name) => {
-                            let dest_params = node_params.get(&node_name).unwrap().clone();
-                            (node_name, Destination::Node(dest_params))
-                        }
-                        dot_parser::EdgeVertex::Call {
-                            node_name,
-                        } => {
-                            let dest_params = call_params.get(&node_name).unwrap().clone();
-                            (node_name, Destination::Call(dest_params))
-                        }
-                    };
                     if let Some(ref mut function) = current_function {
                         if !function.chain.contains_key(&node_name_to) {
                             return Err(SyntaxError::new(format!(
@@ -141,7 +113,7 @@ impl MarkovChain {
                             )));
                         }
                         if let Some(dest_list) = function.chain.get_mut(&node_name_from) {
-                            dest_list.push((0f64, destination));
+                            dest_list.push((0f64, node_params.get(&node_name_to).unwrap().clone()));
                         } else {
                             return Err(SyntaxError::new(format!(
                                 "Cannot build edge: source node does not exist: {}",
@@ -164,65 +136,69 @@ impl MarkovChain {
                 "Query is the entry point and must be defined: subgraph def_Query {{...}}"
             )));
         }
-        for (node_name, params) in call_params {
-            if let Some(function) = functions.get(&params.name) {
-                let gen_type_error = |error_msg: String| {
-                    format!(
-                        "Call node {node_name}: Invalid function arguments; {error_msg} (function source node {})",
-                        function.source_node_name
-                    )
-                };
-                match params.inputs.clone() {
-                    FunctionInputsType::TypeName(name) => {
-                        if let FunctionInputsType::TypeNameVariants(variants) = &function.input_type {
-                            if !variants.contains(&name) {
+        for (node_name, params) in node_params {
+            if let Some(call_params) = params.call_params {
+                if let Some(function) = functions.get(&call_params.func_name) {
+                    let gen_type_error = |error_msg: String| {
+                        format!(
+                            "Call node {node_name}: Invalid function arguments; {error_msg} (function source node {})",
+                            function.source_node_name
+                        )
+                    };
+
+                    match call_params.inputs.clone() {
+                        FunctionInputsType::TypeName(name) => {
+                            if let FunctionInputsType::TypeNameVariants(variants) = &function.input_type {
+                                if !variants.contains(&name) {
+                                    return Err(SyntaxError::new(gen_type_error(format!(
+                                        "Expected one of {:?}, got {:?}", function.input_type, call_params.inputs
+                                    ))));
+                                }
+                            } else {
                                 return Err(SyntaxError::new(gen_type_error(format!(
-                                    "Expected one of {:?}, got {:?}", function.input_type, params.inputs
+                                    "Got {:?}, but the function type is {:?}", call_params.inputs, function.input_type,
                                 ))));
                             }
-                        } else {
-                            return Err(SyntaxError::new(gen_type_error(format!(
-                                "Got {:?}, but the function type is {:?}", params.inputs, function.input_type,
-                            ))));
-                        }
-                    },
-                    FunctionInputsType::TypeNameList(types_list) => {
-                        if let FunctionInputsType::TypeNameList(func_types_list) = &function.input_type {
-                            for c_type in types_list {
-                                if !func_types_list.contains(&c_type) {
+                        },
+                        FunctionInputsType::TypeNameList(types_list) => {
+                            if let FunctionInputsType::TypeNameList(func_types_list) = &function.input_type {
+                                for c_type in types_list {
+                                    if !func_types_list.contains(&c_type) {
+                                        return Err(SyntaxError::new(gen_type_error(format!(
+                                            "type {} is not in {:?}", c_type, function.input_type
+                                        ))));
+                                    }
+                                }
+                            } else {
+                                return Err(SyntaxError::new(gen_type_error(format!(
+                                    "Got {:?}, but the function type is {:?}", call_params.inputs, function.input_type,
+                                ))));
+                            }
+                        },
+                        _ => {}
+                    };
+
+                    if let Some(modifiers) = call_params.modifiers {
+                        if let Some(ref func_modifiers) = function.modifiers {
+                            for c_mod in modifiers {
+                                if !func_modifiers.contains(&c_mod) {
                                     return Err(SyntaxError::new(gen_type_error(format!(
-                                        "type {} is not in {:?}", c_type, function.input_type
+                                        "modifier {} is not in {:?}", c_mod, function.input_type
                                     ))));
                                 }
                             }
                         } else {
                             return Err(SyntaxError::new(gen_type_error(format!(
-                                "Got {:?}, but the function type is {:?}", params.inputs, function.input_type,
+                                "Call has modifiers {:?} which are not present in the declaration", modifiers
                             ))));
                         }
-                    },
-                    _ => {}
-                };
-                if let Some(modifiers) = params.modifiers {
-                    if let Some(ref func_modifiers) = function.modifiers {
-                        for c_mod in modifiers {
-                            if !func_modifiers.contains(&c_mod) {
-                                return Err(SyntaxError::new(gen_type_error(format!(
-                                    "modifier {} is not in {:?}", c_mod, function.input_type
-                                ))));
-                            }
-                        }
-                    } else {
-                        return Err(SyntaxError::new(gen_type_error(format!(
-                            "Call has modifiers {:?} which are not present in the declaration", modifiers
-                        ))));
                     }
+                } else {
+                    return Err(SyntaxError::new(format!(
+                        "Function is not defined: {node_name} (function {})",
+                        params.name
+                    )));
                 }
-            } else {
-                return Err(SyntaxError::new(format!(
-                    "Function is not defined: {node_name} (function {})",
-                    params.name
-                )));
             }
         }
 
@@ -241,26 +217,150 @@ impl MarkovChain {
     }
 }
 
-fn define_node(current_function: &mut Option<Function>, node_params: &mut HashMap<SmolStr, NodeParams>, node_name: SmolStr, optional: bool) -> Result<(), SyntaxError> {
+fn define_node(
+        current_function: &mut Option<Function>, node_params: &mut HashMap<SmolStr, NodeParams>,
+        node_name: SmolStr, call_params: Option<CallParams>, option_name: Option<SmolStr>
+    ) -> Result<(), SyntaxError> {
     if let Some(ref mut function) = current_function {
+        check_option(&function, &node_name, &option_name)?;
         function.chain.insert(node_name.clone(), Vec::<_>::new());
-        node_params.insert(node_name.clone(), NodeParams { name: node_name, optional });
+        node_params.insert(node_name.clone(), NodeParams { name: node_name, call_params, option_name });
     } else {
         return Err(SyntaxError::new(format!(
-            "Unexpected NodeDef: {node_name} [...]"
+            "Unexpected node definition: {node_name} [...]"
         )));
     }
     Ok(())
 }
 
+fn check_option(current_function: &Function, node_name: &SmolStr, option_name: &Option<SmolStr>) -> Result<(), SyntaxError> {
+    if let Some(option_name) = option_name {
+        if !(match &current_function.input_type {
+            FunctionInputsType::TypeNameList(list) => list,
+            FunctionInputsType::TypeNameVariants(list) => list,
+            _ => return Err(SyntaxError::new(format!(
+                "Unexpected optional node: {node_name}. Function does not acccept arguments"
+            )))
+        }.contains(option_name)) {
+            return Err(SyntaxError::new(format!(
+                "Unexpected option: {option_name} Expected one of: {:?}",
+                current_function.input_type
+            )))
+        }
+    }
+    Ok(())
+}
+
+#[derive(Clone, Debug)]
 pub struct MarkovChainGenerator {
+    pub known_type_name_stack: Vec<Vec<SmolStr>>,
+    pub compatible_type_name_stack: Vec<Vec<SmolStr>>,
     markov_chain: MarkovChain,
+    call_stack: Vec<StackItem>,
+    rng: ThreadRng,
+}
+
+#[derive(Clone, Debug)]
+struct StackItem {
+    current_function: CallParams,
+    next_node: SmolStr
 }
 
 impl MarkovChainGenerator {
     pub fn parse_graph_from_file(source_path: PathBuf) -> Result<Self, SyntaxError> {
+        let chain = MarkovChain::parse_dot(source_path)?;
         Ok(MarkovChainGenerator {
-            markov_chain: MarkovChain::parse_dot(source_path)?,
+            markov_chain: chain,
+            call_stack: vec![StackItem {
+                current_function: CallParams {
+                    func_name: SmolStr::new("Query"),
+                    inputs: FunctionInputsType::None,
+                    modifiers: None
+                },
+                
+                next_node: SmolStr::new("Query"),
+            }],
+            known_type_name_stack: vec![vec![SmolStr::new("")]],
+            compatible_type_name_stack: vec![vec![SmolStr::new("")]],
+            rng: thread_rng(),
         })
+    }
+}
+
+fn check_node_off(function_inputs_conv: &FunctionInputsType, option_name: &Option<SmolStr>) -> bool {
+    if let Some(option_name) = option_name {
+        match function_inputs_conv {
+            FunctionInputsType::None => return true,
+            FunctionInputsType::TypeName(t_name) => if t_name != option_name { return true },
+            FunctionInputsType::TypeNameList(t_name_list) => if !t_name_list.contains(&option_name) { return true },
+            _ => panic!("Must be None, TypeName or a TypeNameList")
+        }
+    }
+    return false;
+}
+
+impl Iterator for MarkovChainGenerator {
+    type Item = SmolStr;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let stack_item = self.call_stack.last_mut()?;
+        let function = self.markov_chain.functions.get(&stack_item.current_function.func_name).unwrap();
+        let cur_node_name = stack_item.next_node.clone();
+        let cur_node_outgoing = function.chain.get(&cur_node_name).unwrap();
+
+        if cur_node_name == function.exit_node_name {
+            self.call_stack.pop();
+            if self.call_stack.is_empty() {
+                return None;
+            }
+            return Some(cur_node_name)
+        }
+
+        let level: f64 = self.rng.gen::<f64>() * (
+            cur_node_outgoing.iter().map(|el| {
+                if check_node_off(&stack_item.current_function.inputs, &el.1.option_name) {
+                    return 0f64
+                }
+                el.0
+            }).sum::<f64>()
+        );
+        let mut cumulative_prob = 0f64;
+        let mut destination = Option::<&NodeParams>::None;
+        for (prob, dest) in cur_node_outgoing {
+            if check_node_off(&stack_item.current_function.inputs, &dest.option_name) {
+                continue;
+            }
+            cumulative_prob += prob;
+            if level < cumulative_prob {
+                destination = Some(dest);
+                break;
+            }
+        }
+        let destination = destination.unwrap();
+
+        if let Some(call_params) = &destination.call_params {
+            self.call_stack.push(StackItem {
+                current_function: CallParams {
+                    func_name: call_params.func_name.clone(),
+                    inputs: match &call_params.inputs {
+                        FunctionInputsType::TypeName(t_name) => FunctionInputsType::TypeName(t_name.clone()),
+                        FunctionInputsType::Known => FunctionInputsType::TypeNameList(self.known_type_name_stack.pop().unwrap()),
+                        FunctionInputsType::Compatible => FunctionInputsType::TypeNameList(self.compatible_type_name_stack.pop().unwrap()),
+                        FunctionInputsType::TypeNameList(t_name_list) => FunctionInputsType::TypeNameList(t_name_list.clone()),
+                        FunctionInputsType::Any => {
+                            let function = self.markov_chain.functions.get(&call_params.func_name).unwrap();
+                            function.input_type.clone()
+                        },
+                        _ => FunctionInputsType::None
+                    },
+                    modifiers: call_params.modifiers.clone(),
+                },
+                next_node: call_params.func_name.clone()
+            });
+        } else {
+            stack_item.next_node = destination.name.clone();
+        }
+
+        Some(cur_node_name)
     }
 }
