@@ -1046,7 +1046,7 @@ impl QueryGenerator {
                 _ => panic!("Received unknown state: {state}")
             }
         }
-        todo!()
+        pop_var!(info, Query)
     }
 }
 

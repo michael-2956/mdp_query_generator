@@ -330,7 +330,7 @@ impl Iterator for MarkovChainGenerator {
         };
 
         // check if we have just returned from a function
-        if let Some(ref handler) = stack_item.return_handler {
+        if let Some(ref handler) = stack_item.return_handler.take() {
             return Some(handler.to_owned());
         }
 
