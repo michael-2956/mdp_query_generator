@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use equivalence_testing::query_creation::{
-    random_query_generator::{QueryGenerator, QueryGeneratorParams},
+    random_query_generator::{QueryGenerator},
     state_generators::MarkovChainGenerator,
 };
 use structopt::StructOpt;
@@ -23,10 +23,10 @@ fn main() {
             return;
         }
     };
-    let mut generator = QueryGenerator::new(QueryGeneratorParams::from_generator(markov_generator));
+    let mut generator = QueryGenerator::from_state_generator(markov_generator);
 
     for _ in 0..2 {
-        let query = generator.generate();
+        let query = generator.next().unwrap();
         println!("Generated query: {:#?}", query.to_string());
     }
 }

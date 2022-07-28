@@ -1,15 +1,16 @@
 mod dot_parser;
 mod error;
-use std::{collections::HashMap, fs::File, io::Read, path::PathBuf};
+use std::{collections::HashMap, fs::File, io::Read, path::Path};
 use rand::{prelude::ThreadRng, thread_rng, Rng};
 
 use regex::Regex;
 use smol_str::SmolStr;
 
 use self::{
-    dot_parser::{DotTokenizer, FunctionInputsType},
-    error::SyntaxError,
+    dot_parser::DotTokenizer, error::SyntaxError,
 };
+
+pub use dot_parser::FunctionInputsType;
 
 #[derive(Clone, Debug)]
 struct MarkovChain {
@@ -52,7 +53,7 @@ impl Function {
 }
 
 impl MarkovChain {
-    fn parse_dot(source_path: PathBuf) -> Result<Self, SyntaxError> {
+    fn parse_dot<P: AsRef<Path>>(source_path: P) -> Result<Self, SyntaxError> {
         let mut file = File::open(source_path).unwrap();
         let mut source = String::new();
         file.read_to_string(&mut source).unwrap();
@@ -263,27 +264,44 @@ pub struct MarkovChainGenerator {
 #[derive(Clone, Debug)]
 struct StackItem {
     current_function: CallParams,
-    next_node: SmolStr
+    next_node: SmolStr,
+    return_handler: Option<SmolStr>,
 }
 
 impl MarkovChainGenerator {
-    pub fn parse_graph_from_file(source_path: PathBuf) -> Result<Self, SyntaxError> {
+    pub fn parse_graph_from_file<P: AsRef<Path>>(source_path: P) -> Result<Self, SyntaxError> {
         let chain = MarkovChain::parse_dot(source_path)?;
-        Ok(MarkovChainGenerator {
+        let mut self_ = MarkovChainGenerator {
             markov_chain: chain,
-            call_stack: vec![StackItem {
-                current_function: CallParams {
-                    func_name: SmolStr::new("Query"),
-                    inputs: FunctionInputsType::None,
-                    modifiers: None
-                },
-                
-                next_node: SmolStr::new("Query"),
-            }],
-            known_type_name_stack: vec![vec![SmolStr::new("")]],
-            compatible_type_name_stack: vec![vec![SmolStr::new("")]],
+            call_stack: vec![],
+            known_type_name_stack: vec![],
+            compatible_type_name_stack: vec![],
             rng: thread_rng(),
-        })
+        };
+        self_.reset();
+        Ok(self_)
+    }
+
+    pub fn reset(&mut self) {
+        self.call_stack = vec![StackItem {
+            current_function: CallParams {
+                func_name: SmolStr::new("Query"),
+                inputs: FunctionInputsType::None,
+                modifiers: None
+            },
+            next_node: SmolStr::new("Query"),
+            return_handler: None
+        }];
+        self.known_type_name_stack = vec![vec![SmolStr::new("")]];
+        self.compatible_type_name_stack = vec![vec![SmolStr::new("")]];
+    }
+
+    pub fn get_inputs(&self) -> FunctionInputsType {
+        self.call_stack.last().unwrap().current_function.inputs.clone()
+    }
+
+    pub fn get_modifiers(&self) -> Option<Vec<SmolStr>> {
+        self.call_stack.last().unwrap().current_function.modifiers.clone()
     }
 }
 
@@ -303,18 +321,27 @@ impl Iterator for MarkovChainGenerator {
     type Item = SmolStr;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let stack_item = self.call_stack.last_mut()?;
-        let function = self.markov_chain.functions.get(&stack_item.current_function.func_name).unwrap();
-        let cur_node_name = stack_item.next_node.clone();
-        let cur_node_outgoing = function.chain.get(&cur_node_name).unwrap();
+        let stack_item = match self.call_stack.last_mut() {
+            Some(stack_item) => stack_item,
+            None => {
+                self.reset();
+                return None;
+            },
+        };
 
+        // check if we have just returned from a function
+        if let Some(ref handler) = stack_item.return_handler {
+            return Some(handler.to_owned());
+        }
+
+        let cur_node_name = stack_item.next_node.clone();
+        let function = self.markov_chain.functions.get(&stack_item.current_function.func_name).unwrap();
         if cur_node_name == function.exit_node_name {
             self.call_stack.pop();
-            if self.call_stack.is_empty() {
-                return None;
-            }
             return Some(cur_node_name)
         }
+
+        let cur_node_outgoing = function.chain.get(&cur_node_name).unwrap();
 
         let level: f64 = self.rng.gen::<f64>() * (
             cur_node_outgoing.iter().map(|el| {
@@ -339,6 +366,7 @@ impl Iterator for MarkovChainGenerator {
         let destination = destination.unwrap();
 
         if let Some(call_params) = &destination.call_params {
+            stack_item.return_handler = Some(SmolStr::new(format!("R{cur_node_name}")));
             self.call_stack.push(StackItem {
                 current_function: CallParams {
                     func_name: call_params.func_name.clone(),
@@ -355,7 +383,8 @@ impl Iterator for MarkovChainGenerator {
                     },
                     modifiers: call_params.modifiers.clone(),
                 },
-                next_node: call_params.func_name.clone()
+                next_node: call_params.func_name.clone(),
+                return_handler: None
             });
         } else {
             stack_item.next_node = destination.name.clone();

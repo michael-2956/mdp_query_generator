@@ -153,6 +153,9 @@ digraph G {
         call4_types_all [label="TYPES: ALL", shape=rectangle]
         Between -> call4_types_all
         call4_types_all -> BetweenBetween
+        BetweenBetweenNot [label="NOT"]
+        call4_types_all -> BetweenBetweenNot
+        BetweenBetweenNot -> BetweenBetween
         call22_types [TYPES="[compatible]", label="TYPES: SAME TYPE", shape=rectangle]
         BetweenBetween -> call22_types
         call22_types -> BetweenBetweenAnd
@@ -190,9 +193,9 @@ digraph G {
         AnyAllAnyAllAny[label="ANY"]
         AnyAllAnyAllAll[label="ALL"]
         VAL_3 -> AnyAll
-        call2_list_expr [TYPES="[any]", label="list expr\nTYPES: ALL", shape=rectangle]
-        AnyAll -> call2_list_expr
-        call2_list_expr -> AnyAllSelectOp
+        # call2_list_expr [TYPES="[any]", label="list expr\nTYPES: ALL", shape=rectangle]
+        # AnyAll -> call2_list_expr
+        # call2_list_expr -> AnyAllSelectOp
         call6_types_all[label="TYPES: ALL", shape=rectangle]
         AnyAll -> call6_types_all
         call6_types_all -> AnyAllSelectOp
@@ -236,7 +239,7 @@ digraph G {
         call27_types [TYPES="[3VL Value]", label="TYPES: 3VL Value", shape=rectangle]
         BinaryBooleanOpV3 -> call27_types
         call27_types -> BinaryBooleanOpV3AND
-        call28_types [TYPES="[compatible]", label="TYPES: SAME TYPE", shape=rectangle]
+        call28_types [TYPES="[3VL Value]", label="TYPES: 3VL Value", shape=rectangle]
         BinaryBooleanOpV3AND -> call28_types
         call27_types -> BinaryBooleanOpV3OR
         BinaryBooleanOpV3OR -> call28_types
@@ -279,32 +282,32 @@ digraph G {
         numeric_literal_float -> EXIT_numeric
 
         BinaryNumericOp[label="binary op."]
-        numericRight [label="TYPES: numeric", shape=rectangle]
+        call32_types [label="TYPES: numeric", shape=rectangle]
         numeric -> BinaryNumericOp
-        binary_numeric_left [label="TYPES: numeric", shape=rectangle]
-        BinaryNumericOp -> binary_numeric_left
+        call33_types [label="TYPES: numeric", shape=rectangle]
+        BinaryNumericOp -> call33_types
         binary_numeric_plus [label="+"]
-        binary_numeric_left -> binary_numeric_plus
-        binary_numeric_plus -> numericRight
+        call33_types -> binary_numeric_plus
+        binary_numeric_plus -> call32_types
         binary_numeric_minus [label="-"]
-        binary_numeric_left -> binary_numeric_minus
-        binary_numeric_minus -> numericRight
+        call33_types -> binary_numeric_minus
+        binary_numeric_minus -> call32_types
         binary_numeric_mul [label="*"]
-        binary_numeric_left -> binary_numeric_mul
-        binary_numeric_mul -> numericRight
+        call33_types -> binary_numeric_mul
+        binary_numeric_mul -> call32_types
         binary_numeric_div [label="/"]
-        binary_numeric_left -> binary_numeric_div
-        binary_numeric_div -> numericRight
+        call33_types -> binary_numeric_div
+        binary_numeric_div -> call32_types
         binary_numeric_bin_or [label="|"]
-        binary_numeric_left -> binary_numeric_bin_or
-        binary_numeric_bin_or -> numericRight
+        call33_types -> binary_numeric_bin_or
+        binary_numeric_bin_or -> call32_types
         binary_numeric_bin_and [label="&"]
-        binary_numeric_left -> binary_numeric_bin_and
-        binary_numeric_bin_and -> numericRight
+        call33_types -> binary_numeric_bin_and
+        binary_numeric_bin_and -> call32_types
         binary_numeric_bin_xor [label="^"]
-        binary_numeric_left -> binary_numeric_bin_xor
-        binary_numeric_bin_xor -> numericRight
-        numericRight -> EXIT_numeric
+        call33_types -> binary_numeric_bin_xor
+        binary_numeric_bin_xor -> call32_types
+        call32_types -> EXIT_numeric
 
         UnaryNumericOp [label="unary op."]
         call1_types [TYPES="[numeric]", label="TYPES: numeric"]
@@ -388,20 +391,20 @@ digraph G {
         string_concat_concat -> call8_types
         call8_types -> EXIT_string
 
-        string_substring[label="substring"]
-        string -> string_substring
-        call9_types[TYPES="[string]", label="TYPES: string"]
-        string_substring -> call9_types
-        string_substr_numeric_from_from[label="from"]
-        call9_types -> string_substr_numeric_from_from
-        call10_types [TYPES="[numeric]", label="TYPES: numeric"]
-        string_substr_numeric_from_from -> call10_types
-        call10_types -> EXIT_string
-        string_substr_numeric_len_len [label="length"]
-        call10_types -> string_substr_numeric_len_len
-        call11_types [TYPES="[numeric]", label="TYPES: numeric"]
-        string_substr_numeric_len_len -> call11_types
-        call11_types -> EXIT_string
+        // string_substring[label="substring"]
+        // string -> string_substring
+        // call9_types[TYPES="[string]", label="TYPES: string"]
+        // string_substring -> call9_types
+        // string_substr_numeric_from_from[label="from"]
+        // call9_types -> string_substr_numeric_from_from
+        // call10_types [TYPES="[numeric]", label="TYPES: numeric"]
+        // string_substr_numeric_from_from -> call10_types
+        // call10_types -> EXIT_string
+        // string_substr_numeric_len_len [label="length"]
+        // call10_types -> string_substr_numeric_len_len
+        // call11_types [TYPES="[numeric]", label="TYPES: numeric"]
+        // string_substr_numeric_len_len -> call11_types
+        // call11_types -> EXIT_string
     }
 
     subgraph def_types {
