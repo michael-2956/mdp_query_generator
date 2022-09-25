@@ -1,4 +1,4 @@
 # equivalence_testing
 
 ## Query generator graph 
-![Query generator graph](query-generator-graph/graph_full.svg)
+![Query generator graph](/graph 25.09.svg)
