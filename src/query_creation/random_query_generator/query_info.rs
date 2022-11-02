@@ -1,10 +1,7 @@
 use std::collections::HashMap;
 
 use smol_str::SmolStr;
-use sqlparser::ast::{
-    Expr, Ident, ObjectName, Query, Select, TableFactor,
-    BinaryOperator, UnaryOperator, TrimWhereField,
-};
+use sqlparser::ast::{Ident, ObjectName};
 
 pub struct Relation {
     name: String,
@@ -66,16 +63,13 @@ pub struct QueryInfo {
     /// used to store running query statistics, such as
     /// the current level of nesting
     pub stats: QueryStats,
-    /// variables needed during query generation
-    pub named_var_stack: HashMap<String, Vec<Variable>>,
 }
 
 impl QueryInfo {
     pub fn new() -> QueryInfo {
         QueryInfo {
             relation_generator: RelationGenerator::new(),
-            stats: QueryStats::new(),
-            named_var_stack: HashMap::<_, _>::new()
+            stats: QueryStats::new()
         }
     }
 }
@@ -97,35 +91,7 @@ impl QueryStats {
     }
 }
 
-pub enum Variable {
-    SelectLimit(Option<Expr>),
-    SelectBody(Select),
-    Query(Query),
-    LastRelation(TableFactor),
-    Val3(Expr),
-    IsNullNotFlag(bool),
-    TypesValue(Expr),
-    IsDistinctNotFlag(bool),
-    TypesSelectedType(TypesSelectedType),
-    ExistsNotFlag(bool),
-    InListNotFlag(bool),
-    InSubqueryNotFlag(bool),
-    BetweenNotFlag(bool),
-    BinaryCompOp(BinaryOperator),
-    AnyAllOp(BinaryOperator),
-    Array(Expr),
-    StringLikeNotFlag(bool),
-    BinaryBoolOp(BinaryOperator),
-    Numeric(Expr),
-    NumericBinaryOp(BinaryOperator),
-    NumericUnaryOp(UnaryOperator),
-    String(Expr),
-    TrimSpecFlag(bool),
-    TrimSpecValue(TrimWhereField),
-    ColumnSpec(Expr),
-    ListExpr(Expr),
-}
-
+#[derive(Debug, Clone)]
 pub enum TypesSelectedType {
     Numeric, Val3, Array, ListExpr, String, Any
 }
@@ -139,55 +105,51 @@ impl PartialEq for TypesSelectedType {
 }
 
 impl TypesSelectedType {
-    pub fn get_types(&self) -> Vec<SmolStr> {
+    fn to_smolstr(&self) -> SmolStr {
         match self {
-            TypesSelectedType::Numeric => vec![SmolStr::new("numeric")],
-            TypesSelectedType::Val3 => vec![SmolStr::new("3VL Value")],
-            TypesSelectedType::Array => vec![SmolStr::new("array")],
-            TypesSelectedType::ListExpr => vec![SmolStr::new("list expr")],
-            TypesSelectedType::String => vec![SmolStr::new("string")],
-            TypesSelectedType::Any => vec![SmolStr::new("string"), SmolStr::new("list expr"), SmolStr::new("array"), SmolStr::new("3VL Value"), SmolStr::new("numeric")],
+            TypesSelectedType::Numeric => SmolStr::new("numeric"),
+            TypesSelectedType::Val3 => SmolStr::new("3VL Value"),
+            TypesSelectedType::Array => SmolStr::new("array"),
+            TypesSelectedType::ListExpr => SmolStr::new("list expr"),
+            TypesSelectedType::String => SmolStr::new("string"),
+            TypesSelectedType::Any => SmolStr::new("any"),
         }
     }
-}
 
-// push value into its stack
-macro_rules! push_var {
-    ($info: expr, $variant: ident, $value: expr) => {
-        if let Some(stack) = $info.named_var_stack.get_mut(stringify!($variant)) {
-            stack.push(Variable::$variant($value));
-        } else {
-            $info.named_var_stack.insert(stringify!($variant).to_string(), vec![Variable::$variant($value)]);
+    pub fn get_types(&self) -> Vec<SmolStr> {
+        match self {
+            TypesSelectedType::Any => vec![
+                (TypesSelectedType::String).to_smolstr(),
+                (TypesSelectedType::ListExpr).to_smolstr(),
+                (TypesSelectedType::Array).to_smolstr(),
+                (TypesSelectedType::Val3).to_smolstr(),
+                (TypesSelectedType::Numeric).to_smolstr(),
+            ],
+            _ => vec![self.to_smolstr()],
         }
-    };
-}
+    }
 
-// pop value from its stack
-macro_rules! pop_var {
-    ($info: expr, $variant: ident) => {
-        if let Some(stack) = $info.named_var_stack.get_mut(stringify!($variant)) {
-            if let Some(Variable::$variant(value)) = stack.pop() {
-                value
-            } else {
-                panic!("Failed to pop variant: {}", stringify!($variant));
-            }
-        } else {
-            panic!("Failed to find variant stack: {}", stringify!($variant));
-        }
-    };
-}
+    pub fn get_compat_types(&self) -> Vec<SmolStr> {
+        let mut compat_types = self.get_types();
+        match self {
+            TypesSelectedType::Numeric => compat_types.push((TypesSelectedType::String).to_smolstr()),
+            TypesSelectedType::Val3 => {},
+            TypesSelectedType::Array => {},
+            TypesSelectedType::ListExpr => {},
+            TypesSelectedType::String => compat_types.push((TypesSelectedType::Numeric).to_smolstr()),
+            TypesSelectedType::Any => { compat_types = vec![
+                (TypesSelectedType::String).to_smolstr(),
+                (TypesSelectedType::ListExpr).to_smolstr(),
+                (TypesSelectedType::Array).to_smolstr(),
+                (TypesSelectedType::Val3).to_smolstr(),
+                (TypesSelectedType::Numeric).to_smolstr(),
+            ]; },
+        };
+        compat_types.push((TypesSelectedType::Any).to_smolstr());
+        compat_types
+    }
 
-// return mutable reference to the last value in its stack
-macro_rules! get_mut_var {
-    ($info: expr, $variant: ident) => {
-        if let Some(stack) = $info.named_var_stack.get_mut(stringify!($variant)) {
-            if let Some(Variable::$variant(value)) = stack.last_mut() {
-                value
-            } else {
-                panic!("Failed to get last mut variant: {}", stringify!($variant));
-            }
-        } else {
-            panic!("Failed to find variant stack: {}", stringify!($variant));
-        }
-    };
+    pub fn is_compat_with(&self, other: &TypesSelectedType) -> bool {
+        self.get_compat_types().contains(&other.to_smolstr())
+    }
 }

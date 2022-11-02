@@ -3,11 +3,11 @@ mod query_info;
 
 use smol_str::SmolStr;
 use sqlparser::ast::{
-    Expr, Ident, Query, Select, SelectItem, SetExpr, TableAlias, TableFactor,
-    TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, Array,
+    Expr, Ident, Query, Select, SetExpr, TableAlias, TableFactor,
+    TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, Array, SelectItem,
 };
 
-use self::query_info::{QueryInfo, Variable, TypesSelectedType};
+use self::query_info::{QueryInfo, TypesSelectedType};
 
 use super::state_generators::{MarkovChainGenerator, FunctionInputsType};
 
@@ -15,34 +15,59 @@ pub struct QueryGenerator {
     state_generator: MarkovChainGenerator,
 }
 
+macro_rules! unwrap_variant {
+    ($target: expr, $pat: path) => { {
+        if let $pat(a) = $target {
+            a
+        } else {
+            panic!("Failed to unwrap variant: {} to {}", stringify!($target), stringify!($pat));
+        }
+    } };
+}
+
 impl QueryGenerator {
     pub fn from_state_generator(state_generator: MarkovChainGenerator) -> Self {
-        QueryGenerator {
-            state_generator,
-        }
+        QueryGenerator { state_generator }
     }
 
     fn next_state(&mut self) -> SmolStr {
         self.state_generator.next().unwrap()
     }
 
-    fn panic_unexpected(&mut self, state: &str, after: &str) {
-        panic!("Unexpected {state} after {after}");
+    fn panic_unexpected(&mut self, state: &str) -> ! {
+        self.state_generator.print_stack();
+        panic!("Unexpected state: {state}");
     }
 
-    fn expect_state(&mut self, state: &str, after: &str) {
-        if self.next_state().as_str() != state {
-            panic!("Expected {state} after {after}")
+    fn expect_state(&mut self, state: &str) {
+        let new_state = self.next_state();
+        if new_state.as_str() != state {
+            self.state_generator.print_stack();
+            panic!("Expected {state}, got {new_state}")
         }
     }
 
-    // ======================================================== subgraph Query
+    fn expect_compat(&self, target: &TypesSelectedType, compat_with: &TypesSelectedType) {
+        if !target.is_compat_with(&compat_with) {
+            self.state_generator.print_stack();
+            panic!("Incompatible types: expected compatible with {:?}, got {:?}", compat_with, target);
+        }
+    }
 
-    fn handle_query(&mut self, info: &mut QueryInfo) {
-        let mut limit = Option::<Expr>::None;
+    fn expect_type(&self, target: &TypesSelectedType, expect: &TypesSelectedType) {
+        if target != expect {
+            self.state_generator.print_stack();
+            panic!("Unexpected type: expected {:?}, got {:?}", expect, target);
+        }
+    }
+
+    /// subgraph def_Query
+    fn handle_query(&mut self, info: &mut QueryInfo) -> Query {
+        self.expect_state("Query");
+        let mut select_limit = Option::<Expr>::None;
         if let Some(mods) = self.state_generator.get_modifiers() {
             if mods.contains(&SmolStr::new("single value")) {
-                limit = Some(Expr::Identifier(Ident::new("1")));
+                select_limit = Some(Expr::Identifier(Ident::new("1")));
                 // TODO: Not only limits can enforce this
             } else {
                 panic!("Unexpected mods (Query): {:?}", mods);
@@ -51,9 +76,7 @@ impl QueryGenerator {
         if let FunctionInputsType::TypeName(type_name) = self.state_generator.get_inputs() {
             println!("TODO: Enforce single column & column type (Query): {type_name}")
         }
-
-        push_var!(info, SelectLimit, limit);
-        push_var!(info, SelectBody, Select {
+        let mut select_body = Select {
             distinct: false,
             top: None,
             projection: vec![],
@@ -67,1004 +90,548 @@ impl QueryGenerator {
             sort_by: vec![],
             having: None,
             qualify: None,
-        });
+        };
+        self.expect_state("FROM");
 
-        self.expect_state("FROM", "Query");
-    }
+        loop {
+            select_body.from.push(TableWithJoins { relation: match self.next_state().as_str() {
+                "Table" => TableFactor::Table {
+                    name: info.relation_generator.new_relation().gen_object_name(),
+                    alias: None,
+                    args: None,
+                    with_hints: vec![]
+                },
+                "call0_Query" => TableFactor::Derived {
+                    lateral: false,
+                    subquery: Box::new(self.handle_query(info)),
+                    alias: Some(TableAlias {
+                        name: info.relation_generator.new_ident(),
+                        columns: vec![],
+                    })
+                },
+                "EXIT_FROM" => break,
+                any => self.panic_unexpected(any)
+            }, joins: vec![] });
+            self.expect_state("FROM_multiple_relations");
+        }
 
-    fn handle_query_exit(&mut self, info: &mut QueryInfo) {
-        let query = Query {
+        match self.next_state().as_str() {
+            "WHERE" => {
+                self.expect_state("call0_VAL_3");
+                select_body.selection = Some(self.handle_val_3(info));
+                self.expect_state("EXIT_WHERE");
+            },
+            "EXIT_WHERE" => {},
+            any => self.panic_unexpected(any)
+        }
+
+        // CONTINUE FROM HERE
+        // PLASEHOLDER CODE BEGIN
+        select_body.projection.push(SelectItem::Wildcard);
+        // PLASEHOLDER CODE END
+
+        self.expect_state("EXIT_Query");
+        Query {
             with: None,
-            body: SetExpr::Select(Box::new(pop_var!(info, SelectBody))),
+            body: SetExpr::Select(Box::new(select_body)),
             order_by: vec![],
-            limit: pop_var!(info, SelectLimit),
+            limit: select_limit,
             offset: None,
             fetch: None,
             lock: None,
-        };
-        push_var!(info, Query, query);
-    }
-
-    fn handle_from_table(&mut self, info: &mut QueryInfo) {
-        let last_relation = TableFactor::Table {
-            name: info.relation_generator.new_relation().gen_object_name(),
-            alias: None,
-            args: None,
-            with_hints: vec![]
-        };
-        push_var!(info, LastRelation, last_relation);
-    }
-
-    fn handle_from_subquery_r(&mut self, info: &mut QueryInfo) {
-        let last_relation = TableFactor::Derived {
-            lateral: false,
-            subquery: Box::new(pop_var!(info, Query)),
-            alias: Some(TableAlias {
-                name: info.relation_generator.new_ident(),
-                columns: vec![],
-            })
-        };
-        push_var!(info, LastRelation, last_relation);
-    }
-
-    fn handle_multiple_relations(&mut self, info: &mut QueryInfo) {
-        let relation = pop_var!(info, LastRelation);
-        let body = get_mut_var!(info, SelectBody);
-        body.from.push(TableWithJoins { relation, joins: vec![] });
-    }
-
-    fn handle_select_all(&mut self, info: &mut QueryInfo) {
-        let body = get_mut_var!(info, SelectBody);
-        body.projection.push(SelectItem::Wildcard);
-    }
-
-    fn handle_where_val_3_ret(&mut self, info: &mut QueryInfo) {
-        let val_3 = pop_var!(info, Val3);
-        let body = get_mut_var!(info, SelectBody);
-        body.selection = Some(val_3);
-    }
-
-    // ======================================================== subgraph def_VAL_3
-
-    fn handle_val_3(&mut self, info: &mut QueryInfo) {
-        match self.next_state().as_str() {
-            "IsNull" => self.handle_is_null(info),
-            "IsDistinctFrom" => self.handle_is_distinct_from(info),
-            "Exists" => self.handle_exists(info),
-            "InList" => self.handle_in_list(info),
-            "InSubquery" => self.handle_in_subquery(info),
-            "Between" => self.handle_between(info),
-            "BinaryComp" => self.handle_binary_comp(info),
-            "AnyAll" => self.handle_any_all(info),
-            "BinaryStringLike" => self.handle_string_like(info),
-            "BinaryBooleanOpV3" => self.handle_binary_bool_op(info),
-            "true" => push_var!(info, Val3, Expr::Value(Value::Boolean(true))),
-            "false" => push_var!(info, Val3, Expr::Value(Value::Boolean(false))),
-            "Nested_VAL_3" => self.handle_nested_val(info),
-            "UnaryNot_VAL_3" => self.expect_state("call30_types", "UnaryNot_VAL_3"),
-            any => self.panic_unexpected(any, "VAL_3")
         }
     }
 
-    fn handle_is_null(&mut self, info: &mut QueryInfo) {
-        match self.next_state().as_str() {
-            "IsNull_not" => {
-                push_var!(info, IsNullNotFlag, true);
-                self.expect_state("call0_types_all", "IsNull_not");
+    /// subgraph def_VAL_3
+    fn handle_val_3(&mut self, info: &mut QueryInfo) -> Expr {
+        self.expect_state("VAL_3");
+        let val3 = match self.next_state().as_str() {
+            "IsNull" => {
+                let is_null_not_flag = match self.next_state().as_str() {
+                    "IsNull_not" => {
+                        self.expect_state("call0_types_all");
+                        true
+                    }
+                    "call0_types_all" => false,
+                    any => self.panic_unexpected(any)
+                };
+                let types_value = Box::new(self.handle_types_all(info).1);
+                if is_null_not_flag {
+                    Expr::IsNotNull(types_value)
+                } else {
+                    Expr::IsNull(types_value)
+                }
+            },
+            "IsDistinctFrom" => {
+                self.expect_state("call1_types_all");
+                let (types_selected_type, types_value_1) = self.handle_types_all(info);
+                self.state_generator.push_compatible(types_selected_type.get_compat_types());
+                let is_distinct_not_flag = match self.next_state().as_str() {
+                    "IsDistinctNOT" => {
+                        self.expect_state("DISTINCT");
+                        true
+                    }
+                    "DISTINCT" => false,
+                    any => self.panic_unexpected(any)
+                };
+                self.expect_state("call21_types");
+                let types_value_2 = self.handle_types(info, None, Some(types_selected_type)).1;
+                if is_distinct_not_flag {
+                    Expr::IsNotDistinctFrom(Box::new(types_value_1), Box::new(types_value_2))
+                } else {
+                    Expr::IsDistinctFrom(Box::new(types_value_1), Box::new(types_value_2))
+                }
+            },
+            "Exists" => {
+                let exists_not_flag = match self.next_state().as_str() {
+                    "Exists_not" => {
+                        self.expect_state("call2_Query");
+                        true
+                    },
+                    "call2_Query" => false,
+                    any => self.panic_unexpected(any)
+                };
+                Expr::Exists {
+                    subquery: Box::new(self.handle_query(info)),
+                    negated: exists_not_flag
+                }
+            },
+            "InList" => {
+                self.expect_state("call2_types_all");
+                let (types_selected_type, types_value) = self.handle_types_all(info);
+                self.state_generator.push_compatible(types_selected_type.get_compat_types());
+                let in_list_not_flag = match self.next_state().as_str() {
+                    "InListNot" => {
+                        self.expect_state("InListIn");
+                        true
+                    },
+                    "InListIn" => false,
+                    any => self.panic_unexpected(any)
+                };
+                self.expect_state("call1_list_expr");
+                Expr::InList {
+                    expr: Box::new(types_value),
+                    list: unwrap_variant!(self.handle_list_expr(info), Expr::Tuple),
+                    negated: in_list_not_flag
+                }
+            },
+            "InSubquery" => {
+                self.expect_state("call3_types_all");
+                let (types_selected_type, types_value) = self.handle_types_all(info);
+                self.state_generator.push_compatible(types_selected_type.get_compat_types());
+                let in_subquery_not_flag = match self.next_state().as_str() {
+                    "InSubqueryNot" => {
+                        self.expect_state("InSubqueryIn");
+                        true
+                    },
+                    "InSubqueryIn" => false,
+                    any => self.panic_unexpected(any)
+                };
+                self.expect_state("call3_Query");
+                let query = self.handle_query(info);
+                Expr::InSubquery {
+                    expr: Box::new(types_value),
+                    subquery: Box::new(query),
+                    negated: in_subquery_not_flag
+                }
+            },
+            "Between" => {
+                self.expect_state("call4_types_all");
+                let (types_selected_type, types_value_1) = self.handle_types_all(info);
+                let type_names = types_selected_type.get_compat_types();
+                let between_not_flag = match self.next_state().as_str() {
+                    "BetweenBetweenNot" => {
+                        self.expect_state("BetweenBetween");
+                        true
+                    },
+                    "BetweenBetween" => false,
+                    any => self.panic_unexpected(any)
+                };
+                self.state_generator.push_compatible(type_names.clone());
+                self.expect_state("call22_types");
+                let types_value_2 = self.handle_types(info, None, Some(types_selected_type.clone())).1;
+                self.expect_state("BetweenBetweenAnd");
+                self.state_generator.push_compatible(type_names);
+                self.expect_state("call23_types");
+                let types_value_3 = self.handle_types(info, None, Some(types_selected_type)).1;
+                Expr::Between {
+                    expr: Box::new(types_value_1),
+                    negated: between_not_flag,
+                    low: Box::new(types_value_2),
+                    high: Box::new(types_value_3)
+                }
+            },
+            "BinaryComp" => {
+                self.expect_state("call5_types_all");
+                let (types_selected_type, types_value_1) = self.handle_types_all(info);
+                self.state_generator.push_compatible(types_selected_type.get_compat_types());
+                let binary_comp_op = match self.next_state().as_str() {
+                    "BinaryCompEqual" => BinaryOperator::Eq,
+                    "BinaryCompLess" => BinaryOperator::Lt,
+                    "BinaryCompLessEqual" => BinaryOperator::LtEq,
+                    "BinaryCompUnEqual" => BinaryOperator::NotEq,
+                    any => self.panic_unexpected(any)
+                };
+                self.expect_state("call24_types");
+                let types_value_2 = self.handle_types(info, None, Some(types_selected_type)).1;
+                Expr::BinaryOp {
+                    left: Box::new(types_value_1),
+                    op: binary_comp_op,
+                    right: Box::new(types_value_2)
+                }
+            },
+            "AnyAll" => {
+                let (types_selected_type, types_value) = match self.next_state().as_str() {
+                    "call6_types_all" => self.handle_types_all(info),
+                    "call2_list_expr" => (TypesSelectedType::ListExpr, self.handle_list_expr(info)),
+                    any => self.panic_unexpected(any),
+                };
+                self.state_generator.push_compatible(types_selected_type.get_compat_types());
+                self.expect_state("AnyAllSelectOp");
+                let any_all_op = match self.next_state().as_str() {
+                    "AnyAllEqual" => BinaryOperator::Eq,
+                    "AnyAllLess" => BinaryOperator::Lt,
+                    "AnyAllLessEqual" => BinaryOperator::LtEq,
+                    "AnyAllUnEqual" => BinaryOperator::NotEq,
+                    any => self.panic_unexpected(any)
+                };
+                self.expect_state("AnyAllSelectIter");
+                let iterable = Box::new(match self.next_state().as_str() {
+                    "call4_Query" => Expr::Subquery(Box::new(self.handle_query(info))),
+                    "call1_array" => self.handle_array(info),
+                    any => self.panic_unexpected(any)
+                });
+                self.expect_state("AnyAllAnyAll");
+                let iterable = Box::new(match self.next_state().as_str() {
+                    "AnyAllAnyAllAll" => Expr::AllOp(iterable),
+                    "AnyAllAnyAllAny" => Expr::AnyOp(iterable),
+                    any => self.panic_unexpected(any),
+                });
+                Expr::BinaryOp {
+                    left: Box::new(types_value),
+                    op: any_all_op,
+                    right: iterable,
+                }
+            },
+            "BinaryStringLike" => {
+                self.expect_state("call25_types");
+                let types_value_1 = self.handle_types(info, Some(TypesSelectedType::String), None).1;
+                let string_like_not_flag = match self.next_state().as_str() {
+                    "BinaryStringLikeNot" => {
+                        self.expect_state("BinaryStringLikeIn");
+                        true
+                    }
+                    "BinaryStringLikeIn" => false,
+                    any => self.panic_unexpected(any)
+                };
+                self.expect_state("call26_types");
+                let types_value_2 = self.handle_types(info, Some(TypesSelectedType::String), None).1;
+                Expr::BinaryOp {
+                left: Box::new(types_value_1),
+                    op: if string_like_not_flag { BinaryOperator::NotLike } else { BinaryOperator::Like },
+                    right: Box::new(types_value_2)
+                }
+            },
+            "BinaryBooleanOpV3" => {
+                self.expect_state("call27_types");
+                let types_value_1 = self.handle_types(info, Some(TypesSelectedType::Val3), None).1;
+                let binary_bool_op = match self.next_state().as_str() {
+                    "BinaryBooleanOpV3AND" => BinaryOperator::And,
+                    "BinaryBooleanOpV3OR" => BinaryOperator::Or,
+                    "BinaryBooleanOpV3XOR" => BinaryOperator::Xor,
+                    any => self.panic_unexpected(any)
+                };
+                self.expect_state("call28_types");
+                let types_value_2 = self.handle_types(info, Some(TypesSelectedType::Val3), None).1;
+                Expr::BinaryOp {
+                    left: Box::new(types_value_1),
+                    op: binary_bool_op,
+                    right: Box::new(types_value_2)
+                }
+            },
+            "true" => Expr::Value(Value::Boolean(true)),
+            "false" => Expr::Value(Value::Boolean(false)),
+            "Nested_VAL_3" => {
+                self.expect_state("call29_types");
+                Expr::Nested(Box::new(self.handle_types(info, Some(TypesSelectedType::Val3), None).1))
+            },
+            "UnaryNot_VAL_3" => {
+                self.expect_state("call30_types");
+                Expr::UnaryOp { op: UnaryOperator::Not, expr: Box::new( self.handle_types(
+                    info, Some(TypesSelectedType::Val3), None
+                ).1) }
+            },
+            any => self.panic_unexpected(any)
+        };
+        self.expect_state("EXIT_VAL_3");
+        val3
+    }
+
+    /// subgraph def_numeric
+    fn handle_numeric(&mut self, info: &mut QueryInfo) -> Expr {
+        self.expect_state("numeric");
+        let numeric = match self.next_state().as_str() {
+            "numeric_literal" => {
+                Expr::Value(Value::Number(match self.next_state().as_str() {
+                    "numeric_literal_float" => {
+                        "3.1415"  // TODO: hardcode
+                    },
+                    "numeric_literal_int" => {
+                        "3"       // TODO: hardcode
+                    },
+                    any => self.panic_unexpected(any)
+                }.to_string(), false))
+            },
+            "BinaryNumericOp" => {
+                self.expect_state("call48_types");
+                let types_value_1 = self.handle_types(info, Some(TypesSelectedType::Numeric), None).1;
+                let numeric_binary_op = match self.next_state().as_str() {
+                    "binary_numeric_bin_and" => BinaryOperator::BitwiseAnd,
+                    "binary_numeric_bin_or" => BinaryOperator::BitwiseOr,
+                    "binary_numeric_bin_xor" => BinaryOperator::BitwiseXor,
+                    "binary_numeric_div" => BinaryOperator::Divide,
+                    "binary_numeric_minus" => BinaryOperator::Minus,
+                    "binary_numeric_mul" => BinaryOperator::Multiply,
+                    "binary_numeric_plus" => BinaryOperator::Plus,
+                    any => self.panic_unexpected(any),
+                };
+                self.expect_state("call47_types");
+                let types_value_2 = self.handle_types(info, Some(TypesSelectedType::Numeric), None).1;
+                Expr::BinaryOp {
+                    left: Box::new(types_value_1),
+                    op: numeric_binary_op,
+                    right: Box::new(types_value_2)
+                }
+            },
+            "UnaryNumericOp" => {
+                let numeric_unary_op = match self.next_state().as_str() {
+                    "unary_numeric_abs" => UnaryOperator::PGAbs,
+                    "unary_numeric_bin_not" => UnaryOperator::PGBitwiseNot,
+                    "unary_numeric_cub_root" => UnaryOperator::PGCubeRoot,
+                    "unary_numeric_minus" => UnaryOperator::Minus,
+                    "unary_numeric_plus" => UnaryOperator::Plus,
+                    "unary_numeric_postfix_fact" => UnaryOperator::PGPostfixFactorial,
+                    "unary_numeric_prefix_fact" => UnaryOperator::PGPrefixFactorial,
+                    "unary_numeric_sq_root" => UnaryOperator::PGSquareRoot,
+                    any => self.panic_unexpected(any),
+                };
+                self.expect_state("call1_types");
+                let types_value = self.handle_types(info, Some(TypesSelectedType::Numeric), None).1;
+                Expr::UnaryOp {
+                    op: numeric_unary_op,
+                    expr: Box::new(types_value)
+                }
+            },
+            "numeric_string_Position" => {
+                self.expect_state("call2_types");
+                let types_value_1 = self.handle_types(info, Some(TypesSelectedType::String), None).1;
+                self.expect_state("string_position_in");
+                self.expect_state("call3_types");
+                let types_value_2 = self.handle_types(info, Some(TypesSelectedType::String), None).1;
+                Expr::Position {
+                    expr: Box::new(types_value_1),
+                    r#in: Box::new(types_value_2)
+                }
+            },
+            "Nested_numeric" => {
+                self.expect_state("call4_types");
+                let types_value = self.handle_types(info, Some(TypesSelectedType::Numeric), None).1;
+                Expr::Nested(Box::new(types_value))
+            },
+            any => self.panic_unexpected(any)
+        };
+        self.expect_state("EXIT_numeric");
+        numeric
+    }
+
+    /// subgraph def_string
+    fn handle_string(&mut self, info: &mut QueryInfo) -> Expr {
+        self.expect_state("string");
+        let string = match self.next_state().as_str() {
+            "string_literal" => Expr::Value(Value::SingleQuotedString("HJeihfbwei".to_string())),  // TODO: hardcoded
+            "string_trim" => {
+                let trim_where = match self.next_state().as_str() {
+                    "call6_types" => {
+                        let types_value = self.handle_types(info, Some(TypesSelectedType::String), None).1;
+                        let spec_mode = match self.next_state().as_str() {
+                            "BOTH" => TrimWhereField::Both,
+                            "LEADING" => TrimWhereField::Leading,
+                            "TRAILING" => TrimWhereField::Trailing,
+                            any => self.panic_unexpected(any)
+                        };
+                        self.expect_state("call5_types");
+                        Some((spec_mode, Box::new(types_value)))
+                    },
+                    "call5_types" => None,
+                    any => self.panic_unexpected(any)
+                };
+                let types_value = self.handle_types(info, Some(TypesSelectedType::String), None).1;
+                Expr::Trim {
+                    expr: Box::new(types_value), trim_where
+                }
+            },
+            "string_concat" => {
+                self.expect_state("call7_types");
+                let types_value_1 = self.handle_types(info, Some(TypesSelectedType::String), None).1;
+                self.expect_state("string_concat_concat");
+                self.expect_state("call8_types");
+                let types_value_2 = self.handle_types(info, Some(TypesSelectedType::String), None).1;
+                Expr::BinaryOp {
+                    left: Box::new(types_value_1),
+                    op: BinaryOperator::StringConcat,
+                    right: Box::new(types_value_2)
+                }
+            },
+            any => self.panic_unexpected(any)
+        };
+        self.expect_state("EXIT_string");
+        string
+    }
+
+    /// subgraph def_types
+    fn handle_types(
+        &mut self, info: &mut QueryInfo, equal_to: Option<TypesSelectedType>,
+        compatible_with: Option<TypesSelectedType>
+    ) -> (TypesSelectedType, Expr) {
+        self.expect_state("types");
+        let (types_selected_type, types_value) = match self.next_state().as_str() {
+            "types_select_type" => {
+                let types_selected_type = match self.next_state().as_str() {
+                    "types_select_type_3vl" => TypesSelectedType::Val3,
+                    "types_select_type_array" => TypesSelectedType::Array,
+                    "types_select_type_list_expr" => TypesSelectedType::ListExpr,
+                    "types_select_type_numeric" => TypesSelectedType::Numeric,
+                    "types_select_type_string" => TypesSelectedType::String,
+                    any => self.panic_unexpected(any)
+                };
+                self.state_generator.push_known(types_selected_type.get_types());
+                self.expect_state("types_select_type_end");
+                (types_selected_type, match self.next_state().as_str() {
+                    "call0_column_spec" => self.handle_column_spec(info),
+                    "call1_Query" => Expr::Subquery(Box::new(self.handle_query(info))),
+                    any => self.panic_unexpected(any)
+                })
+            },
+            "types_null" => (TypesSelectedType::Any, Expr::Value(Value::Null)),
+            "call0_numeric" => (TypesSelectedType::Numeric, self.handle_numeric(info)),
+            "call1_VAL_3" => (TypesSelectedType::Val3, self.handle_val_3(info)),
+            "call0_string" => (TypesSelectedType::String, self.handle_string(info)),
+            "call0_list_expr" => {
+                self.state_generator.push_known(match self.state_generator.get_inputs() {
+                    FunctionInputsType::TypeNameList(list) => list,
+                    any => panic!("Couldn't pass {:?} to subgraph def_list_expr", any)
+                });
+                (TypesSelectedType::ListExpr, self.handle_list_expr(info))
+            },
+            "call0_array" => {
+                self.state_generator.push_known(match self.state_generator.get_inputs() {
+                    FunctionInputsType::TypeNameList(list) => list,
+                    any => panic!("Couldn't pass {:?} to subgraph def_array", any)
+                });
+                (TypesSelectedType::Array, self.handle_array(info))
+            },
+            any => self.panic_unexpected(any)
+        };
+        self.expect_state("EXIT_types");
+        if let Some(to) = equal_to {
+            self.expect_type(&types_selected_type, &to);
+        }
+        if let Some(with) = compatible_with {
+            self.expect_compat(&types_selected_type, &with);
+        }
+        (types_selected_type, types_value)
+    }
+
+    /// subgraph def_types_all
+    fn handle_types_all(&mut self, info: &mut QueryInfo) -> (TypesSelectedType, Expr) {
+        self.expect_state("types_all");
+        self.expect_state("call0_types");
+        let ret = self.handle_types(info, None, None);
+        self.expect_state("EXIT_types_all");
+        ret
+    }
+
+    /// subgraph def_column_spec
+    fn handle_column_spec(&mut self, info: &mut QueryInfo) -> Expr {
+        self.expect_state("column_spec");
+        let ret = match self.next_state().as_str() {
+            "qualified_name" => Expr::Identifier(info.relation_generator.new_relation().gen_column_ident()),
+            "unqualified_name" => Expr::CompoundIdentifier(vec![
+                info.relation_generator.new_relation().gen_column_ident(),
+                info.relation_generator.new_relation().gen_column_ident()
+            ]),
+            any => self.panic_unexpected(any)
+        };
+        self.expect_state("EXIT_column_spec");
+        ret
+    }
+
+    /// subgraph def_array
+    fn handle_array(&mut self, info: &mut QueryInfo) -> Expr {
+        self.expect_state("array");
+        let array_compat_type = match self.next_state().as_str() {
+            "call12_types" => TypesSelectedType::Numeric,
+            "call13_types" => TypesSelectedType::Val3,
+            "call31_types" => TypesSelectedType::String,
+            "call14_types" => TypesSelectedType::Array,
+            any => self.panic_unexpected(any)
+        };
+        let types_value = self.handle_types(info, Some(array_compat_type.clone()), None).1;
+        let mut array: Vec<Expr> = vec![types_value];
+        loop {
+            match self.next_state().as_str() {
+                "call50_types" => {
+                    self.state_generator.push_compatible(array_compat_type.get_compat_types());
+                    let types_value = self.handle_types(info, None, Some(array_compat_type.clone())).1;
+                    array.push(types_value);
+                },
+                "EXIT_array" => break,
+                any => self.panic_unexpected(any)
             }
-            "call0_types_all" => {
-                push_var!(info, IsNullNotFlag, false);
-            },
-            any => self.panic_unexpected(any, "IsNull")
         }
-    }
-
-    fn handle_is_null_value(&mut self, info: &mut QueryInfo) {
-        let types_all_ret = pop_var!(info, TypesValue);
-        let is_not_null = pop_var!(info, IsNullNotFlag);
-        let val_3 = if is_not_null {
-            Expr::IsNotNull(Box::new(types_all_ret))
-        } else {
-            Expr::IsNull(Box::new(types_all_ret))
-        };
-        push_var!(info, Val3, val_3);
-    }
-
-    fn handle_is_distinct_from(&mut self, _info: &mut QueryInfo) {
-        self.expect_state("call1_types_all", "IsDistinctFrom");
-    }
-
-    fn handle_is_distinct_from_1st_val(&mut self, info: &mut QueryInfo) {
-        self.state_generator.compatible_type_name_stack.push(
-            pop_var!(info, TypesSelectedType).get_types()
-        );
-        match self.next_state().as_str() {
-            "IsDistinctNOT" => {
-                push_var!(info, IsDistinctNotFlag, true);
-                self.expect_state("DISTINCT", "IsDistinctNOT");
-            }
-            "DISTINCT" => {
-                push_var!(info, IsDistinctNotFlag, false);
-            },
-            any => self.panic_unexpected(any, "call1_types_all")
-        }
-        self.expect_state("call21_types", "DISTINCT");
-    }
-
-    fn handle_is_distinct_from_2nd_val(&mut self, info: &mut QueryInfo) {
-        let val2 = Box::new(pop_var!(info, TypesValue));
-        let val1 = Box::new(pop_var!(info, TypesValue));
-        let is_not_distinct = pop_var!(info, IsDistinctNotFlag);
-
-        let val_3 = if is_not_distinct {
-            Expr::IsNotDistinctFrom(val1, val2)
-        } else {
-            Expr::IsDistinctFrom(val1, val2)
-        };
-
-        push_var!(info, Val3, val_3);
-    }
-
-    fn handle_exists(&mut self, info: &mut QueryInfo) {
-        match self.next_state().as_str() {
-            "Exists_not" => {
-                push_var!(info, ExistsNotFlag, true);
-                self.expect_state("call2_Query", "Exists_not");
-            },
-            "call2_Query" => {
-                push_var!(info, ExistsNotFlag, false);
-            },
-            any => self.panic_unexpected(any, "Exists")
-        }
-    }
-
-    fn handle_exists_val(&mut self, info: &mut QueryInfo) {
-        let val_3 = Expr::Exists {
-            subquery: Box::new(pop_var!(info, Query)),
-            negated: pop_var!(info, ExistsNotFlag)
-        };
-
-        push_var!(info, Val3, val_3);
-    }
-
-    fn handle_in_list(&mut self, _info: &mut QueryInfo) {
-        self.expect_state("call2_types_all", "InList");
-    }
-
-    fn handle_in_list_1st_val(&mut self, info: &mut QueryInfo) {
-        self.state_generator.compatible_type_name_stack.push(
-            pop_var!(info, TypesSelectedType).get_types()
-        );
-        match self.next_state().as_str() {
-            "InListNot" => {
-                push_var!(info, InListNotFlag, true);
-                self.expect_state("InListIn", "InListNot");
-                self.expect_state("call1_list_expr", "InListIn");
-            },
-            "InListIn" => {
-                push_var!(info, InListNotFlag, false);
-                self.expect_state("call1_list_expr", "InListIn");
-            },
-            any => self.panic_unexpected(any, "call2_types_all")
-        }
-    }
-
-    fn handle_in_list_2nd_val(&mut self, info: &mut QueryInfo) {
-        let val_3 = Expr::InList {
-            expr: Box::new(pop_var!(info, TypesValue)),
-            list: vec![
-                Expr::Value(Value::SingleQuotedString("5".to_string())),
-                Expr::Value(Value::SingleQuotedString("erf".to_string())),
-                Expr::Value(Value::SingleQuotedString("vvv".to_string())),
-            ], // TODO: HARDCODE 
-            negated: pop_var!(info, InListNotFlag)
-        };
-
-        push_var!(info, Val3, val_3);
-    }
-
-    fn handle_in_subquery(&mut self, _info: &mut QueryInfo) {
-        self.expect_state("call3_types_all", "InSubquery");
-    }
-
-    fn handle_in_subquery_1st_val(&mut self, info: &mut QueryInfo) {
-        self.state_generator.compatible_type_name_stack.push(
-            pop_var!(info, TypesSelectedType).get_types()
-        );
-        match self.next_state().as_str() {
-            "InSubqueryNot" => {
-                push_var!(info, InSubqueryNotFlag, true);
-                self.expect_state("InSubqueryIn", "InSubqueryNot");
-            },
-            "InSubqueryIn" => {
-                push_var!(info, InSubqueryNotFlag, false);
-            },
-            any => self.panic_unexpected(any, "call2_types_all")
-        }
-        self.expect_state("call3_Query", "InSubqueryIn");
-    }
-
-    fn handle_in_subquery_2nd_val(&mut self, info: &mut QueryInfo) {
-        let val_3 = Expr::InSubquery {
-            expr: Box::new(pop_var!(info, TypesValue)),
-            subquery: Box::new(pop_var!(info, Query)),
-            negated: pop_var!(info, InSubqueryNotFlag)
-        };
-
-        push_var!(info, Val3, val_3);
-    }
-
-    fn handle_between(&mut self, _info: &mut QueryInfo) {
-        self.expect_state("call4_types_all", "Between");
-    }
-
-    fn handle_between_1st_val(&mut self, info: &mut QueryInfo) {
-        let types_name = pop_var!(info, TypesSelectedType).get_types();
-        self.state_generator.compatible_type_name_stack.push(types_name.clone());
-        self.state_generator.compatible_type_name_stack.push(types_name);
-        match self.next_state().as_str() {
-            "BetweenBetweenNot" => {
-                push_var!(info, BetweenNotFlag, true);
-                self.expect_state("BetweenBetween", "BetweenBetweenNot");
-            },
-            "BetweenBetween" => {
-                push_var!(info, BetweenNotFlag, false);
-            },
-            any => self.panic_unexpected(any, "call4_types_all")
-        }
-        self.expect_state("call22_types", "BetweenBetween");
-    }
-
-    fn handle_between_2nd_val(&mut self, _info: &mut QueryInfo) {
-        self.expect_state("BetweenBetweenAnd", "call22_types");
-        self.expect_state("call23_types", "BetweenBetweenAnd");
-    }
-
-    fn handle_between_3rd_val(&mut self, info: &mut QueryInfo) {
-        let high = Box::new(pop_var!(info, TypesValue));
-        let low = Box::new(pop_var!(info, TypesValue));
-        let expr = Box::new(pop_var!(info, TypesValue));
-        let negated = pop_var!(info, BetweenNotFlag);
-        let val_3 = Expr::Between { expr, negated, low, high };
-
-        push_var!(info, Val3, val_3);
-    }
-
-    fn handle_binary_comp(&mut self, _info: &mut QueryInfo) {
-        self.expect_state("call5_types_all", "BinaryComp");
-    }
-
-    fn handle_binary_comp_1st_val(&mut self, info: &mut QueryInfo) {
-        self.state_generator.compatible_type_name_stack.push(
-            pop_var!(info, TypesSelectedType).get_types()
-        );
-        match self.next_state().as_str() {
-            "BinaryCompEqual" => {
-                push_var!(info, BinaryCompOp, BinaryOperator::Eq);
-                self.expect_state("call24_types", "BinaryCompEqual");
-            },
-            "BinaryCompLess" => {
-                push_var!(info, BinaryCompOp, BinaryOperator::Lt);
-                self.expect_state("call24_types", "BinaryCompLess");
-            },
-            "BinaryCompLessEqual" => {
-                push_var!(info, BinaryCompOp, BinaryOperator::LtEq);
-                self.expect_state("call24_types", "BinaryCompLessEqual");
-            },
-            "BinaryCompUnEqual" => {
-                push_var!(info, BinaryCompOp, BinaryOperator::NotEq);
-                self.expect_state("call24_types", "BinaryCompUnEqual");
-            },
-            any => self.panic_unexpected(any, "call5_types_all")
-        }
-    }
-
-    fn handle_binary_comp_2nd_val(&mut self, info: &mut QueryInfo) {
-        let right = Box::new(pop_var!(info, TypesValue));
-        let op = pop_var!(info, BinaryCompOp);
-        let left = Box::new(pop_var!(info, TypesValue));
-
-        push_var!(info, Val3, Expr::BinaryOp { left, op, right });
-    }
-
-    fn handle_any_all(&mut self, _info: &mut QueryInfo) {
-        self.expect_state("call6_types_all", "AnyAll");
-    }
-
-    fn handle_any_all_1st_val(&mut self, info: &mut QueryInfo) {
-        self.state_generator.compatible_type_name_stack.push(
-            pop_var!(info, TypesSelectedType).get_types()
-        );
-        self.expect_state("AnyAllSelectOp", "call6_types_all");
-
-        match self.next_state().as_str() {
-            "AnyAllEqual" => {
-                push_var!(info, AnyAllOp, BinaryOperator::Eq);
-                self.expect_state("AnyAllSelectIter", "AnyAllEqual");
-            },
-            "AnyAllLess" => {
-                push_var!(info, AnyAllOp, BinaryOperator::Lt);
-                self.expect_state("AnyAllSelectIter", "AnyAllLess");
-            },
-            "AnyAllLessEqual" => {
-                push_var!(info, AnyAllOp, BinaryOperator::LtEq);
-                self.expect_state("AnyAllSelectIter", "AnyAllLessEqual");
-            },
-            "AnyAllUnEqual" => {
-                push_var!(info, AnyAllOp, BinaryOperator::NotEq);
-                self.expect_state("AnyAllSelectIter", "AnyAllUnEqual");
-            },
-            any => self.panic_unexpected(any, "call6_types_all")
-        }
-
-        match self.next_state().as_str() {
-            "call4_Query" => {},
-            "call1_array" => {},
-            any => self.panic_unexpected(any, "AnyAllSelectIter")
-        }
-    }
-
-    fn handle_any_all_2nd_val(&mut self, info: &mut QueryInfo, array: bool) {
-        self.expect_state("AnyAllAnyAll", if array { "call1_array" } else { "call4_Query" });
-
-        let right = Box::new(if array {
-            pop_var!(info, Array)
-        } else {
-            Expr::Subquery(Box::new(pop_var!(info, Query)))
-        });
-        let right = Box::new(match self.next_state().as_str() {
-            "AnyAllAnyAllAll" => Expr::AllOp(right),
-            "AnyAllAnyAllAny" => Expr::AnyOp(right),
-            any => {
-                self.panic_unexpected(any, "AnyAllAnyAll");
-                panic!()  // dumb compiler errors :(
-            }
-        });
-
-        let op = pop_var!(info, AnyAllOp);
-        let left = Box::new(pop_var!(info, TypesValue));
-
-        push_var!(info, Val3, Expr::BinaryOp { left, op, right });
-    }
-
-    fn handle_string_like(&mut self, _info: &mut QueryInfo) {
-        self.expect_state("call25_types", "BinaryStringLike");
-    }
-
-    fn handle_string_like_1st_val(&mut self, info: &mut QueryInfo) {
-        if pop_var!(info, TypesSelectedType) != TypesSelectedType::String {
-            panic!("String LIKE expected String as 1st argument")
-        }
-        match self.next_state().as_str() {
-            "BinaryStringLikeNot" => {
-                push_var!(info, StringLikeNotFlag, true);
-                self.expect_state("BinaryStringLikeIn", "BinaryStringLikeNot");
-            }
-            "BinaryStringLikeIn" => {
-                push_var!(info, StringLikeNotFlag, false);
-            },
-            any => self.panic_unexpected(any, "call25_types")
-        }
-        self.expect_state("call26_types", "BinaryStringLikeIn");
-    }
-
-    fn handle_string_like_2nd_val(&mut self, info: &mut QueryInfo) {
-        if pop_var!(info, TypesSelectedType) != TypesSelectedType::String {
-            panic!("String LIKE expected String as 2nd argument")
-        }
-        let right = Box::new(pop_var!(info, TypesValue));
-        let left = Box::new(pop_var!(info, TypesValue));
-        let op = if pop_var!(info, StringLikeNotFlag) { BinaryOperator::NotLike } else { BinaryOperator::Like };
-
-        push_var!(info, Val3, Expr::BinaryOp { left, op, right });
-    }
-
-    fn handle_binary_bool_op(&mut self, _info: &mut QueryInfo) {
-        self.expect_state("call27_types", "BinaryBooleanOpV3");
-    }
-
-    fn handle_binary_bool_op_1st_val(&mut self, info: &mut QueryInfo) {
-        if pop_var!(info, TypesSelectedType) != TypesSelectedType::Val3 {
-            panic!("Boolean op expected TypesSelectedType::Val3 as 1st argument")
-        }
-        match self.next_state().as_str() {
-            "BinaryBooleanOpV3AND" => {
-                push_var!(info, BinaryBoolOp, BinaryOperator::And);
-                self.expect_state("call28_types", "BinaryBooleanOpV3AND");
-            },
-            "BinaryBooleanOpV3OR" => {
-                push_var!(info, BinaryBoolOp, BinaryOperator::Or);
-                self.expect_state("call28_types", "BinaryBooleanOpV3OR");
-            },
-            "BinaryBooleanOpV3XOR" => {
-                push_var!(info, BinaryBoolOp, BinaryOperator::Xor);
-                self.expect_state("call28_types", "BinaryBooleanOpV3XOR");
-            },
-            any => self.panic_unexpected(any, "call27_types")
-        }
-    }
-
-    fn handle_binary_bool_op_2nd_val(&mut self, info: &mut QueryInfo) {
-        if pop_var!(info, TypesSelectedType) != TypesSelectedType::Val3 {
-            panic!("Boolean op expected TypesSelectedType::Val3 as 2nd argument")
-        }
-        let right = Box::new(pop_var!(info, TypesValue));
-        let op = pop_var!(info, BinaryBoolOp);
-        let left = Box::new(pop_var!(info, TypesValue));
-
-        push_var!(info, Val3, Expr::BinaryOp { left, op, right });
-    }
-
-    fn handle_nested_val(&mut self, _info: &mut QueryInfo) {
-        self.expect_state("call29_types", "Nested_VAL_3");
-    }
-
-    fn handle_nested_val_val(&mut self, info: &mut QueryInfo) {
-        if pop_var!(info, TypesSelectedType) != TypesSelectedType::Val3 {
-            panic!("Nested_VAL_3 expected TypesSelectedType::Val3 as argument")
-        }
-        let nested = Box::new(pop_var!(info, TypesValue));
-        push_var!(info, Val3, Expr::Nested(nested));
-    }
-
-    fn handle_unary_not_val(&mut self, info: &mut QueryInfo) {
-        if pop_var!(info, TypesSelectedType) != TypesSelectedType::Val3 {
-            panic!("Nested_VAL_3 expected TypesSelectedType::Val3 as argument")
-        }
-        let expr = Box::new(pop_var!(info, TypesValue));
-        push_var!(info, Val3, Expr::UnaryOp { op: UnaryOperator::Not, expr });
-    }
-
-    // ======================================================== subgraph def_numeric
-
-    fn handle_numeric(&mut self, info: &mut QueryInfo) {
-        match self.next_state().as_str() {
-            "numeric_literal" => self.handle_numeric_literal(info),
-            "BinaryNumericOp" => self.handle_numeric_binary(info),
-            "UnaryNumericOp" => self.handle_numeric_unary(info),
-            "numeric_string_Position" => self.handle_string_position(info),
-            "Nested_numeric" => self.handle_numeric_nested_val(info),
-            any => self.panic_unexpected(any, "numeric")
-        }
-    }
-
-    fn handle_numeric_literal(&mut self, info: &mut QueryInfo) {
-        let num_str = match self.next_state().as_str() {
-            "numeric_literal_float" => {
-                "3.1415"  // TODO: hardcode
-            },
-            "numeric_literal_int" => {
-                "3"       // TODO: hardcode
-            },
-            any => {
-                self.panic_unexpected(any, "numeric_literal");
-                panic!() // compiler dumb
-            }
-        }.to_string();
-        push_var!(info, Numeric, Expr::Value(Value::Number(num_str, false)));
-    }
-
-    fn handle_numeric_binary(&mut self, _info: &mut QueryInfo) {
-        self.expect_state("call33_types", "BinaryNumericOp");
-    }
-
-    fn handle_numeric_binary_1st_val(&mut self, info: &mut QueryInfo) {
-        if pop_var!(info, TypesSelectedType) != TypesSelectedType::Numeric {
-            panic!("BinaryNumericOp expected TypesSelectedType::Numeric as argument")
-        }
-        match self.next_state().as_str() {
-            "binary_numeric_bin_and" => {
-                push_var!(info, NumericBinaryOp, BinaryOperator::BitwiseAnd);
-                self.expect_state("call32_types", "binary_numeric_bin_and")
-            },
-            "binary_numeric_bin_or" => {
-                push_var!(info, NumericBinaryOp, BinaryOperator::BitwiseOr);
-                self.expect_state("call32_types", "binary_numeric_bin_or")
-            },
-            "binary_numeric_bin_xor" => {
-                push_var!(info, NumericBinaryOp, BinaryOperator::BitwiseXor);
-                self.expect_state("call32_types", "binary_numeric_bin_xor")
-            },
-            "binary_numeric_div" => {
-                push_var!(info, NumericBinaryOp, BinaryOperator::Divide);
-                self.expect_state("call32_types", "binary_numeric_div")
-            },
-            "binary_numeric_minus" => {
-                push_var!(info, NumericBinaryOp, BinaryOperator::Minus);
-                self.expect_state("call32_types", "binary_numeric_minus")
-            },
-            "binary_numeric_mul" => {
-                push_var!(info, NumericBinaryOp, BinaryOperator::Multiply);
-                self.expect_state("call32_types", "binary_numeric_mul")
-            },
-            "binary_numeric_plus" => {
-                push_var!(info, NumericBinaryOp, BinaryOperator::Plus);
-                self.expect_state("call32_types", "binary_numeric_plus")
-            },
-            any => self.panic_unexpected(any, "call33_types"),
-        }
-    }
-
-    fn handle_numeric_binary_2nd_val(&mut self, info: &mut QueryInfo) {
-        if pop_var!(info, TypesSelectedType) != TypesSelectedType::Numeric {
-            panic!("BinaryNumericOp expected TypesSelectedType::Numeric as argument")
-        }
-        let right = Box::new(pop_var!(info, TypesValue));
-        let op = pop_var!(info, NumericBinaryOp);
-        let left = Box::new(pop_var!(info, TypesValue));
-
-        push_var!(info, Numeric, Expr::BinaryOp { left, op, right });
-    }
-
-    fn handle_numeric_unary(&mut self, info: &mut QueryInfo) {
-        match self.next_state().as_str() {
-            "unary_numeric_abs" => {
-                push_var!(info, NumericUnaryOp, UnaryOperator::PGAbs);
-                self.expect_state("call1_types", "unary_numeric_abs");
-            },
-            "unary_numeric_bin_not" => {
-                push_var!(info, NumericUnaryOp, UnaryOperator::PGBitwiseNot);
-                self.expect_state("call1_types", "unary_numeric_bin_not");
-            },
-            "unary_numeric_cub_root" => {
-                push_var!(info, NumericUnaryOp, UnaryOperator::PGCubeRoot);
-                self.expect_state("call1_types", "unary_numeric_cub_root");
-            },
-            "unary_numeric_minus" => {
-                push_var!(info, NumericUnaryOp, UnaryOperator::Minus);
-                self.expect_state("call1_types", "unary_numeric_minus");
-            },
-            "unary_numeric_plus" => {
-                push_var!(info, NumericUnaryOp, UnaryOperator::Plus);
-                self.expect_state("call1_types", "unary_numeric_plus");
-            },
-            "unary_numeric_postfix_fact" => {
-                push_var!(info, NumericUnaryOp, UnaryOperator::PGPostfixFactorial);
-                self.expect_state("call1_types", "unary_numeric_postfix_fact");
-            },
-            "unary_numeric_prefix_fact" => {
-                push_var!(info, NumericUnaryOp, UnaryOperator::PGPrefixFactorial);
-                self.expect_state("call1_types", "unary_numeric_prefix_fact");
-            },
-            "unary_numeric_sq_root" => {
-                push_var!(info, NumericUnaryOp, UnaryOperator::PGSquareRoot);
-                self.expect_state("call1_types", "unary_numeric_sq_root");
-            },
-            any => self.panic_unexpected(any, "call33_types"),
-        }
-    }
-
-    fn handle_numeric_unary_val(&mut self, info: &mut QueryInfo) {
-        if pop_var!(info, TypesSelectedType) != TypesSelectedType::Numeric {
-            panic!("UnaryNumericOp expected TypesSelectedType::Numeric as argument")
-        }
-        let op = pop_var!(info, NumericUnaryOp);
-        let expr = Box::new(pop_var!(info, TypesValue));
-        push_var!(info, Numeric, Expr::UnaryOp { op, expr });
-    }
-
-    fn handle_string_position(&mut self, _info: &mut QueryInfo) {
-        self.expect_state("call2_types", "numeric_string_Position");
-    }
-
-    fn handle_string_position_1st_val(&mut self, info: &mut QueryInfo) {
-        if pop_var!(info, TypesSelectedType) != TypesSelectedType::String {
-            panic!("numeric_string_Position expected TypesSelectedType::String as 1st argument")
-        }
-        self.expect_state("string_position_in", "call2_types");
-        self.expect_state("call3_types", "string_position_in");
-    }
-
-    fn handle_string_position_2nd_val(&mut self, info: &mut QueryInfo) {
-        if pop_var!(info, TypesSelectedType) != TypesSelectedType::String {
-            panic!("numeric_string_Position expected TypesSelectedType::String as 2nd argument")
-        }
-        let right = Box::new(pop_var!(info, TypesValue));
-        let left = Box::new(pop_var!(info, TypesValue));
-        push_var!(info, Numeric, Expr::Position { expr: left, r#in: right });
-    }
-
-    fn handle_numeric_nested_val(&mut self, _info: &mut QueryInfo) {
-        self.expect_state("call4_types", "Nested_numeric");
-    }
-
-    fn handle_numeric_nested_val_val(&mut self, info: &mut QueryInfo) {
-        if pop_var!(info, TypesSelectedType) != TypesSelectedType::Numeric {
-            panic!("Nested_numeric expected TypesSelectedType::Numeric as argument")
-        }
-        let nested = Box::new(pop_var!(info, TypesValue));
-        push_var!(info, Numeric, Expr::Nested(nested));
-    }
-
-    // ======================================================== subgraph def_string
-
-    fn handle_string(&mut self, info: &mut QueryInfo) {
-        match self.next_state().as_str() {
-            "string_literal" => push_var!(info, String, Expr::Value(Value::SingleQuotedString("HJeihfbwei".to_string()))),  // TODO: hardcoded
-            "string_trim" => self.handle_trim(info),
-            "string_concat" => self.handle_concat(info),
-            any => self.panic_unexpected(any, "string")
-        }
-    }
-
-    fn handle_trim(&mut self, info: &mut QueryInfo) {
-        match self.next_state().as_str() {
-            "call6_types" => { push_var!(info, TrimSpecFlag, true); },
-            "call5_types" => { push_var!(info, TrimSpecFlag, false); },
-            any => self.panic_unexpected(any, "string_trim")
-        }
-    }
-
-    fn handle_trim_spec(&mut self, info: &mut QueryInfo) {
-        match self.next_state().as_str() {
-            "BOTH" => { 
-                push_var!(info, TrimSpecValue, TrimWhereField::Both);
-                self.expect_state("call5_types", "BOTH");
-            },
-            "LEADING" => {
-                push_var!(info, TrimSpecValue, TrimWhereField::Leading);
-                self.expect_state("call5_types", "LEADING");
-            },
-            "TRAILING" => {
-                push_var!(info, TrimSpecValue, TrimWhereField::Trailing);
-                self.expect_state("call5_types", "TRAILING");
-            },
-            any => self.panic_unexpected(any, "string_trim")
-        }
-    }
-
-    fn handle_trim_val(&mut self, info: &mut QueryInfo) {
-        let is_spec = pop_var!(info, TrimSpecFlag);
-
-        if pop_var!(info, TypesSelectedType) != TypesSelectedType::String {
-            panic!("trim expected TypesSelectedType::String as expr")
-        }
-        let expr = Box::new(pop_var!(info, TypesValue));
-
-        let trim_where = if is_spec {
-            if pop_var!(info, TypesSelectedType) != TypesSelectedType::String {
-                panic!("trim expected TypesSelectedType::String as spec")
-            }
-            let field = pop_var!(info, TrimSpecValue);
-            let spec = Box::new(pop_var!(info, TypesValue));
-            Some((field, spec))
-        } else {
-            None
-        };
-        push_var!(info, String, Expr::Trim {
-            expr, trim_where
+        Expr::Array(Array {
+            elem: array,
+            named: false
         })
     }
 
-    fn handle_concat(&mut self, _info: &mut QueryInfo) {
-        self.expect_state("call7_types", "string_concat");
-    }
-
-    fn handle_concat_1st_val(&mut self, info: &mut QueryInfo) {
-        if pop_var!(info, TypesSelectedType) != TypesSelectedType::String {
-            panic!("string_concat expected TypesSelectedType::String as 1st value")
-        }
-        self.expect_state("string_concat_concat", "call7_types");
-        self.expect_state("call8_types", "string_concat_concat");
-    }
-
-    fn handle_concat_2nd_val(&mut self, info: &mut QueryInfo) {
-        if pop_var!(info, TypesSelectedType) != TypesSelectedType::String {
-            panic!("string_concat expected TypesSelectedType::String as 2nd value")
-        }
-        let right = Box::new(pop_var!(info, TypesValue));
-        let left = Box::new(pop_var!(info, TypesValue));
-        push_var!(info, String, Expr::BinaryOp { left, op: BinaryOperator::StringConcat, right }  )
-    }
-
-    // ======================================================== subgraph def_types
-
-    fn handle_types(&mut self, info: &mut QueryInfo) {
-        match self.next_state().as_str() {
-            "types_select_type" => self.handle_types_select_type(info),
-            "types_null" => {
-                push_var!(info, TypesSelectedType, TypesSelectedType::Any);
-                push_var!(info, TypesValue, Expr::Value(Value::Null));
-            },
-            "call0_numeric" => {},
-            "call1_VAL_3" => {},
-            "call0_string" => {},
-            "call0_list_expr" => {
-                self.state_generator.known_type_name_stack.push(match self.state_generator.get_inputs() {
-                    FunctionInputsType::TypeNameList(list) => list,
-                    _ => panic!("Couldn't replicate inputs")
-                })
-            },
-            "call0_array" => {
-                self.state_generator.known_type_name_stack.push(match self.state_generator.get_inputs() {
-                    FunctionInputsType::TypeNameList(list) => list,
-                    _ => panic!("Couldn't replicate inputs")
-                })
-            },
-            any => self.panic_unexpected(any, "types")
-        }
-    }
-
-    fn handle_types_select_type(&mut self, info: &mut QueryInfo) {
-        match self.next_state().as_str() {
-            "types_select_type_3vl" => {
-                push_var!(info, TypesSelectedType, TypesSelectedType::Val3);
-                self.state_generator.known_type_name_stack.push((TypesSelectedType::Val3).get_types());
-                self.expect_state("types_select_type_end", "types_select_type_3vl");
-            },
-            "types_select_type_array" => {
-                push_var!(info, TypesSelectedType, TypesSelectedType::Array);
-                self.state_generator.known_type_name_stack.push((TypesSelectedType::Array).get_types());
-                self.expect_state("types_select_type_end", "types_select_type_array");
-            },
-            "types_select_type_list_expr" => {
-                push_var!(info, TypesSelectedType, TypesSelectedType::ListExpr);
-                self.state_generator.known_type_name_stack.push((TypesSelectedType::ListExpr).get_types());
-                self.expect_state("types_select_type_end", "types_select_type_list_expr");
-            },
-            "types_select_type_numeric" => {
-                push_var!(info, TypesSelectedType, TypesSelectedType::Numeric);
-                self.state_generator.known_type_name_stack.push((TypesSelectedType::Numeric).get_types());
-                self.expect_state("types_select_type_end", "types_select_type_numeric");
-            },
-            "types_select_type_string" => {
-                push_var!(info, TypesSelectedType, TypesSelectedType::String);
-                self.state_generator.known_type_name_stack.push((TypesSelectedType::String).get_types());
-                self.expect_state("types_select_type_end", "types_select_type_string");
-            },
-            any => self.panic_unexpected(any, "types_select_type")
-        }
-
-        match self.next_state().as_str() {
-            "call0_column_spec" => {},
-            "call1_Query" => {},
-            any => self.panic_unexpected(any, "types_select_type_end")
-        }
-    }
-
-    fn handle_types_select_type_value(&mut self, info: &mut QueryInfo, query: bool) {
-        let value = if query {
-            Expr::Subquery(Box::new(pop_var!(info, Query)))
-        } else {
-            pop_var!(info, ColumnSpec)
+    /// subgraph def_list_expr
+    fn handle_list_expr(&mut self, info: &mut QueryInfo) -> Expr {
+        self.expect_state("list_expr");
+        let list_compat_type = match self.next_state().as_str() {
+            "call16_types" => TypesSelectedType::Numeric,
+            "call17_types" => TypesSelectedType::Val3,
+            "call18_types" => TypesSelectedType::String,
+            "call19_types" => TypesSelectedType::ListExpr,
+            "call20_types" => TypesSelectedType::Array,
+            any => self.panic_unexpected(any)
         };
-        push_var!(info, TypesValue, value);
-    }
-
-    fn handle_types_numeric(&mut self, info: &mut QueryInfo) {
-        push_var!(info, TypesSelectedType, TypesSelectedType::Numeric);
-        let val = pop_var!(info, Numeric);
-        push_var!(info, TypesValue, val);
-    }
-
-    fn handle_types_val3(&mut self, info: &mut QueryInfo) {
-        push_var!(info, TypesSelectedType, TypesSelectedType::Val3);
-        let val = pop_var!(info, Val3);
-        push_var!(info, TypesValue, val);
-    }
-
-    fn handle_types_string(&mut self, info: &mut QueryInfo) {
-        push_var!(info, TypesSelectedType, TypesSelectedType::String);
-        let val = pop_var!(info, String);
-        push_var!(info, TypesValue, val);
-    }
-
-    fn handle_types_list_expr(&mut self, info: &mut QueryInfo) {
-        push_var!(info, TypesSelectedType, TypesSelectedType::ListExpr);
-        let val = pop_var!(info, ListExpr);
-        push_var!(info, TypesValue, val);
-    }
-
-    fn handle_types_array(&mut self, info: &mut QueryInfo) {
-        push_var!(info, TypesSelectedType, TypesSelectedType::Array);
-        let val = pop_var!(info, Array);
-        push_var!(info, TypesValue, val);
-    }
-
-    // ======================================================== subgraph def_types_all
-
-    fn handle_types_all(&mut self, _info: &mut QueryInfo) {
-        self.expect_state("call0_types", "types_all");
-    }
-
-    // ======================================================== subgraph def_column_spec
-
-    fn handle_column_spec(&mut self, info: &mut QueryInfo) {
-        match self.next_state().as_str() {
-            "qualified_name" => {
-                push_var!(info, ColumnSpec, Expr::Identifier(info.relation_generator.new_relation().gen_column_ident()));
-            },
-            "unqualified_name" => {
-                push_var!(info, ColumnSpec, Expr::CompoundIdentifier(vec![
-                    info.relation_generator.new_relation().gen_column_ident(),
-                    info.relation_generator.new_relation().gen_column_ident()
-                ]));
-            },
-            any => self.panic_unexpected(any, "types_select_type")
-        }
-    }
-
-    // ======================================================== subgraph def_array
-
-    fn handle_array(&mut self, info: &mut QueryInfo) {
-        // TODO: HARDCODE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        match self.next_state().as_str() {
-            "call12_types" => {
-                push_var!(info, Array, Expr::Array(Array { elem: vec![
-                    Expr::Value(Value::Number("5".to_string(), false)),
-                    Expr::Value(Value::Number("64".to_string(), false)),
-                    Expr::Value(Value::Number("2".to_string(), false))
-                ], named: false }));
-            },
-            "call13_types" => {
-                push_var!(info, Array, Expr::Array(Array { elem: vec![
-                    Expr::Value(Value::Boolean(false)),
-                    Expr::Value(Value::Boolean(false)),
-                    Expr::Value(Value::Boolean(true))
-                ], named: false }));
-            },
-            "call31_types" => {
-                push_var!(info, Array, Expr::Array(Array { elem: vec![
-                    Expr::Value(Value::SingleQuotedString("5".to_string())),
-                    Expr::Value(Value::SingleQuotedString("erf".to_string())),
-                    Expr::Value(Value::SingleQuotedString("vvv".to_string())),
-                ], named: false }));
-            },
-            "call14_types" => {
-                push_var!(info, Array, Expr::Array(Array { elem: vec![
-                    Expr::Array(Array { elem: vec![
-                        Expr::Value(Value::SingleQuotedString("5".to_string())),
-                        Expr::Value(Value::SingleQuotedString("erf".to_string())),
-                        Expr::Value(Value::SingleQuotedString("vvv".to_string())),
-                    ], named: false }),
-                    Expr::Array(Array { elem: vec![
-                        Expr::Value(Value::SingleQuotedString("5".to_string())),
-                        Expr::Value(Value::SingleQuotedString("erf".to_string())),
-                        Expr::Value(Value::SingleQuotedString("vvv".to_string())),
-                    ], named: false }),
-                    Expr::Array(Array { elem: vec![
-                        Expr::Value(Value::SingleQuotedString("5".to_string())),
-                        Expr::Value(Value::SingleQuotedString("erf".to_string())),
-                        Expr::Value(Value::SingleQuotedString("vvv".to_string())),
-                    ], named: false }),
-                ], named: false }));
-            },
-            any => self.panic_unexpected(any, "types_select_type")
-        }
-    }
-
-    fn generate(&mut self, info: &mut QueryInfo) -> Query {
-        while let Some(state) = self.state_generator.next() {
-            match state.as_str() {
-                // ===== subgraph Query
-                "Query" => self.handle_query(info),
-                "EXIT_Query" => self.handle_query_exit(info),
-                "Table" => self.handle_from_table(info),
-                "call0_Query" => {},
-                "Rcall0_Query" => self.handle_from_subquery_r(info),
-                "FROM_multiple_relations" => self.handle_multiple_relations(info),
-                "EXIT_FROM" => {},
-                "WHERE" => {},
-                "call0_VAL_3" => {},
-                "Rcall0_VAL_3" => self.handle_where_val_3_ret(info),
-                "SELECT" => {},
-                "select_all" => self.handle_select_all(info),
-
-                // ===== subgraph VAL_3
-                "VAL_3" => self.handle_val_3(info),
-                "EXIT_VAL_3" => {},
-                "Rcall0_types_all" => self.handle_is_null_value(info),
-                "Rcall1_types_all" => self.handle_is_distinct_from_1st_val(info),
-                "Rcall21_types" => self.handle_is_distinct_from_2nd_val(info),
-                "Rcall2_Query" => self.handle_exists_val(info),
-                "Rcall2_types_all" => self.handle_in_list_1st_val(info),
-                "Rcall1_list_expr" => self.handle_in_list_2nd_val(info),
-                "Rcall3_types_all" => self.handle_in_subquery_1st_val(info),
-                "Rcall3_Query" => self.handle_in_subquery_2nd_val(info),
-                "Rcall4_types_all" => self.handle_between_1st_val(info),
-                "Rcall22_types" => self.handle_between_2nd_val(info),
-                "Rcall23_types" => self.handle_between_3rd_val(info),
-                "Rcall5_types_all" => self.handle_binary_comp_1st_val(info),
-                "Rcall24_types" => self.handle_binary_comp_2nd_val(info),
-                "Rcall6_types_all" => self.handle_any_all_1st_val(info),
-                "Rcall4_Query" => self.handle_any_all_2nd_val(info, false),
-                "Rcall1_array" => self.handle_any_all_2nd_val(info, true),
-                "Rcall25_types" => self.handle_string_like_1st_val(info),
-                "Rcall26_types" => self.handle_string_like_2nd_val(info),
-                "Rcall27_types" => self.handle_binary_bool_op_1st_val(info),
-                "Rcall28_types" => self.handle_binary_bool_op_2nd_val(info),
-                "Rcall29_types" => self.handle_nested_val_val(info),
-                "Rcall30_types" => self.handle_unary_not_val(info),
-
-                // ===== subgraph def_numeric
-                "numeric" => self.handle_numeric(info),
-                "EXIT_numeric" => {},
-                "Rcall33_types" => self.handle_numeric_binary_1st_val(info),
-                "Rcall32_types" => self.handle_numeric_binary_2nd_val(info),
-                "Rcall1_types" => self.handle_numeric_unary_val(info),
-                "Rcall2_types" => self.handle_string_position_1st_val(info),
-                "Rcall3_types" => self.handle_string_position_2nd_val(info),
-                "Rcall4_types" => self.handle_numeric_nested_val_val(info),
-
-                // ===== subgraph def_string
-                "string" => self.handle_string(info),
-                "EXIT_string" => {},
-                "Rcall6_types" => self.handle_trim_spec(info),
-                "Rcall5_types" => self.handle_trim_val(info),
-                "Rcall7_types" => self.handle_concat_1st_val(info),
-                "Rcall8_types" => self.handle_concat_2nd_val(info),
-
-                // ===== subgraph def_types
-                "types" => self.handle_types(info),
-                "EXIT_types" => {},
-                "Rcall0_column_spec" => self.handle_types_select_type_value(info, false),
-                "Rcall1_Query" => self.handle_types_select_type_value(info, true),
-                "call0_numeric" => self.handle_types_numeric(info),
-                "call1_VAL_3" => self.handle_types_val3(info),
-                "call0_string" => self.handle_types_string(info),
-                "call0_list_expr" => self.handle_types_list_expr(info),
-                "call0_array" => self.handle_types_array(info),
-
-                // ===== subgraph def_types_all
-                "types_all" => self.handle_types_all(info),
-                "EXIT_types_all" => {},
-
-                // ===== subgraph def_column_spec
-                "column_spec" => self.handle_column_spec(info),
-                "EXIT_column_spec" => {},
-
-                // ===== subgraph def_array
-                "array" => self.handle_array(info),
-                "EXIT_array" => {},
-                "call12_types" => {},
-                "call13_types" => {},  // this is hardcoded (no time!)
-                "call31_types" => {},
-                "call14_types" => {},
-                "Rcall12_types" => {},
-                "Rcall13_types" => {},
-                "Rcall31_types" => {},
-                "Rcall14_types" => {},
-
-                // ===== subgraph def_list_expr
-                "list_expr" => {
-                    // TODO : HARDCODE
-                    push_var!(info, ListExpr, Expr::Tuple(vec![
-                        Expr::Value(Value::SingleQuotedString("5".to_string())),
-                        Expr::Value(Value::SingleQuotedString("erf".to_string())),
-                        Expr::Value(Value::SingleQuotedString("vvv".to_string())),
-                    ]));
-                }
-                "EXIT_list_expr" => {},
-                "list_expr_element" => {},
-                "list_expr_element_exit" => {},
-                "call16_types" => {},
-                "call17_types" => {},
-                "call18_types" => {},
-                "call19_types" => {},
-                "call20_types" => {},
-
-                _ => panic!("Received unknown state: {state}")
+        let types_value = self.handle_types(info, Some(list_compat_type.clone()), None).1;
+        let mut list_expr: Vec<Expr> = vec![types_value];
+        loop {
+            match self.next_state().as_str() {
+                "call49_types" => {
+                    self.state_generator.push_compatible(list_compat_type.get_compat_types());
+                    let types_value = self.handle_types(info, None, Some(list_compat_type.clone())).1;
+                    list_expr.push(types_value);
+                },
+                "EXIT_list_expr" => break,
+                any => self.panic_unexpected(any)
             }
         }
-        pop_var!(info, Query)
+        Expr::Tuple(list_expr)
+    }
+
+    /// starting point; calls handle_query for the first time
+    fn generate(&mut self) -> Query {
+        self.handle_query(&mut QueryInfo::new())
     }
 }
-
-/*
-"call10_types" => {},
-"call11_types" => {},
-"call2_list_expr" => {},
-
-"numericRight" => {},
-"string_substr_numeric_from_from" => {},
-"string_substr_numeric_len_len" => {},
-"string_substring" => {},
-*/
 
 impl Iterator for QueryGenerator {
     type Item = Query;
 
     fn next(&mut self) -> Option<Self::Item> {
-        Some(self.generate(&mut QueryInfo::new()))
+        Some(self.generate())
     }
 }

@@ -1,10 +1,11 @@
 mod dot_parser;
 mod error;
 use std::{collections::HashMap, fs::File, io::Read, path::Path};
-use rand::{prelude::ThreadRng, thread_rng, Rng};
+use rand::{Rng, SeedableRng};
 
 use regex::Regex;
 use smol_str::SmolStr;
+use rand_chacha::ChaCha8Rng;
 
 use self::{
     dot_parser::DotTokenizer, error::SyntaxError,
@@ -12,11 +13,14 @@ use self::{
 
 pub use dot_parser::FunctionInputsType;
 
+/// this structure contains all the parsed graph functions
 #[derive(Clone, Debug)]
 struct MarkovChain {
     functions: HashMap<SmolStr, Function>,
 }
 
+/// this structure represents a single node with all of
+/// its possible properties and modifiers
 #[derive(Clone, Debug)]
 struct NodeParams {
     name: SmolStr,
@@ -24,23 +28,49 @@ struct NodeParams {
     option_name: Option<SmolStr>,
 }
 
+/// represents the call parameters passed to a function
+/// called with a call node
 #[derive(Clone, Debug)]
 struct CallParams {
+    /// which function this call node calls
     func_name: SmolStr,
+    /// the output types the called function
+    /// should be restricted to generate
     inputs: FunctionInputsType,
+    /// the special modifiers passed to the
+    /// function called, which affect function
+    /// behaviour
     modifiers: Option<Vec<SmolStr>>,
 }
 
+/// represents a functional subgraph
 #[derive(Clone, Debug)]
 struct Function {
+    /// this is the source node of a function
+    /// the function execution starts here
     source_node_name: SmolStr,
+    /// this is the function exit node. When this node
+    /// is reached, the function exits and the parent
+    /// function continues execution
     exit_node_name: SmolStr,
+    /// the output types the function supports to
+    /// be restricted to generate, affecting optional
+    /// nodes
     input_type: FunctionInputsType,
+    /// a vector of special function modifiers. Affects
+    /// the function behaviour, but not the nodes
     modifiers: Option<Vec<SmolStr>>,
+    /// the chain of the function, contains all of the
+    /// function nodes and connectiona between them.
+    /// We suppose that it's cheaper by time to clone
+    /// NodeParams than to use a separate name -> NodeParams
+    /// hashmap, which is why this map stores the
+    /// NodeParams directly.
     chain: HashMap<SmolStr, Vec<(f64, NodeParams)>>,
 }
 
 impl Function {
+    /// create Function struct from its parsed parameters
     fn new(definition: dot_parser::Function) -> Self {
         Function {
             source_node_name: definition.source_node_name,
@@ -53,24 +83,32 @@ impl Function {
 }
 
 impl MarkovChain {
+    /// parse the chain from a dot file; Initialise all the weights uniformly
     fn parse_dot<P: AsRef<Path>>(source_path: P) -> Result<Self, SyntaxError> {
         let mut file = File::open(source_path).unwrap();
         let mut source = String::new();
         file.read_to_string(&mut source).unwrap();
         let source = MarkovChain::remove_fake_edges(source);
-        let mut functions = MarkovChain::parse_functions(&source)?;
-        MarkovChain::fill_probs_equal(&mut functions);
+        let (
+            mut functions,
+            node_params
+        ) = MarkovChain::parse_functions_and_params(&source)?;
+        MarkovChain::perform_type_checks(&functions, node_params)?;
+        MarkovChain::fill_probs_uniform(&mut functions);
         Ok(MarkovChain { functions })
     }
 
+    /// manually removes all the [color=none] edges. Works breaking the lexer paradigm because of a bug.
+    /// See https://github.com/maciejhirsz/logos/issues/258 for details.
     fn remove_fake_edges(source: String) -> String {
-        // see https://github.com/maciejhirsz/logos/issues/258
         let fake_edge_regex = Regex::new(r"[^\r\n]+\[[\s]*color[\s]*=[\s]*none[\s]*\]").unwrap();
         fake_edge_regex.replace_all(&source, "").into_owned()
     }
 
-    fn parse_functions(source: &str) -> Result<HashMap<SmolStr, Function>, SyntaxError> {
+    /// parse all the functions from the code using the lexer; perform all the nessesary type checks
+    fn parse_functions_and_params(source: &str) -> Result<(HashMap<SmolStr, Function>, HashMap<SmolStr, NodeParams>), SyntaxError> {
         let mut functions = HashMap::<_, _>::new();
+        // stores node parameters map, needed for faster graph creation & type checks
         let mut node_params = HashMap::<SmolStr, NodeParams>::new();
         let mut current_function = Option::<Function>::None;
         for token in DotTokenizer::from_str(&source) {
@@ -130,8 +168,11 @@ impl MarkovChain {
                 }
             };
         }
+        Ok((functions, node_params))
+    }
 
-        // type checks
+    /// performs all the type checks to ensure that the .dot code is correct
+    fn perform_type_checks(functions: &HashMap<SmolStr, Function>, node_params: HashMap<SmolStr, NodeParams>) -> Result<(), SyntaxError> {
         if functions.get("Query").is_none() {
             return Err(SyntaxError::new(format!(
                 "Query is the entry point and must be defined: subgraph def_Query {{...}}"
@@ -202,11 +243,11 @@ impl MarkovChain {
                 }
             }
         }
-
-        Ok(functions)
+        Ok(())
     }
 
-    fn fill_probs_equal(functions: &mut HashMap<SmolStr, Function>) {
+    /// fill Markov chain probabilities uniformely.
+    fn fill_probs_uniform(functions: &mut HashMap<SmolStr, Function>) {
         for (_, function) in functions {
             for (_, out) in function.chain.iter_mut() {
                 let fill_with = 1f64 / (out.len() as f64);
@@ -218,6 +259,7 @@ impl MarkovChain {
     }
 }
 
+/// add a node to the current function graph & node_params map; Perform syntax checks for optional nodes
 fn define_node(
         current_function: &mut Option<Function>, node_params: &mut HashMap<SmolStr, NodeParams>,
         node_name: SmolStr, call_params: Option<CallParams>, option_name: Option<SmolStr>
@@ -234,6 +276,7 @@ fn define_node(
     Ok(())
 }
 
+/// Perform syntax checks for optional nodes
 fn check_option(current_function: &Function, node_name: &SmolStr, option_name: &Option<SmolStr>) -> Result<(), SyntaxError> {
     if let Some(option_name) = option_name {
         if !(match &current_function.input_type {
@@ -252,20 +295,27 @@ fn check_option(current_function: &Function, node_name: &SmolStr, option_name: &
     Ok(())
 }
 
+/// The markov chain generator. Runs the functional
+/// subgraphs parsed from the .dot file. Manages the
+/// probabilities, outputs states, disables nodes if
+/// needed.
 #[derive(Clone, Debug)]
 pub struct MarkovChainGenerator {
-    pub known_type_name_stack: Vec<Vec<SmolStr>>,
-    pub compatible_type_name_stack: Vec<Vec<SmolStr>>,
+    /// this stack contains information about the known type names
+    /// inferred when [known] is used in [TYPES]
+    known_type_name_stack: Vec<Vec<SmolStr>>,
+    compatible_type_name_stack: Vec<Vec<SmolStr>>,
     markov_chain: MarkovChain,
     call_stack: Vec<StackItem>,
-    rng: ThreadRng,
+    pending_call: Option<CallParams>,
+    rng: ChaCha8Rng,
 }
 
 #[derive(Clone, Debug)]
 struct StackItem {
     current_function: CallParams,
-    next_node: SmolStr,
-    return_handler: Option<SmolStr>,
+    current_node_name: SmolStr,
+    next_node: NodeParams,
 }
 
 impl MarkovChainGenerator {
@@ -274,23 +324,36 @@ impl MarkovChainGenerator {
         let mut self_ = MarkovChainGenerator {
             markov_chain: chain,
             call_stack: vec![],
+            pending_call: None,
             known_type_name_stack: vec![],
             compatible_type_name_stack: vec![],
-            rng: thread_rng(),
+            rng: ChaCha8Rng::seed_from_u64(0),
         };
         self_.reset();
         Ok(self_)
     }
 
+    pub fn print_stack(&self) {
+        println!("Call stack:");
+        for stack_item in &self.call_stack {
+            println!("{} ({}):", stack_item.current_function.func_name, stack_item.current_node_name)
+        }
+    }
+
+    /// used when the markov chain reaches end, for the object to be iterable multiple times
     pub fn reset(&mut self) {
+        let query_call_params = CallParams {
+            func_name: SmolStr::new("Query"),
+            inputs: FunctionInputsType::None,
+            modifiers: None
+        };
         self.call_stack = vec![StackItem {
-            current_function: CallParams {
-                func_name: SmolStr::new("Query"),
-                inputs: FunctionInputsType::None,
-                modifiers: None
-            },
-            next_node: SmolStr::new("Query"),
-            return_handler: None
+            current_function: query_call_params.clone(),
+            current_node_name: SmolStr::new("-"),
+            next_node: NodeParams {
+                name: query_call_params.func_name,
+                call_params: None, option_name: None
+            }
         }];
         self.known_type_name_stack = vec![vec![SmolStr::new("")]];
         self.compatible_type_name_stack = vec![vec![SmolStr::new("")]];
@@ -302,6 +365,34 @@ impl MarkovChainGenerator {
 
     pub fn get_modifiers(&self) -> Option<Vec<SmolStr>> {
         self.call_stack.last().unwrap().current_function.modifiers.clone()
+    }
+
+    pub fn push_known(&mut self, type_list: Vec<SmolStr>) {
+        self.known_type_name_stack.push(type_list);
+    }
+
+    pub fn push_compatible(&mut self, type_list: Vec<SmolStr>) {
+        self.compatible_type_name_stack.push(type_list);
+    }
+
+    fn pop_known(&mut self) -> Vec<SmolStr> {
+        match self.known_type_name_stack.pop() {
+            Some(item) => item,
+            None => {
+                self.print_stack();
+                panic!("No known type name found!")
+            },
+        }
+    }
+
+    fn pop_compatible(&mut self) -> Vec<SmolStr> {
+        match self.compatible_type_name_stack.pop() {
+            Some(item) => item,
+            None => {
+                self.print_stack();
+                panic!("No known type name found!")
+            },
+        }
     }
 }
 
@@ -321,6 +412,35 @@ impl Iterator for MarkovChainGenerator {
     type Item = SmolStr;
 
     fn next(&mut self) -> Option<Self::Item> {
+        println!("-------------------------------------------------------");
+        self.print_stack();
+
+        if let Some(call_params) = self.pending_call.take() {
+            let inputs = match &call_params.inputs {
+                FunctionInputsType::TypeName(t_name) => FunctionInputsType::TypeName(t_name.clone()),
+                FunctionInputsType::Known => FunctionInputsType::TypeNameList(self.pop_known()),
+                FunctionInputsType::Compatible => FunctionInputsType::TypeNameList(self.pop_compatible()),
+                FunctionInputsType::TypeNameList(t_name_list) => FunctionInputsType::TypeNameList(t_name_list.clone()),
+                FunctionInputsType::Any => {
+                    let function = self.markov_chain.functions.get(&call_params.func_name).unwrap();
+                    function.input_type.clone()
+                },
+                _ => FunctionInputsType::None
+            };
+            self.call_stack.push(StackItem {
+                current_function: CallParams {
+                    func_name: call_params.func_name.clone(),
+                    inputs: inputs,
+                    modifiers: call_params.modifiers.clone(),
+                },
+                current_node_name: SmolStr::new("-"),
+                next_node: NodeParams {
+                    name: call_params.func_name.clone(),
+                    call_params: None, option_name: None
+                }
+            });
+        }
+
         let stack_item = match self.call_stack.last_mut() {
             Some(stack_item) => stack_item,
             None => {
@@ -329,26 +449,23 @@ impl Iterator for MarkovChainGenerator {
             },
         };
 
-        // check if we have just returned from a function
-        if let Some(ref handler) = stack_item.return_handler.take() {
-            return Some(handler.to_owned());
-        }
+        let current_node = stack_item.next_node.clone();
 
-        let cur_node_name = stack_item.next_node.clone();
         let function = self.markov_chain.functions.get(&stack_item.current_function.func_name).unwrap();
-        if cur_node_name == function.exit_node_name {
+        if current_node.name == function.exit_node_name {
             self.call_stack.pop();
-            return Some(cur_node_name)
+            return Some(current_node.name)
         }
 
-        let cur_node_outgoing = function.chain.get(&cur_node_name).unwrap();
+        let cur_node_outgoing = function.chain.get(&current_node.name).unwrap();
 
         let level: f64 = self.rng.gen::<f64>() * (
             cur_node_outgoing.iter().map(|el| {
                 if check_node_off(&stack_item.current_function.inputs, &el.1.option_name) {
-                    return 0f64
+                    0f64
+                } else {
+                    el.0
                 }
-                el.0
             }).sum::<f64>()
         );
         let mut cumulative_prob = 0f64;
@@ -363,33 +480,16 @@ impl Iterator for MarkovChainGenerator {
                 break;
             }
         }
-        let destination = destination.unwrap();
+        if destination.is_none() {
+            println!("None! cumulative_prob={cumulative_prob}, level={level}, current_node.name={}, stack_item.current_function.inputs={:?}", current_node.name, stack_item.current_function.inputs);
+        }
+        stack_item.current_node_name = current_node.name.clone();
+        stack_item.next_node = destination.unwrap().clone();
 
-        if let Some(call_params) = &destination.call_params {
-            stack_item.return_handler = Some(SmolStr::new(format!("R{cur_node_name}")));
-            self.call_stack.push(StackItem {
-                current_function: CallParams {
-                    func_name: call_params.func_name.clone(),
-                    inputs: match &call_params.inputs {
-                        FunctionInputsType::TypeName(t_name) => FunctionInputsType::TypeName(t_name.clone()),
-                        FunctionInputsType::Known => FunctionInputsType::TypeNameList(self.known_type_name_stack.pop().unwrap()),
-                        FunctionInputsType::Compatible => FunctionInputsType::TypeNameList(self.compatible_type_name_stack.pop().unwrap()),
-                        FunctionInputsType::TypeNameList(t_name_list) => FunctionInputsType::TypeNameList(t_name_list.clone()),
-                        FunctionInputsType::Any => {
-                            let function = self.markov_chain.functions.get(&call_params.func_name).unwrap();
-                            function.input_type.clone()
-                        },
-                        _ => FunctionInputsType::None
-                    },
-                    modifiers: call_params.modifiers.clone(),
-                },
-                next_node: call_params.func_name.clone(),
-                return_handler: None
-            });
-        } else {
-            stack_item.next_node = destination.name.clone();
+        if let Some(call_params) = &current_node.call_params {
+            self.pending_call = Some(call_params.clone());
         }
 
-        Some(cur_node_name)
+        Some(current_node.name)
     }
 }

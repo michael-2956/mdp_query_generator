@@ -23,6 +23,7 @@ fn main() {
             return;
         }
     };
+    
     let mut generator = QueryGenerator::from_state_generator(markov_generator);
 
     for _ in 0..2 {

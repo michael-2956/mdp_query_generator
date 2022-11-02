@@ -53,27 +53,30 @@ enum DotToken {
     Arrow,
 }
 
+/// extracts value from an identifier
 fn identifier(lex: &mut Lexer<'_, DotToken>) -> SmolStr {
     SmolStr::new(lex.slice())
 }
 
+/// extracts value from an identifier with quotes
 fn quoted_identifier(lex: &mut Lexer<'_, DotToken>) -> SmolStr {
     let quoted_ident = lex.slice();
     SmolStr::new(quoted_ident.get(1..quoted_ident.len() - 1).unwrap())
 }
 
+/// extracts value from an identifier with quotes and square brackets
 fn quoted_identifier_with_brackets(lex: &mut Lexer<'_, DotToken>) -> SmolStr {
     let quoted_ident = lex.slice();
     let opening_bracket_pos = quoted_ident.find('[').unwrap();
     let closing_bracket_pos = quoted_ident.find(']').unwrap();
     SmolStr::new(
         quoted_ident
-            .get(opening_bracket_pos + 1..closing_bracket_pos)
+            .get(opening_bracket_pos+1..closing_bracket_pos)
             .unwrap(),
     )
 }
 
-/// Callback to skip block comments
+/// callback that skips block comments
 fn block_comment(lex: &mut Lexer<'_, DotToken>) -> Filter<()> {
     if let Some(end) = lex.remainder().find("*/") {
         lex.bump(end + 2);
@@ -83,6 +86,11 @@ fn block_comment(lex: &mut Lexer<'_, DotToken>) -> Filter<()> {
     }
 }
 
+/// this structure can be treated in two ways: either
+/// as the output types the function should be restricted
+/// to generate, when in the context of a call node, or
+/// what input types the function supports, when mentioned
+/// in function definition
 #[derive(Debug, Clone, PartialEq)]
 pub enum FunctionInputsType {
     Any,
@@ -95,6 +103,7 @@ pub enum FunctionInputsType {
 }
 
 impl FunctionInputsType {
+    /// tries to match a special type (any, known, compatible)
     fn try_extract_special_type(idents: &SmolStr) -> Option<FunctionInputsType> {
         match idents.as_str() {
             "any" => Some(FunctionInputsType::Any),
@@ -104,6 +113,7 @@ impl FunctionInputsType {
         }
     }
 
+    /// splits a string with commas into a list of trimmed identifiers
     fn get_identifier_names(name_list_str: SmolStr) -> Vec<SmolStr> {
         name_list_str
             .split(',')
@@ -112,6 +122,7 @@ impl FunctionInputsType {
     }
 }
 
+/// a code unit represents a distinct command in code.
 #[derive(Debug)]
 pub enum CodeUnit {
     Function(Function),
@@ -133,6 +144,8 @@ pub enum CodeUnit {
     CloseDeclaration,
 }
 
+/// this structure contains function details extracted
+/// from function declaration
 #[derive(Clone, Debug)]
 pub struct Function {
     pub source_node_name: SmolStr,
@@ -141,6 +154,8 @@ pub struct Function {
     pub modifiers: Option<Vec<SmolStr>>,
 }
 
+/// this structure stores the interral parser values needed
+/// during code parsing
 pub struct DotTokenizer<'a> {
     lexer: Lexer<'a, DotToken>,
     digraph_defined: bool,
@@ -149,6 +164,7 @@ pub struct DotTokenizer<'a> {
 }
 
 impl<'a> DotTokenizer<'a> {
+    /// creates a DotTokenizer from a string with code
     pub fn from_str(source: &'a str) -> Self {
         DotTokenizer {
             lexer: DotToken::lexer(source),
@@ -162,6 +178,7 @@ impl<'a> DotTokenizer<'a> {
 impl<'a> Iterator for DotTokenizer<'a> {
     type Item = Result<CodeUnit, SyntaxError>;
 
+    /// parse the tokens returned by lexer and return parsed code units one by one
     fn next(&mut self) -> Option<Self::Item> {
         let mut ignore_subgraph = false;
         loop {
@@ -282,6 +299,7 @@ impl<'a> Iterator for DotTokenizer<'a> {
     }
 }
 
+/// handles a new subgraph definition
 fn handle_digraph(lex: &mut Lexer<'_, DotToken>) -> Result<(), SyntaxError> {
     match lex.next() {
         None => Ok(()), // digraph at the end of file
@@ -346,6 +364,7 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<CodeUn
     }
 }
 
+/// parse funciton options, either in function declaration or in function call
 fn parse_function_options(
     node_name: &SmolStr,
     mut node_spec: HashMap<SmolStr, DotToken>,
@@ -413,6 +432,7 @@ fn parse_function_options(
     Ok((input_type, modifiers))
 }
 
+/// expects and parses an exit node name after function declaration
 fn parse_function_exit_node_name(
     lex: &mut Lexer<'_, DotToken>,
     node_name: &SmolStr,
@@ -435,6 +455,7 @@ fn parse_function_exit_node_name(
     }
 }
 
+/// read an opening bracket and a node specification afterwards
 fn read_node_specification(
     lex: &mut Lexer<'_, DotToken>,
     node_name: &SmolStr,
@@ -448,6 +469,7 @@ fn read_node_specification(
     }
 }
 
+/// read node specification after an opening bracket was read
 fn read_opened_node_specification(
     lex: &mut Lexer<'_, DotToken>,
     node_name: &SmolStr,
