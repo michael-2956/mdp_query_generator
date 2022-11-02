@@ -304,6 +304,8 @@ pub struct MarkovChainGenerator {
     /// this stack contains information about the known type names
     /// inferred when [known] is used in [TYPES]
     known_type_name_stack: Vec<Vec<SmolStr>>,
+    /// this stack contains information about the compatible type names
+    /// inferred when [compatible] is used in [TYPES]
     compatible_type_name_stack: Vec<Vec<SmolStr>>,
     markov_chain: MarkovChain,
     call_stack: Vec<StackItem>,
@@ -327,7 +329,7 @@ impl MarkovChainGenerator {
             pending_call: None,
             known_type_name_stack: vec![],
             compatible_type_name_stack: vec![],
-            rng: ChaCha8Rng::seed_from_u64(0),
+            rng: ChaCha8Rng::seed_from_u64(1),
         };
         self_.reset();
         Ok(self_)
@@ -412,9 +414,6 @@ impl Iterator for MarkovChainGenerator {
     type Item = SmolStr;
 
     fn next(&mut self) -> Option<Self::Item> {
-        println!("-------------------------------------------------------");
-        self.print_stack();
-
         if let Some(call_params) = self.pending_call.take() {
             let inputs = match &call_params.inputs {
                 FunctionInputsType::TypeName(t_name) => FunctionInputsType::TypeName(t_name.clone()),
@@ -481,7 +480,7 @@ impl Iterator for MarkovChainGenerator {
             }
         }
         if destination.is_none() {
-            println!("None! cumulative_prob={cumulative_prob}, level={level}, current_node.name={}, stack_item.current_function.inputs={:?}", current_node.name, stack_item.current_function.inputs);
+            panic!("No destination found for {}. stack_item.current_function.inputs={:?}", current_node.name, stack_item.current_function.inputs);
         }
         stack_item.current_node_name = current_node.name.clone();
         stack_item.next_node = destination.unwrap().clone();

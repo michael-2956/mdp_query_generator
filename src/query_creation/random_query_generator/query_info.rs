@@ -129,27 +129,13 @@ impl TypesSelectedType {
         }
     }
 
+    /// get a list of compatible types
     pub fn get_compat_types(&self) -> Vec<SmolStr> {
-        let mut compat_types = self.get_types();
-        match self {
-            TypesSelectedType::Numeric => compat_types.push((TypesSelectedType::String).to_smolstr()),
-            TypesSelectedType::Val3 => {},
-            TypesSelectedType::Array => {},
-            TypesSelectedType::ListExpr => {},
-            TypesSelectedType::String => compat_types.push((TypesSelectedType::Numeric).to_smolstr()),
-            TypesSelectedType::Any => { compat_types = vec![
-                (TypesSelectedType::String).to_smolstr(),
-                (TypesSelectedType::ListExpr).to_smolstr(),
-                (TypesSelectedType::Array).to_smolstr(),
-                (TypesSelectedType::Val3).to_smolstr(),
-                (TypesSelectedType::Numeric).to_smolstr(),
-            ]; },
-        };
-        compat_types.push((TypesSelectedType::Any).to_smolstr());
-        compat_types
+        self.get_types()
     }
 
     pub fn is_compat_with(&self, other: &TypesSelectedType) -> bool {
+        *other == TypesSelectedType::Any || *self == TypesSelectedType::Any ||
         self.get_compat_types().contains(&other.to_smolstr())
     }
 }

@@ -281,12 +281,8 @@ impl QueryGenerator {
                 }
             },
             "AnyAll" => {
-                let (types_selected_type, types_value) = match self.next_state().as_str() {
-                    "call6_types_all" => self.handle_types_all(info),
-                    "call2_list_expr" => (TypesSelectedType::ListExpr, self.handle_list_expr(info)),
-                    any => self.panic_unexpected(any),
-                };
-                self.state_generator.push_compatible(types_selected_type.get_compat_types());
+                self.expect_state("call6_types_all");
+                let (types_selected_type, types_value) = self.handle_types_all(info);
                 self.expect_state("AnyAllSelectOp");
                 let any_all_op = match self.next_state().as_str() {
                     "AnyAllEqual" => BinaryOperator::Eq,
@@ -296,6 +292,7 @@ impl QueryGenerator {
                     any => self.panic_unexpected(any)
                 };
                 self.expect_state("AnyAllSelectIter");
+                self.state_generator.push_compatible(types_selected_type.get_compat_types());
                 let iterable = Box::new(match self.next_state().as_str() {
                     "call4_Query" => Expr::Subquery(Box::new(self.handle_query(info))),
                     "call1_array" => self.handle_array(info),
@@ -573,6 +570,7 @@ impl QueryGenerator {
             "call12_types" => TypesSelectedType::Numeric,
             "call13_types" => TypesSelectedType::Val3,
             "call31_types" => TypesSelectedType::String,
+            "call51_types" => TypesSelectedType::ListExpr,
             "call14_types" => TypesSelectedType::Array,
             any => self.panic_unexpected(any)
         };
@@ -624,7 +622,12 @@ impl QueryGenerator {
 
     /// starting point; calls handle_query for the first time
     fn generate(&mut self) -> Query {
-        self.handle_query(&mut QueryInfo::new())
+        let query = self.handle_query(&mut QueryInfo::new());
+        // reset the generator
+        if let Some(state) = self.state_generator.next() {
+            panic!("Couldn't reset state_generator: Received {state}");
+        }
+        query
     }
 }
 

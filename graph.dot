@@ -233,9 +233,6 @@ digraph G {
         AnyAllAnyAllAny[label="ANY"]
         AnyAllAnyAllAll[label="ALL"]
         VAL_3 -> AnyAll
-        call2_list_expr [TYPES="[any]", label="list expr\nTYPES: ALL", shape=rectangle, style=filled, color=blue]
-        AnyAll -> call2_list_expr
-        call2_list_expr -> AnyAllSelectOp
         call6_types_all[label="TYPES: ALL", shape=rectangle, style=filled, color=orange]
         AnyAll -> call6_types_all
         call6_types_all -> AnyAllSelectOp
@@ -523,7 +520,7 @@ digraph G {
     }
 
     subgraph def_array {
-        array [TYPES="[numeric, 3VL Value, string, array]", label="array\ntypes=[numeric?, 3VL Value?, string?, array?]", shape=octagon, style=filled, color=yellow]
+        array [TYPES="[numeric, 3VL Value, string, list expr, array]", label="array\ntypes=[numeric?, 3VL Value?, string?, array?]", shape=octagon, style=filled, color=yellow]
         EXIT_array[label="EXIT array"]
 
         call50_types [TYPES="[compatible]", label="TYPES: [compatible]", shape=rectangle, style=filled, color=lightblue]
@@ -540,6 +537,10 @@ digraph G {
         call31_types [OPTIONAL="string", TYPES="[string]", label="TYPE: string?", shape=rectangle, style=filled, color=lightblue]
         array -> call31_types
         call31_types -> call50_types
+
+        call51_types [OPTIONAL="list expr", TYPES="[list expr]", label="TYPE: list expr?", shape=rectangle, style=filled, color=lightblue]
+        array -> call51_types
+        call51_types -> call50_types
 
         call14_types [OPTIONAL="array", TYPES="[array]", label="TYPE: array?", shape=rectangle, style=filled, color=lightblue]
         array -> call14_types
