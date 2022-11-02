@@ -1,311 +1,640 @@
-use rand::{prelude::ThreadRng, thread_rng, Rng};
+#[macro_use]
+mod query_info;
+
+use smol_str::SmolStr;
 use sqlparser::ast::{
-    Expr, Ident, ObjectName, Query, Select, SelectItem, SetExpr, TableAlias, TableFactor,
-    TableWithJoins, Value,
+    Expr, Ident, Query, Select, SetExpr, TableAlias, TableFactor,
+    TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, Array, SelectItem,
 };
 
-pub struct QueryGeneratorParams {
-    /// max number of tables (counting repetitions) mentioned
-    /// in a well-defined SELECT-FROM-WHERE block, including
-    /// nested subqueries
-    pub max_total_tables: u32,
-    /// max level of nested queries in FROM and WHERE
-    pub max_nest_level: u32,
-    /// max number of attributes in a SELECT clause
-    pub max_select_attrs: u32,
-    /// max number of atomic conditions in WHERE
-    pub max_where_conds: u32,
-    /// probability of generating the (n+1)th table after nth
-    /// table in the FROM clause
-    pub from_next_table_prob: f64,
-    /// probability of generating the same table when
-    /// generating a new table in FROM
-    pub from_same_table_prob: f64,
-    /// probability of nesting a query in the FROM clause.
-    pub from_nest_prob: f64,
-    /// probability of DISTINCT appearing in a SELECT clause
-    pub distinct_prob: f64,
-    /// probability of generating * in SELECT
-    pub select_asterisk_prob: f64,
-    /// probability of generating expression with alias in SELECT
-    pub select_expr_with_alias_prob: f64,
-    /// probability of generating qualified wildcard in SELECT
-    /// under condition that wildcard in not generated
-    pub select_expr_qualified_wildcard_prob: f64,
-    /// probability of generating (n+1)th attribute after
-    /// generating the nth one in SELECT
-    pub select_next_attr_prob: f64,
-    /// probability of generating column with existing name
-    pub select_same_column_prob: f64,
-    /// probability of generating a subcondition after
-    /// generating a condition on WHERE
-    pub where_subcond_prob: f64,
-    /// probability of nesting a subquery instead of an atomic
-    /// condition when generating a subcondition in WHERE
-    pub where_nest_prob: f64,
-    /// probability of generating an ISNULL around a condition
-    /// in WHERE
-    pub where_isull_prob: f64,
-    /// probability of negating a condition in WHERE
-    pub where_negation_prob: f64,
-}
+use self::query_info::{QueryInfo, TypesSelectedType};
 
-impl Default for QueryGeneratorParams {
-    fn default() -> Self {
-        Self {
-            max_total_tables: 6,
-            max_nest_level: 3,
-            max_select_attrs: 3,
-            max_where_conds: 8,
-            from_next_table_prob: 0.1,
-            from_same_table_prob: 0.1,
-            from_nest_prob: 0.5,
-            distinct_prob: 0.4,
-            select_asterisk_prob: 0.1,
-            select_expr_qualified_wildcard_prob: 0.3,
-            select_expr_with_alias_prob: 0.4,
-            select_next_attr_prob: 0.7,
-            select_same_column_prob: 0.1,
-            where_subcond_prob: 0.3,
-            where_nest_prob: 0.5,
-            where_isull_prob: 0.2,
-            where_negation_prob: 0.5,
-        }
-    }
-}
+use super::state_generators::{MarkovChainGenerator, FunctionInputsType};
 
 pub struct QueryGenerator {
-    params: QueryGeneratorParams,
-    rng: ThreadRng,
+    state_generator: MarkovChainGenerator,
 }
 
-struct QueryInfo {
-    /// global number of table mentions
-    /// including repetitions
-    table_mentions_num: u32,
-    /// Remember to increase this value before
-    /// and after generating a subquery, to
-    /// control the maximum level of nesting
-    /// allowed
-    current_nest_level: u32,
-    /// tables used in from
-    from_tables: Vec<String>,
-    /// list of aliased table names used in FROM
-    from_aliased_table_names: Vec<String>,
-    /// used for table alias name generation in FROM
-    from_free_alias_index: u32,
-    /// Increased when new attribute in SELECT is added
-    select_attrs_num: u32,
-    /// list of column names in SELECT
-    select_column_names: Vec<String>,
-    /// used for table alias name generation in SELECT
-    select_free_alias_index: u32,
-}
-
-impl QueryInfo {
-    fn new() -> QueryInfo {
-        QueryInfo {
-            table_mentions_num: 0,
-            current_nest_level: 1,
-            from_tables: Vec::<_>::new(),
-            from_aliased_table_names: Vec::<_>::new(),
-            from_free_alias_index: 0,
-            select_attrs_num: 0,
-            select_free_alias_index: 0,
-            select_column_names: Vec::<_>::new(),
+macro_rules! unwrap_variant {
+    ($target: expr, $pat: path) => { {
+        if let $pat(a) = $target {
+            a
+        } else {
+            panic!("Failed to unwrap variant: {} to {}", stringify!($target), stringify!($pat));
         }
-    }
+    } };
 }
 
 impl QueryGenerator {
-    pub fn new(params: QueryGeneratorParams) -> Self {
-        QueryGenerator {
-            params,
-            rng: thread_rng(),
+    pub fn from_state_generator(state_generator: MarkovChainGenerator) -> Self {
+        QueryGenerator { state_generator }
+    }
+
+    fn next_state(&mut self) -> SmolStr {
+        self.state_generator.next().unwrap()
+    }
+
+    fn panic_unexpected(&mut self, state: &str) -> ! {
+        self.state_generator.print_stack();
+        panic!("Unexpected state: {state}");
+    }
+
+    fn expect_state(&mut self, state: &str) {
+        let new_state = self.next_state();
+        if new_state.as_str() != state {
+            self.state_generator.print_stack();
+            panic!("Expected {state}, got {new_state}")
         }
     }
 
-    pub fn generate(&mut self) -> Query {
-        self.generate_query(&mut QueryInfo::new())
+    fn expect_compat(&self, target: &TypesSelectedType, compat_with: &TypesSelectedType) {
+        if !target.is_compat_with(&compat_with) {
+            self.state_generator.print_stack();
+            panic!("Incompatible types: expected compatible with {:?}, got {:?}", compat_with, target);
+        }
     }
 
-    fn generate_query(&mut self, query_info: &mut QueryInfo) -> Query {
-        let from = self.generate_from(query_info);
-        let projection = self.generate_projection(query_info);
-        let distinct = self.rng.gen_bool(self.params.distinct_prob);
+    fn expect_type(&self, target: &TypesSelectedType, expect: &TypesSelectedType) {
+        if target != expect {
+            self.state_generator.print_stack();
+            panic!("Unexpected type: expected {:?}, got {:?}", expect, target);
+        }
+    }
+
+    /// subgraph def_Query
+    fn handle_query(&mut self, info: &mut QueryInfo) -> Query {
+        self.expect_state("Query");
+        let mut select_limit = Option::<Expr>::None;
+        if let Some(mods) = self.state_generator.get_modifiers() {
+            if mods.contains(&SmolStr::new("single value")) {
+                select_limit = Some(Expr::Identifier(Ident::new("1")));
+                // TODO: Not only limits can enforce this
+            } else {
+                panic!("Unexpected mods (Query): {:?}", mods);
+            }
+        }
+        if let FunctionInputsType::TypeName(type_name) = self.state_generator.get_inputs() {
+            println!("TODO: Enforce single column & column type (Query): {type_name}")
+        }
+        let mut select_body = Select {
+            distinct: false,
+            top: None,
+            projection: vec![],
+            into: None,
+            from: vec![],
+            lateral_views: vec![],
+            selection: None,
+            group_by: vec![],
+            cluster_by: vec![],
+            distribute_by: vec![],
+            sort_by: vec![],
+            having: None,
+            qualify: None,
+        };
+        self.expect_state("FROM");
+
+        loop {
+            select_body.from.push(TableWithJoins { relation: match self.next_state().as_str() {
+                "Table" => TableFactor::Table {
+                    name: info.relation_generator.new_relation().gen_object_name(),
+                    alias: None,
+                    args: None,
+                    with_hints: vec![]
+                },
+                "call0_Query" => TableFactor::Derived {
+                    lateral: false,
+                    subquery: Box::new(self.handle_query(info)),
+                    alias: Some(TableAlias {
+                        name: info.relation_generator.new_ident(),
+                        columns: vec![],
+                    })
+                },
+                "EXIT_FROM" => break,
+                any => self.panic_unexpected(any)
+            }, joins: vec![] });
+            self.expect_state("FROM_multiple_relations");
+        }
+
+        match self.next_state().as_str() {
+            "WHERE" => {
+                self.expect_state("call0_VAL_3");
+                select_body.selection = Some(self.handle_val_3(info));
+                self.expect_state("EXIT_WHERE");
+            },
+            "EXIT_WHERE" => {},
+            any => self.panic_unexpected(any)
+        }
+
+        // CONTINUE FROM HERE
+        // PLASEHOLDER CODE BEGIN
+        select_body.projection.push(SelectItem::Wildcard);
+        // PLASEHOLDER CODE END
+
+        self.expect_state("EXIT_Query");
         Query {
             with: None,
-            body: SetExpr::Select(Box::new(Select {
-                distinct: distinct,
-                top: None,
-                projection: projection,
-                into: None,
-                from: from,
-                lateral_views: Vec::<_>::new(),
-                selection: Some(Expr::Value(Value::Boolean(true))), // WHERE TRUE;
-                group_by: Vec::<_>::new(),
-                cluster_by: Vec::<_>::new(),
-                distribute_by: Vec::<_>::new(),
-                sort_by: Vec::<_>::new(),
-                having: None,
-                qualify: None,
-            })),
-            order_by: Vec::<_>::new(),
-            limit: None,
+            body: SetExpr::Select(Box::new(select_body)),
+            order_by: vec![],
+            limit: select_limit,
             offset: None,
             fetch: None,
             lock: None,
         }
     }
 
-    fn generate_from(&mut self, query_info: &mut QueryInfo) -> Vec<TableWithJoins> {
-        let mut from_tables = Vec::<_>::new();
-
-        from_tables.push(self.generate_relation_with_joins(query_info));
-
-        while query_info.table_mentions_num < self.params.max_total_tables
-            && self.rng.gen_bool(self.params.from_next_table_prob)
-        {
-            from_tables.push(self.generate_relation_with_joins(query_info));
-        }
-
-        from_tables
-    }
-
-    fn generate_relation_with_joins(&mut self, query_info: &mut QueryInfo) -> TableWithJoins {
-        TableWithJoins {
-            relation: if self.rng.gen_bool(self.params.from_nest_prob)
-                && query_info.current_nest_level < self.params.max_nest_level
-            {
-                self.generate_subquery(query_info)
-            } else {
-                self.generate_table(query_info)
-            },
-            joins: Vec::<_>::new(),
-        }
-    }
-
-    fn generate_subquery(&mut self, query_info: &mut QueryInfo) -> TableFactor {
-        query_info.current_nest_level += 1;
-        let subquery = self.generate_query(query_info);
-        query_info.current_nest_level -= 1;
-        TableFactor::Derived {
-            lateral: false,
-            subquery: Box::new(subquery),
-            alias: Some(self.generate_table_alias(query_info)),
-        }
-    }
-
-    fn generate_table(&mut self, query_info: &mut QueryInfo) -> TableFactor {
-        let (name, alias) = self.generate_table_name_and_alias(query_info);
-        query_info.table_mentions_num += 1;
-        TableFactor::Table {
-            name: name,
-            alias: alias,
-            args: None,
-            with_hints: Vec::<_>::new(),
-        }
-    }
-
-    fn generate_table_name_and_alias(
-        &mut self,
-        query_info: &mut QueryInfo,
-    ) -> (ObjectName, Option<TableAlias>) {
-        let tables_num = query_info.from_tables.len();
-        let (name, alias) =
-            if tables_num != 0 && self.rng.gen_bool(self.params.from_same_table_prob) {
-                let table_name = query_info.from_tables[self.rng.gen_range(0..tables_num)].clone();
-                (table_name, Some(self.generate_table_alias(query_info)))
-            } else {
-                let new_name = format!("R{tables_num}");
-                query_info.from_tables.push(new_name);
-                (format!("R{tables_num}"), None)
-            };
-
-        query_info.from_aliased_table_names.push(name.clone());
-
-        (ObjectName(vec![Ident::new(name)]), alias)
-    }
-
-    fn generate_table_alias(&mut self, query_info: &mut QueryInfo) -> TableAlias {
-        let alias = format!("A{}", query_info.from_free_alias_index);
-        query_info.from_free_alias_index += 1;
-        TableAlias {
-            name: Ident {
-                value: alias,
-                quote_style: None,
-            },
-            columns: Vec::<_>::new(),
-        }
-    }
-
-    fn generate_projection(&mut self, query_info: &mut QueryInfo) -> Vec<SelectItem> {
-        if self.rng.gen_bool(self.params.select_asterisk_prob) {
-            vec![SelectItem::Wildcard]
-        } else {
-            let mut select_attrs = Vec::<_>::new();
-            select_attrs.push(self.generate_select_item(query_info));
-            while self.rng.gen_bool(self.params.select_next_attr_prob)
-                && query_info.select_attrs_num < self.params.max_select_attrs
-            {
-                query_info.select_attrs_num += 1;
-                select_attrs.push(self.generate_select_item(query_info));
-            }
-            select_attrs
-        }
-    }
-
-    fn generate_select_item(&mut self, query_info: &mut QueryInfo) -> SelectItem {
-        if self
-            .rng
-            .gen_bool(self.params.select_expr_qualified_wildcard_prob)
-        {
-            let name = ObjectName(vec![Ident::new(
-                query_info.from_aliased_table_names[self
-                    .rng
-                    .gen_range(0..query_info.from_aliased_table_names.len())]
-                .clone(),
-            )]);
-            SelectItem::QualifiedWildcard(name)
-        } else {
-            let col_ident = Expr::Identifier(Ident {
-                value: self.generate_column_name(query_info).to_string(),
-                quote_style: None,
-            });
-            if self.rng.gen_bool(self.params.select_expr_with_alias_prob) {
-                SelectItem::ExprWithAlias {
-                    expr: col_ident,
-                    alias: Ident {
-                        value: self.generate_select_alias(query_info).to_string(),
-                        quote_style: None,
-                    },
+    /// subgraph def_VAL_3
+    fn handle_val_3(&mut self, info: &mut QueryInfo) -> Expr {
+        self.expect_state("VAL_3");
+        let val3 = match self.next_state().as_str() {
+            "IsNull" => {
+                let is_null_not_flag = match self.next_state().as_str() {
+                    "IsNull_not" => {
+                        self.expect_state("call0_types_all");
+                        true
+                    }
+                    "call0_types_all" => false,
+                    any => self.panic_unexpected(any)
+                };
+                let types_value = Box::new(self.handle_types_all(info).1);
+                if is_null_not_flag {
+                    Expr::IsNotNull(types_value)
+                } else {
+                    Expr::IsNull(types_value)
                 }
-            } else {
-                SelectItem::UnnamedExpr(col_ident)
+            },
+            "IsDistinctFrom" => {
+                self.expect_state("call1_types_all");
+                let (types_selected_type, types_value_1) = self.handle_types_all(info);
+                self.state_generator.push_compatible(types_selected_type.get_compat_types());
+                let is_distinct_not_flag = match self.next_state().as_str() {
+                    "IsDistinctNOT" => {
+                        self.expect_state("DISTINCT");
+                        true
+                    }
+                    "DISTINCT" => false,
+                    any => self.panic_unexpected(any)
+                };
+                self.expect_state("call21_types");
+                let types_value_2 = self.handle_types(info, None, Some(types_selected_type)).1;
+                if is_distinct_not_flag {
+                    Expr::IsNotDistinctFrom(Box::new(types_value_1), Box::new(types_value_2))
+                } else {
+                    Expr::IsDistinctFrom(Box::new(types_value_1), Box::new(types_value_2))
+                }
+            },
+            "Exists" => {
+                let exists_not_flag = match self.next_state().as_str() {
+                    "Exists_not" => {
+                        self.expect_state("call2_Query");
+                        true
+                    },
+                    "call2_Query" => false,
+                    any => self.panic_unexpected(any)
+                };
+                Expr::Exists {
+                    subquery: Box::new(self.handle_query(info)),
+                    negated: exists_not_flag
+                }
+            },
+            "InList" => {
+                self.expect_state("call2_types_all");
+                let (types_selected_type, types_value) = self.handle_types_all(info);
+                self.state_generator.push_compatible(types_selected_type.get_compat_types());
+                let in_list_not_flag = match self.next_state().as_str() {
+                    "InListNot" => {
+                        self.expect_state("InListIn");
+                        true
+                    },
+                    "InListIn" => false,
+                    any => self.panic_unexpected(any)
+                };
+                self.expect_state("call1_list_expr");
+                Expr::InList {
+                    expr: Box::new(types_value),
+                    list: unwrap_variant!(self.handle_list_expr(info), Expr::Tuple),
+                    negated: in_list_not_flag
+                }
+            },
+            "InSubquery" => {
+                self.expect_state("call3_types_all");
+                let (types_selected_type, types_value) = self.handle_types_all(info);
+                self.state_generator.push_compatible(types_selected_type.get_compat_types());
+                let in_subquery_not_flag = match self.next_state().as_str() {
+                    "InSubqueryNot" => {
+                        self.expect_state("InSubqueryIn");
+                        true
+                    },
+                    "InSubqueryIn" => false,
+                    any => self.panic_unexpected(any)
+                };
+                self.expect_state("call3_Query");
+                let query = self.handle_query(info);
+                Expr::InSubquery {
+                    expr: Box::new(types_value),
+                    subquery: Box::new(query),
+                    negated: in_subquery_not_flag
+                }
+            },
+            "Between" => {
+                self.expect_state("call4_types_all");
+                let (types_selected_type, types_value_1) = self.handle_types_all(info);
+                let type_names = types_selected_type.get_compat_types();
+                let between_not_flag = match self.next_state().as_str() {
+                    "BetweenBetweenNot" => {
+                        self.expect_state("BetweenBetween");
+                        true
+                    },
+                    "BetweenBetween" => false,
+                    any => self.panic_unexpected(any)
+                };
+                self.state_generator.push_compatible(type_names.clone());
+                self.expect_state("call22_types");
+                let types_value_2 = self.handle_types(info, None, Some(types_selected_type.clone())).1;
+                self.expect_state("BetweenBetweenAnd");
+                self.state_generator.push_compatible(type_names);
+                self.expect_state("call23_types");
+                let types_value_3 = self.handle_types(info, None, Some(types_selected_type)).1;
+                Expr::Between {
+                    expr: Box::new(types_value_1),
+                    negated: between_not_flag,
+                    low: Box::new(types_value_2),
+                    high: Box::new(types_value_3)
+                }
+            },
+            "BinaryComp" => {
+                self.expect_state("call5_types_all");
+                let (types_selected_type, types_value_1) = self.handle_types_all(info);
+                self.state_generator.push_compatible(types_selected_type.get_compat_types());
+                let binary_comp_op = match self.next_state().as_str() {
+                    "BinaryCompEqual" => BinaryOperator::Eq,
+                    "BinaryCompLess" => BinaryOperator::Lt,
+                    "BinaryCompLessEqual" => BinaryOperator::LtEq,
+                    "BinaryCompUnEqual" => BinaryOperator::NotEq,
+                    any => self.panic_unexpected(any)
+                };
+                self.expect_state("call24_types");
+                let types_value_2 = self.handle_types(info, None, Some(types_selected_type)).1;
+                Expr::BinaryOp {
+                    left: Box::new(types_value_1),
+                    op: binary_comp_op,
+                    right: Box::new(types_value_2)
+                }
+            },
+            "AnyAll" => {
+                self.expect_state("call6_types_all");
+                let (types_selected_type, types_value) = self.handle_types_all(info);
+                self.expect_state("AnyAllSelectOp");
+                let any_all_op = match self.next_state().as_str() {
+                    "AnyAllEqual" => BinaryOperator::Eq,
+                    "AnyAllLess" => BinaryOperator::Lt,
+                    "AnyAllLessEqual" => BinaryOperator::LtEq,
+                    "AnyAllUnEqual" => BinaryOperator::NotEq,
+                    any => self.panic_unexpected(any)
+                };
+                self.expect_state("AnyAllSelectIter");
+                self.state_generator.push_compatible(types_selected_type.get_compat_types());
+                let iterable = Box::new(match self.next_state().as_str() {
+                    "call4_Query" => Expr::Subquery(Box::new(self.handle_query(info))),
+                    "call1_array" => self.handle_array(info),
+                    any => self.panic_unexpected(any)
+                });
+                self.expect_state("AnyAllAnyAll");
+                let iterable = Box::new(match self.next_state().as_str() {
+                    "AnyAllAnyAllAll" => Expr::AllOp(iterable),
+                    "AnyAllAnyAllAny" => Expr::AnyOp(iterable),
+                    any => self.panic_unexpected(any),
+                });
+                Expr::BinaryOp {
+                    left: Box::new(types_value),
+                    op: any_all_op,
+                    right: iterable,
+                }
+            },
+            "BinaryStringLike" => {
+                self.expect_state("call25_types");
+                let types_value_1 = self.handle_types(info, Some(TypesSelectedType::String), None).1;
+                let string_like_not_flag = match self.next_state().as_str() {
+                    "BinaryStringLikeNot" => {
+                        self.expect_state("BinaryStringLikeIn");
+                        true
+                    }
+                    "BinaryStringLikeIn" => false,
+                    any => self.panic_unexpected(any)
+                };
+                self.expect_state("call26_types");
+                let types_value_2 = self.handle_types(info, Some(TypesSelectedType::String), None).1;
+                Expr::BinaryOp {
+                left: Box::new(types_value_1),
+                    op: if string_like_not_flag { BinaryOperator::NotLike } else { BinaryOperator::Like },
+                    right: Box::new(types_value_2)
+                }
+            },
+            "BinaryBooleanOpV3" => {
+                self.expect_state("call27_types");
+                let types_value_1 = self.handle_types(info, Some(TypesSelectedType::Val3), None).1;
+                let binary_bool_op = match self.next_state().as_str() {
+                    "BinaryBooleanOpV3AND" => BinaryOperator::And,
+                    "BinaryBooleanOpV3OR" => BinaryOperator::Or,
+                    "BinaryBooleanOpV3XOR" => BinaryOperator::Xor,
+                    any => self.panic_unexpected(any)
+                };
+                self.expect_state("call28_types");
+                let types_value_2 = self.handle_types(info, Some(TypesSelectedType::Val3), None).1;
+                Expr::BinaryOp {
+                    left: Box::new(types_value_1),
+                    op: binary_bool_op,
+                    right: Box::new(types_value_2)
+                }
+            },
+            "true" => Expr::Value(Value::Boolean(true)),
+            "false" => Expr::Value(Value::Boolean(false)),
+            "Nested_VAL_3" => {
+                self.expect_state("call29_types");
+                Expr::Nested(Box::new(self.handle_types(info, Some(TypesSelectedType::Val3), None).1))
+            },
+            "UnaryNot_VAL_3" => {
+                self.expect_state("call30_types");
+                Expr::UnaryOp { op: UnaryOperator::Not, expr: Box::new( self.handle_types(
+                    info, Some(TypesSelectedType::Val3), None
+                ).1) }
+            },
+            any => self.panic_unexpected(any)
+        };
+        self.expect_state("EXIT_VAL_3");
+        val3
+    }
+
+    /// subgraph def_numeric
+    fn handle_numeric(&mut self, info: &mut QueryInfo) -> Expr {
+        self.expect_state("numeric");
+        let numeric = match self.next_state().as_str() {
+            "numeric_literal" => {
+                Expr::Value(Value::Number(match self.next_state().as_str() {
+                    "numeric_literal_float" => {
+                        "3.1415"  // TODO: hardcode
+                    },
+                    "numeric_literal_int" => {
+                        "3"       // TODO: hardcode
+                    },
+                    any => self.panic_unexpected(any)
+                }.to_string(), false))
+            },
+            "BinaryNumericOp" => {
+                self.expect_state("call48_types");
+                let types_value_1 = self.handle_types(info, Some(TypesSelectedType::Numeric), None).1;
+                let numeric_binary_op = match self.next_state().as_str() {
+                    "binary_numeric_bin_and" => BinaryOperator::BitwiseAnd,
+                    "binary_numeric_bin_or" => BinaryOperator::BitwiseOr,
+                    "binary_numeric_bin_xor" => BinaryOperator::BitwiseXor,
+                    "binary_numeric_div" => BinaryOperator::Divide,
+                    "binary_numeric_minus" => BinaryOperator::Minus,
+                    "binary_numeric_mul" => BinaryOperator::Multiply,
+                    "binary_numeric_plus" => BinaryOperator::Plus,
+                    any => self.panic_unexpected(any),
+                };
+                self.expect_state("call47_types");
+                let types_value_2 = self.handle_types(info, Some(TypesSelectedType::Numeric), None).1;
+                Expr::BinaryOp {
+                    left: Box::new(types_value_1),
+                    op: numeric_binary_op,
+                    right: Box::new(types_value_2)
+                }
+            },
+            "UnaryNumericOp" => {
+                let numeric_unary_op = match self.next_state().as_str() {
+                    "unary_numeric_abs" => UnaryOperator::PGAbs,
+                    "unary_numeric_bin_not" => UnaryOperator::PGBitwiseNot,
+                    "unary_numeric_cub_root" => UnaryOperator::PGCubeRoot,
+                    "unary_numeric_minus" => UnaryOperator::Minus,
+                    "unary_numeric_plus" => UnaryOperator::Plus,
+                    "unary_numeric_postfix_fact" => UnaryOperator::PGPostfixFactorial,
+                    "unary_numeric_prefix_fact" => UnaryOperator::PGPrefixFactorial,
+                    "unary_numeric_sq_root" => UnaryOperator::PGSquareRoot,
+                    any => self.panic_unexpected(any),
+                };
+                self.expect_state("call1_types");
+                let types_value = self.handle_types(info, Some(TypesSelectedType::Numeric), None).1;
+                Expr::UnaryOp {
+                    op: numeric_unary_op,
+                    expr: Box::new(types_value)
+                }
+            },
+            "numeric_string_Position" => {
+                self.expect_state("call2_types");
+                let types_value_1 = self.handle_types(info, Some(TypesSelectedType::String), None).1;
+                self.expect_state("string_position_in");
+                self.expect_state("call3_types");
+                let types_value_2 = self.handle_types(info, Some(TypesSelectedType::String), None).1;
+                Expr::Position {
+                    expr: Box::new(types_value_1),
+                    r#in: Box::new(types_value_2)
+                }
+            },
+            "Nested_numeric" => {
+                self.expect_state("call4_types");
+                let types_value = self.handle_types(info, Some(TypesSelectedType::Numeric), None).1;
+                Expr::Nested(Box::new(types_value))
+            },
+            any => self.panic_unexpected(any)
+        };
+        self.expect_state("EXIT_numeric");
+        numeric
+    }
+
+    /// subgraph def_string
+    fn handle_string(&mut self, info: &mut QueryInfo) -> Expr {
+        self.expect_state("string");
+        let string = match self.next_state().as_str() {
+            "string_literal" => Expr::Value(Value::SingleQuotedString("HJeihfbwei".to_string())),  // TODO: hardcoded
+            "string_trim" => {
+                let trim_where = match self.next_state().as_str() {
+                    "call6_types" => {
+                        let types_value = self.handle_types(info, Some(TypesSelectedType::String), None).1;
+                        let spec_mode = match self.next_state().as_str() {
+                            "BOTH" => TrimWhereField::Both,
+                            "LEADING" => TrimWhereField::Leading,
+                            "TRAILING" => TrimWhereField::Trailing,
+                            any => self.panic_unexpected(any)
+                        };
+                        self.expect_state("call5_types");
+                        Some((spec_mode, Box::new(types_value)))
+                    },
+                    "call5_types" => None,
+                    any => self.panic_unexpected(any)
+                };
+                let types_value = self.handle_types(info, Some(TypesSelectedType::String), None).1;
+                Expr::Trim {
+                    expr: Box::new(types_value), trim_where
+                }
+            },
+            "string_concat" => {
+                self.expect_state("call7_types");
+                let types_value_1 = self.handle_types(info, Some(TypesSelectedType::String), None).1;
+                self.expect_state("string_concat_concat");
+                self.expect_state("call8_types");
+                let types_value_2 = self.handle_types(info, Some(TypesSelectedType::String), None).1;
+                Expr::BinaryOp {
+                    left: Box::new(types_value_1),
+                    op: BinaryOperator::StringConcat,
+                    right: Box::new(types_value_2)
+                }
+            },
+            any => self.panic_unexpected(any)
+        };
+        self.expect_state("EXIT_string");
+        string
+    }
+
+    /// subgraph def_types
+    fn handle_types(
+        &mut self, info: &mut QueryInfo, equal_to: Option<TypesSelectedType>,
+        compatible_with: Option<TypesSelectedType>
+    ) -> (TypesSelectedType, Expr) {
+        self.expect_state("types");
+        let (types_selected_type, types_value) = match self.next_state().as_str() {
+            "types_select_type" => {
+                let types_selected_type = match self.next_state().as_str() {
+                    "types_select_type_3vl" => TypesSelectedType::Val3,
+                    "types_select_type_array" => TypesSelectedType::Array,
+                    "types_select_type_list_expr" => TypesSelectedType::ListExpr,
+                    "types_select_type_numeric" => TypesSelectedType::Numeric,
+                    "types_select_type_string" => TypesSelectedType::String,
+                    any => self.panic_unexpected(any)
+                };
+                self.state_generator.push_known(types_selected_type.get_types());
+                self.expect_state("types_select_type_end");
+                (types_selected_type, match self.next_state().as_str() {
+                    "call0_column_spec" => self.handle_column_spec(info),
+                    "call1_Query" => Expr::Subquery(Box::new(self.handle_query(info))),
+                    any => self.panic_unexpected(any)
+                })
+            },
+            "types_null" => (TypesSelectedType::Any, Expr::Value(Value::Null)),
+            "call0_numeric" => (TypesSelectedType::Numeric, self.handle_numeric(info)),
+            "call1_VAL_3" => (TypesSelectedType::Val3, self.handle_val_3(info)),
+            "call0_string" => (TypesSelectedType::String, self.handle_string(info)),
+            "call0_list_expr" => {
+                self.state_generator.push_known(match self.state_generator.get_inputs() {
+                    FunctionInputsType::TypeNameList(list) => list,
+                    any => panic!("Couldn't pass {:?} to subgraph def_list_expr", any)
+                });
+                (TypesSelectedType::ListExpr, self.handle_list_expr(info))
+            },
+            "call0_array" => {
+                self.state_generator.push_known(match self.state_generator.get_inputs() {
+                    FunctionInputsType::TypeNameList(list) => list,
+                    any => panic!("Couldn't pass {:?} to subgraph def_array", any)
+                });
+                (TypesSelectedType::Array, self.handle_array(info))
+            },
+            any => self.panic_unexpected(any)
+        };
+        self.expect_state("EXIT_types");
+        if let Some(to) = equal_to {
+            self.expect_type(&types_selected_type, &to);
+        }
+        if let Some(with) = compatible_with {
+            self.expect_compat(&types_selected_type, &with);
+        }
+        (types_selected_type, types_value)
+    }
+
+    /// subgraph def_types_all
+    fn handle_types_all(&mut self, info: &mut QueryInfo) -> (TypesSelectedType, Expr) {
+        self.expect_state("types_all");
+        self.expect_state("call0_types");
+        let ret = self.handle_types(info, None, None);
+        self.expect_state("EXIT_types_all");
+        ret
+    }
+
+    /// subgraph def_column_spec
+    fn handle_column_spec(&mut self, info: &mut QueryInfo) -> Expr {
+        self.expect_state("column_spec");
+        let ret = match self.next_state().as_str() {
+            "qualified_name" => Expr::Identifier(info.relation_generator.new_relation().gen_column_ident()),
+            "unqualified_name" => Expr::CompoundIdentifier(vec![
+                info.relation_generator.new_relation().gen_column_ident(),
+                info.relation_generator.new_relation().gen_column_ident()
+            ]),
+            any => self.panic_unexpected(any)
+        };
+        self.expect_state("EXIT_column_spec");
+        ret
+    }
+
+    /// subgraph def_array
+    fn handle_array(&mut self, info: &mut QueryInfo) -> Expr {
+        self.expect_state("array");
+        let array_compat_type = match self.next_state().as_str() {
+            "call12_types" => TypesSelectedType::Numeric,
+            "call13_types" => TypesSelectedType::Val3,
+            "call31_types" => TypesSelectedType::String,
+            "call51_types" => TypesSelectedType::ListExpr,
+            "call14_types" => TypesSelectedType::Array,
+            any => self.panic_unexpected(any)
+        };
+        let types_value = self.handle_types(info, Some(array_compat_type.clone()), None).1;
+        let mut array: Vec<Expr> = vec![types_value];
+        loop {
+            match self.next_state().as_str() {
+                "call50_types" => {
+                    self.state_generator.push_compatible(array_compat_type.get_compat_types());
+                    let types_value = self.handle_types(info, None, Some(array_compat_type.clone())).1;
+                    array.push(types_value);
+                },
+                "EXIT_array" => break,
+                any => self.panic_unexpected(any)
             }
         }
+        Expr::Array(Array {
+            elem: array,
+            named: false
+        })
     }
 
-    fn generate_column_name(&mut self, query_info: &mut QueryInfo) -> String {
-        let columns_num = query_info.select_column_names.len();
-        let name = if columns_num != 0 && self.rng.gen_bool(self.params.select_same_column_prob) {
-            let column_name =
-                query_info.select_column_names[self.rng.gen_range(0..columns_num)].clone();
-            column_name
-        } else {
-            let new_name = format!("AT{columns_num}");
-            query_info.select_column_names.push(new_name.clone());
-            new_name
+    /// subgraph def_list_expr
+    fn handle_list_expr(&mut self, info: &mut QueryInfo) -> Expr {
+        self.expect_state("list_expr");
+        let list_compat_type = match self.next_state().as_str() {
+            "call16_types" => TypesSelectedType::Numeric,
+            "call17_types" => TypesSelectedType::Val3,
+            "call18_types" => TypesSelectedType::String,
+            "call19_types" => TypesSelectedType::ListExpr,
+            "call20_types" => TypesSelectedType::Array,
+            any => self.panic_unexpected(any)
         };
-        name.to_string()
+        let types_value = self.handle_types(info, Some(list_compat_type.clone()), None).1;
+        let mut list_expr: Vec<Expr> = vec![types_value];
+        loop {
+            match self.next_state().as_str() {
+                "call49_types" => {
+                    self.state_generator.push_compatible(list_compat_type.get_compat_types());
+                    let types_value = self.handle_types(info, None, Some(list_compat_type.clone())).1;
+                    list_expr.push(types_value);
+                },
+                "EXIT_list_expr" => break,
+                any => self.panic_unexpected(any)
+            }
+        }
+        Expr::Tuple(list_expr)
     }
 
-    fn generate_select_alias(&mut self, query_info: &mut QueryInfo) -> String {
-        let name = {
-            let new_name = format!("A{}", query_info.select_free_alias_index);
-            query_info.select_free_alias_index += 1;
-            new_name
-        };
-        name.to_string()
+    /// starting point; calls handle_query for the first time
+    fn generate(&mut self) -> Query {
+        let query = self.handle_query(&mut QueryInfo::new());
+        // reset the generator
+        if let Some(state) = self.state_generator.next() {
+            panic!("Couldn't reset state_generator: Received {state}");
+        }
+        query
+    }
+}
+
+impl Iterator for QueryGenerator {
+    type Item = Query;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        Some(self.generate())
     }
 }
