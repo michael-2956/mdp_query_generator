@@ -30,64 +30,34 @@ impl Relation {
     }
 }
 
-pub struct RelationGenerator {
-    pub relations: HashMap<String, Relation>,
+pub struct RelationManager {
+    relations: HashMap<String, Relation>,
     free_relation_name_index: u32
 }
 
-impl RelationGenerator {
-    fn new() -> Self {
+impl RelationManager {
+    pub fn new() -> Self {
         Self {
             relations: HashMap::<_, _>::new(),
             free_relation_name_index: 1
         }
     }
 
-    pub fn new_relation(&mut self) -> &mut Relation {
+    fn new_name(&mut self) -> String {
         let name = format!("T{}", self.free_relation_name_index);
-        let relation = Relation::with_name(name.clone());
         self.free_relation_name_index += 1;
+        name
+    }
+
+    pub fn new_relation(&mut self) -> &mut Relation {
+        let name = self.new_name();
+        let relation = Relation::with_name(name.clone());
         self.relations.insert(name.clone(), relation);
         self.relations.get_mut(&name).unwrap()
     }
 
     pub fn new_ident(&mut self) -> Ident {
-        Ident::new(format!("T{}", self.free_relation_name_index))
-    }
-}
-
-pub struct QueryInfo {
-    /// used to generate and store info about
-    /// all available relations
-    pub relation_generator: RelationGenerator,
-    /// used to store running query statistics, such as
-    /// the current level of nesting
-    pub stats: QueryStats,
-}
-
-impl QueryInfo {
-    pub fn new() -> QueryInfo {
-        QueryInfo {
-            relation_generator: RelationGenerator::new(),
-            stats: QueryStats::new()
-        }
-    }
-}
-
-pub struct QueryStats {
-    /// Remember to increase this value before
-    /// and decrease after generating a subquery, to
-    /// control the maximum level of nesting
-    /// allowed
-    #[allow(dead_code)]
-    current_nest_level: u32,
-}
-
-impl QueryStats {
-    fn new() -> Self {
-        Self {
-            current_nest_level: 0
-        }
+        Ident::new(self.new_name())
     }
 }
 

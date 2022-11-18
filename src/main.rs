@@ -12,6 +12,9 @@ struct ProgramArgs {
     /// Path to graph source for a markov chain
     #[structopt(parse(from_os_str))]
     input: PathBuf,
+    /// number of generated queries
+    #[structopt(default_value = "10")]
+    num_generate: usize,
 }
 
 fn main() {
@@ -23,10 +26,10 @@ fn main() {
             return;
         }
     };
-    
+
     let mut generator = QueryGenerator::from_state_generator(markov_generator);
 
-    for _ in 0..2 {
+    for _ in 0..program_args.num_generate {
         let query = generator.next().unwrap();
         println!("Generated query: {:#?}", query.to_string());
     }
