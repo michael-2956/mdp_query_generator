@@ -9,10 +9,25 @@ use sqlparser::ast::{
 
 use self::query_info::{QueryInfo, TypesSelectedType};
 
-use super::state_generators::{MarkovChainGenerator, FunctionInputsType};
+use super::state_generators::{MarkovChainGenerator, FunctionInputsType, NodeParams, DynamicModel};
+
+struct LiteralSelector { }
+
+impl LiteralSelector {
+    fn new() -> Self {
+        Self {  }
+    }
+}
+
+impl DynamicModel for LiteralSelector {
+    fn assign_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Vec::<(f64, NodeParams)> {
+        node_outgoing
+    }
+}
 
 pub struct QueryGenerator {
     state_generator: MarkovChainGenerator,
+    dynamic_model: LiteralSelector
 }
 
 macro_rules! unwrap_variant {
@@ -27,11 +42,17 @@ macro_rules! unwrap_variant {
 
 impl QueryGenerator {
     pub fn from_state_generator(state_generator: MarkovChainGenerator) -> Self {
-        QueryGenerator { state_generator }
+        QueryGenerator {
+            state_generator, dynamic_model: LiteralSelector::new()
+        }
+    }
+
+    fn next_state_opt(&mut self) -> Option<SmolStr> {
+        self.state_generator.next(&mut self.dynamic_model)
     }
 
     fn next_state(&mut self) -> SmolStr {
-        self.state_generator.next().unwrap()
+        self.next_state_opt().unwrap()
     }
 
     fn panic_unexpected(&mut self, state: &str) -> ! {
@@ -624,7 +645,7 @@ impl QueryGenerator {
     fn generate(&mut self) -> Query {
         let query = self.handle_query(&mut QueryInfo::new());
         // reset the generator
-        if let Some(state) = self.state_generator.next() {
+        if let Some(state) = self.next_state_opt() {
             panic!("Couldn't reset state_generator: Received {state}");
         }
         query

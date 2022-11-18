@@ -22,16 +22,16 @@ struct MarkovChain {
 /// this structure represents a single node with all of
 /// its possible properties and modifiers
 #[derive(Clone, Debug)]
-struct NodeParams {
-    name: SmolStr,
-    call_params: Option<CallParams>,
-    option_name: Option<SmolStr>,
+pub struct NodeParams {
+    pub name: SmolStr,
+    pub call_params: Option<CallParams>,
+    pub option_name: Option<SmolStr>,
 }
 
 /// represents the call parameters passed to a function
 /// called with a call node
 #[derive(Clone, Debug)]
-struct CallParams {
+pub struct CallParams {
     /// which function this call node calls
     func_name: SmolStr,
     /// the output types the called function
@@ -410,10 +410,26 @@ fn check_node_off(function_inputs_conv: &FunctionInputsType, option_name: &Optio
     return false;
 }
 
-impl Iterator for MarkovChainGenerator {
-    type Item = SmolStr;
+pub trait DynamicModel {
+    fn assign_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Vec::<(f64, NodeParams)>;
+}
 
-    fn next(&mut self) -> Option<Self::Item> {
+pub struct DefaultModel { }
+
+impl DefaultModel {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl DynamicModel for DefaultModel {
+    fn assign_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Vec::<(f64, NodeParams)> {
+        node_outgoing
+    }
+}
+
+impl MarkovChainGenerator {
+    pub fn next(&mut self, dyn_model: &mut impl DynamicModel) -> Option<<Self as Iterator>::Item> {
         if let Some(call_params) = self.pending_call.take() {
             let inputs = match &call_params.inputs {
                 FunctionInputsType::TypeName(t_name) => FunctionInputsType::TypeName(t_name.clone()),
@@ -458,21 +474,22 @@ impl Iterator for MarkovChainGenerator {
 
         let cur_node_outgoing = function.chain.get(&current_node.name).unwrap();
 
-        let level: f64 = self.rng.gen::<f64>() * (
-            cur_node_outgoing.iter().map(|el| {
-                if check_node_off(&stack_item.current_function.inputs, &el.1.option_name) {
+        let cur_node_outgoing: Vec<(f64, NodeParams)> = {
+            let cur_node_outgoing = cur_node_outgoing.iter().map(|el| {
+                (if check_node_off(&stack_item.current_function.inputs, &el.1.option_name) {
                     0f64
                 } else {
                     el.0
-                }
-            }).sum::<f64>()
-        );
+                }, el.1.clone())
+            }).collect::<Vec<_>>();
+            let cur_node_outgoing = dyn_model.assign_probabilities(cur_node_outgoing);
+            let max_level: f64 = cur_node_outgoing.iter().map(|el| { el.0 }).sum();
+            cur_node_outgoing.iter().map(|el| { (el.0 / max_level, el.1.clone()) }).collect()
+        };
+        let level: f64 = self.rng.gen::<f64>();
         let mut cumulative_prob = 0f64;
-        let mut destination = Option::<&NodeParams>::None;
+        let mut destination = Option::<NodeParams>::None;
         for (prob, dest) in cur_node_outgoing {
-            if check_node_off(&stack_item.current_function.inputs, &dest.option_name) {
-                continue;
-            }
             cumulative_prob += prob;
             if level < cumulative_prob {
                 destination = Some(dest);
@@ -490,5 +507,13 @@ impl Iterator for MarkovChainGenerator {
         }
 
         Some(current_node.name)
+    }
+}
+
+impl Iterator for MarkovChainGenerator {
+    type Item = SmolStr;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next(&mut DefaultModel::new())
     }
 }
