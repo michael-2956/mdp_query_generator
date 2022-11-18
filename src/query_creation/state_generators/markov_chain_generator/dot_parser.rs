@@ -129,6 +129,7 @@ pub enum CodeUnit {
     NodeDef {
         name: SmolStr,
         option_name: Option<SmolStr>,
+        literal: bool,
     },
     Call {
         node_name: SmolStr,
@@ -238,6 +239,10 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                         Some(DotToken::QuotedIdentifiers(idents)) => Some(idents),
                                         _ => None
                                     };
+                                    let literal = match node_spec.remove("LITERAL") {
+                                        Some(DotToken::QuotedIdentifiers(idents)) => idents == SmolStr::new("t"),
+                                        _ => false
+                                    };
                                     if self.call_ident_regex.is_match(&node_name) {
                                         let (input_type, modifiers) = match parse_function_options(
                                             &node_name, node_spec, true
@@ -245,6 +250,11 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                             Ok(options) => options,
                                             Err(err) => break Some(Err(err))
                                         };
+                                        if literal {
+                                            break Some(Err(SyntaxError::new(format!(
+                                                "call nodes can't be declaread as literal (node {node_name})"
+                                            ))));
+                                        }
                                         break Some(Ok(CodeUnit::Call {
                                             node_name: node_name.clone(),
                                             func_name: SmolStr::new(node_name.split_once('_').unwrap().1),
@@ -256,6 +266,7 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                         break Some(Ok(CodeUnit::NodeDef {
                                             name: node_name,
                                             option_name,
+                                            literal: false,
                                         }));
                                     }
                                 },

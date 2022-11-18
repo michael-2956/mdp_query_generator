@@ -22,16 +22,17 @@ struct MarkovChain {
 /// this structure represents a single node with all of
 /// its possible properties and modifiers
 #[derive(Clone, Debug)]
-struct NodeParams {
-    name: SmolStr,
-    call_params: Option<CallParams>,
-    option_name: Option<SmolStr>,
+pub struct NodeParams {
+    pub name: SmolStr,
+    pub call_params: Option<CallParams>,
+    pub option_name: Option<SmolStr>,
+    pub literal: bool,
 }
 
 /// represents the call parameters passed to a function
 /// called with a call node
 #[derive(Clone, Debug)]
-struct CallParams {
+pub struct CallParams {
     /// which function this call node calls
     func_name: SmolStr,
     /// the output types the called function
@@ -115,8 +116,8 @@ impl MarkovChain {
             match token? {
                 dot_parser::CodeUnit::Function(definition) => {
                     current_function = Some(Function::new(definition.clone()));
-                    define_node(&mut current_function, &mut node_params, definition.source_node_name, None, None)?;
-                    define_node(&mut current_function, &mut node_params, definition.exit_node_name, None, None)?;
+                    define_node(&mut current_function, &mut node_params, definition.source_node_name, None, None, false)?;
+                    define_node(&mut current_function, &mut node_params, definition.exit_node_name, None, None, false)?;
                 }
                 dot_parser::CodeUnit::CloseDeclaration => {
                     if let Some(function) = current_function {
@@ -126,8 +127,8 @@ impl MarkovChain {
                         return Err(SyntaxError::new(format!("Unexpected CloseDeclaration")));
                     }
                 }
-                dot_parser::CodeUnit::NodeDef { name, option_name } => {
-                    define_node(&mut current_function, &mut node_params, name, None, option_name)?;
+                dot_parser::CodeUnit::NodeDef { name, option_name, literal } => {
+                    define_node(&mut current_function, &mut node_params, name, None, option_name, literal)?;
                 }
                 dot_parser::CodeUnit::Call {
                     node_name,
@@ -138,7 +139,7 @@ impl MarkovChain {
                 } => {
                     define_node(&mut current_function, &mut node_params, node_name, Some(CallParams {
                         func_name, inputs, modifiers
-                    }), option_name)?;
+                    }), option_name, false)?;
                 }
                 dot_parser::CodeUnit::Edge {
                     node_name_from,
@@ -262,12 +263,13 @@ impl MarkovChain {
 /// add a node to the current function graph & node_params map; Perform syntax checks for optional nodes
 fn define_node(
         current_function: &mut Option<Function>, node_params: &mut HashMap<SmolStr, NodeParams>,
-        node_name: SmolStr, call_params: Option<CallParams>, option_name: Option<SmolStr>
+        node_name: SmolStr, call_params: Option<CallParams>, option_name: Option<SmolStr>,
+        literal: bool
     ) -> Result<(), SyntaxError> {
     if let Some(ref mut function) = current_function {
         check_option(&function, &node_name, &option_name)?;
         function.chain.insert(node_name.clone(), Vec::<_>::new());
-        node_params.insert(node_name.clone(), NodeParams { name: node_name, call_params, option_name });
+        node_params.insert(node_name.clone(), NodeParams { name: node_name, call_params, option_name, literal });
     } else {
         return Err(SyntaxError::new(format!(
             "Unexpected node definition: {node_name} [...]"
@@ -354,7 +356,8 @@ impl MarkovChainGenerator {
             current_node_name: SmolStr::new("-"),
             next_node: NodeParams {
                 name: query_call_params.func_name,
-                call_params: None, option_name: None
+                call_params: None, option_name: None,
+                literal: false
             }
         }];
         self.known_type_name_stack = vec![vec![SmolStr::new("")]];
@@ -410,10 +413,28 @@ fn check_node_off(function_inputs_conv: &FunctionInputsType, option_name: &Optio
     return false;
 }
 
-impl Iterator for MarkovChainGenerator {
-    type Item = SmolStr;
+pub trait DynamicModel {
+    /// assigns the (unnormalized) probabilities to a dynamic model. Receives probabilities recorded in graph,
+    /// with zeroes in place for the deselected nodes. The probabilities on input are thus unnormalized, too
+    fn assign_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Vec::<(f64, NodeParams)>;
+}
 
-    fn next(&mut self) -> Option<Self::Item> {
+pub struct DefaultModel { }
+
+impl DefaultModel {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl DynamicModel for DefaultModel {
+    fn assign_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Vec::<(f64, NodeParams)> {
+        node_outgoing
+    }
+}
+
+impl MarkovChainGenerator {
+    pub fn next(&mut self, dyn_model: &mut impl DynamicModel) -> Option<<Self as Iterator>::Item> {
         if let Some(call_params) = self.pending_call.take() {
             let inputs = match &call_params.inputs {
                 FunctionInputsType::TypeName(t_name) => FunctionInputsType::TypeName(t_name.clone()),
@@ -435,7 +456,8 @@ impl Iterator for MarkovChainGenerator {
                 current_node_name: SmolStr::new("-"),
                 next_node: NodeParams {
                     name: call_params.func_name.clone(),
-                    call_params: None, option_name: None
+                    call_params: None, option_name: None,
+                    literal: false
                 }
             });
         }
@@ -458,21 +480,22 @@ impl Iterator for MarkovChainGenerator {
 
         let cur_node_outgoing = function.chain.get(&current_node.name).unwrap();
 
-        let level: f64 = self.rng.gen::<f64>() * (
-            cur_node_outgoing.iter().map(|el| {
-                if check_node_off(&stack_item.current_function.inputs, &el.1.option_name) {
+        let cur_node_outgoing: Vec<(f64, NodeParams)> = {
+            let cur_node_outgoing = cur_node_outgoing.iter().map(|el| {
+                (if check_node_off(&stack_item.current_function.inputs, &el.1.option_name) {
                     0f64
                 } else {
                     el.0
-                }
-            }).sum::<f64>()
-        );
+                }, el.1.clone())
+            }).collect::<Vec<_>>();
+            let cur_node_outgoing = dyn_model.assign_probabilities(cur_node_outgoing);
+            let max_level: f64 = cur_node_outgoing.iter().map(|el| { el.0 }).sum();
+            cur_node_outgoing.into_iter().map(|el| { (el.0 / max_level, el.1) }).collect()
+        };
+        let level: f64 = self.rng.gen::<f64>();
         let mut cumulative_prob = 0f64;
-        let mut destination = Option::<&NodeParams>::None;
+        let mut destination = Option::<NodeParams>::None;
         for (prob, dest) in cur_node_outgoing {
-            if check_node_off(&stack_item.current_function.inputs, &dest.option_name) {
-                continue;
-            }
             cumulative_prob += prob;
             if level < cumulative_prob {
                 destination = Some(dest);
@@ -490,5 +513,13 @@ impl Iterator for MarkovChainGenerator {
         }
 
         Some(current_node.name)
+    }
+}
+
+impl Iterator for MarkovChainGenerator {
+    type Item = SmolStr;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next(&mut DefaultModel::new())
     }
 }

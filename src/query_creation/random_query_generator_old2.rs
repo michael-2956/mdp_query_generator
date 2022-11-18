@@ -50,6 +50,22 @@ pub struct QueryInfo {
     /// used to generate and store info about
     /// all available relations
     pub relation_generator: RelationGenerator,
+}
+
+/// query_info.rs
+impl QueryInfo {
+    pub fn new() -> QueryInfo {
+        QueryInfo {
+            relation_generator: RelationGenerator::new(),
+        }
+    }
+}
+
+/// query_info.rs
+pub struct QueryInfo {
+    /// used to generate and store info about
+    /// all available relations
+    pub relation_generator: RelationGenerator,
     /// used to store running query statistics, such as
     /// the current level of nesting
     pub stats: QueryStats,
@@ -125,7 +141,6 @@ impl QueryGenerator {
 
     // ======================================================== subgraph Query
 
-    /// done
     fn handle_query(&mut self, info: &mut QueryInfo) {
         let mut limit = Option::<Expr>::None;
         if let Some(mods) = self.state_generator.get_modifiers() {
@@ -160,7 +175,6 @@ impl QueryGenerator {
         self.expect_state("FROM", "Query");
     }
 
-    /// done
     fn handle_query_exit(&mut self, info: &mut QueryInfo) {
         let query = Query {
             with: None,
@@ -174,7 +188,6 @@ impl QueryGenerator {
         push_var!(info, Query, query);
     }
 
-    /// done
     fn handle_from_table(&mut self, info: &mut QueryInfo) {
         let last_relation = TableFactor::Table {
             name: info.relation_generator.new_relation().gen_object_name(),
@@ -185,7 +198,6 @@ impl QueryGenerator {
         push_var!(info, LastRelation, last_relation);
     }
 
-    /// done
     fn handle_from_subquery_r(&mut self, info: &mut QueryInfo) {
         let last_relation = TableFactor::Derived {
             lateral: false,
@@ -198,20 +210,17 @@ impl QueryGenerator {
         push_var!(info, LastRelation, last_relation);
     }
 
-    /// done
     fn handle_multiple_relations(&mut self, info: &mut QueryInfo) {
         let relation = pop_var!(info, LastRelation);
         let body = get_mut_var!(info, SelectBody);
         body.from.push(TableWithJoins { relation, joins: vec![] });
     }
 
-    /// removed
     fn handle_select_all(&mut self, info: &mut QueryInfo) {
         let body = get_mut_var!(info, SelectBody);
         body.projection.push(SelectItem::Wildcard);
     }
 
-    /// done
     fn handle_where_val_3_ret(&mut self, info: &mut QueryInfo) {
         let val_3 = pop_var!(info, Val3);
         let body = get_mut_var!(info, SelectBody);
@@ -220,7 +229,6 @@ impl QueryGenerator {
 
     // ======================================================== subgraph def_VAL_3
 
-    /// done
     fn handle_val_3(&mut self, info: &mut QueryInfo) {
         match self.next_state().as_str() {
             "IsNull" => self.handle_is_null(info),
@@ -241,7 +249,6 @@ impl QueryGenerator {
         }
     }
 
-    /// done
     fn handle_is_null(&mut self, info: &mut QueryInfo) {
         match self.next_state().as_str() {
             "IsNull_not" => {
@@ -255,7 +262,6 @@ impl QueryGenerator {
         }
     }
 
-    /// done
     fn handle_is_null_value(&mut self, info: &mut QueryInfo) {
         let types_all_ret = pop_var!(info, TypesValue);
         let is_not_null = pop_var!(info, IsNullNotFlag);
@@ -267,12 +273,10 @@ impl QueryGenerator {
         push_var!(info, Val3, val_3);
     }
 
-    /// done
     fn handle_is_distinct_from(&mut self, _info: &mut QueryInfo) {
         self.expect_state("call1_types_all", "IsDistinctFrom");
     }
 
-    /// done
     fn handle_is_distinct_from_1st_val(&mut self, info: &mut QueryInfo) {
         self.state_generator.compatible_type_name_stack.push(
             pop_var!(info, TypesSelectedType).get_types()
@@ -290,7 +294,6 @@ impl QueryGenerator {
         self.expect_state("call21_types", "DISTINCT");
     }
 
-    /// done
     fn handle_is_distinct_from_2nd_val(&mut self, info: &mut QueryInfo) {
         let val2 = Box::new(pop_var!(info, TypesValue));
         let val1 = Box::new(pop_var!(info, TypesValue));
@@ -305,7 +308,6 @@ impl QueryGenerator {
         push_var!(info, Val3, val_3);
     }
 
-    /// done
     fn handle_exists(&mut self, info: &mut QueryInfo) {
         match self.next_state().as_str() {
             "Exists_not" => {
@@ -319,7 +321,6 @@ impl QueryGenerator {
         }
     }
 
-    /// done
     fn handle_exists_val(&mut self, info: &mut QueryInfo) {
         let val_3 = Expr::Exists {
             subquery: Box::new(pop_var!(info, Query)),
@@ -329,12 +330,10 @@ impl QueryGenerator {
         push_var!(info, Val3, val_3);
     }
 
-    /// done
     fn handle_in_list(&mut self, _info: &mut QueryInfo) {
         self.expect_state("call2_types_all", "InList");
     }
 
-    /// done
     fn handle_in_list_1st_val(&mut self, info: &mut QueryInfo) {
         self.state_generator.compatible_type_name_stack.push(
             pop_var!(info, TypesSelectedType).get_types()
@@ -353,7 +352,6 @@ impl QueryGenerator {
         }
     }
 
-    /// done
     fn handle_in_list_2nd_val(&mut self, info: &mut QueryInfo) {
         let val_3 = Expr::InList {
             expr: Box::new(pop_var!(info, TypesValue)),
@@ -368,12 +366,10 @@ impl QueryGenerator {
         push_var!(info, Val3, val_3);
     }
 
-    /// done
     fn handle_in_subquery(&mut self, _info: &mut QueryInfo) {
         self.expect_state("call3_types_all", "InSubquery");
     }
 
-    /// done
     fn handle_in_subquery_1st_val(&mut self, info: &mut QueryInfo) {
         self.state_generator.compatible_type_name_stack.push(
             pop_var!(info, TypesSelectedType).get_types()
@@ -391,7 +387,6 @@ impl QueryGenerator {
         self.expect_state("call3_Query", "InSubqueryIn");
     }
 
-    /// done
     fn handle_in_subquery_2nd_val(&mut self, info: &mut QueryInfo) {
         let val_3 = Expr::InSubquery {
             expr: Box::new(pop_var!(info, TypesValue)),
@@ -402,12 +397,10 @@ impl QueryGenerator {
         push_var!(info, Val3, val_3);
     }
 
-    /// done
     fn handle_between(&mut self, _info: &mut QueryInfo) {
         self.expect_state("call4_types_all", "Between");
     }
 
-    /// done
     fn handle_between_1st_val(&mut self, info: &mut QueryInfo) {
         let types_name = pop_var!(info, TypesSelectedType).get_types();
         self.state_generator.compatible_type_name_stack.push(types_name.clone());
@@ -425,13 +418,11 @@ impl QueryGenerator {
         self.expect_state("call22_types", "BetweenBetween");
     }
 
-    /// done
     fn handle_between_2nd_val(&mut self, _info: &mut QueryInfo) {
         self.expect_state("BetweenBetweenAnd", "call22_types");
         self.expect_state("call23_types", "BetweenBetweenAnd");
     }
 
-    /// done
     fn handle_between_3rd_val(&mut self, info: &mut QueryInfo) {
         let high = Box::new(pop_var!(info, TypesValue));
         let low = Box::new(pop_var!(info, TypesValue));
@@ -442,12 +433,10 @@ impl QueryGenerator {
         push_var!(info, Val3, val_3);
     }
 
-    /// done
     fn handle_binary_comp(&mut self, _info: &mut QueryInfo) {
         self.expect_state("call5_types_all", "BinaryComp");
     }
 
-    /// done
     fn handle_binary_comp_1st_val(&mut self, info: &mut QueryInfo) {
         self.state_generator.compatible_type_name_stack.push(
             pop_var!(info, TypesSelectedType).get_types()
@@ -473,7 +462,6 @@ impl QueryGenerator {
         }
     }
 
-    /// done
     fn handle_binary_comp_2nd_val(&mut self, info: &mut QueryInfo) {
         let right = Box::new(pop_var!(info, TypesValue));
         let op = pop_var!(info, BinaryCompOp);
@@ -482,12 +470,10 @@ impl QueryGenerator {
         push_var!(info, Val3, Expr::BinaryOp { left, op, right });
     }
 
-    /// done
     fn handle_any_all(&mut self, _info: &mut QueryInfo) {
         self.expect_state("call6_types_all", "AnyAll");
     }
 
-    /// done
     fn handle_any_all_1st_val(&mut self, info: &mut QueryInfo) {
         self.state_generator.compatible_type_name_stack.push(
             pop_var!(info, TypesSelectedType).get_types()
@@ -521,7 +507,6 @@ impl QueryGenerator {
         }
     }
 
-    /// done
     fn handle_any_all_2nd_val(&mut self, info: &mut QueryInfo, array: bool) {
         self.expect_state("AnyAllAnyAll", if array { "call1_array" } else { "call4_Query" });
 
@@ -545,12 +530,10 @@ impl QueryGenerator {
         push_var!(info, Val3, Expr::BinaryOp { left, op, right });
     }
 
-    /// done
     fn handle_string_like(&mut self, _info: &mut QueryInfo) {
         self.expect_state("call25_types", "BinaryStringLike");
     }
 
-    /// done
     fn handle_string_like_1st_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::String {
             panic!("String LIKE expected String as 1st argument")
@@ -568,7 +551,6 @@ impl QueryGenerator {
         self.expect_state("call26_types", "BinaryStringLikeIn");
     }
 
-    /// done
     fn handle_string_like_2nd_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::String {
             panic!("String LIKE expected String as 2nd argument")
@@ -580,12 +562,10 @@ impl QueryGenerator {
         push_var!(info, Val3, Expr::BinaryOp { left, op, right });
     }
 
-    /// done
     fn handle_binary_bool_op(&mut self, _info: &mut QueryInfo) {
         self.expect_state("call27_types", "BinaryBooleanOpV3");
     }
 
-    /// done
     fn handle_binary_bool_op_1st_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::Val3 {
             panic!("Boolean op expected TypesSelectedType::Val3 as 1st argument")
@@ -607,7 +587,6 @@ impl QueryGenerator {
         }
     }
 
-    /// done
     fn handle_binary_bool_op_2nd_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::Val3 {
             panic!("Boolean op expected TypesSelectedType::Val3 as 2nd argument")
@@ -619,12 +598,10 @@ impl QueryGenerator {
         push_var!(info, Val3, Expr::BinaryOp { left, op, right });
     }
 
-    /// done
     fn handle_nested_val(&mut self, _info: &mut QueryInfo) {
         self.expect_state("call29_types", "Nested_VAL_3");
     }
 
-    /// done
     fn handle_nested_val_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::Val3 {
             panic!("Nested_VAL_3 expected TypesSelectedType::Val3 as argument")
@@ -633,7 +610,6 @@ impl QueryGenerator {
         push_var!(info, Val3, Expr::Nested(nested));
     }
 
-    /// done
     fn handle_unary_not_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::Val3 {
             panic!("Nested_VAL_3 expected TypesSelectedType::Val3 as argument")
@@ -644,7 +620,6 @@ impl QueryGenerator {
 
     // ======================================================== subgraph def_numeric
 
-    /// done
     fn handle_numeric(&mut self, info: &mut QueryInfo) {
         match self.next_state().as_str() {
             "numeric_literal" => self.handle_numeric_literal(info),
@@ -656,7 +631,6 @@ impl QueryGenerator {
         }
     }
 
-    /// done
     fn handle_numeric_literal(&mut self, info: &mut QueryInfo) {
         let num_str = match self.next_state().as_str() {
             "numeric_literal_float" => {
@@ -673,12 +647,10 @@ impl QueryGenerator {
         push_var!(info, Numeric, Expr::Value(Value::Number(num_str, false)));
     }
 
-    /// done
     fn handle_numeric_binary(&mut self, _info: &mut QueryInfo) {
         self.expect_state("call33_types", "BinaryNumericOp");
     }
 
-    /// done
     fn handle_numeric_binary_1st_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::Numeric {
             panic!("BinaryNumericOp expected TypesSelectedType::Numeric as argument")
@@ -716,7 +688,6 @@ impl QueryGenerator {
         }
     }
 
-    /// done
     fn handle_numeric_binary_2nd_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::Numeric {
             panic!("BinaryNumericOp expected TypesSelectedType::Numeric as argument")
@@ -728,7 +699,6 @@ impl QueryGenerator {
         push_var!(info, Numeric, Expr::BinaryOp { left, op, right });
     }
 
-    /// done
     fn handle_numeric_unary(&mut self, info: &mut QueryInfo) {
         match self.next_state().as_str() {
             "unary_numeric_abs" => {
@@ -767,7 +737,6 @@ impl QueryGenerator {
         }
     }
 
-    /// done
     fn handle_numeric_unary_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::Numeric {
             panic!("UnaryNumericOp expected TypesSelectedType::Numeric as argument")
@@ -777,12 +746,10 @@ impl QueryGenerator {
         push_var!(info, Numeric, Expr::UnaryOp { op, expr });
     }
 
-    /// done
     fn handle_string_position(&mut self, _info: &mut QueryInfo) {
         self.expect_state("call2_types", "numeric_string_Position");
     }
 
-    /// done
     fn handle_string_position_1st_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::String {
             panic!("numeric_string_Position expected TypesSelectedType::String as 1st argument")
@@ -791,7 +758,6 @@ impl QueryGenerator {
         self.expect_state("call3_types", "string_position_in");
     }
 
-    /// done
     fn handle_string_position_2nd_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::String {
             panic!("numeric_string_Position expected TypesSelectedType::String as 2nd argument")
@@ -801,12 +767,10 @@ impl QueryGenerator {
         push_var!(info, Numeric, Expr::Position { expr: left, r#in: right });
     }
 
-    /// done
     fn handle_numeric_nested_val(&mut self, _info: &mut QueryInfo) {
         self.expect_state("call4_types", "Nested_numeric");
     }
 
-    /// done
     fn handle_numeric_nested_val_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::Numeric {
             panic!("Nested_numeric expected TypesSelectedType::Numeric as argument")
@@ -817,7 +781,6 @@ impl QueryGenerator {
 
     // ======================================================== subgraph def_string
 
-    /// done
     fn handle_string(&mut self, info: &mut QueryInfo) {
         match self.next_state().as_str() {
             "string_literal" => push_var!(info, String, Expr::Value(Value::SingleQuotedString("HJeihfbwei".to_string()))),  // TODO: hardcoded
@@ -827,7 +790,6 @@ impl QueryGenerator {
         }
     }
 
-    /// done
     fn handle_trim(&mut self, info: &mut QueryInfo) {
         match self.next_state().as_str() {
             "call6_types" => { push_var!(info, TrimSpecFlag, true); },
@@ -836,7 +798,6 @@ impl QueryGenerator {
         }
     }
 
-    /// done
     fn handle_trim_spec(&mut self, info: &mut QueryInfo) {
         match self.next_state().as_str() {
             "BOTH" => { 
@@ -855,7 +816,6 @@ impl QueryGenerator {
         }
     }
 
-    /// done
     fn handle_trim_val(&mut self, info: &mut QueryInfo) {
         let is_spec = pop_var!(info, TrimSpecFlag);
 
@@ -879,12 +839,10 @@ impl QueryGenerator {
         })
     }
 
-    /// done
     fn handle_concat(&mut self, _info: &mut QueryInfo) {
         self.expect_state("call7_types", "string_concat");
     }
 
-    /// done
     fn handle_concat_1st_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::String {
             panic!("string_concat expected TypesSelectedType::String as 1st value")
@@ -893,7 +851,6 @@ impl QueryGenerator {
         self.expect_state("call8_types", "string_concat_concat");
     }
 
-    /// done
     fn handle_concat_2nd_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::String {
             panic!("string_concat expected TypesSelectedType::String as 2nd value")
@@ -905,7 +862,6 @@ impl QueryGenerator {
 
     // ======================================================== subgraph def_types
 
-    /// done
     fn handle_types(&mut self, info: &mut QueryInfo) {
         match self.next_state().as_str() {
             "types_select_type" => self.handle_types_select_type(info),
@@ -932,7 +888,6 @@ impl QueryGenerator {
         }
     }
 
-    /// done
     fn handle_types_select_type(&mut self, info: &mut QueryInfo) {
         match self.next_state().as_str() {
             "types_select_type_3vl" => {
@@ -970,7 +925,6 @@ impl QueryGenerator {
         }
     }
 
-    /// done
     fn handle_types_select_type_value(&mut self, info: &mut QueryInfo, query: bool) {
         let value = if query {
             Expr::Subquery(Box::new(pop_var!(info, Query)))
@@ -980,35 +934,30 @@ impl QueryGenerator {
         push_var!(info, TypesValue, value);
     }
 
-    /// done
     fn handle_types_numeric(&mut self, info: &mut QueryInfo) {
         push_var!(info, TypesSelectedType, TypesSelectedType::Numeric);
         let val = pop_var!(info, Numeric);
         push_var!(info, TypesValue, val);
     }
 
-    /// done
     fn handle_types_val3(&mut self, info: &mut QueryInfo) {
         push_var!(info, TypesSelectedType, TypesSelectedType::Val3);
         let val = pop_var!(info, Val3);
         push_var!(info, TypesValue, val);
     }
 
-    /// done
     fn handle_types_string(&mut self, info: &mut QueryInfo) {
         push_var!(info, TypesSelectedType, TypesSelectedType::String);
         let val = pop_var!(info, String);
         push_var!(info, TypesValue, val);
     }
 
-    /// done
     fn handle_types_list_expr(&mut self, info: &mut QueryInfo) {
         push_var!(info, TypesSelectedType, TypesSelectedType::ListExpr);
         let val = pop_var!(info, ListExpr);
         push_var!(info, TypesValue, val);
     }
 
-    /// done
     fn handle_types_array(&mut self, info: &mut QueryInfo) {
         push_var!(info, TypesSelectedType, TypesSelectedType::Array);
         let val = pop_var!(info, Array);
@@ -1017,14 +966,12 @@ impl QueryGenerator {
 
     // ======================================================== subgraph def_types_all
 
-    /// done
     fn handle_types_all(&mut self, _info: &mut QueryInfo) {
         self.expect_state("call0_types", "types_all");
     }
 
     // ======================================================== subgraph def_column_spec
 
-    /// done
     fn handle_column_spec(&mut self, info: &mut QueryInfo) {
         match self.next_state().as_str() {
             "qualified_name" => {
@@ -1042,7 +989,6 @@ impl QueryGenerator {
 
     // ======================================================== subgraph def_array
 
-    /// done
     fn handle_array(&mut self, info: &mut QueryInfo) {
         // TODO: HARDCODE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         match self.next_state().as_str() {

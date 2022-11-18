@@ -52,6 +52,9 @@
 
 # 12. Do NOT use block comments /* */
 
+# 13 [temporary]. Mark nodes that will generate a literal value with 100%
+# probability as node[literal="t"]
+
 digraph G {
     subgraph def_Query {
         Query [TYPES="[any]", MOD="[single value]", label="Query\ntypes(ordered)=[...]\nmodif.=[SINGLE VALUE]", shape=octagon, style=filled, color=green]
@@ -284,10 +287,10 @@ digraph G {
         BinaryBooleanOpV3XOR -> call28_types
         call28_types -> EXIT_VAL_3
 
-        true []
+        true [literal="t"]
         VAL_3 -> true
         true -> EXIT_VAL_3
-        false []
+        false [literal="t"]
         VAL_3 -> false
         false -> EXIT_VAL_3
 
@@ -308,12 +311,12 @@ digraph G {
         numeric [shape=rectangle, label="numeric", style=filled, color=chocolate]
         EXIT_numeric [label="EXIT numeric"]
 
-        numeric_literal[label="literal"]
+        numeric_literal[label="literal", literal="t"]
         numeric -> numeric_literal
-        numeric_literal_int[label="random int"]
+        numeric_literal_int[label="random int", literal="t"]
         numeric_literal -> numeric_literal_int
         numeric_literal_int -> EXIT_numeric
-        numeric_literal_float[label="random float"]
+        numeric_literal_float[label="random float", literal="t"]
         numeric_literal -> numeric_literal_float
         numeric_literal_float -> EXIT_numeric
 
@@ -395,7 +398,7 @@ digraph G {
         string [label="string", shape=rectangle, style=filled, color=pink]
         EXIT_string [label="EXIT string"]
 
-        string_literal [label="random string literal"]
+        string_literal [label="random string literal", literal="t"]
         string -> string_literal
         string_literal -> EXIT_string
 
