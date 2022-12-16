@@ -18,7 +18,7 @@ pub struct QueryStats {
     /// allowed
     #[allow(dead_code)]
     current_nest_level: u32,
-    /// current state number
+    /// current state number in the global path
     current_state_num: u32,
 }
 
@@ -31,13 +31,13 @@ impl QueryStats {
     }
 }
 
-struct LiteralSelector {
+struct AntiCallModel {
     /// used to store running query statistics, such as
     /// the current level of nesting
     pub stats: QueryStats,
 }
 
-impl LiteralSelector {
+impl AntiCallModel {
     fn new() -> Self {
         Self {
             stats: QueryStats::new()
@@ -45,19 +45,31 @@ impl LiteralSelector {
     }
 }
 
-impl DynamicModel for LiteralSelector {
+impl DynamicModel for AntiCallModel {
     fn assign_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Vec::<(f64, NodeParams)> {
-        let any_literal = node_outgoing.iter().any(|el| el.1.literal );
+        if !node_outgoing.iter().any(|el| (
+            el.1.no_calls_possible_until_function_exit || el.1.call_params.is_none()
+        )) {
+            // if not any outcomes are non-call or no-call-till-exit-possible nodes, exit
+            return node_outgoing;
+        }
+        let prob_multiplier = f64::sqrt(self.stats.current_state_num as f64);
         node_outgoing.into_iter().map(|el| {
-            let m = el.0 * f64::sqrt(self.stats.current_state_num as f64);
-            (if any_literal {if el.1.literal { el.0 * m } else { el.0 / m }} else { el.0 }, el.1)
+            let mut prob = el.0;
+            if el.1.no_calls_possible_until_function_exit {
+                prob *= prob_multiplier;
+            }
+            if el.1.call_params.is_none() {
+                prob *= prob_multiplier;
+            }
+            (prob, el.1)
         }).collect()
     }
 }
 
 pub struct QueryGenerator {
     state_generator: MarkovChainGenerator,
-    dynamic_model: LiteralSelector,
+    dynamic_model: AntiCallModel,
     current_query_rm: RelationManager,
 }
 
@@ -75,7 +87,7 @@ impl QueryGenerator {
     pub fn from_state_generator(state_generator: MarkovChainGenerator) -> Self {
         QueryGenerator {
             state_generator,
-            dynamic_model: LiteralSelector::new(),
+            dynamic_model: AntiCallModel::new(),
             current_query_rm: RelationManager::new()
         }
     }
@@ -683,7 +695,7 @@ impl QueryGenerator {
             panic!("Couldn't reset state_generator: Received {state}");
         }
         self.current_query_rm = RelationManager::new();
-        self.dynamic_model = LiteralSelector::new();
+        self.dynamic_model = AntiCallModel::new();
         query
     }
 }

@@ -1,6 +1,6 @@
 mod dot_parser;
 mod error;
-use std::{collections::HashMap, fs::File, io::Read, path::Path};
+use std::{collections::{HashMap, HashSet}, fs::File, io::Read, path::Path};
 use rand::{Rng, SeedableRng};
 
 use regex::Regex;
@@ -27,6 +27,7 @@ pub struct NodeParams {
     pub call_params: Option<CallParams>,
     pub option_name: Option<SmolStr>,
     pub literal: bool,
+    pub no_calls_possible_until_function_exit: bool
 }
 
 /// represents the call parameters passed to a function
@@ -94,8 +95,9 @@ impl MarkovChain {
             mut functions,
             node_params
         ) = MarkovChain::parse_functions_and_params(&source)?;
-        MarkovChain::perform_type_checks(&functions, node_params)?;
+        MarkovChain::perform_type_checks(&functions, &node_params)?;
         MarkovChain::fill_probs_uniform(&mut functions);
+        MarkovChain::fill_paths_to_exit_with_no_calls(&mut functions, &node_params);
         Ok(MarkovChain { functions })
     }
 
@@ -173,14 +175,14 @@ impl MarkovChain {
     }
 
     /// performs all the type checks to ensure that the .dot code is correct
-    fn perform_type_checks(functions: &HashMap<SmolStr, Function>, node_params: HashMap<SmolStr, NodeParams>) -> Result<(), SyntaxError> {
+    fn perform_type_checks(functions: &HashMap<SmolStr, Function>, node_params: &HashMap<SmolStr, NodeParams>) -> Result<(), SyntaxError> {
         if functions.get("Query").is_none() {
             return Err(SyntaxError::new(format!(
                 "Query is the entry point and must be defined: subgraph def_Query {{...}}"
             )));
         }
         for (node_name, params) in node_params {
-            if let Some(call_params) = params.call_params {
+            if let Some(ref call_params) = params.call_params {
                 if let Some(function) = functions.get(&call_params.func_name) {
                     let gen_type_error = |error_msg: String| {
                         format!(
@@ -221,7 +223,7 @@ impl MarkovChain {
                         _ => {}
                     };
 
-                    if let Some(modifiers) = call_params.modifiers {
+                    if let Some(ref modifiers) = call_params.modifiers {
                         if let Some(ref func_modifiers) = function.modifiers {
                             for c_mod in modifiers {
                                 if !func_modifiers.contains(&c_mod) {
@@ -258,6 +260,71 @@ impl MarkovChain {
             }
         }
     }
+
+    fn fill_paths_to_exit_with_no_calls(functions: &mut HashMap<SmolStr, Function>, node_params: &HashMap<SmolStr, NodeParams>) {
+        let mut marked_positive = HashSet::<SmolStr>::new();
+        let mut marked_negative = HashSet::<SmolStr>::new();
+        for (_, function) in functions.iter() {
+            for (start_node_name, _) in node_params {
+                if marked_positive.contains(start_node_name) {
+                    continue;
+                }
+                if marked_negative.contains(start_node_name) {
+                    continue;
+                }
+                if !function.chain.contains_key(start_node_name) {
+                    continue;
+                }
+
+                let mut start_node_was_marked_positive = false;
+                let mut dfs_stack = Vec::<(SmolStr, Vec<SmolStr>)>::new();
+                dfs_stack.push((start_node_name.clone(), vec![]));
+                let mut visited = HashSet::<SmolStr>::new();
+                while !dfs_stack.is_empty() {
+                    let (node_name, mut path) = dfs_stack.pop().unwrap();
+                    // ignore negative and marked nodes
+                    if visited.contains(&node_name) || marked_positive.contains(&node_name) || marked_negative.contains(&node_name) {
+                        continue;
+                    }
+                    path.push(node_name.clone());
+                    visited.insert(node_name.clone());
+                    for out_node_name in function.chain.get_key_value(&node_name).unwrap().1 {
+                        if out_node_name.1.name == function.exit_node_name || marked_positive.contains(&out_node_name.1.name) {
+                            for node_name in path {
+                                marked_positive.insert(node_name);
+                            }
+                            marked_positive.insert(out_node_name.1.name.clone());
+                            start_node_was_marked_positive = true;
+                            break;
+                        }
+                        // ignore call nodes
+                        if out_node_name.1.call_params.is_none() {
+                            dfs_stack.push((out_node_name.1.name.clone(), path.clone()));
+                        }
+                    }
+                    if start_node_was_marked_positive {
+                        break;
+                    }
+                }
+                if !start_node_was_marked_positive {
+                    marked_negative.insert(start_node_name.clone());
+                }
+            }
+        }
+        for (_, function) in functions {
+            for (_, out_nodes) in function.chain.iter_mut() {
+                for out_node in out_nodes {
+                    if marked_positive.contains(&out_node.1.name) {
+                        out_node.1.no_calls_possible_until_function_exit = true;
+                    } else if marked_negative.contains(&out_node.1.name) {
+                        out_node.1.no_calls_possible_until_function_exit = false;
+                    } else {
+                        panic!("Node {} was not marked", out_node.1.name);
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// add a node to the current function graph & node_params map; Perform syntax checks for optional nodes
@@ -269,7 +336,10 @@ fn define_node(
     if let Some(ref mut function) = current_function {
         check_option(&function, &node_name, &option_name)?;
         function.chain.insert(node_name.clone(), Vec::<_>::new());
-        node_params.insert(node_name.clone(), NodeParams { name: node_name, call_params, option_name, literal });
+        node_params.insert(node_name.clone(), NodeParams {
+            name: node_name, call_params, option_name,
+            literal, no_calls_possible_until_function_exit: false
+        });
     } else {
         return Err(SyntaxError::new(format!(
             "Unexpected node definition: {node_name} [...]"
@@ -322,6 +392,21 @@ struct StackItem {
     next_node: NodeParams,
 }
 
+impl StackItem {
+    fn from_call_params(call_params: CallParams) -> Self {
+        let func_name = call_params.func_name.clone();
+        Self {
+            current_function: call_params,
+            current_node_name: SmolStr::new("-"),
+            next_node: NodeParams {
+                name: func_name,
+                call_params: None, option_name: None,
+                literal: false, no_calls_possible_until_function_exit: false
+            }
+        }
+    }
+}
+
 impl MarkovChainGenerator {
     pub fn parse_graph_from_file<P: AsRef<Path>>(source_path: P) -> Result<Self, SyntaxError> {
         let chain = MarkovChain::parse_dot(source_path)?;
@@ -346,20 +431,11 @@ impl MarkovChainGenerator {
 
     /// used when the markov chain reaches end, for the object to be iterable multiple times
     pub fn reset(&mut self) {
-        let query_call_params = CallParams {
+        self.call_stack = vec![StackItem::from_call_params(CallParams {
             func_name: SmolStr::new("Query"),
             inputs: FunctionInputsType::None,
             modifiers: None
-        };
-        self.call_stack = vec![StackItem {
-            current_function: query_call_params.clone(),
-            current_node_name: SmolStr::new("-"),
-            next_node: NodeParams {
-                name: query_call_params.func_name,
-                call_params: None, option_name: None,
-                literal: false
-            }
-        }];
+        })];
         self.known_type_name_stack = vec![vec![SmolStr::new("")]];
         self.compatible_type_name_stack = vec![vec![SmolStr::new("")]];
     }
@@ -447,19 +523,11 @@ impl MarkovChainGenerator {
                 },
                 _ => FunctionInputsType::None
             };
-            self.call_stack.push(StackItem {
-                current_function: CallParams {
-                    func_name: call_params.func_name.clone(),
-                    inputs: inputs,
-                    modifiers: call_params.modifiers.clone(),
-                },
-                current_node_name: SmolStr::new("-"),
-                next_node: NodeParams {
-                    name: call_params.func_name.clone(),
-                    call_params: None, option_name: None,
-                    literal: false
-                }
-            });
+            self.call_stack.push(StackItem::from_call_params(CallParams {
+                func_name: call_params.func_name.clone(),
+                inputs: inputs,
+                modifiers: call_params.modifiers.clone(),
+            }));
         }
 
         let stack_item = match self.call_stack.last_mut() {
@@ -511,6 +579,8 @@ impl MarkovChainGenerator {
         if let Some(call_params) = &current_node.call_params {
             self.pending_call = Some(call_params.clone());
         }
+
+        // println!("{}", current_node.name);
 
         Some(current_node.name)
     }
