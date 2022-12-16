@@ -636,8 +636,9 @@ digraph G {
 
     subgraph def_aggregate_function {
         aggregate_function [label="aggregate function", shape=octagon, style=filled, color=peru]
-        EXIT_fun_choice [label=";"]
         EXIT_aggregate_function [label="EXIT aggregate function"]
+        
+        EXIT_fun_choice [label=";"]
 
         aggr_distinct [label="DISTINCT"]
         aggr_distinct -> EXIT_aggregate_function

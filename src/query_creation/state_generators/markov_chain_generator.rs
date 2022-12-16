@@ -1,6 +1,6 @@
 mod dot_parser;
 mod error;
-use std::{collections::{HashMap, HashSet}, fs::File, io::Read, path::Path};
+use std::{collections::{HashMap, BinaryHeap}, fs::File, io::Read, path::Path, cmp::Ordering};
 use rand::{Rng, SeedableRng};
 
 use regex::Regex;
@@ -27,7 +27,7 @@ pub struct NodeParams {
     pub call_params: Option<CallParams>,
     pub option_name: Option<SmolStr>,
     pub literal: bool,
-    pub no_calls_possible_until_function_exit: bool
+    pub min_calls_until_function_exit: usize
 }
 
 /// represents the call parameters passed to a function
@@ -84,6 +84,26 @@ impl Function {
     }
 }
 
+#[derive(Clone, Eq, PartialEq)]
+struct BinaryHeapNode {
+    calls_from_src: usize,
+    node_name: SmolStr
+}
+
+impl Ord for BinaryHeapNode {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other.calls_from_src.cmp(&self.calls_from_src).then_with(
+            || self.node_name.cmp(&other.node_name)
+        )
+    }
+}
+
+impl PartialOrd for BinaryHeapNode {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl MarkovChain {
     /// parse the chain from a dot file; Initialise all the weights uniformly
     fn parse_dot<P: AsRef<Path>>(source_path: P) -> Result<Self, SyntaxError> {
@@ -97,7 +117,7 @@ impl MarkovChain {
         ) = MarkovChain::parse_functions_and_params(&source)?;
         MarkovChain::perform_type_checks(&functions, &node_params)?;
         MarkovChain::fill_probs_uniform(&mut functions);
-        MarkovChain::fill_paths_to_exit_with_no_calls(&mut functions, &node_params);
+        MarkovChain::fill_paths_to_exit_with_call_nums(&mut functions, &node_params);
         Ok(MarkovChain { functions })
     }
 
@@ -261,69 +281,132 @@ impl MarkovChain {
         }
     }
 
-    fn fill_paths_to_exit_with_no_calls(functions: &mut HashMap<SmolStr, Function>, node_params: &HashMap<SmolStr, NodeParams>) {
-        let mut marked_positive = HashSet::<SmolStr>::new();
-        let mut marked_negative = HashSet::<SmolStr>::new();
+    fn fill_paths_to_exit_with_call_nums(functions: &mut HashMap<SmolStr, Function>, node_params: &HashMap<SmolStr, NodeParams>) {
+        let mut min_calls_till_exit = HashMap::<SmolStr, usize>::new();
         for (_, function) in functions.iter() {
-            for (start_node_name, _) in node_params {
-                if marked_positive.contains(start_node_name) {
-                    continue;
-                }
-                if marked_negative.contains(start_node_name) {
-                    continue;
-                }
+            min_calls_till_exit.insert(function.exit_node_name.clone(), 0);
+            for (start_node_name, start_node_props) in node_params {
                 if !function.chain.contains_key(start_node_name) {
                     continue;
                 }
+                if min_calls_till_exit.contains_key(start_node_name) {
+                    continue;
+                }
+                min_calls_till_exit.insert(start_node_name.clone(), usize::MAX);
 
-                let mut start_node_was_marked_positive = false;
-                let mut dfs_stack = Vec::<(SmolStr, Vec<SmolStr>)>::new();
-                dfs_stack.push((start_node_name.clone(), vec![]));
-                let mut visited = HashSet::<SmolStr>::new();
-                while !dfs_stack.is_empty() {
-                    let (node_name, mut path) = dfs_stack.pop().unwrap();
-                    // ignore negative and marked nodes
-                    if visited.contains(&node_name) || marked_positive.contains(&node_name) || marked_negative.contains(&node_name) {
-                        continue;
-                    }
-                    path.push(node_name.clone());
-                    visited.insert(node_name.clone());
-                    for out_node_name in function.chain.get_key_value(&node_name).unwrap().1 {
-                        if out_node_name.1.name == function.exit_node_name || marked_positive.contains(&out_node_name.1.name) {
-                            for node_name in path {
-                                marked_positive.insert(node_name);
-                            }
-                            marked_positive.insert(out_node_name.1.name.clone());
-                            start_node_was_marked_positive = true;
-                            break;
-                        }
-                        // ignore call nodes
-                        if out_node_name.1.call_params.is_none() {
-                            dfs_stack.push((out_node_name.1.name.clone(), path.clone()));
-                        }
-                    }
-                    if start_node_was_marked_positive {
+                let mut priority_queue = BinaryHeap::<BinaryHeapNode>::new();
+                priority_queue.push(BinaryHeapNode {
+                    calls_from_src: 0, node_name: start_node_name.clone(),
+                });
+                let mut min_calls_from_src_map = HashMap::<SmolStr, usize>::new();
+                min_calls_from_src_map.insert(start_node_name.clone(), 0);
+                while let Some(BinaryHeapNode { calls_from_src, node_name }) = priority_queue.pop() {
+                    if node_name == function.exit_node_name {
+                        min_calls_till_exit.insert(start_node_name.clone(),
+                            calls_from_src + (start_node_props.call_params.is_some() as usize)
+                        );
                         break;
                     }
-                }
-                if !start_node_was_marked_positive {
-                    marked_negative.insert(start_node_name.clone());
+                    if let Some(min_calls_from_src_map_value) = min_calls_from_src_map.get(&node_name) {
+                        if *min_calls_from_src_map_value < calls_from_src {
+                            continue;
+                        }
+                    }
+                    for out_node_name in function.chain.get_key_value(&node_name).unwrap().1 {
+                        // out_node_name.1.name
+                        let node_calls_from_src = calls_from_src + (out_node_name.1.call_params.is_some() as usize);
+                        let current_min_calls_from_src = min_calls_from_src_map.entry(
+                            out_node_name.1.name.clone()
+                        ).or_insert(usize::MAX);
+                        if node_calls_from_src < *current_min_calls_from_src {
+                            *current_min_calls_from_src = node_calls_from_src;
+                            priority_queue.push(BinaryHeapNode {
+                                calls_from_src: node_calls_from_src,
+                                node_name: out_node_name.1.name.clone(),
+                            });
+                        }
+                    }
                 }
             }
         }
         for (_, function) in functions {
             for (_, out_nodes) in function.chain.iter_mut() {
                 for out_node in out_nodes {
-                    if marked_positive.contains(&out_node.1.name) {
-                        out_node.1.no_calls_possible_until_function_exit = true;
-                    } else if marked_negative.contains(&out_node.1.name) {
-                        out_node.1.no_calls_possible_until_function_exit = false;
+                    if let Some(min_calls) = min_calls_till_exit.get_key_value(&out_node.1.name) {
+                        if *min_calls.1 == usize::MAX {
+                            panic!("Node {} does not reach function exit", out_node.1.name);
+                        }
+                        out_node.1.min_calls_until_function_exit = *min_calls.1;
                     } else {
-                        panic!("Node {} was not marked", out_node.1.name);
+                        panic!("Node {} was not marked with minimum distance.", out_node.1.name);
                     }
                 }
             }
         }
+
+
+        // let mut marked_positive = HashSet::<SmolStr>::new();
+        // let mut marked_negative = HashSet::<SmolStr>::new();
+        // for (_, function) in functions.iter() {
+        //     for (start_node_name, _) in node_params {
+        //         if marked_positive.contains(start_node_name) {
+        //             continue;
+        //         }
+        //         if marked_negative.contains(start_node_name) {
+        //             continue;
+        //         }
+        //         if !function.chain.contains_key(start_node_name) {
+        //             continue;
+        //         }
+
+        //         let mut start_node_was_marked_positive = false;
+        //         let mut dfs_stack = Vec::<(SmolStr, Vec<SmolStr>)>::new();
+        //         dfs_stack.push((start_node_name.clone(), vec![]));
+        //         let mut visited = HashSet::<SmolStr>::new();
+        //         while !dfs_stack.is_empty() {
+        //             let (node_name, mut path) = dfs_stack.pop().unwrap();
+        //             // ignore negative and marked nodes
+        //             if visited.contains(&node_name) || marked_positive.contains(&node_name) || marked_negative.contains(&node_name) {
+        //                 continue;
+        //             }
+        //             path.push(node_name.clone());
+        //             visited.insert(node_name.clone());
+        //             for out_node_name in function.chain.get_key_value(&node_name).unwrap().1 {
+        //                 if out_node_name.1.name == function.exit_node_name || marked_positive.contains(&out_node_name.1.name) {
+        //                     for node_name in path {
+        //                         marked_positive.insert(node_name);
+        //                     }
+        //                     marked_positive.insert(out_node_name.1.name.clone());
+        //                     start_node_was_marked_positive = true;
+        //                     break;
+        //                 }
+        //                 // ignore call nodes
+        //                 if out_node_name.1.call_params.is_none() {
+        //                     dfs_stack.push((out_node_name.1.name.clone(), path.clone()));
+        //                 }
+        //             }
+        //             if start_node_was_marked_positive {
+        //                 break;
+        //             }
+        //         }
+        //         if !start_node_was_marked_positive {
+        //             marked_negative.insert(start_node_name.clone());
+        //         }
+        //     }
+        // }
+        // for (_, function) in functions {
+        //     for (_, out_nodes) in function.chain.iter_mut() {
+        //         for out_node in out_nodes {
+        //             if marked_positive.contains(&out_node.1.name) {
+        //                 out_node.1.min_calls_until_function_exit = 1;
+        //             } else if marked_negative.contains(&out_node.1.name) {
+        //                 out_node.1.min_calls_until_function_exit = 0;
+        //             } else {
+        //                 panic!("Node {} was not marked", out_node.1.name);
+        //             }
+        //         }
+        //     }
+        // }
     }
 }
 
@@ -338,7 +421,7 @@ fn define_node(
         function.chain.insert(node_name.clone(), Vec::<_>::new());
         node_params.insert(node_name.clone(), NodeParams {
             name: node_name, call_params, option_name,
-            literal, no_calls_possible_until_function_exit: false
+            literal, min_calls_until_function_exit: 0,
         });
     } else {
         return Err(SyntaxError::new(format!(
@@ -401,7 +484,7 @@ impl StackItem {
             next_node: NodeParams {
                 name: func_name,
                 call_params: None, option_name: None,
-                literal: false, no_calls_possible_until_function_exit: false
+                literal: false, min_calls_until_function_exit: 0,
             }
         }
     }
