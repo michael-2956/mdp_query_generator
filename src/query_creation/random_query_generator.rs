@@ -47,7 +47,7 @@ impl AntiCallModel {
 
 impl DynamicModel for AntiCallModel {
     fn assign_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Vec::<(f64, NodeParams)> {
-        let prob_multiplier = f64::sqrt(self.stats.current_state_num as f64);
+        let prob_multiplier = f64::sqrt(f64::sqrt(self.stats.current_state_num as f64));
         node_outgoing.into_iter().map(|el| {(
             el.0 / f64::powf(prob_multiplier, el.1.min_calls_until_function_exit as f64),
             el.1
