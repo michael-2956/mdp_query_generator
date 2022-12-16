@@ -10,7 +10,7 @@ use sqlparser::dialect::{PostgreSqlDialect, Dialect, MySqlDialect};
 
 
 fn string_to_query(input: &str) -> Box<Query> {
-    let dialect = MySqlDialect {};
+    let dialect = PostgreSqlDialect {};
     let ast = Parser::parse_sql(&dialect, input).unwrap();
     match ast.into_iter().next().expect("No single query in sql file") {
         sqlparser::ast::Statement::Query(query) => query,
@@ -24,7 +24,7 @@ pub fn equivalence_tester (sql: &str) -> bool {
     check_query(*query)
 }
 
-fn check_query (query: Query) -> bool {
+pub fn check_query (query: Query) -> bool {
     let _body = query.body;
     let _select = match _body {
         SetExpr::Select(select) => select,
@@ -128,6 +128,10 @@ fn check_expr (expr: Expr) -> bool {
                 return (check_expr(*expr) == true) && (check_expr(*array_expr) == true);
             }
         },
+
+        Expr::Value(val) => {
+            return true;;
+        }
 
         ///BETWEEN is treated as comparison operation
         // `<expr> [ NOT ] BETWEEN <low> AND <high>`
@@ -298,7 +302,7 @@ fn check_expr (expr: Expr) -> bool {
                 return true;
             }, 
 
-            _ => panic!("These WHERE cases not ready yet!"),
+            _ => {return true;},
     }
 
     true

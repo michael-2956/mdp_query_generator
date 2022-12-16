@@ -47,23 +47,11 @@ impl AntiCallModel {
 
 impl DynamicModel for AntiCallModel {
     fn assign_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Vec::<(f64, NodeParams)> {
-        if !node_outgoing.iter().any(|el| (
-            el.1.no_calls_possible_until_function_exit || el.1.call_params.is_none()
-        )) {
-            // if not any outcomes are non-call or no-call-till-exit-possible nodes, exit
-            return node_outgoing;
-        }
-        let prob_multiplier = f64::sqrt(self.stats.current_state_num as f64);
-        node_outgoing.into_iter().map(|el| {
-            let mut prob = el.0;
-            if el.1.no_calls_possible_until_function_exit {
-                prob *= prob_multiplier;
-            }
-            if el.1.call_params.is_none() {
-                prob *= prob_multiplier;
-            }
-            (prob, el.1)
-        }).collect()
+        let prob_multiplier = f64::sqrt(f64::sqrt(self.stats.current_state_num as f64));
+        node_outgoing.into_iter().map(|el| {(
+            el.0 / f64::powf(prob_multiplier, el.1.min_calls_until_function_exit as f64),
+            el.1
+        )}).collect()
     }
 }
 
