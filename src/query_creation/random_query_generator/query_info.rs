@@ -1,22 +1,25 @@
 use std::collections::HashMap;
 
 use smol_str::SmolStr;
+use rand_chacha::ChaCha8Rng;
+use rand::{SeedableRng, Rng};
 use sqlparser::ast::{Ident, ObjectName};
 
+#[derive(Debug, Clone)]
 pub struct Relation {
-    name: String,
-    free_column_name_index: u32
+    name: SmolStr,
+    free_column_name_index: u32,
 }
 
 impl Relation {
-    fn with_name(name: String) -> Self {
+    fn with_name(name: SmolStr) -> Self {
         Self {
             name, free_column_name_index: 1
         }
     }
 
     pub fn gen_ident(&self) -> Ident {
-        Ident { value: self.name.clone(), quote_style: None }
+        Ident { value: self.name.to_string(), quote_style: None }
     }
 
     pub fn gen_object_name(&self) -> ObjectName {
@@ -31,20 +34,22 @@ impl Relation {
 }
 
 pub struct RelationManager {
-    relations: HashMap<String, Relation>,
-    free_relation_name_index: u32
+    relations: HashMap<SmolStr, Relation>,
+    free_relation_name_index: u32,
+    rng: ChaCha8Rng,
 }
 
 impl RelationManager {
     pub fn new() -> Self {
         Self {
             relations: HashMap::<_, _>::new(),
-            free_relation_name_index: 1
+            free_relation_name_index: 1,
+            rng: ChaCha8Rng::seed_from_u64(1)
         }
     }
 
-    fn new_name(&mut self) -> String {
-        let name = format!("T{}", self.free_relation_name_index);
+    fn new_name(&mut self) -> SmolStr {
+        let name = SmolStr::new(format!("T{}", self.free_relation_name_index));
         self.free_relation_name_index += 1;
         name
     }
@@ -54,6 +59,12 @@ impl RelationManager {
         let relation = Relation::with_name(name.clone());
         self.relations.insert(name.clone(), relation);
         self.relations.get_mut(&name).unwrap()
+    }
+
+    pub fn get_random_relation(&mut self) -> &mut Relation {
+        let num_skip = self.rng.gen_range(0..self.relations.len());
+        let key = self.relations.iter().skip(num_skip).next().unwrap().0.to_owned();
+        self.relations.get_mut(&key).unwrap()
     }
 
     pub fn new_ident(&mut self) -> Ident {

@@ -4,7 +4,7 @@ mod query_info;
 use smol_str::SmolStr;
 use sqlparser::ast::{
     Expr, Ident, Query, Select, SetExpr, TableAlias, TableFactor,
-    TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, Array, SelectItem,
+    TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, Array, SelectItem, ObjectName,
 };
 
 use self::query_info::{TypesSelectedType, RelationManager};
@@ -71,6 +71,7 @@ pub struct QueryGenerator {
     state_generator: MarkovChainGenerator,
     dynamic_model: AntiCallModel,
     current_query_rm: RelationManager,
+    free_projection_alias_index: u32,
 }
 
 macro_rules! unwrap_variant {
@@ -88,7 +89,8 @@ impl QueryGenerator {
         QueryGenerator {
             state_generator,
             dynamic_model: AntiCallModel::new(),
-            current_query_rm: RelationManager::new()
+            current_query_rm: RelationManager::new(),
+            free_projection_alias_index: 1,
         }
     }
 
@@ -128,9 +130,16 @@ impl QueryGenerator {
         }
     }
 
+    pub fn gen_select_alias(&mut self) -> Ident {
+        let name = format!("C{}", self.free_projection_alias_index);
+        self.free_projection_alias_index += 1;
+        Ident { value: name.clone(), quote_style: None }
+    }
+
     /// subgraph def_Query
     fn handle_query(&mut self) -> Query {
         self.expect_state("Query");
+        self.dynamic_model.stats.current_nest_level += 1;
         let mut select_limit = Option::<Expr>::None;
         if let Some(mods) = self.state_generator.get_modifiers() {
             if mods.contains(&SmolStr::new("single value")) {
@@ -192,12 +201,47 @@ impl QueryGenerator {
             any => self.panic_unexpected(any)
         }
 
-        // CONTINUE FROM HERE
-        // PLASEHOLDER CODE BEGIN
-        select_body.projection.push(SelectItem::Wildcard);
-        // PLASEHOLDER CODE END
+        self.expect_state("SELECT");
+        select_body.distinct = match self.next_state().as_str() {
+            "SELECT_DISTINCT" => {
+                self.expect_state("SELECT_distinct_end");
+                true
+            },
+            "SELECT_distinct_end" => false,
+            any => self.panic_unexpected(any)
+        };
+
+        self.expect_state("SELECT_projection");
+        while match self.next_state().as_str() {
+            "SELECT_list" => true,
+            "EXIT_SELECT" => false,
+            any => self.panic_unexpected(any)
+        } {
+            match self.next_state().as_str() {
+                "SELECT_wildcard" => select_body.projection.push(SelectItem::Wildcard),
+                "SELECT_qualified_wildcard" => {
+                    select_body.projection.push(SelectItem::QualifiedWildcard(ObjectName(vec![
+                        self.current_query_rm.get_random_relation().gen_ident()
+                    ])));
+                },
+                arm @ ("SELECT_unnamed_expr" | "SELECT_expr_with_alias") => {
+                    self.expect_state("call7_types_all");
+                    let expr = self.handle_types_all().1;
+                    select_body.projection.push(match arm {
+                        "SELECT_unnamed_expr" => SelectItem::UnnamedExpr(expr),
+                        "SELECT_expr_with_alias" => SelectItem::ExprWithAlias {
+                            expr, alias: self.gen_select_alias(),
+                        },
+                        any => self.panic_unexpected(any)
+                    });
+                },
+                any => self.panic_unexpected(any)
+            };
+            self.expect_state("SELECT_list_multiple_values");
+        }
 
         self.expect_state("EXIT_Query");
+        self.dynamic_model.stats.current_nest_level -= 1;
         Query {
             with: None,
             body: SetExpr::Select(Box::new(select_body)),
@@ -618,11 +662,12 @@ impl QueryGenerator {
     /// subgraph def_column_spec
     fn handle_column_spec(&mut self) -> Expr {
         self.expect_state("column_spec");
-        let ret = match self.next_state().as_str() {
-            "qualified_name" => Expr::Identifier(self.current_query_rm.new_relation().gen_column_ident()),
-            "unqualified_name" => Expr::CompoundIdentifier(vec![
-                self.current_query_rm.new_relation().gen_column_ident(),
-                self.current_query_rm.new_relation().gen_column_ident()
+        let next_state = self.next_state();
+        let relation = self.current_query_rm.get_random_relation();
+        let ret = match next_state.as_str() {
+            "unqualified_name" => Expr::Identifier(relation.gen_column_ident()),
+            "qualified_name" => Expr::CompoundIdentifier(vec![
+                relation.gen_ident(), relation.gen_column_ident()
             ]),
             any => self.panic_unexpected(any)
         };
