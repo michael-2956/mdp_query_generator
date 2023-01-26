@@ -3,7 +3,7 @@ mod query_info;
 
 use smol_str::SmolStr;
 use sqlparser::ast::{
-    Expr, Ident, Query, Select, SetExpr, TableAlias, TableFactor,
+    Expr, Query, Select, SetExpr, TableAlias, TableFactor,
     TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, Array, SelectItem,
 };
 
