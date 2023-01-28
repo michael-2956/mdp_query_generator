@@ -1,12 +1,9 @@
-use sqlparser::dialect::GenericDialect;
-use sqlparser::keywords::{IGNORE, NEW, NULL};
 use sqlparser::parser::Parser;
 
 use sqlparser::ast::{
-    Expr, Ident, Query, Select, SelectItem, SetExpr, TableAlias, TableFactor,
-    TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, Array, Statement, ListAgg,
+    Expr, Query, SetExpr
 };
-use sqlparser::dialect::{PostgreSqlDialect, Dialect, MySqlDialect};
+use sqlparser::dialect::PostgreSqlDialect;
 
 
 fn string_to_query(input: &str) -> Box<Query> {

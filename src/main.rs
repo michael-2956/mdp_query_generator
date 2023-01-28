@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 mod equivalence_testing_function;
-use equivalence_testing_function::equivalence_tester;
 use equivalence_testing_function::check_query;
 
 use equivalence_testing::query_creation::{
