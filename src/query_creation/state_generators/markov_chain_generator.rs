@@ -1,6 +1,6 @@
 mod dot_parser;
 mod error;
-use std::{collections::HashMap, fs::File, io::Read, path::Path};
+use std::{collections::{HashMap, BinaryHeap}, fs::File, io::Read, path::Path, cmp::Ordering};
 use rand::{Rng, SeedableRng};
 
 use regex::Regex;
@@ -27,6 +27,7 @@ pub struct NodeParams {
     pub call_params: Option<CallParams>,
     pub option_name: Option<SmolStr>,
     pub literal: bool,
+    pub min_calls_until_function_exit: usize
 }
 
 /// represents the call parameters passed to a function
@@ -83,6 +84,26 @@ impl Function {
     }
 }
 
+#[derive(Clone, Eq, PartialEq)]
+struct BinaryHeapNode {
+    calls_from_src: usize,
+    node_name: SmolStr
+}
+
+impl Ord for BinaryHeapNode {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other.calls_from_src.cmp(&self.calls_from_src).then_with(
+            || self.node_name.cmp(&other.node_name)
+        )
+    }
+}
+
+impl PartialOrd for BinaryHeapNode {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl MarkovChain {
     /// parse the chain from a dot file; Initialise all the weights uniformly
     fn parse_dot<P: AsRef<Path>>(source_path: P) -> Result<Self, SyntaxError> {
@@ -94,8 +115,9 @@ impl MarkovChain {
             mut functions,
             node_params
         ) = MarkovChain::parse_functions_and_params(&source)?;
-        MarkovChain::perform_type_checks(&functions, node_params)?;
+        MarkovChain::perform_type_checks(&functions, &node_params)?;
         MarkovChain::fill_probs_uniform(&mut functions);
+        MarkovChain::fill_paths_to_exit_with_call_nums(&mut functions, &node_params);
         Ok(MarkovChain { functions })
     }
 
@@ -173,14 +195,14 @@ impl MarkovChain {
     }
 
     /// performs all the type checks to ensure that the .dot code is correct
-    fn perform_type_checks(functions: &HashMap<SmolStr, Function>, node_params: HashMap<SmolStr, NodeParams>) -> Result<(), SyntaxError> {
+    fn perform_type_checks(functions: &HashMap<SmolStr, Function>, node_params: &HashMap<SmolStr, NodeParams>) -> Result<(), SyntaxError> {
         if functions.get("Query").is_none() {
             return Err(SyntaxError::new(format!(
                 "Query is the entry point and must be defined: subgraph def_Query {{...}}"
             )));
         }
         for (node_name, params) in node_params {
-            if let Some(call_params) = params.call_params {
+            if let Some(ref call_params) = params.call_params {
                 if let Some(function) = functions.get(&call_params.func_name) {
                     let gen_type_error = |error_msg: String| {
                         format!(
@@ -221,7 +243,7 @@ impl MarkovChain {
                         _ => {}
                     };
 
-                    if let Some(modifiers) = call_params.modifiers {
+                    if let Some(ref modifiers) = call_params.modifiers {
                         if let Some(ref func_modifiers) = function.modifiers {
                             for c_mod in modifiers {
                                 if !func_modifiers.contains(&c_mod) {
@@ -258,6 +280,70 @@ impl MarkovChain {
             }
         }
     }
+
+    fn fill_paths_to_exit_with_call_nums(functions: &mut HashMap<SmolStr, Function>, node_params: &HashMap<SmolStr, NodeParams>) {
+        let mut min_calls_till_exit = HashMap::<SmolStr, usize>::new();
+        for (_, function) in functions.iter() {
+            min_calls_till_exit.insert(function.exit_node_name.clone(), 0);
+            for (start_node_name, start_node_props) in node_params {
+                if !function.chain.contains_key(start_node_name) {
+                    continue;
+                }
+                if min_calls_till_exit.contains_key(start_node_name) {
+                    continue;
+                }
+                min_calls_till_exit.insert(start_node_name.clone(), usize::MAX);
+
+                let mut priority_queue = BinaryHeap::<BinaryHeapNode>::new();
+                priority_queue.push(BinaryHeapNode {
+                    calls_from_src: 0, node_name: start_node_name.clone(),
+                });
+                let mut min_calls_from_src_map = HashMap::<SmolStr, usize>::new();
+                min_calls_from_src_map.insert(start_node_name.clone(), 0);
+                while let Some(BinaryHeapNode { calls_from_src, node_name }) = priority_queue.pop() {
+                    if node_name == function.exit_node_name {
+                        min_calls_till_exit.insert(start_node_name.clone(),
+                            calls_from_src + (start_node_props.call_params.is_some() as usize)
+                        );
+                        break;
+                    }
+                    if let Some(min_calls_from_src_map_value) = min_calls_from_src_map.get(&node_name) {
+                        if *min_calls_from_src_map_value < calls_from_src {
+                            continue;
+                        }
+                    }
+                    for out_node_name in function.chain.get_key_value(&node_name).unwrap().1 {
+                        // out_node_name.1.name
+                        let node_calls_from_src = calls_from_src + (out_node_name.1.call_params.is_some() as usize);
+                        let current_min_calls_from_src = min_calls_from_src_map.entry(
+                            out_node_name.1.name.clone()
+                        ).or_insert(usize::MAX);
+                        if node_calls_from_src < *current_min_calls_from_src {
+                            *current_min_calls_from_src = node_calls_from_src;
+                            priority_queue.push(BinaryHeapNode {
+                                calls_from_src: node_calls_from_src,
+                                node_name: out_node_name.1.name.clone(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        for (_, function) in functions {
+            for (_, out_nodes) in function.chain.iter_mut() {
+                for out_node in out_nodes {
+                    if let Some(min_calls) = min_calls_till_exit.get_key_value(&out_node.1.name) {
+                        if *min_calls.1 == usize::MAX {
+                            panic!("Node {} does not reach function exit", out_node.1.name);
+                        }
+                        out_node.1.min_calls_until_function_exit = *min_calls.1;
+                    } else {
+                        panic!("Node {} was not marked with minimum distance.", out_node.1.name);
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// add a node to the current function graph & node_params map; Perform syntax checks for optional nodes
@@ -269,7 +355,10 @@ fn define_node(
     if let Some(ref mut function) = current_function {
         check_option(&function, &node_name, &option_name)?;
         function.chain.insert(node_name.clone(), Vec::<_>::new());
-        node_params.insert(node_name.clone(), NodeParams { name: node_name, call_params, option_name, literal });
+        node_params.insert(node_name.clone(), NodeParams {
+            name: node_name, call_params, option_name,
+            literal, min_calls_until_function_exit: 0,
+        });
     } else {
         return Err(SyntaxError::new(format!(
             "Unexpected node definition: {node_name} [...]"
@@ -322,6 +411,21 @@ struct StackItem {
     next_node: NodeParams,
 }
 
+impl StackItem {
+    fn from_call_params(call_params: CallParams) -> Self {
+        let func_name = call_params.func_name.clone();
+        Self {
+            current_function: call_params,
+            current_node_name: SmolStr::new("-"),
+            next_node: NodeParams {
+                name: func_name,
+                call_params: None, option_name: None,
+                literal: false, min_calls_until_function_exit: 0,
+            }
+        }
+    }
+}
+
 impl MarkovChainGenerator {
     pub fn parse_graph_from_file<P: AsRef<Path>>(source_path: P) -> Result<Self, SyntaxError> {
         let chain = MarkovChain::parse_dot(source_path)?;
@@ -347,20 +451,11 @@ impl MarkovChainGenerator {
 
     /// used when the markov chain reaches end, for the object to be iterable multiple times
     pub fn reset(&mut self) {
-        let query_call_params = CallParams {
+        self.call_stack = vec![StackItem::from_call_params(CallParams {
             func_name: SmolStr::new("Query"),
             inputs: FunctionInputsType::None,
             modifiers: None
-        };
-        self.call_stack = vec![StackItem {
-            current_function: query_call_params.clone(),
-            current_node_name: SmolStr::new("-"),
-            next_node: NodeParams {
-                name: query_call_params.func_name,
-                call_params: None, option_name: None,
-                literal: false
-            }
-        }];
+        })];
         self.known_type_name_stack = vec![vec![SmolStr::new("")]];
         self.compatible_type_name_stack = vec![vec![SmolStr::new("")]];
     }
@@ -454,19 +549,11 @@ impl MarkovChainGenerator {
                 },
                 _ => FunctionInputsType::None
             };
-            self.call_stack.push(StackItem {
-                current_function: CallParams {
-                    func_name: call_params.func_name.clone(),
-                    inputs: inputs,
-                    modifiers: call_params.modifiers.clone(),
-                },
-                current_node_name: SmolStr::new("-"),
-                next_node: NodeParams {
-                    name: call_params.func_name.clone(),
-                    call_params: None, option_name: None,
-                    literal: false
-                }
-            });
+            self.call_stack.push(StackItem::from_call_params(CallParams {
+                func_name: call_params.func_name.clone(),
+                inputs: inputs,
+                modifiers: call_params.modifiers.clone(),
+            }));
         }
 
         let stack_item = match self.call_stack.last_mut() {
@@ -518,6 +605,8 @@ impl MarkovChainGenerator {
         if let Some(call_params) = &current_node.call_params {
             self.pending_call = Some(call_params.clone());
         }
+
+        // println!("{}", current_node.name);
 
         Some(current_node.name)
     }
