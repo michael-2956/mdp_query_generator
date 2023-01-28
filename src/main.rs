@@ -51,5 +51,4 @@ fn main() {
         }
     }
     println!("Equivalence: {} / {}", num_equivalent, num_generated);
-
 }
