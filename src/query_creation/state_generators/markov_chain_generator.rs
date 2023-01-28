@@ -337,6 +337,7 @@ impl MarkovChainGenerator {
         Ok(self_)
     }
 
+    /// used to print the call stack of the markov chain functions
     pub fn print_stack(&self) {
         println!("Call stack:");
         for stack_item in &self.call_stack {
@@ -364,22 +365,27 @@ impl MarkovChainGenerator {
         self.compatible_type_name_stack = vec![vec![SmolStr::new("")]];
     }
 
+    /// get crrent function inputs list
     pub fn get_inputs(&self) -> FunctionInputsType {
         self.call_stack.last().unwrap().current_function.inputs.clone()
     }
 
+    /// get crrent function modifiers list
     pub fn get_modifiers(&self) -> Option<Vec<SmolStr>> {
         self.call_stack.last().unwrap().current_function.modifiers.clone()
     }
 
+    /// push the known type list for the next node that will use the type=[known]
     pub fn push_known(&mut self, type_list: Vec<SmolStr>) {
         self.known_type_name_stack.push(type_list);
     }
 
+    /// push the compatible type list for the next node that will use the type=[compatible]
     pub fn push_compatible(&mut self, type_list: Vec<SmolStr>) {
         self.compatible_type_name_stack.push(type_list);
     }
 
+    /// pop the known type for the current node which will uses type=[known]
     fn pop_known(&mut self) -> Vec<SmolStr> {
         match self.known_type_name_stack.pop() {
             Some(item) => item,
@@ -390,6 +396,7 @@ impl MarkovChainGenerator {
         }
     }
 
+    /// pop the compatible type for the current node which will uses type=[compatible]
     fn pop_compatible(&mut self) -> Vec<SmolStr> {
         match self.compatible_type_name_stack.pop() {
             Some(item) => item,
