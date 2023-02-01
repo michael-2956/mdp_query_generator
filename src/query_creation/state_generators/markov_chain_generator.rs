@@ -428,7 +428,7 @@ impl StackItem {
 }
 
 impl MarkovChainGenerator {
-    pub fn parse_graph_from_file<P: AsRef<Path>>(source_path: P) -> Result<Self, SyntaxError> {
+    pub fn parse_graph_from_file<P: AsRef<Path>>(source_path: P, state_chooser: Box<dyn StateChooser>) -> Result<Self, SyntaxError> {
         let chain = MarkovChain::parse_dot(source_path)?;
         let mut self_ = MarkovChainGenerator {
             markov_chain: chain,
@@ -436,7 +436,7 @@ impl MarkovChainGenerator {
             pending_call: None,
             known_type_name_stack: vec![],
             compatible_type_name_stack: vec![],
-            state_chooser: Box::new(ProbabilisticStateChooser::new())
+            state_chooser: state_chooser
         };
         self_.reset();
         Ok(self_)
@@ -516,15 +516,6 @@ fn check_node_off(function_inputs_conv: &FunctionInputsType, option_name: &Optio
     return false;
 }
 
-
-// pub trait MyTrait: Debug {
-//     fn test(&mut self) -> bool;
-// }
-// #[derive(Debug)]
-// pub struct MyStruct {
-//     my_trait: Box<dyn MyTrait>,
-// }
-
 /// Dynamic model for assigning probabilities when using ProbabilisticModel 
 pub trait DynamicModel {
     /// assigns the (unnormalized) probabilities to a dynamic model. Receives probabilities recorded in graph,
@@ -574,7 +565,7 @@ pub struct ProbabilisticStateChooser {
 }
 
 impl ProbabilisticStateChooser {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self { rng: ChaCha8Rng::seed_from_u64(1), }
     }
 }

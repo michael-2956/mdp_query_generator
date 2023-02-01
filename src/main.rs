@@ -6,7 +6,7 @@ use equivalence_testing_function::string_to_query;
 
 use equivalence_testing::query_creation::{
     random_query_generator::QueryGenerator,
-    state_generators::MarkovChainGenerator,
+    state_generators::{MarkovChainGenerator, ProbabilisticStateChooser},
 };
 use structopt::StructOpt;
 
@@ -23,7 +23,9 @@ struct ProgramArgs {
 
 fn main() {
     let program_args = ProgramArgs::from_args();
-    let markov_generator = match MarkovChainGenerator::parse_graph_from_file(program_args.input) {
+    let markov_generator = match MarkovChainGenerator::parse_graph_from_file(
+        program_args.input, Box::new(ProbabilisticStateChooser::new())
+    ) {
         Ok(generator) => generator,
         Err(err) => {
             println!("{}", err);
