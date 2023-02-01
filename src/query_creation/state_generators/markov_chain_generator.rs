@@ -4,6 +4,7 @@ use std::{collections::{HashMap, BinaryHeap}, fs::File, io::Read, path::Path, cm
 use rand::{Rng, SeedableRng};
 
 use regex::Regex;
+use core::fmt::Debug;
 use smol_str::SmolStr;
 use rand_chacha::ChaCha8Rng;
 
@@ -390,7 +391,7 @@ fn check_option(current_function: &Function, node_name: &SmolStr, option_name: &
 /// subgraphs parsed from the .dot file. Manages the
 /// probabilities, outputs states, disables nodes if
 /// needed.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct MarkovChainGenerator {
     /// this stack contains information about the known type names
     /// inferred when [known] is used in [TYPES]
@@ -401,7 +402,7 @@ pub struct MarkovChainGenerator {
     markov_chain: MarkovChain,
     call_stack: Vec<StackItem>,
     pending_call: Option<CallParams>,
-    rng: ChaCha8Rng,
+    state_chooser: Box<dyn StateChooser>,
 }
 
 #[derive(Clone, Debug)]
@@ -435,7 +436,7 @@ impl MarkovChainGenerator {
             pending_call: None,
             known_type_name_stack: vec![],
             compatible_type_name_stack: vec![],
-            rng: ChaCha8Rng::seed_from_u64(1),
+            state_chooser: Box::new(ProbabilisticStateChooser::new())
         };
         self_.reset();
         Ok(self_)
@@ -445,7 +446,7 @@ impl MarkovChainGenerator {
     pub fn print_stack(&self) {
         println!("Call stack:");
         for stack_item in &self.call_stack {
-            println!("{} ({}):", stack_item.current_function.func_name, stack_item.current_node_name)
+            println!("{} ({:?}) [{}]:", stack_item.current_function.func_name, stack_item.current_function.inputs, stack_item.current_node_name)
         }
     }
 
@@ -515,23 +516,104 @@ fn check_node_off(function_inputs_conv: &FunctionInputsType, option_name: &Optio
     return false;
 }
 
+
+// pub trait MyTrait: Debug {
+//     fn test(&mut self) -> bool;
+// }
+// #[derive(Debug)]
+// pub struct MyStruct {
+//     my_trait: Box<dyn MyTrait>,
+// }
+
+/// Dynamic model for assigning probabilities when using ProbabilisticModel 
 pub trait DynamicModel {
     /// assigns the (unnormalized) probabilities to a dynamic model. Receives probabilities recorded in graph,
     /// with zeroes in place for the deselected nodes. The probabilities on input are thus unnormalized, too
-    fn assign_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Vec::<(f64, NodeParams)>;
+    fn assign_probabilities(&mut self, node_outgoing: Vec<(bool, f64, NodeParams)>) -> Vec::<(bool, f64, NodeParams)>;
 }
 
-pub struct DefaultModel { }
+pub struct MarkovModel { }
 
-impl DefaultModel {
+impl MarkovModel {
     pub fn new() -> Self {
         Self {}
     }
 }
 
-impl DynamicModel for DefaultModel {
-    fn assign_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Vec::<(f64, NodeParams)> {
+impl DynamicModel for MarkovModel {
+    fn assign_probabilities(&mut self, node_outgoing: Vec<(bool, f64, NodeParams)>) -> Vec::<(bool, f64, NodeParams)> {
         node_outgoing
+    }
+}
+
+pub trait CloneBoxed {
+    fn clone_boxed<'slf> (self: &'_ Self)
+      -> Box<dyn StateChooser + 'slf>
+    where
+        Self : 'slf,
+    ;
+}
+
+impl<T: Clone + StateChooser> CloneBoxed for T {
+    fn clone_boxed<'slf> (self: &'_ Self)
+      -> Box<dyn StateChooser + 'slf>
+    where
+        Self : 'slf,
+     {
+        Box::new(self.clone())
+    }
+}
+
+pub trait StateChooser: Debug + CloneBoxed {
+    fn choose_destination(&mut self, cur_node_outgoing: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams>;
+}
+
+#[derive(Debug, Clone)]
+pub struct ProbabilisticStateChooser {
+    rng: ChaCha8Rng,
+}
+
+impl ProbabilisticStateChooser {
+    fn new() -> Self {
+        Self { rng: ChaCha8Rng::seed_from_u64(1), }
+    }
+}
+
+impl StateChooser for ProbabilisticStateChooser {
+    fn choose_destination(&mut self, cur_node_outgoing: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams> {
+        let cur_node_outgoing: Vec<(f64, NodeParams)> = {
+            let cur_node_outgoing = cur_node_outgoing.iter().map(|el| {
+                (if el.0 { 0f64 } else { el.1 }, el.2.clone())
+            }).collect::<Vec<_>>();
+            let max_level: f64 = cur_node_outgoing.iter().map(|el| { el.0 }).sum();
+            cur_node_outgoing.into_iter().map(|el| { (el.0 / max_level, el.1) }).collect()
+        };
+        let level: f64 = self.rng.gen::<f64>();
+        let mut cumulative_prob = 0f64;
+        let mut destination = Option::<NodeParams>::None;
+        for (prob, dest) in cur_node_outgoing {
+            cumulative_prob += prob;
+            if level < cumulative_prob {
+                destination = Some(dest);
+                break;
+            }
+        }
+        destination
+    }
+}
+
+// pub struct DeterministicStateChooser
+
+impl Clone for MarkovChainGenerator {
+    fn clone(&self) -> Self {
+        Self {
+            known_type_name_stack: self.known_type_name_stack.clone(),
+            compatible_type_name_stack: self.compatible_type_name_stack.clone(),
+            markov_chain: self.markov_chain.clone(),
+            call_stack: self.call_stack.clone(),
+            pending_call: self.pending_call.clone(),
+            state_chooser: self.state_chooser.clone_boxed() 
+        }
     }
 }
 
@@ -574,33 +656,24 @@ impl MarkovChainGenerator {
 
         let cur_node_outgoing = function.chain.get(&current_node.name).unwrap();
 
-        let cur_node_outgoing: Vec<(f64, NodeParams)> = {
-            let cur_node_outgoing = cur_node_outgoing.iter().map(|el| {
-                (if check_node_off(&stack_item.current_function.inputs, &el.1.option_name) {
-                    0f64
-                } else {
-                    el.0
-                }, el.1.clone())
-            }).collect::<Vec<_>>();
-            let cur_node_outgoing = dyn_model.assign_probabilities(cur_node_outgoing);
-            let max_level: f64 = cur_node_outgoing.iter().map(|el| { el.0 }).sum();
-            cur_node_outgoing.into_iter().map(|el| { (el.0 / max_level, el.1) }).collect()
-        };
-        let level: f64 = self.rng.gen::<f64>();
-        let mut cumulative_prob = 0f64;
-        let mut destination = Option::<NodeParams>::None;
-        for (prob, dest) in cur_node_outgoing {
-            cumulative_prob += prob;
-            if level < cumulative_prob {
-                destination = Some(dest);
-                break;
+        let cur_node_outgoing = cur_node_outgoing.iter().map(|el| {
+            (check_node_off(&stack_item.current_function.inputs, &el.1.option_name), el.0, el.1.clone())
+        }).collect::<Vec<_>>();
+
+        let cur_node_outgoing = dyn_model.assign_probabilities(cur_node_outgoing);
+
+        let destination = self.state_chooser.choose_destination(cur_node_outgoing);
+
+        if let Some(destination) = destination {
+            if check_node_off(&stack_item.current_function.inputs, &destination.option_name) {
+                panic!("Chosen node is off: {} (after {})", destination.name, current_node.name);
             }
+            stack_item.current_node_name = current_node.name.clone();
+            stack_item.next_node = destination.clone();
+        } else {
+            self.print_stack();
+            panic!("No destination found for {}.", current_node.name);
         }
-        if destination.is_none() {
-            panic!("No destination found for {}. stack_item.current_function.inputs={:?}", current_node.name, stack_item.current_function.inputs);
-        }
-        stack_item.current_node_name = current_node.name.clone();
-        stack_item.next_node = destination.unwrap().clone();
 
         if let Some(call_params) = &current_node.call_params {
             self.pending_call = Some(call_params.clone());
@@ -616,6 +689,6 @@ impl Iterator for MarkovChainGenerator {
     type Item = SmolStr;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.next(&mut DefaultModel::new())
+        self.next(&mut MarkovModel::new())
     }
 }
