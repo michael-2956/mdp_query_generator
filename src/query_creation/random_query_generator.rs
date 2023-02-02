@@ -9,56 +9,11 @@ use sqlparser::ast::{
 
 use self::query_info::{TypesSelectedType, RelationManager};
 
-use super::state_generators::{MarkovChainGenerator, FunctionInputsType, NodeParams, DynamicModel};
+use super::state_generators::{MarkovChainGenerator, FunctionInputsType, DynamicModel};
 
-pub struct QueryStats {
-    /// Remember to increase this value before
-    /// and decrease after generating a subquery, to
-    /// control the maximum level of nesting
-    /// allowed
-    #[allow(dead_code)]
-    current_nest_level: u32,
-    /// current state number in the global path
-    current_state_num: u32,
-}
-
-impl QueryStats {
-    fn new() -> Self {
-        Self {
-            current_nest_level: 0,
-            current_state_num: 0
-        }
-    }
-}
-
-struct AntiCallModel {
-    /// used to store running query statistics, such as
-    /// the current level of nesting
-    pub stats: QueryStats,
-}
-
-impl AntiCallModel {
-    fn new() -> Self {
-        Self {
-            stats: QueryStats::new()
-        }
-    }
-}
-
-impl DynamicModel for AntiCallModel {
-    fn assign_probabilities(&mut self, node_outgoing: Vec<(bool, f64, NodeParams)>) -> Vec::<(bool, f64, NodeParams)> {
-        let prob_multiplier = f64::sqrt(f64::sqrt(self.stats.current_state_num as f64));
-        node_outgoing.into_iter().map(|el| {(
-            el.0,
-            el.1 / f64::powf(prob_multiplier, el.2.min_calls_until_function_exit as f64),
-            el.2
-        )}).collect()
-    }
-}
-
-pub struct QueryGenerator {
+pub struct QueryGenerator<DynMod: DynamicModel> {
     state_generator: MarkovChainGenerator,
-    dynamic_model: AntiCallModel,
+    dynamic_model: Box<DynMod>,
     current_query_rm: RelationManager,
     free_projection_alias_index: u32,
 }
@@ -73,19 +28,18 @@ macro_rules! unwrap_variant {
     } };
 }
 
-impl QueryGenerator {
+impl<DynMod: DynamicModel> QueryGenerator<DynMod> {
     pub fn from_state_generator(state_generator: MarkovChainGenerator) -> Self {
-        QueryGenerator {
+        QueryGenerator::<DynMod> {
             state_generator,
-            dynamic_model: AntiCallModel::new(),
+            dynamic_model: Box::new(DynMod::new()),
             current_query_rm: RelationManager::new(),
             free_projection_alias_index: 1,
         }
     }
 
     fn next_state_opt(&mut self) -> Option<SmolStr> {
-        self.dynamic_model.stats.current_state_num += 1;
-        self.state_generator.next(&mut self.dynamic_model)
+        self.state_generator.next(&mut *self.dynamic_model)
     }
 
     fn next_state(&mut self) -> SmolStr {
@@ -127,8 +81,8 @@ impl QueryGenerator {
 
     /// subgraph def_Query
     fn handle_query(&mut self) -> Query {
+        self.dynamic_model.notify_subquery_creation_begin();
         self.expect_state("Query");
-        self.dynamic_model.stats.current_nest_level += 1;
         let mut select_limit = Option::<Expr>::None;
         if let Some(mods) = self.state_generator.get_modifiers() {
             if mods.contains(&SmolStr::new("single value")) {
@@ -230,7 +184,7 @@ impl QueryGenerator {
         }
 
         self.expect_state("EXIT_Query");
-        self.dynamic_model.stats.current_nest_level -= 1;
+        self.dynamic_model.notify_subquery_creation_end();
         Query {
             with: None,
             body: SetExpr::Select(Box::new(select_body)),
@@ -729,12 +683,12 @@ impl QueryGenerator {
             panic!("Couldn't reset state_generator: Received {state}");
         }
         self.current_query_rm = RelationManager::new();
-        self.dynamic_model = AntiCallModel::new();
+        self.dynamic_model = Box::new(DynMod::new());
         query
     }
 }
 
-impl Iterator for QueryGenerator {
+impl<DynMod: DynamicModel> Iterator for QueryGenerator<DynMod> {
     type Item = Query;
 
     fn next(&mut self) -> Option<Self::Item> {
