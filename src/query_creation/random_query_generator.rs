@@ -9,10 +9,10 @@ use sqlparser::ast::{
 
 use self::query_info::{TypesSelectedType, RelationManager};
 
-use super::state_generators::{MarkovChainGenerator, FunctionInputsType, DynamicModel};
+use super::state_generators::{MarkovChainGenerator, FunctionInputsType, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
-pub struct QueryGenerator<DynMod: DynamicModel> {
-    state_generator: MarkovChainGenerator,
+pub struct QueryGenerator<DynMod: DynamicModel, StC: StateChooser> {
+    state_generator: MarkovChainGenerator<StC>,
     dynamic_model: Box<DynMod>,
     current_query_rm: RelationManager,
     free_projection_alias_index: u32,
@@ -28,9 +28,9 @@ macro_rules! unwrap_variant {
     } };
 }
 
-impl<DynMod: DynamicModel> QueryGenerator<DynMod> {
-    pub fn from_state_generator(state_generator: MarkovChainGenerator) -> Self {
-        QueryGenerator::<DynMod> {
+impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
+    pub fn from_state_generator(state_generator: MarkovChainGenerator<StC>) -> Self {
+        QueryGenerator::<DynMod, StC> {
             state_generator,
             dynamic_model: Box::new(DynMod::new()),
             current_query_rm: RelationManager::new(),
@@ -688,7 +688,7 @@ impl<DynMod: DynamicModel> QueryGenerator<DynMod> {
     }
 }
 
-impl<DynMod: DynamicModel> Iterator for QueryGenerator<DynMod> {
+impl<DynMod: DynamicModel, StC: StateChooser> Iterator for QueryGenerator<DynMod, StC> {
     type Item = Query;
 
     fn next(&mut self) -> Option<Self::Item> {
