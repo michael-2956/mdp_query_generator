@@ -19,6 +19,7 @@ impl StateChooser for ProbabilisticStateChooser {
     fn new() -> Self {
         Self { rng: ChaCha8Rng::seed_from_u64(1), }
     }
+
     fn choose_destination(&mut self, cur_node_outgoing: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams> {
         let cur_node_outgoing: Vec<(f64, NodeParams)> = {
             let cur_node_outgoing = cur_node_outgoing.iter().map(|el| {
@@ -41,4 +42,18 @@ impl StateChooser for ProbabilisticStateChooser {
     }
 }
 
-// pub struct DeterministicStateChooser
+#[derive(Debug, Clone)]
+pub struct DeterministicStateChooser { }
+
+impl StateChooser for DeterministicStateChooser {
+    fn new() -> Self where Self: Sized {
+        Self { }
+    }
+
+    fn choose_destination(&mut self, cur_node_outgoing: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams> {
+        if cur_node_outgoing.len() == 0 { return None }
+        if cur_node_outgoing.len() == 1 { return Some(cur_node_outgoing[0].2.clone()) }
+        
+        Some(cur_node_outgoing[0].2.clone()) // placeholder
+    }
+}
