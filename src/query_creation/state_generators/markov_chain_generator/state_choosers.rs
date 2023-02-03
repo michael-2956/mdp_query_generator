@@ -1,6 +1,8 @@
+use core::fmt::Debug;
 use rand::{Rng, SeedableRng};
 
-use core::fmt::Debug;
+use smol_str::SmolStr;
+use sqlparser::ast::Query;
 use rand_chacha::ChaCha8Rng;
 
 use super::markov_chain::NodeParams;
@@ -43,17 +45,43 @@ impl StateChooser for ProbabilisticStateChooser {
 }
 
 #[derive(Debug, Clone)]
-pub struct DeterministicStateChooser { }
+pub struct DeterministicStateChooser {
+    state_list: Vec<SmolStr>,
+    state_index: usize,
+}
+
+impl DeterministicStateChooser {
+    fn _from_query(_query: Query) -> Self where Self: Sized {
+        // TODO: Initialise state list from query
+        Self {
+            state_list: vec![],
+            state_index: 0
+        }
+    }
+}
 
 impl StateChooser for DeterministicStateChooser {
     fn new() -> Self where Self: Sized {
-        Self { }
+        Self {
+            state_list: vec![],
+            state_index: 0
+        }
     }
 
     fn choose_destination(&mut self, cur_node_outgoing: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams> {
-        if cur_node_outgoing.len() == 0 { return None }
+        if cur_node_outgoing.len() == 0 {
+            println!("List of outgoing nodes is empty!");
+            return None
+        }
         if cur_node_outgoing.len() == 1 { return Some(cur_node_outgoing[0].2.clone()) }
-        
-        Some(cur_node_outgoing[0].2.clone()) // placeholder
+        let node_name = self.state_list[self.state_index].clone();
+        self.state_index += 1;
+        match cur_node_outgoing.iter().find(|node| node.2.name == node_name) {
+            Some(node) => Some(node.2.clone()),
+            None => {
+                println!("None of {:?} matches \"{node_name}\" inferred from query", cur_node_outgoing);
+                None
+            },
+        }
     }
 }
