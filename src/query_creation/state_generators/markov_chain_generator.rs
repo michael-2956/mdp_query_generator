@@ -55,6 +55,7 @@ impl StackItem {
                 name: func_name,
                 call_params: None, option_name: None,
                 literal: false, min_calls_until_function_exit: 0,
+                trigger: None
             }
         }
     }
@@ -137,16 +138,22 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 }
 
-fn check_node_off(function_inputs_conv: &FunctionInputsType, option_name: &Option<SmolStr>) -> bool {
-    if let Some(option_name) = option_name {
-        match function_inputs_conv {
-            FunctionInputsType::None => return true,
-            FunctionInputsType::TypeName(t_name) => if t_name != option_name { return true },
-            FunctionInputsType::TypeNameList(t_name_list) => if !t_name_list.contains(&option_name) { return true },
-            _ => panic!("Must be None, TypeName or a TypeNameList")
+fn check_node_off(call_params: &CallParams, node_params: &NodeParams) -> bool {
+    let mut off = false;
+    if let Some(ref option_name) = node_params.option_name {
+        off = match call_params.inputs {
+            FunctionInputsType::None => true,
+            FunctionInputsType::TypeName(ref t_name) => if t_name != option_name { true } else { false },
+            FunctionInputsType::TypeNameList(ref t_name_list) => if !t_name_list.contains(&option_name) { true } else { false },
+            _ => panic!("Expected None, TypeName or a TypeNameList for function inputs")
+        };
+    }
+    if let Some((ref trigger_name, ref trigger_on)) = node_params.trigger {
+        if let Some(ref modifiers) = call_params.modifiers {
+            off = if modifiers.contains(&trigger_name) { !trigger_on } else { *trigger_on }
         }
     }
-    return false;
+    return off;
 }
 
 impl<StC: StateChooser> MarkovChainGenerator<StC> {
@@ -191,7 +198,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         let cur_node_outgoing = function.chain.get(&current_node.name).unwrap();
 
         let cur_node_outgoing = cur_node_outgoing.iter().map(|el| {
-            (check_node_off(&stack_item.current_function.inputs, &el.1.option_name), el.0, el.1.clone())
+            (check_node_off(&stack_item.current_function, &el.1), el.0, el.1.clone())
         }).collect::<Vec<_>>();
 
         let cur_node_outgoing = dyn_model.assign_probabilities(cur_node_outgoing);
@@ -199,7 +206,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         let destination = self.state_chooser.choose_destination(cur_node_outgoing);
 
         if let Some(destination) = destination {
-            if check_node_off(&stack_item.current_function.inputs, &destination.option_name) {
+            if check_node_off(&stack_item.current_function, &destination) {
                 panic!("Chosen node is off: {} (after {})", destination.name, current_node.name);
             }
             stack_item.current_node_name = current_node.name.clone();
@@ -212,8 +219,6 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         if let Some(call_params) = &current_node.call_params {
             self.pending_call = Some(call_params.clone());
         }
-
-        // println!("{}", current_node.name);
 
         Some(current_node.name)
     }

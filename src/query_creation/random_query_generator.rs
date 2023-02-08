@@ -83,15 +83,16 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     fn handle_query(&mut self) -> Query {
         self.dynamic_model.notify_subquery_creation_begin();
         self.expect_state("Query");
-        let mut select_limit = Option::<Expr>::None;
-        if let Some(mods) = self.state_generator.get_modifiers() {
-            if mods.contains(&SmolStr::new("single value")) {
-                select_limit = Some(Expr::Value(Value::Number("1".to_string(), false)));
-                // TODO: Not only limits can enforce this
-            } else {
-                panic!("Unexpected mods (Query): {:?}", mods);
-            }
-        }
+
+        let select_limit = match self.next_state().as_str() {
+            "single_value_true" => Some(Expr::Value(Value::Number("1".to_string(), false))),
+            "single_value_false" => {
+                self.expect_state("call52_types");
+                Some(self.handle_numeric())
+            },
+            any => self.panic_unexpected(any)
+        };
+
         if let FunctionInputsType::TypeName(type_name) = self.state_generator.get_inputs() {
             println!("TODO: Enforce single column & column type (Query): {type_name}")
         }

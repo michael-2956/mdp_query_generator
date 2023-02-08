@@ -22,7 +22,8 @@ pub struct NodeParams {
     pub call_params: Option<CallParams>,
     pub option_name: Option<SmolStr>,
     pub literal: bool,
-    pub min_calls_until_function_exit: usize
+    pub min_calls_until_function_exit: usize,
+    pub trigger: Option<(SmolStr, bool)>
 }
 
 /// represents the call parameters passed to a function
@@ -133,8 +134,8 @@ impl MarkovChain {
             match token? {
                 dot_parser::CodeUnit::Function(definition) => {
                     current_function = Some(Function::new(definition.clone()));
-                    define_node(&mut current_function, &mut node_params, definition.source_node_name, None, None, false)?;
-                    define_node(&mut current_function, &mut node_params, definition.exit_node_name, None, None, false)?;
+                    define_node(&mut current_function, &mut node_params, definition.source_node_name, None, None, false, None)?;
+                    define_node(&mut current_function, &mut node_params, definition.exit_node_name, None, None, false, None)?;
                 }
                 dot_parser::CodeUnit::CloseDeclaration => {
                     if let Some(function) = current_function {
@@ -144,8 +145,8 @@ impl MarkovChain {
                         return Err(SyntaxError::new(format!("Unexpected CloseDeclaration")));
                     }
                 }
-                dot_parser::CodeUnit::NodeDef { name, option_name, literal } => {
-                    define_node(&mut current_function, &mut node_params, name, None, option_name, literal)?;
+                dot_parser::CodeUnit::NodeDef { name, option_name, literal, trigger } => {
+                    define_node(&mut current_function, &mut node_params, name, None, option_name, literal, trigger)?;
                 }
                 dot_parser::CodeUnit::Call {
                     node_name,
@@ -156,7 +157,7 @@ impl MarkovChain {
                 } => {
                     define_node(&mut current_function, &mut node_params, node_name, Some(CallParams {
                         func_name, inputs, modifiers
-                    }), option_name, false)?;
+                    }), option_name, false, None)?;
                 }
                 dot_parser::CodeUnit::Edge {
                     node_name_from,
@@ -345,14 +346,16 @@ impl MarkovChain {
 fn define_node(
         current_function: &mut Option<Function>, node_params: &mut HashMap<SmolStr, NodeParams>,
         node_name: SmolStr, call_params: Option<CallParams>, option_name: Option<SmolStr>,
-        literal: bool
+        literal: bool, trigger: Option<(SmolStr, bool)>
     ) -> Result<(), SyntaxError> {
     if let Some(ref mut function) = current_function {
         check_option(&function, &node_name, &option_name)?;
+        check_trigger(&function, &node_name, &trigger)?;
         function.chain.insert(node_name.clone(), Vec::<_>::new());
         node_params.insert(node_name.clone(), NodeParams {
             name: node_name, call_params, option_name,
             literal, min_calls_until_function_exit: 0,
+            trigger
         });
     } else {
         return Err(SyntaxError::new(format!(
@@ -375,6 +378,24 @@ fn check_option(current_function: &Function, node_name: &SmolStr, option_name: &
             return Err(SyntaxError::new(format!(
                 "Unexpected option: {option_name} Expected one of: {:?}",
                 current_function.input_type
+            )))
+        }
+    }
+    Ok(())
+}
+
+/// Perform syntax checks for trigger nodes
+fn check_trigger(current_function: &Function, node_name: &SmolStr, trigger: &Option<(SmolStr, bool)>) -> Result<(), SyntaxError> {
+    if let Some((trigger_name, _)) = trigger {
+        if !(match &current_function.modifiers {
+            Some(list) => list,
+            None => return Err(SyntaxError::new(format!(
+                "Unexpected trigger node: {node_name}. Function does not acccept modifiers"
+            )))
+        }.contains(trigger_name)) {
+            return Err(SyntaxError::new(format!(
+                "Unexpected trigger: {trigger_name} Expected one of: {:?}",
+                current_function.modifiers
             )))
         }
     }

@@ -55,13 +55,24 @@
 # 13 [temporary]. Mark nodes that will generate a literal value with 100%
 # probability as node[literal="t"]
 
+# 14. To use modifiers provided in arguments, mark a node with trigger="MOD. NAME", trigger_mode="off" / trigger_mode="on"
+
 digraph G {
     subgraph def_Query {
-        Query [TYPES="[any]", MOD="[single value]", label="Query\ntypes(ordered)=[...]\nmodif.=[SINGLE VALUE]", shape=octagon, style=filled, color=green]
+        Query [TYPES="[any]", MOD="[single value]", label="Query\ntypes(ordered)=[...]\nmodif.=[single value]", shape=octagon, style=filled, color=green]
         EXIT_Query [label="EXIT Query"]
 
         FROM []
-        Query -> FROM
+
+        single_value_true [label="limit 1 (mod.: 'single value')", trigger="single value", trigger_mode="on"]
+        Query -> single_value_true
+        single_value_true -> FROM
+
+        single_value_false [label="limit [int] (mod.: '!single value')", trigger="single value", trigger_mode="off"]
+        Query -> single_value_false
+        call52_types [TYPES="[numeric]", label="TYPES: numeric", shape=rectangle, style=filled, color=lightblue]
+        single_value_false -> call52_types
+        call52_types -> FROM
 
         FROM_multiple_relations [label="multiple relations"]
 
@@ -493,7 +504,7 @@ digraph G {
         types_select_type_end -> call0_column_spec
         call0_column_spec -> EXIT_types
 
-        call1_Query [TYPES="[known]", MOD="[single value]", label="Query\nmodif.: SINGLE VALUE\nTYPE: type", shape=rectangle, style=filled, color=green]
+        call1_Query [TYPES="[known]", MOD="[single value]", label="Query\nmodif.: single value\nTYPE: type", shape=rectangle, style=filled, color=green]
         types_select_type_end -> call1_Query
         call1_Query -> EXIT_types
 

@@ -130,6 +130,7 @@ pub enum CodeUnit {
         name: SmolStr,
         option_name: Option<SmolStr>,
         literal: bool,
+        trigger: Option<(SmolStr, bool)>
     },
     Call {
         node_name: SmolStr,
@@ -239,6 +240,23 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                         Some(DotToken::QuotedIdentifiers(idents)) => Some(idents),
                                         _ => None
                                     };
+                                    let trigger = match node_spec.remove("trigger") {
+                                        Some(DotToken::QuotedIdentifiers(idents)) => {
+                                            let trigger_on = match node_spec.remove("trigger_mode") {
+                                                Some(DotToken::QuotedIdentifiers(mode_name)) => match mode_name.as_str() {
+                                                    mode_name @ ("on" | "off") => Some(mode_name == "on"), _ => None
+                                                }, _ => None,
+                                            };
+                                            let trigger_on = match trigger_on {
+                                                Some(v) => v,
+                                                None => break Some(Err(SyntaxError::new(format!(
+                                                    "Expected trigger_mode=\"on\" or trigger_mode=\"off\" after trigger=\"{idents}\""
+                                                )))),
+                                            };
+                                            Some((idents, trigger_on))
+                                        },
+                                        _ => None
+                                    };
                                     let literal = match node_spec.remove("LITERAL") {
                                         Some(DotToken::QuotedIdentifiers(idents)) => idents == SmolStr::new("t"),
                                         _ => false
@@ -266,7 +284,8 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                         break Some(Ok(CodeUnit::NodeDef {
                                             name: node_name,
                                             option_name,
-                                            literal: false,
+                                            literal,
+                                            trigger
                                         }));
                                     }
                                 },
