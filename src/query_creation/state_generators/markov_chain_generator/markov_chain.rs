@@ -26,6 +26,16 @@ pub struct NodeParams {
     pub trigger: Option<(SmolStr, bool)>
 }
 
+/// represents modifiers passed in call parameters.
+/// Can be either None, list of static modifiers, or a
+/// pass-through (pass current funciton's arguments)
+#[derive(Clone, Debug, PartialEq)]
+pub enum CallModifiers {
+    None,
+    PassThrough,
+    StaticList(Vec<SmolStr>),
+}
+
 /// represents the call parameters passed to a function
 /// called with a call node
 #[derive(Clone, Debug)]
@@ -38,7 +48,7 @@ pub struct CallParams {
     /// the special modifiers passed to the
     /// function called, which affect function
     /// behaviour
-    pub modifiers: Option<Vec<SmolStr>>,
+    pub modifiers: CallModifiers,
 }
 
 /// represents a functional subgraph
@@ -154,10 +164,26 @@ impl MarkovChain {
                     inputs,
                     modifiers,
                     option_name,
+                    trigger,
                 } => {
+                    let modifiers = match modifiers {
+                        Some(modifiers) => {
+                            if modifiers.contains(&SmolStr::new("...")) {
+                                if modifiers.len() != 1 {
+                                    return Err(SyntaxError::new(format!(
+                                        "{node_name}: when modifier '...' is present, it should be the only modifier, but got {:?}", modifiers
+                                    )));
+                                }
+                                CallModifiers::PassThrough
+                            } else {
+                                CallModifiers::StaticList(modifiers)
+                            }
+                        },
+                        None => CallModifiers::None,
+                    };
                     define_node(&mut current_function, &mut node_params, node_name, Some(CallParams {
                         func_name, inputs, modifiers
-                    }), option_name, false, None)?;
+                    }), option_name, false, trigger)?;
                 }
                 dot_parser::CodeUnit::Edge {
                     node_name_from,
@@ -239,18 +265,24 @@ impl MarkovChain {
                         _ => {}
                     };
 
-                    if let Some(ref modifiers) = call_params.modifiers {
+                    if call_params.modifiers != CallModifiers::None {
                         if let Some(ref func_modifiers) = function.modifiers {
-                            for c_mod in modifiers {
-                                if !func_modifiers.contains(&c_mod) {
-                                    return Err(SyntaxError::new(gen_type_error(format!(
-                                        "modifier {} is not in {:?}", c_mod, function.input_type
-                                    ))));
-                                }
+                            match call_params.modifiers {
+                                CallModifiers::None => {},
+                                CallModifiers::PassThrough => {},
+                                CallModifiers::StaticList(ref modifiers) => {
+                                    for c_mod in modifiers {
+                                        if !func_modifiers.contains(&c_mod) {
+                                            return Err(SyntaxError::new(gen_type_error(format!(
+                                                "modifier {} is not in {:?}", c_mod, func_modifiers
+                                            ))));
+                                        }
+                                    }
+                                },
                             }
                         } else {
                             return Err(SyntaxError::new(gen_type_error(format!(
-                                "Call has modifiers {:?} which are not present in the declaration", modifiers
+                                "Call has modifiers {:?} but no modifiers are present in the function declaration", call_params.modifiers
                             ))));
                         }
                     }

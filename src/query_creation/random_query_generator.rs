@@ -28,6 +28,8 @@ macro_rules! unwrap_variant {
     } };
 }
 
+/// TODO: Nesting to prevent hierarchy conflicts
+
 impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     pub fn from_state_generator(state_generator: MarkovChainGenerator<StC>) -> Self {
         QueryGenerator::<DynMod, StC> {
@@ -85,10 +87,21 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         self.expect_state("Query");
 
         let select_limit = match self.next_state().as_str() {
-            "single_value_true" => Some(Expr::Value(Value::Number("1".to_string(), false))),
+            "single_value_true" => {
+                self.expect_state("FROM");
+                Some(Expr::Value(Value::Number("1".to_string(), false)))
+            },
             "single_value_false" => {
-                self.expect_state("call52_types");
-                Some(self.handle_numeric())
+                match self.next_state().as_str() {
+                    "limit" => {
+                        self.expect_state("call52_types");
+                        let num = self.handle_types(Some(TypesSelectedType::Numeric), None).1;
+                        self.expect_state("FROM");
+                        Some(num)
+                    },
+                    "FROM" => None,
+                    any => self.panic_unexpected(any)
+                }
             },
             any => self.panic_unexpected(any)
         };
@@ -111,7 +124,6 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             having: None,
             qualify: None,
         };
-        self.expect_state("FROM");
 
         loop {
             select_body.from.push(TableWithJoins { relation: match self.next_state().as_str() {
@@ -462,8 +474,8 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     "unary_numeric_cub_root" => UnaryOperator::PGCubeRoot,
                     "unary_numeric_minus" => UnaryOperator::Minus,
                     "unary_numeric_plus" => UnaryOperator::Plus,
-                    "unary_numeric_postfix_fact" => UnaryOperator::PGPostfixFactorial,
-                    "unary_numeric_prefix_fact" => UnaryOperator::PGPrefixFactorial,
+                    // "unary_numeric_postfix_fact" => UnaryOperator::PGPostfixFactorial,
+                    // "unary_numeric_prefix_fact" => UnaryOperator::PGPrefixFactorial,  // THESE 2 WERE REMOVED FROM POSTGRESQL
                     "unary_numeric_sq_root" => UnaryOperator::PGSquareRoot,
                     any => self.panic_unexpected(any),
                 };
@@ -645,7 +657,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         }
         Expr::Array(Array {
             elem: array,
-            named: false
+            named: true
         })
     }
 

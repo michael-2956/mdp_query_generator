@@ -11,7 +11,7 @@ use smol_str::SmolStr;
 
 use self::{
     markov_chain::{
-        MarkovChain, NodeParams, CallParams
+        MarkovChain, NodeParams, CallParams, CallModifiers
     }, error::SyntaxError,
 };
 
@@ -89,7 +89,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         self.call_stack = vec![StackItem::from_call_params(CallParams {
             func_name: SmolStr::new("Query"),
             inputs: FunctionInputsType::None,
-            modifiers: None
+            modifiers: CallModifiers::None
         })];
         self.known_type_name_stack = vec![vec![SmolStr::new("")]];
         self.compatible_type_name_stack = vec![vec![SmolStr::new("")]];
@@ -101,7 +101,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 
     /// get crrent function modifiers list
-    pub fn get_modifiers(&self) -> Option<Vec<SmolStr>> {
+    pub fn get_modifiers(&self) -> CallModifiers {
         self.call_stack.last().unwrap().current_function.modifiers.clone()
     }
 
@@ -149,9 +149,13 @@ fn check_node_off(call_params: &CallParams, node_params: &NodeParams) -> bool {
         };
     }
     if let Some((ref trigger_name, ref trigger_on)) = node_params.trigger {
-        if let Some(ref modifiers) = call_params.modifiers {
-            off = if modifiers.contains(&trigger_name) { !trigger_on } else { *trigger_on }
-        }
+        off = match call_params.modifiers {
+            CallModifiers::None => *trigger_on,
+            CallModifiers::PassThrough => panic!("CallModifiers::PassThrough was not substituted for CallModifiers::StaticList!"),
+            CallModifiers::StaticList(ref modifiers) => {
+                if modifiers.contains(&trigger_name) { !trigger_on } else { *trigger_on }
+            },
+        };
     }
     return off;
 }
@@ -217,7 +221,12 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         }
 
         if let Some(call_params) = &current_node.call_params {
-            self.pending_call = Some(call_params.clone());
+            let mut prepared_call_params = call_params.clone();
+            prepared_call_params.modifiers = match prepared_call_params.modifiers {
+                CallModifiers::PassThrough => stack_item.current_function.modifiers.clone(),
+                any => any,
+            };
+            self.pending_call = Some(prepared_call_params);
         }
 
         Some(current_node.name)
