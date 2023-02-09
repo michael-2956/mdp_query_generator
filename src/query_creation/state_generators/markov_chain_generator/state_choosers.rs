@@ -2,7 +2,7 @@ use core::fmt::Debug;
 use rand::{Rng, SeedableRng};
 
 use smol_str::SmolStr;
-use sqlparser::ast::{Query, Expr, Value};
+use sqlparser::ast::{Query};
 use rand_chacha::ChaCha8Rng;
 
 use super::markov_chain::NodeParams;
@@ -51,7 +51,7 @@ pub struct DeterministicStateChooser {
 }
 
 impl DeterministicStateChooser {
-    fn _from_query(query: Query) -> Self where Self: Sized {
+    fn _from_query(_query: Query) -> Self where Self: Sized {
         let _self = Self {
             state_list: vec![],
             state_index: 0
@@ -60,7 +60,7 @@ impl DeterministicStateChooser {
         _self
     }
 
-    fn push_state(&mut self, state_name: &str) {
+    fn _push_state(&mut self, state_name: &str) {
         self.state_list.push(SmolStr::new(state_name));
     }
 
