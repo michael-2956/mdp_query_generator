@@ -17,6 +17,7 @@ pub fn create_table(name: &str, alias_name: Option<&str>) -> TableWithJoins {
             }),
             args: None,
             with_hints: Vec::<_>::new(),
+            columns_definition: None,
         },
         joins: Vec::<_>::new(),
     }
@@ -52,7 +53,7 @@ pub fn create_select(
 ) -> Query {
     Query {
         with: None,
-        body: SetExpr::Select(Box::new(Select {
+        body: Box::new(SetExpr::Select(Box::new(Select {
             distinct: distinct,
             top: None,
             projection: projection,
@@ -66,12 +67,12 @@ pub fn create_select(
             sort_by: Vec::<_>::new(),
             having: None,
             qualify: None,
-        })),
+        }))),
         order_by: Vec::<_>::new(),
         limit: None,
         offset: None,
         fetch: None,
-        lock: None,
+        locks: vec![],
     }
 }
 
