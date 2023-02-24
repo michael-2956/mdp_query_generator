@@ -16,7 +16,7 @@ pub fn string_to_query(input: &str) -> Box<Query> {
 
 pub fn check_query (query: Box<Query>) -> bool {
     let body = query.body;
-    let select = match body {
+    let select = match *body {
         SetExpr::Select(select) => select,
         _ => panic!("query is not a SELECT query.")
     };

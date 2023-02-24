@@ -4,7 +4,7 @@ mod query_info;
 use smol_str::SmolStr;
 use sqlparser::ast::{
     Expr, Ident, Query, Select, SetExpr, TableAlias, TableFactor,
-    TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, Array, SelectItem, ObjectName,
+    TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, Array, SelectItem, ObjectName, WildcardAdditionalOptions,
 };
 
 use self::query_info::{TypesSelectedType, RelationManager};
@@ -26,6 +26,114 @@ macro_rules! unwrap_variant {
             panic!("Failed to unwrap variant: {} to {}", stringify!($target), stringify!($pat));
         }
     } };
+}
+
+trait ExpressionPriority {
+    fn get_priority(&self) -> i32;
+}
+
+impl ExpressionPriority for Expr {
+    fn get_priority(&self) -> i32 {
+       match self {
+        Expr::Identifier(_) => 0,
+        Expr::CompoundIdentifier(_) => 0,
+        Expr::CompositeAccess { expr: _, key: _ } => 0,
+        Expr::Cast { expr: _, data_type: _} => 1,
+        Expr::TryCast { expr: _, data_type: _ } => 1,
+        Expr::ArrayIndex { obj: _, indexes: _ } => 2,
+        Expr::UnaryOp { op, expr: _ } => {
+            match op {
+                UnaryOperator::Plus => 3,
+                UnaryOperator::Minus => 3,
+                UnaryOperator::Not => 11,
+                _ => 7,
+            }
+        },
+        Expr::BinaryOp { left: _, op, right: _ } => {
+            match op {
+                BinaryOperator::Plus => todo!(),
+                BinaryOperator::Minus => todo!(),
+                BinaryOperator::Multiply => todo!(),
+                BinaryOperator::Divide => todo!(),
+                BinaryOperator::Modulo => todo!(),
+                BinaryOperator::StringConcat => todo!(),
+                BinaryOperator::Gt => todo!(),
+                BinaryOperator::Lt => todo!(),
+                BinaryOperator::GtEq => todo!(),
+                BinaryOperator::LtEq => todo!(),
+                BinaryOperator::Spaceship => todo!(),
+                BinaryOperator::Eq => todo!(),
+                BinaryOperator::NotEq => todo!(),
+                BinaryOperator::And => todo!(),
+                BinaryOperator::Or => todo!(),
+                BinaryOperator::Xor => todo!(),
+                BinaryOperator::BitwiseOr => todo!(),
+                BinaryOperator::BitwiseAnd => todo!(),
+                BinaryOperator::BitwiseXor => todo!(),
+                BinaryOperator::PGBitwiseXor => todo!(),
+                BinaryOperator::PGBitwiseShiftLeft => todo!(),
+                BinaryOperator::PGBitwiseShiftRight => todo!(),
+                BinaryOperator::PGRegexMatch => todo!(),
+                BinaryOperator::PGRegexIMatch => todo!(),
+                BinaryOperator::PGRegexNotMatch => todo!(),
+                BinaryOperator::PGRegexNotIMatch => todo!(),
+                BinaryOperator::PGExp => todo!(),
+                BinaryOperator::PGCustomBinaryOperator(_) => todo!(),
+            }
+        },
+        Expr::JsonAccess { left: _, operator: _, right: _ } => todo!(),
+        Expr::IsFalse(_) => todo!(),
+        Expr::IsTrue(_) => todo!(),
+        Expr::IsNull(_) => todo!(),
+        Expr::IsNotNull(_) => todo!(),
+        Expr::IsDistinctFrom(_, _) => todo!(),
+        Expr::IsNotDistinctFrom(_, _) => todo!(),
+        Expr::InList { expr: _, list: _, negated: _ } => todo!(),
+        Expr::InSubquery { expr: _, subquery: _, negated: _ } => todo!(),
+        Expr::InUnnest { expr: _, array_expr: _, negated: _ } => todo!(),
+        Expr::Between { expr: _, negated: _, low: _, high: _ } => todo!(),
+        Expr::AnyOp(_) => todo!(),
+        Expr::AllOp(_) => todo!(),
+        Expr::Extract { field: _, expr: _ } => todo!(),
+        Expr::Position { expr: _, r#in: _ } => todo!(),
+        Expr::Substring { expr: _, substring_from: _, substring_for: _ } => todo!(),
+        Expr::Trim { expr: _, trim_what: _, trim_where: _ } => todo!(),
+        Expr::Collate { expr: _, collation: _ } => todo!(),
+        Expr::Nested(_) => todo!(),
+        Expr::Value(_) => todo!(),
+        Expr::TypedString { data_type: _, value: _ } => todo!(),
+        Expr::MapAccess { column: _, keys: _ } => todo!(),
+        Expr::Function(_) => todo!(),
+        Expr::Case { operand: _, conditions: _, results: _, else_result: _ } => todo!(),
+        Expr::Exists { subquery: _, negated: _ } => todo!(),
+        Expr::Subquery(_) => todo!(),
+        Expr::ListAgg(_) => todo!(),
+        Expr::GroupingSets(_) => todo!(),
+        Expr::Cube(_) => todo!(),
+        Expr::Rollup(_) => todo!(),
+        Expr::Tuple(_) => todo!(),
+        Expr::Array(_) => todo!(),
+        Expr::IsNotFalse(_) => todo!(),
+        Expr::IsNotTrue(_) => todo!(),
+        Expr::IsUnknown(_) => todo!(),
+        Expr::IsNotUnknown(_) => todo!(),
+//////////////////////////////////////////////////////
+        Expr::Like { negated: _, expr: _, pattern: _, escape_char: _ } => todo!(),
+        Expr::ILike { negated: _, expr: _, pattern: _, escape_char: _ } => todo!(),
+        Expr::SimilarTo { negated: _, expr: _, pattern: _, escape_char: _ } => todo!(),
+        Expr::SafeCast { expr: _, data_type: _ } => todo!(),
+        Expr::AtTimeZone { timestamp: _, time_zone: _ } => todo!(),
+        Expr::Ceil { expr: _, field: _ } => todo!(),
+        Expr::Floor { expr: _, field: _ } => todo!(),
+        Expr::Overlay { expr: _, overlay_what: _, overlay_from: _, overlay_for: _ } => todo!(),
+        Expr::IntroducedString { introducer: _, value: _ } => todo!(),
+        Expr::AggregateExpressionWithFilter { expr: _, filter: _ } => todo!(),
+        Expr::ArraySubquery(_) => todo!(),
+        Expr::ArrayAgg(_) => todo!(),
+        Expr::Interval { value: _, leading_field: _, leading_precision: _, last_field: _, fractional_seconds_precision: _ } => todo!(),
+        Expr::MatchAgainst { columns: _, match_value: _, opt_search_modifier: _ } => todo!(),
+    }
+    }
 }
 
 /// TODO: Nesting to prevent hierarchy conflicts
@@ -81,6 +189,12 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         Ident { value: name.clone(), quote_style: None }
     }
 
+    // /// adds nesting to child if needed
+    // fn add_nesting(child: Expr, parent: Expr) -> Expr {
+
+    //     Expr::Nested(Box::new(child))
+    // }
+
     /// subgraph def_Query
     fn handle_query(&mut self) -> Query {
         self.dynamic_model.notify_subquery_creation_begin();
@@ -131,7 +245,8 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     name: self.current_query_rm.new_relation().gen_object_name(),
                     alias: None,
                     args: None,
-                    with_hints: vec![]
+                    with_hints: vec![],
+                    columns_definition: None,
                 },
                 "call0_Query" => TableFactor::Derived {
                     lateral: false,
@@ -174,11 +289,15 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             any => self.panic_unexpected(any)
         } {
             match self.next_state().as_str() {
-                "SELECT_wildcard" => select_body.projection.push(SelectItem::Wildcard),
+                "SELECT_wildcard" => select_body.projection.push(SelectItem::Wildcard(WildcardAdditionalOptions {
+                    opt_exclude: None, opt_except: None, opt_rename: None,
+                })),
                 "SELECT_qualified_wildcard" => {
                     select_body.projection.push(SelectItem::QualifiedWildcard(ObjectName(vec![
                         self.current_query_rm.get_random_relation().gen_ident()
-                    ])));
+                    ]), WildcardAdditionalOptions {
+                        opt_exclude: None, opt_except: None, opt_rename: None,
+                    }));
                 },
                 arm @ ("SELECT_unnamed_expr" | "SELECT_expr_with_alias") => {
                     self.expect_state("call7_types_all");
@@ -200,12 +319,12 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         self.dynamic_model.notify_subquery_creation_end();
         Query {
             with: None,
-            body: SetExpr::Select(Box::new(select_body)),
+            body: Box::new(SetExpr::Select(Box::new(select_body))),
             order_by: vec![],
             limit: select_limit,
             offset: None,
             fetch: None,
-            lock: None,
+            locks: vec![],
         }
     }
 
@@ -390,10 +509,11 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                 };
                 self.expect_state("call26_types");
                 let types_value_2 = self.handle_types(Some(TypesSelectedType::String), None).1;
-                Expr::BinaryOp {
-                left: Box::new(types_value_1),
-                    op: if string_like_not_flag { BinaryOperator::NotLike } else { BinaryOperator::Like },
-                    right: Box::new(types_value_2)
+                Expr::Like {
+                    negated: string_like_not_flag,
+                    expr: Box::new(types_value_1),
+                    pattern: Box::new(types_value_2),
+                    escape_char: None
                 }
             },
             "BinaryBooleanOpV3" => {
@@ -452,7 +572,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                 let numeric_binary_op = match self.next_state().as_str() {
                     "binary_numeric_bin_and" => BinaryOperator::BitwiseAnd,
                     "binary_numeric_bin_or" => BinaryOperator::BitwiseOr,
-                    "binary_numeric_bin_xor" => BinaryOperator::BitwiseXor,
+                    "binary_numeric_bin_xor" => BinaryOperator::PGBitwiseXor,  // BitwiseXor is exponentiation
                     "binary_numeric_div" => BinaryOperator::Divide,
                     "binary_numeric_minus" => BinaryOperator::Minus,
                     "binary_numeric_mul" => BinaryOperator::Multiply,
@@ -514,7 +634,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         let string = match self.next_state().as_str() {
             "string_literal" => Expr::Value(Value::SingleQuotedString("HJeihfbwei".to_string())),  // TODO: hardcoded
             "string_trim" => {
-                let trim_where = match self.next_state().as_str() {
+                let (trim_where, trim_what) = match self.next_state().as_str() {
                     "call6_types" => {
                         let types_value = self.handle_types(Some(TypesSelectedType::String), None).1;
                         let spec_mode = match self.next_state().as_str() {
@@ -524,14 +644,14 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                             any => self.panic_unexpected(any)
                         };
                         self.expect_state("call5_types");
-                        Some((spec_mode, Box::new(types_value)))
+                        (Some(spec_mode), Some(Box::new(types_value)))
                     },
-                    "call5_types" => None,
+                    "call5_types" => (None, None),
                     any => self.panic_unexpected(any)
                 };
                 let types_value = self.handle_types(Some(TypesSelectedType::String), None).1;
                 Expr::Trim {
-                    expr: Box::new(types_value), trim_where
+                    expr: Box::new(types_value), trim_where, trim_what
                 }
             },
             "string_concat" => {

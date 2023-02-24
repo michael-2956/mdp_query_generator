@@ -148,7 +148,7 @@ digraph G {
         SELECT_list -> SELECT_qualified_wildcard
         SELECT_list -> SELECT_unnamed_expr
         SELECT_list -> SELECT_expr_with_alias
-        call7_types_all [label="TYPES: ALL", MODS="[no column spec]", shape=rectangle, style=filled, color=orange]
+        call7_types_all [label="TYPES: ALL\nmodif: [no column spec]", MODS="[no column spec]", shape=rectangle, style=filled, color=orange]
         SELECT_unnamed_expr -> call7_types_all
         SELECT_expr_with_alias -> call7_types_all
 
