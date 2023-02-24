@@ -28,111 +28,198 @@ macro_rules! unwrap_variant {
     } };
 }
 
-trait ExpressionPriority {
+trait ExpressionNesting {
+    fn p_nest(self, parent_priority: i32) -> Self;
+}
+
+trait ExpressionPriority: ExpressionNesting {
     fn get_priority(&self) -> i32;
+    fn nest_children_if_needed(self) -> Expr;
+}
+
+impl ExpressionNesting for Vec<Expr> {
+    fn p_nest(self, parent_priority: i32) -> Vec<Expr> {
+        self.into_iter().map(|expr| expr.p_nest(parent_priority)).collect()
+    }
+}
+
+impl ExpressionNesting for Vec<Vec<Expr>> {
+    fn p_nest(self, parent_priority: i32) -> Vec<Vec<Expr>> {
+        self.into_iter().map(|expr| expr.p_nest(parent_priority)).collect()
+    }
+}
+
+impl ExpressionNesting for Box<Expr> {
+    fn p_nest(self, parent_priority: i32) -> Box<Expr> {
+        Box::new((*self).p_nest(parent_priority))
+    }
+}
+
+impl ExpressionNesting for Option<Box<Expr>> {
+    fn p_nest(self, parent_priority: i32) -> Option<Box<Expr>> {
+        self.map(|expr| expr.p_nest(parent_priority))
+    }
+}
+
+impl ExpressionNesting for Expr {
+    fn p_nest(self, parent_priority: i32) -> Expr {
+        if self.get_priority() > parent_priority {
+            Expr::Nested(Box::new(self))
+        } else {
+            self
+        }
+    }
 }
 
 impl ExpressionPriority for Expr {
     fn get_priority(&self) -> i32 {
-       match self {
-        Expr::Identifier(_) => 0,
-        Expr::CompoundIdentifier(_) => 0,
-        Expr::CompositeAccess { expr: _, key: _ } => 0,
-        Expr::Cast { expr: _, data_type: _} => 1,
-        Expr::TryCast { expr: _, data_type: _ } => 1,
-        Expr::ArrayIndex { obj: _, indexes: _ } => 2,
-        Expr::UnaryOp { op, expr: _ } => {
-            match op {
-                UnaryOperator::Plus => 3,
-                UnaryOperator::Minus => 3,
-                UnaryOperator::Not => 11,
-                _ => 7,
-            }
-        },
-        Expr::BinaryOp { left: _, op, right: _ } => {
-            match op {
-                BinaryOperator::Plus => todo!(),
-                BinaryOperator::Minus => todo!(),
-                BinaryOperator::Multiply => todo!(),
-                BinaryOperator::Divide => todo!(),
-                BinaryOperator::Modulo => todo!(),
-                BinaryOperator::StringConcat => todo!(),
-                BinaryOperator::Gt => todo!(),
-                BinaryOperator::Lt => todo!(),
-                BinaryOperator::GtEq => todo!(),
-                BinaryOperator::LtEq => todo!(),
-                BinaryOperator::Spaceship => todo!(),
-                BinaryOperator::Eq => todo!(),
-                BinaryOperator::NotEq => todo!(),
-                BinaryOperator::And => todo!(),
-                BinaryOperator::Or => todo!(),
-                BinaryOperator::Xor => todo!(),
-                BinaryOperator::BitwiseOr => todo!(),
-                BinaryOperator::BitwiseAnd => todo!(),
-                BinaryOperator::BitwiseXor => todo!(),
-                BinaryOperator::PGBitwiseXor => todo!(),
-                BinaryOperator::PGBitwiseShiftLeft => todo!(),
-                BinaryOperator::PGBitwiseShiftRight => todo!(),
-                BinaryOperator::PGRegexMatch => todo!(),
-                BinaryOperator::PGRegexIMatch => todo!(),
-                BinaryOperator::PGRegexNotMatch => todo!(),
-                BinaryOperator::PGRegexNotIMatch => todo!(),
-                BinaryOperator::PGExp => todo!(),
-                BinaryOperator::PGCustomBinaryOperator(_) => todo!(),
-            }
-        },
-        Expr::JsonAccess { left: _, operator: _, right: _ } => todo!(),
-        Expr::IsFalse(_) => todo!(),
-        Expr::IsTrue(_) => todo!(),
-        Expr::IsNull(_) => todo!(),
-        Expr::IsNotNull(_) => todo!(),
-        Expr::IsDistinctFrom(_, _) => todo!(),
-        Expr::IsNotDistinctFrom(_, _) => todo!(),
-        Expr::InList { expr: _, list: _, negated: _ } => todo!(),
-        Expr::InSubquery { expr: _, subquery: _, negated: _ } => todo!(),
-        Expr::InUnnest { expr: _, array_expr: _, negated: _ } => todo!(),
-        Expr::Between { expr: _, negated: _, low: _, high: _ } => todo!(),
-        Expr::AnyOp(_) => todo!(),
-        Expr::AllOp(_) => todo!(),
-        Expr::Extract { field: _, expr: _ } => todo!(),
-        Expr::Position { expr: _, r#in: _ } => todo!(),
-        Expr::Substring { expr: _, substring_from: _, substring_for: _ } => todo!(),
-        Expr::Trim { expr: _, trim_what: _, trim_where: _ } => todo!(),
-        Expr::Collate { expr: _, collation: _ } => todo!(),
-        Expr::Nested(_) => todo!(),
-        Expr::Value(_) => todo!(),
-        Expr::TypedString { data_type: _, value: _ } => todo!(),
-        Expr::MapAccess { column: _, keys: _ } => todo!(),
-        Expr::Function(_) => todo!(),
-        Expr::Case { operand: _, conditions: _, results: _, else_result: _ } => todo!(),
-        Expr::Exists { subquery: _, negated: _ } => todo!(),
-        Expr::Subquery(_) => todo!(),
-        Expr::ListAgg(_) => todo!(),
-        Expr::GroupingSets(_) => todo!(),
-        Expr::Cube(_) => todo!(),
-        Expr::Rollup(_) => todo!(),
-        Expr::Tuple(_) => todo!(),
-        Expr::Array(_) => todo!(),
-        Expr::IsNotFalse(_) => todo!(),
-        Expr::IsNotTrue(_) => todo!(),
-        Expr::IsUnknown(_) => todo!(),
-        Expr::IsNotUnknown(_) => todo!(),
-//////////////////////////////////////////////////////
-        Expr::Like { negated: _, expr: _, pattern: _, escape_char: _ } => todo!(),
-        Expr::ILike { negated: _, expr: _, pattern: _, escape_char: _ } => todo!(),
-        Expr::SimilarTo { negated: _, expr: _, pattern: _, escape_char: _ } => todo!(),
-        Expr::SafeCast { expr: _, data_type: _ } => todo!(),
-        Expr::AtTimeZone { timestamp: _, time_zone: _ } => todo!(),
-        Expr::Ceil { expr: _, field: _ } => todo!(),
-        Expr::Floor { expr: _, field: _ } => todo!(),
-        Expr::Overlay { expr: _, overlay_what: _, overlay_from: _, overlay_for: _ } => todo!(),
-        Expr::IntroducedString { introducer: _, value: _ } => todo!(),
-        Expr::AggregateExpressionWithFilter { expr: _, filter: _ } => todo!(),
-        Expr::ArraySubquery(_) => todo!(),
-        Expr::ArrayAgg(_) => todo!(),
-        Expr::Interval { value: _, leading_field: _, leading_precision: _, last_field: _, fractional_seconds_precision: _ } => todo!(),
-        Expr::MatchAgainst { columns: _, match_value: _, opt_search_modifier: _ } => todo!(),
+        match self {
+            // no nesting, not of children nor of ourselves is needed
+            Expr::Function(_) => -1,
+            Expr::Nested(_) => -1,
+            Expr::Value(_) => -1,
+            Expr::Identifier(_) => -1,
+            Expr::AnyOp(_) => -1,
+            Expr::AllOp(_) => -1,
+            Expr::Extract { field: _, expr: _ } => -1,
+            Expr::Position { expr: _, r#in: _ } => -1,
+            Expr::Substring { expr: _, substring_from: _, substring_for: _ } => -1,
+            Expr::Trim { expr: _, trim_what: _, trim_where: _ } => -1,
+            Expr::TryCast { expr: _, data_type: _ } => -1,
+            Expr::SafeCast { expr: _, data_type: _ } => -1,
+            Expr::Exists { subquery: _, negated: _ } => -1,
+            Expr::Subquery(_) => -1,
+            Expr::ListAgg(_) => -1,
+            Expr::Tuple(_) => -1,
+            Expr::Array(_) => -1,
+            Expr::Ceil { expr: _, field: _ } => -1,
+            Expr::Floor { expr: _, field: _ } => -1,
+            Expr::Overlay { expr: _, overlay_what: _, overlay_from: _, overlay_for: _ } => -1,
+            Expr::ArrayAgg(_) => -1,
+            Expr::ArraySubquery(_) => -1,
+            Expr::MatchAgainst { columns: _, match_value: _, opt_search_modifier: _ } => -1,
+            Expr::Case { operand: _, conditions: _, results: _, else_result: _ } => -1,
+            Expr::GroupingSets(_) => -1,
+            Expr::Cube(_) => -1,
+            Expr::Rollup(_) => -1,
+            Expr::AggregateExpressionWithFilter { expr: _, filter: _ } => -1,
+
+            // normal operations
+            Expr::CompoundIdentifier(_) => 0,
+            Expr::CompositeAccess { expr: _, key: _ } => 0,
+            Expr::Cast { expr: _, data_type: _} => 1,  // can be a ::
+            Expr::ArrayIndex { obj: _, indexes: _ } => 2,
+            Expr::MapAccess { column: _, keys: _ } => 2,
+            Expr::UnaryOp { op, expr: _ } => {
+                match op {
+                    UnaryOperator::Plus => 3,
+                    UnaryOperator::Minus => 3,
+                    UnaryOperator::PGBitwiseNot => 7,
+                    UnaryOperator::PGSquareRoot => 7,
+                    UnaryOperator::PGCubeRoot => 7,
+                    UnaryOperator::PGPostfixFactorial => 7,
+                    UnaryOperator::PGPrefixFactorial => 7,
+                    UnaryOperator::PGAbs => 7,
+                    UnaryOperator::Not => 11,
+                }
+            },
+            Expr::BinaryOp { left: _, op, right: _ } => {
+                match op {
+                    BinaryOperator::PGExp => 4,
+                    BinaryOperator::Multiply => 5,
+                    BinaryOperator::Divide => 5,
+                    BinaryOperator::Modulo => 5,
+                    BinaryOperator::Plus => 6,
+                    BinaryOperator::Minus => 6,
+                    BinaryOperator::StringConcat => 7,
+                    BinaryOperator::Spaceship => 7,
+                    BinaryOperator::Xor => 7,
+                    BinaryOperator::BitwiseOr => 7,
+                    BinaryOperator::BitwiseAnd => 7,
+                    BinaryOperator::BitwiseXor => 7,
+                    BinaryOperator::PGBitwiseXor => 7,
+                    BinaryOperator::PGBitwiseShiftLeft => 7,
+                    BinaryOperator::PGBitwiseShiftRight => 7,
+                    BinaryOperator::PGRegexMatch => 7,
+                    BinaryOperator::PGRegexIMatch => 7,
+                    BinaryOperator::PGRegexNotMatch => 7,
+                    BinaryOperator::PGRegexNotIMatch => 7,
+                    BinaryOperator::PGCustomBinaryOperator(_) => 7,
+                    BinaryOperator::Gt => 9,
+                    BinaryOperator::Lt => 9,
+                    BinaryOperator::GtEq => 9,
+                    BinaryOperator::LtEq => 9,
+                    BinaryOperator::Eq => 9,
+                    BinaryOperator::NotEq => 9,
+                    BinaryOperator::And => 12,
+                    BinaryOperator::Or => 13,
+                }
+            },
+            Expr::Like { negated: _, expr: _, pattern: _, escape_char: _ } => 8,
+            Expr::ILike { negated: _, expr: _, pattern: _, escape_char: _ } => 8,
+            Expr::Between { expr: _, negated: _, low: _, high: _ } => 8,
+            Expr::InList { expr: _, list: _, negated: _ } => 8,
+            Expr::InSubquery { expr: _, subquery: _, negated: _ } => 8,
+            Expr::InUnnest { expr: _, array_expr: _, negated: _ } => 8,
+            Expr::SimilarTo { negated: _, expr: _, pattern: _, escape_char: _ } => 8,
+            Expr::IsFalse(_) => 10,
+            Expr::IsTrue(_) => 10,
+            Expr::IsNull(_) => 10,
+            Expr::IsNotNull(_) => 10,
+            Expr::IsDistinctFrom(_, _) => 10,
+            Expr::IsNotDistinctFrom(_, _) => 10,
+            Expr::IsNotFalse(_) => 10,
+            Expr::IsNotTrue(_) => 10,
+            Expr::IsUnknown(_) => 10,
+            Expr::IsNotUnknown(_) => 10,
+            Expr::JsonAccess { left: _, operator: _, right: _ } => 7,
+            Expr::Collate { expr: _, collation: _ } => 7,
+            Expr::TypedString { data_type: _, value: _ } => 7,
+            Expr::AtTimeZone { timestamp: _, time_zone: _ } => 7,
+            Expr::IntroducedString { introducer: _, value: _ } => 7,
+            Expr::Interval { value: _, leading_field: _, leading_precision: _, last_field: _, fractional_seconds_precision: _ } => 7,
+        }
     }
+
+    /// adds nesting to child if needed
+    fn nest_children_if_needed(self) -> Expr {
+        let parent_priority = self.get_priority();
+        if parent_priority == -1 {
+            return self
+        }
+        match self {
+            Expr::CompoundIdentifier(ident_vec) => Expr::CompoundIdentifier(ident_vec),
+            Expr::CompositeAccess { expr, key } => Expr::CompositeAccess { expr: expr.p_nest(parent_priority), key },
+            Expr::Cast { expr, data_type} => Expr::Cast { expr: expr.p_nest(parent_priority), data_type},
+            Expr::ArrayIndex { obj, indexes } => Expr::ArrayIndex { obj: obj.p_nest(parent_priority), indexes },
+            Expr::MapAccess { column, keys } => Expr::MapAccess { column: column.p_nest(parent_priority), keys },
+            Expr::UnaryOp { op, expr } => Expr::UnaryOp { op, expr: expr.p_nest(parent_priority) },
+            Expr::BinaryOp { left, op, right } => Expr::BinaryOp { left: left.p_nest(parent_priority), op, right: right.p_nest(parent_priority) },
+            Expr::Like { negated, expr, pattern, escape_char } => Expr::Like { negated, expr: expr.p_nest(parent_priority), pattern: pattern.p_nest(parent_priority), escape_char },
+            Expr::ILike { negated, expr, pattern, escape_char } => Expr::ILike { negated, expr: expr.p_nest(parent_priority), pattern: pattern.p_nest(parent_priority), escape_char },
+            Expr::Between { expr, negated, low, high } => Expr::Between { expr: expr.p_nest(parent_priority), negated, low: low.p_nest(parent_priority), high: high.p_nest(parent_priority) },
+            Expr::InList { expr, list, negated } => Expr::InList { expr: expr.p_nest(parent_priority), list, negated },
+            Expr::InSubquery { expr, subquery, negated } => Expr::InSubquery { expr: expr.p_nest(parent_priority), subquery, negated },
+            Expr::InUnnest { expr, array_expr, negated } => Expr::InUnnest { expr: expr.p_nest(parent_priority), array_expr: array_expr, negated },
+            Expr::SimilarTo { negated, expr, pattern, escape_char } => Expr::SimilarTo { negated, expr: expr.p_nest(parent_priority), pattern: pattern.p_nest(parent_priority), escape_char },
+            Expr::IsFalse(expr) => Expr::IsFalse(expr.p_nest(parent_priority)),
+            Expr::IsTrue(expr) => Expr::IsTrue(expr.p_nest(parent_priority)),
+            Expr::IsNull(expr) => Expr::IsNull(expr.p_nest(parent_priority)),
+            Expr::IsNotNull(expr) => Expr::IsNotNull(expr.p_nest(parent_priority)),
+            Expr::IsDistinctFrom(expr1, expr2) => Expr::IsDistinctFrom(expr1.p_nest(parent_priority), expr2.p_nest(parent_priority)),
+            Expr::IsNotDistinctFrom(expr1, expr2) => Expr::IsNotDistinctFrom(expr1.p_nest(parent_priority), expr2.p_nest(parent_priority)),
+            Expr::IsNotFalse(expr) => Expr::IsNotFalse(expr.p_nest(parent_priority)),
+            Expr::IsNotTrue(expr) => Expr::IsNotTrue(expr.p_nest(parent_priority)),
+            Expr::IsUnknown(expr) => Expr::IsUnknown(expr.p_nest(parent_priority)),
+            Expr::IsNotUnknown(expr) => Expr::IsNotUnknown(expr.p_nest(parent_priority)),
+            Expr::JsonAccess { left, operator, right } => Expr::JsonAccess { left: left.p_nest(parent_priority), operator, right: right.p_nest(parent_priority) },
+            Expr::Collate { expr, collation } => Expr::Collate { expr: expr.p_nest(parent_priority), collation },
+            Expr::TypedString { data_type, value } => Expr::TypedString { data_type, value },
+            Expr::AtTimeZone { timestamp, time_zone } => Expr::AtTimeZone { timestamp: timestamp.p_nest(parent_priority), time_zone },
+            Expr::IntroducedString { introducer, value } => Expr::IntroducedString { introducer, value },
+            Expr::Interval { value, leading_field, leading_precision, last_field, fractional_seconds_precision } => Expr::Interval { value: value.p_nest(parent_priority), leading_field, leading_precision, last_field, fractional_seconds_precision },
+            any => any
+        }
     }
 }
 
@@ -188,12 +275,6 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         self.free_projection_alias_index += 1;
         Ident { value: name.clone(), quote_style: None }
     }
-
-    // /// adds nesting to child if needed
-    // fn add_nesting(child: Expr, parent: Expr) -> Expr {
-
-    //     Expr::Nested(Box::new(child))
-    // }
 
     /// subgraph def_Query
     fn handle_query(&mut self) -> Query {
@@ -264,8 +345,8 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
 
         match self.next_state().as_str() {
             "WHERE" => {
-                self.expect_state("call0_VAL_3");
-                select_body.selection = Some(self.handle_val_3());
+                self.expect_state("call53_types");
+                select_body.selection = Some(self.handle_types(Some(TypesSelectedType::Val3), None).1);
                 self.expect_state("EXIT_WHERE");
             },
             "EXIT_WHERE" => {},
@@ -723,7 +804,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         if let Some(with) = compatible_with {
             self.expect_compat(&types_selected_type, &with);
         }
-        (types_selected_type, types_value)
+        (types_selected_type, types_value.nest_children_if_needed())
     }
 
     /// subgraph def_types_all

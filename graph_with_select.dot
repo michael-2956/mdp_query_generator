@@ -96,12 +96,12 @@ digraph G {
         WHERE [label="WHERE"]
         EXIT_FROM -> WHERE
 
-        call0_VAL_3 [label="3VL Value", shape=rectangle, style=filled, color=red]
-        WHERE -> call0_VAL_3
+        call53_types [TYPES="[3VL Value]", label="TYPES: 3VL Value", shape=rectangle, style=filled, color=lightblue]
+        WHERE -> call53_types
 
         SELECT []
         EXIT_WHERE [label="EXIT WHERE"]
-        call0_VAL_3 -> EXIT_WHERE
+        call53_types -> EXIT_WHERE
         EXIT_FROM -> EXIT_WHERE
 
         SELECT []
