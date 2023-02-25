@@ -29,7 +29,10 @@ macro_rules! unwrap_variant {
 }
 
 trait ExpressionNesting {
-    fn p_nest(self, parent_priority: i32) -> Self;
+    /// nest l-value if needed
+    fn p_nest_l(self, parent_priority: i32) -> Self;
+    /// nest r-value if needed
+    fn p_nest_r(self, parent_priority: i32) -> Self;
 }
 
 trait ExpressionPriority: ExpressionNesting {
@@ -38,32 +41,56 @@ trait ExpressionPriority: ExpressionNesting {
 }
 
 impl ExpressionNesting for Vec<Expr> {
-    fn p_nest(self, parent_priority: i32) -> Vec<Expr> {
-        self.into_iter().map(|expr| expr.p_nest(parent_priority)).collect()
+    fn p_nest_l(self, parent_priority: i32) -> Vec<Expr> {
+        self.into_iter().map(|expr| expr.p_nest_l(parent_priority)).collect()
+    }
+
+    fn p_nest_r(self, parent_priority: i32) -> Vec<Expr> {
+        self.into_iter().map(|expr| expr.p_nest_r(parent_priority)).collect()
     }
 }
 
 impl ExpressionNesting for Vec<Vec<Expr>> {
-    fn p_nest(self, parent_priority: i32) -> Vec<Vec<Expr>> {
-        self.into_iter().map(|expr| expr.p_nest(parent_priority)).collect()
+    fn p_nest_l(self, parent_priority: i32) -> Vec<Vec<Expr>> {
+        self.into_iter().map(|expr| expr.p_nest_l(parent_priority)).collect()
+    }
+
+    fn p_nest_r(self, parent_priority: i32) -> Vec<Vec<Expr>> {
+        self.into_iter().map(|expr| expr.p_nest_r(parent_priority)).collect()
     }
 }
 
 impl ExpressionNesting for Box<Expr> {
-    fn p_nest(self, parent_priority: i32) -> Box<Expr> {
-        Box::new((*self).p_nest(parent_priority))
+    fn p_nest_l(self, parent_priority: i32) -> Box<Expr> {
+        Box::new((*self).p_nest_l(parent_priority))
+    }
+
+    fn p_nest_r(self, parent_priority: i32) -> Box<Expr> {
+        Box::new((*self).p_nest_r(parent_priority))
     }
 }
 
 impl ExpressionNesting for Option<Box<Expr>> {
-    fn p_nest(self, parent_priority: i32) -> Option<Box<Expr>> {
-        self.map(|expr| expr.p_nest(parent_priority))
+    fn p_nest_l(self, parent_priority: i32) -> Option<Box<Expr>> {
+        self.map(|expr| expr.p_nest_l(parent_priority))
+    }
+
+    fn p_nest_r(self, parent_priority: i32) -> Option<Box<Expr>> {
+        self.map(|expr| expr.p_nest_r(parent_priority))
     }
 }
 
 impl ExpressionNesting for Expr {
-    fn p_nest(self, parent_priority: i32) -> Expr {
+    fn p_nest_l(self, parent_priority: i32) -> Expr {
         if self.get_priority() > parent_priority {
+            Expr::Nested(Box::new(self))
+        } else {
+            self
+        }
+    }
+
+    fn p_nest_r(self, parent_priority: i32) -> Expr {
+        if self.get_priority() >= parent_priority {
             Expr::Nested(Box::new(self))
         } else {
             self
@@ -189,35 +216,35 @@ impl ExpressionPriority for Expr {
         }
         match self {
             Expr::CompoundIdentifier(ident_vec) => Expr::CompoundIdentifier(ident_vec),
-            Expr::CompositeAccess { expr, key } => Expr::CompositeAccess { expr: expr.p_nest(parent_priority), key },
-            Expr::Cast { expr, data_type} => Expr::Cast { expr: expr.p_nest(parent_priority), data_type},
-            Expr::ArrayIndex { obj, indexes } => Expr::ArrayIndex { obj: obj.p_nest(parent_priority), indexes },
-            Expr::MapAccess { column, keys } => Expr::MapAccess { column: column.p_nest(parent_priority), keys },
-            Expr::UnaryOp { op, expr } => Expr::UnaryOp { op, expr: expr.p_nest(parent_priority) },
-            Expr::BinaryOp { left, op, right } => Expr::BinaryOp { left: left.p_nest(parent_priority), op, right: right.p_nest(parent_priority) },
-            Expr::Like { negated, expr, pattern, escape_char } => Expr::Like { negated, expr: expr.p_nest(parent_priority), pattern: pattern.p_nest(parent_priority), escape_char },
-            Expr::ILike { negated, expr, pattern, escape_char } => Expr::ILike { negated, expr: expr.p_nest(parent_priority), pattern: pattern.p_nest(parent_priority), escape_char },
-            Expr::Between { expr, negated, low, high } => Expr::Between { expr: expr.p_nest(parent_priority), negated, low: low.p_nest(parent_priority), high: high.p_nest(parent_priority) },
-            Expr::InList { expr, list, negated } => Expr::InList { expr: expr.p_nest(parent_priority), list, negated },
-            Expr::InSubquery { expr, subquery, negated } => Expr::InSubquery { expr: expr.p_nest(parent_priority), subquery, negated },
-            Expr::InUnnest { expr, array_expr, negated } => Expr::InUnnest { expr: expr.p_nest(parent_priority), array_expr: array_expr, negated },
-            Expr::SimilarTo { negated, expr, pattern, escape_char } => Expr::SimilarTo { negated, expr: expr.p_nest(parent_priority), pattern: pattern.p_nest(parent_priority), escape_char },
-            Expr::IsFalse(expr) => Expr::IsFalse(expr.p_nest(parent_priority)),
-            Expr::IsTrue(expr) => Expr::IsTrue(expr.p_nest(parent_priority)),
-            Expr::IsNull(expr) => Expr::IsNull(expr.p_nest(parent_priority)),
-            Expr::IsNotNull(expr) => Expr::IsNotNull(expr.p_nest(parent_priority)),
-            Expr::IsDistinctFrom(expr1, expr2) => Expr::IsDistinctFrom(expr1.p_nest(parent_priority), expr2.p_nest(parent_priority)),
-            Expr::IsNotDistinctFrom(expr1, expr2) => Expr::IsNotDistinctFrom(expr1.p_nest(parent_priority), expr2.p_nest(parent_priority)),
-            Expr::IsNotFalse(expr) => Expr::IsNotFalse(expr.p_nest(parent_priority)),
-            Expr::IsNotTrue(expr) => Expr::IsNotTrue(expr.p_nest(parent_priority)),
-            Expr::IsUnknown(expr) => Expr::IsUnknown(expr.p_nest(parent_priority)),
-            Expr::IsNotUnknown(expr) => Expr::IsNotUnknown(expr.p_nest(parent_priority)),
-            Expr::JsonAccess { left, operator, right } => Expr::JsonAccess { left: left.p_nest(parent_priority), operator, right: right.p_nest(parent_priority) },
-            Expr::Collate { expr, collation } => Expr::Collate { expr: expr.p_nest(parent_priority), collation },
+            Expr::CompositeAccess { expr, key } => Expr::CompositeAccess { expr: expr.p_nest_l(parent_priority), key },
+            Expr::Cast { expr, data_type} => Expr::Cast { expr: expr.p_nest_l(parent_priority), data_type},
+            Expr::ArrayIndex { obj, indexes } => Expr::ArrayIndex { obj: obj.p_nest_l(parent_priority), indexes },
+            Expr::MapAccess { column, keys } => Expr::MapAccess { column: column.p_nest_l(parent_priority), keys },
+            Expr::UnaryOp { op, expr } => Expr::UnaryOp { op, expr: expr.p_nest_l(parent_priority) },
+            Expr::BinaryOp { left, op, right } => Expr::BinaryOp { left: left.p_nest_l(parent_priority), op, right: right.p_nest_r(parent_priority) },
+            Expr::Like { negated, expr, pattern, escape_char } => Expr::Like { negated, expr: expr.p_nest_l(parent_priority), pattern: pattern.p_nest_r(parent_priority), escape_char },
+            Expr::ILike { negated, expr, pattern, escape_char } => Expr::ILike { negated, expr: expr.p_nest_l(parent_priority), pattern: pattern.p_nest_r(parent_priority), escape_char },
+            Expr::Between { expr, negated, low, high } => Expr::Between { expr: expr.p_nest_l(parent_priority), negated, low: low.p_nest_l(parent_priority), high: high.p_nest_l(parent_priority) },
+            Expr::InList { expr, list, negated } => Expr::InList { expr: expr.p_nest_l(parent_priority), list, negated },
+            Expr::InSubquery { expr, subquery, negated } => Expr::InSubquery { expr: expr.p_nest_l(parent_priority), subquery, negated },
+            Expr::InUnnest { expr, array_expr, negated } => Expr::InUnnest { expr: expr.p_nest_l(parent_priority), array_expr: array_expr, negated },
+            Expr::SimilarTo { negated, expr, pattern, escape_char } => Expr::SimilarTo { negated, expr: expr.p_nest_l(parent_priority), pattern: pattern.p_nest_r(parent_priority), escape_char },
+            Expr::IsFalse(expr) => Expr::IsFalse(expr.p_nest_l(parent_priority)),
+            Expr::IsTrue(expr) => Expr::IsTrue(expr.p_nest_l(parent_priority)),
+            Expr::IsNull(expr) => Expr::IsNull(expr.p_nest_l(parent_priority)),
+            Expr::IsNotNull(expr) => Expr::IsNotNull(expr.p_nest_l(parent_priority)),
+            Expr::IsDistinctFrom(expr1, expr2) => Expr::IsDistinctFrom(expr1.p_nest_l(parent_priority), expr2.p_nest_r(parent_priority)),
+            Expr::IsNotDistinctFrom(expr1, expr2) => Expr::IsNotDistinctFrom(expr1.p_nest_l(parent_priority), expr2.p_nest_r(parent_priority)),
+            Expr::IsNotFalse(expr) => Expr::IsNotFalse(expr.p_nest_l(parent_priority)),
+            Expr::IsNotTrue(expr) => Expr::IsNotTrue(expr.p_nest_l(parent_priority)),
+            Expr::IsUnknown(expr) => Expr::IsUnknown(expr.p_nest_l(parent_priority)),
+            Expr::IsNotUnknown(expr) => Expr::IsNotUnknown(expr.p_nest_l(parent_priority)),
+            Expr::JsonAccess { left, operator, right } => Expr::JsonAccess { left: left.p_nest_l(parent_priority), operator, right: right.p_nest_r(parent_priority) },
+            Expr::Collate { expr, collation } => Expr::Collate { expr: expr.p_nest_l(parent_priority), collation },
             Expr::TypedString { data_type, value } => Expr::TypedString { data_type, value },
-            Expr::AtTimeZone { timestamp, time_zone } => Expr::AtTimeZone { timestamp: timestamp.p_nest(parent_priority), time_zone },
+            Expr::AtTimeZone { timestamp, time_zone } => Expr::AtTimeZone { timestamp: timestamp.p_nest_l(parent_priority), time_zone },
             Expr::IntroducedString { introducer, value } => Expr::IntroducedString { introducer, value },
-            Expr::Interval { value, leading_field, leading_precision, last_field, fractional_seconds_precision } => Expr::Interval { value: value.p_nest(parent_priority), leading_field, leading_precision, last_field, fractional_seconds_precision },
+            Expr::Interval { value, leading_field, leading_precision, last_field, fractional_seconds_precision } => Expr::Interval { value: value.p_nest_l(parent_priority), leading_field, leading_precision, last_field, fractional_seconds_precision },
             any => any
         }
     }
