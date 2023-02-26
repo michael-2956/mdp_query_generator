@@ -49,6 +49,10 @@ fn run_generation<DynMod: DynamicModel, StC: StateChooser>(markov_generator: Mar
         if equivalent {
             num_equivalent += 1;
         }
+        if i % 1000 == 0 {
+            print!("{}/{num_generate}      \r", i);
+            std::io::stdout().flush().unwrap();
+        }
     }
     println!("Equivalence: {} / {}", num_equivalent, num_generated);
 }
