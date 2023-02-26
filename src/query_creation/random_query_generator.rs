@@ -114,7 +114,6 @@ impl ExpressionPriority for Expr {
             Expr::Trim { expr: _, trim_what: _, trim_where: _ } => -1,
             Expr::TryCast { expr: _, data_type: _ } => -1,
             Expr::SafeCast { expr: _, data_type: _ } => -1,
-            Expr::Exists { subquery: _, negated: _ } => -1,
             Expr::Subquery(_) => -1,
             Expr::ListAgg(_) => -1,
             Expr::Tuple(_) => -1,
@@ -199,6 +198,8 @@ impl ExpressionPriority for Expr {
             Expr::IsNotTrue(_) => 10,
             Expr::IsUnknown(_) => 10,
             Expr::IsNotUnknown(_) => 10,
+            // EXISTS needs nesting possibly because of NOT, thus inherits its priority
+            Expr::Exists { subquery: _, negated } => if *negated {11} else {-1},
             Expr::JsonAccess { left: _, operator: _, right: _ } => 7,
             Expr::Collate { expr: _, collation: _ } => 7,
             Expr::TypedString { data_type: _, value: _ } => 7,
