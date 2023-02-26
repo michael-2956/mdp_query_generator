@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, io::Write};
 
 use equivalence_testing::{query_creation::{
     random_query_generator::{QueryGenerator},
@@ -31,13 +31,17 @@ fn run_generation<DynMod: DynamicModel, StC: StateChooser>(markov_generator: Mar
 
     let mut num_generated = 0;
     let mut num_equivalent = 0;
-    for _ in 0..num_generate {
+    for i in 0..num_generate {
         let query_ast = Box::new(generator.next().unwrap());
         let query_string = query_ast.to_string();
         // println!("Generated query: {query_string}");
-        let desired_ast = string_to_query(&query_string);
-        if desired_ast != query_ast {
-            println!("AST mismatch! For query: {query_string}\nAST #1 (generated): {:#?}\nAST #2 (parsed): {:#?}", query_ast, desired_ast)
+        let parsed_ast = string_to_query(&query_string);
+        if parsed_ast != query_ast {
+            println!("AST mismatch! For query: {query_string}");
+            let mut f_g = std::fs::File::create(format!("{i}-g")).unwrap();
+            write!(f_g, "{:#?}", query_ast).unwrap();
+            let mut f_p = std::fs::File::create(format!("{i}-p")).unwrap();
+            write!(f_p, "{:#?}", parsed_ast).unwrap();
         }
         let equivalent = check_query(query_ast);
         // println!("Equivalent? {:#?}\n", equivalent);

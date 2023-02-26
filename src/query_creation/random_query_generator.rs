@@ -235,7 +235,7 @@ impl ExpressionPriority for Expr {
                         }
                     }
                 }
-                Expr::UnaryOp { op, expr: expr.p_nest_l(parent_priority) }
+                Expr::UnaryOp { op, expr: expr.p_nest_r(parent_priority) }
             },
             Expr::BinaryOp { left, op, right } => Expr::BinaryOp { left: left.p_nest_l(parent_priority), op, right: right.p_nest_r(parent_priority) },
             Expr::Like { negated, expr, pattern, escape_char } => Expr::Like { negated, expr: expr.p_nest_l(parent_priority), pattern: pattern.p_nest_r(parent_priority), escape_char },
