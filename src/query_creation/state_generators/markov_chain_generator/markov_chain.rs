@@ -5,7 +5,7 @@ use core::fmt::Debug;
 use smol_str::SmolStr;
 
 use super::{
-    dot_parser, dot_parser::{DotTokenizer, FunctionInputsType}, error::SyntaxError,
+    dot_parser, dot_parser::{DotTokenizer, FunctionInputsType, SubgraphType}, error::SyntaxError,
 };
 
 /// this structure contains all the parsed graph functions
@@ -20,7 +20,7 @@ pub struct MarkovChain {
 pub struct NodeParams {
     pub name: SmolStr,
     pub call_params: Option<CallParams>,
-    pub option_name: Option<SmolStr>,
+    pub type_name: Option<SubgraphType>,
     pub literal: bool,
     pub min_calls_until_function_exit: usize,
     pub trigger: Option<(SmolStr, bool)>
@@ -155,7 +155,7 @@ impl MarkovChain {
                         return Err(SyntaxError::new(format!("Unexpected CloseDeclaration")));
                     }
                 }
-                dot_parser::CodeUnit::NodeDef { name, option_name, literal, trigger } => {
+                dot_parser::CodeUnit::NodeDef { name, type_name: option_name, literal, trigger } => {
                     define_node(&mut current_function, &mut node_params, name, None, option_name, literal, trigger)?;
                 }
                 dot_parser::CodeUnit::Call {
@@ -163,7 +163,7 @@ impl MarkovChain {
                     func_name,
                     inputs,
                     modifiers,
-                    option_name,
+                    type_name,
                     trigger,
                 } => {
                     let modifiers = match modifiers {
@@ -183,7 +183,7 @@ impl MarkovChain {
                     };
                     define_node(&mut current_function, &mut node_params, node_name, Some(CallParams {
                         func_name, inputs, modifiers
-                    }), option_name, false, trigger)?;
+                    }), type_name, false, trigger)?;
                 }
                 dot_parser::CodeUnit::Edge {
                     node_name_from,
@@ -377,15 +377,15 @@ impl MarkovChain {
 /// add a node to the current function graph & node_params map; Perform syntax checks for optional nodes
 fn define_node(
         current_function: &mut Option<Function>, node_params: &mut HashMap<SmolStr, NodeParams>,
-        node_name: SmolStr, call_params: Option<CallParams>, option_name: Option<SmolStr>,
+        node_name: SmolStr, call_params: Option<CallParams>, type_name_opt: Option<SubgraphType>,
         literal: bool, trigger: Option<(SmolStr, bool)>
     ) -> Result<(), SyntaxError> {
     if let Some(ref mut function) = current_function {
-        check_option(&function, &node_name, &option_name)?;
+        check_type(&function, &node_name, &type_name_opt)?;
         check_trigger(&function, &node_name, &trigger)?;
         function.chain.insert(node_name.clone(), Vec::<_>::new());
         node_params.insert(node_name.clone(), NodeParams {
-            name: node_name, call_params, option_name,
+            name: node_name, call_params, type_name: type_name_opt,
             literal, min_calls_until_function_exit: 0,
             trigger
         });
@@ -398,17 +398,17 @@ fn define_node(
 }
 
 /// Perform syntax checks for optional nodes
-fn check_option(current_function: &Function, node_name: &SmolStr, option_name: &Option<SmolStr>) -> Result<(), SyntaxError> {
-    if let Some(option_name) = option_name {
+fn check_type(current_function: &Function, node_name: &SmolStr, type_name_opt: &Option<SubgraphType>) -> Result<(), SyntaxError> {
+    if let Some(type_name) = type_name_opt {
         if !(match &current_function.input_type {
             FunctionInputsType::TypeNameList(list) => list,
             FunctionInputsType::TypeNameVariants(list) => list,
             _ => return Err(SyntaxError::new(format!(
                 "Unexpected optional node: {node_name}. Function does not acccept arguments"
             )))
-        }.contains(option_name)) {
+        }.contains(type_name)) {
             return Err(SyntaxError::new(format!(
-                "Unexpected option: {option_name} Expected one of: {:?}",
+                "Unexpected option: {type_name} Expected one of: {:?}",
                 current_function.input_type
             )))
         }

@@ -12,12 +12,13 @@ use smol_str::SmolStr;
 use self::{
     markov_chain::{
         MarkovChain, NodeParams, CallParams, CallModifiers
-    }, error::SyntaxError,
+    }, error::SyntaxError
 };
 
 use state_choosers::StateChooser;
 use dynamic_models::{MarkovModel, DynamicModel};
 
+pub use dot_parser::SubgraphType;
 pub use dot_parser::FunctionInputsType;
 
 /// The markov chain generator. Runs the functional
@@ -28,10 +29,10 @@ pub use dot_parser::FunctionInputsType;
 pub struct MarkovChainGenerator<StC: StateChooser> {
     /// this stack contains information about the known type names
     /// inferred when [known] is used in [TYPES]
-    known_type_name_stack: Vec<Vec<SmolStr>>,
+    known_type_name_stack: Vec<Vec<SubgraphType>>,
     /// this stack contains information about the compatible type names
     /// inferred when [compatible] is used in [TYPES]
-    compatible_type_name_stack: Vec<Vec<SmolStr>>,
+    compatible_type_name_stack: Vec<Vec<SubgraphType>>,
     markov_chain: MarkovChain,
     call_stack: Vec<StackItem>,
     pending_call: Option<CallParams>,
@@ -53,7 +54,7 @@ impl StackItem {
             current_node_name: SmolStr::new("-"),
             next_node: NodeParams {
                 name: func_name,
-                call_params: None, option_name: None,
+                call_params: None, type_name: None,
                 literal: false, min_calls_until_function_exit: 0,
                 trigger: None
             }
@@ -91,8 +92,8 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             inputs: FunctionInputsType::None,
             modifiers: CallModifiers::None
         })];
-        self.known_type_name_stack = vec![vec![SmolStr::new("")]];
-        self.compatible_type_name_stack = vec![vec![SmolStr::new("")]];
+        self.known_type_name_stack = vec![vec![]];
+        self.compatible_type_name_stack = vec![vec![]];
     }
 
     /// get crrent function inputs list
@@ -106,17 +107,17 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 
     /// push the known type list for the next node that will use the type=[known]
-    pub fn push_known(&mut self, type_list: Vec<SmolStr>) {
+    pub fn push_known(&mut self, type_list: Vec<SubgraphType>) {
         self.known_type_name_stack.push(type_list);
     }
 
     /// push the compatible type list for the next node that will use the type=[compatible]
-    pub fn push_compatible(&mut self, type_list: Vec<SmolStr>) {
+    pub fn push_compatible(&mut self, type_list: Vec<SubgraphType>) {
         self.compatible_type_name_stack.push(type_list);
     }
 
     /// pop the known type for the current node which will uses type=[known]
-    fn pop_known(&mut self) -> Vec<SmolStr> {
+    fn pop_known(&mut self) -> Vec<SubgraphType> {
         match self.known_type_name_stack.pop() {
             Some(item) => item,
             None => {
@@ -127,7 +128,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 
     /// pop the compatible type for the current node which will uses type=[compatible]
-    fn pop_compatible(&mut self) -> Vec<SmolStr> {
+    fn pop_compatible(&mut self) -> Vec<SubgraphType> {
         match self.compatible_type_name_stack.pop() {
             Some(item) => item,
             None => {
@@ -140,7 +141,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
 fn check_node_off(call_params: &CallParams, node_params: &NodeParams) -> bool {
     let mut off = false;
-    if let Some(ref option_name) = node_params.option_name {
+    if let Some(ref option_name) = node_params.type_name {
         off = match call_params.inputs {
             FunctionInputsType::None => true,
             FunctionInputsType::TypeName(ref t_name) => if t_name != option_name { true } else { false },
@@ -180,6 +181,8 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
                 modifiers: call_params.modifiers.clone(),
             }));
         }
+
+        dyn_model.notify_call_stack_length(self.call_stack.len());
 
         let stack_item = match self.call_stack.last_mut() {
             Some(stack_item) => stack_item,

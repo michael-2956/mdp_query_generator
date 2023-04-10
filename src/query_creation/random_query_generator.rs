@@ -4,10 +4,12 @@ mod query_info;
 use smol_str::SmolStr;
 use sqlparser::ast::{
     Expr, Ident, Query, Select, SetExpr, TableAlias, TableFactor,
-    TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, Array, SelectItem, ObjectName, WildcardAdditionalOptions,
+    TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, Array, SelectItem, WildcardAdditionalOptions,
 };
 
-use self::query_info::{TypesSelectedType, RelationManager};
+use super::{super::unwrap_variant, state_generators::SubgraphType};
+pub use self::query_info::TypesSelectedType;
+use self::query_info::RelationManager;
 
 use super::state_generators::{MarkovChainGenerator, FunctionInputsType, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
@@ -16,16 +18,6 @@ pub struct QueryGenerator<DynMod: DynamicModel, StC: StateChooser> {
     dynamic_model: Box<DynMod>,
     current_query_rm: RelationManager,
     free_projection_alias_index: u32,
-}
-
-macro_rules! unwrap_variant {
-    ($target: expr, $pat: path) => { {
-        if let $pat(a) = $target {
-            a
-        } else {
-            panic!("Failed to unwrap variant: {} to {}", stringify!($target), stringify!($pat));
-        }
-    } };
 }
 
 trait ExpressionNesting {
@@ -102,41 +94,41 @@ impl ExpressionPriority for Expr {
     fn get_priority(&self) -> i32 {
         match self {
             // no nesting, not of children nor of ourselves is needed
-            Expr::Function(_) => -1,
-            Expr::Nested(_) => -1,
-            Expr::Value(_) => -1,
-            Expr::Identifier(_) => -1,
-            Expr::AnyOp(_) => -1,
-            Expr::AllOp(_) => -1,
-            Expr::Extract { field: _, expr: _ } => -1,
-            Expr::Position { expr: _, r#in: _ } => -1,
-            Expr::Substring { expr: _, substring_from: _, substring_for: _ } => -1,
-            Expr::Trim { expr: _, trim_what: _, trim_where: _ } => -1,
-            Expr::TryCast { expr: _, data_type: _ } => -1,
-            Expr::SafeCast { expr: _, data_type: _ } => -1,
-            Expr::Subquery(_) => -1,
-            Expr::ListAgg(_) => -1,
-            Expr::Tuple(_) => -1,
-            Expr::Array(_) => -1,
-            Expr::Ceil { expr: _, field: _ } => -1,
-            Expr::Floor { expr: _, field: _ } => -1,
-            Expr::Overlay { expr: _, overlay_what: _, overlay_from: _, overlay_for: _ } => -1,
-            Expr::ArrayAgg(_) => -1,
-            Expr::ArraySubquery(_) => -1,
-            Expr::MatchAgainst { columns: _, match_value: _, opt_search_modifier: _ } => -1,
-            Expr::Case { operand: _, conditions: _, results: _, else_result: _ } => -1,
-            Expr::GroupingSets(_) => -1,
-            Expr::Cube(_) => -1,
-            Expr::Rollup(_) => -1,
-            Expr::AggregateExpressionWithFilter { expr: _, filter: _ } => -1,
+            Expr::Function(..) => -1,
+            Expr::Nested(..) => -1,
+            Expr::Value(..) => -1,
+            Expr::Identifier(..) => -1,
+            Expr::AnyOp(..) => -1,
+            Expr::AllOp(..) => -1,
+            Expr::Extract { .. } => -1,
+            Expr::Position { .. } => -1,
+            Expr::Substring { .. } => -1,
+            Expr::Trim { .. } => -1,
+            Expr::TryCast { .. } => -1,
+            Expr::SafeCast { .. } => -1,
+            Expr::Subquery(..) => -1,
+            Expr::ListAgg(..) => -1,
+            Expr::Tuple(..) => -1,
+            Expr::Array(..) => -1,
+            Expr::Ceil { .. } => -1,
+            Expr::Floor { .. } => -1,
+            Expr::Overlay { .. } => -1,
+            Expr::ArrayAgg(..) => -1,
+            Expr::ArraySubquery(..) => -1,
+            Expr::MatchAgainst { .. } => -1,
+            Expr::Case { .. } => -1,
+            Expr::GroupingSets(..) => -1,
+            Expr::Cube(..) => -1,
+            Expr::Rollup(..) => -1,
+            Expr::AggregateExpressionWithFilter { .. } => -1,
 
             // normal operations
-            Expr::CompoundIdentifier(_) => 0,
-            Expr::CompositeAccess { expr: _, key: _ } => 0,
-            Expr::Cast { expr: _, data_type: _} => 1,  // can be a ::
-            Expr::ArrayIndex { obj: _, indexes: _ } => 2,
-            Expr::MapAccess { column: _, keys: _ } => 2,
-            Expr::UnaryOp { op, expr: _ } => {
+            Expr::CompoundIdentifier(..) => 0,
+            Expr::CompositeAccess { .. } => 0,
+            Expr::Cast { .. } => 1,  // can be a ::
+            Expr::ArrayIndex { .. } => 2,
+            Expr::MapAccess { .. } => 2,
+            Expr::UnaryOp { op, .. } => {
                 match op {
                     UnaryOperator::Plus => 3,
                     UnaryOperator::Minus => 3,
@@ -149,7 +141,7 @@ impl ExpressionPriority for Expr {
                     UnaryOperator::Not => 11,
                 }
             },
-            Expr::BinaryOp { left: _, op, right: _ } => {
+            Expr::BinaryOp { op, .. } => {
                 match op {
                     BinaryOperator::PGExp => 4,
                     BinaryOperator::Multiply => 5,
@@ -170,7 +162,7 @@ impl ExpressionPriority for Expr {
                     BinaryOperator::PGRegexIMatch => 7,
                     BinaryOperator::PGRegexNotMatch => 7,
                     BinaryOperator::PGRegexNotIMatch => 7,
-                    BinaryOperator::PGCustomBinaryOperator(_) => 7,
+                    BinaryOperator::PGCustomBinaryOperator(..) => 7,
                     BinaryOperator::Gt => 9,
                     BinaryOperator::Lt => 9,
                     BinaryOperator::GtEq => 9,
@@ -181,31 +173,31 @@ impl ExpressionPriority for Expr {
                     BinaryOperator::Or => 13,
                 }
             },
-            Expr::Like { negated: _, expr: _, pattern: _, escape_char: _ } => 8,
-            Expr::ILike { negated: _, expr: _, pattern: _, escape_char: _ } => 8,
-            Expr::Between { expr: _, negated: _, low: _, high: _ } => 8,
-            Expr::InList { expr: _, list: _, negated: _ } => 8,
-            Expr::InSubquery { expr: _, subquery: _, negated: _ } => 8,
-            Expr::InUnnest { expr: _, array_expr: _, negated: _ } => 8,
-            Expr::SimilarTo { negated: _, expr: _, pattern: _, escape_char: _ } => 8,
-            Expr::IsFalse(_) => 10,
-            Expr::IsTrue(_) => 10,
-            Expr::IsNull(_) => 10,
-            Expr::IsNotNull(_) => 10,
+            Expr::Like { .. } => 8,
+            Expr::ILike { .. } => 8,
+            Expr::Between { .. } => 8,
+            Expr::InList { .. } => 8,
+            Expr::InSubquery { .. } => 8,
+            Expr::InUnnest { .. } => 8,
+            Expr::SimilarTo { .. } => 8,
+            Expr::IsFalse(..) => 10,
+            Expr::IsTrue(..) => 10,
+            Expr::IsNull(..) => 10,
+            Expr::IsNotNull(..) => 10,
             Expr::IsDistinctFrom(_, _) => 10,
             Expr::IsNotDistinctFrom(_, _) => 10,
-            Expr::IsNotFalse(_) => 10,
-            Expr::IsNotTrue(_) => 10,
-            Expr::IsUnknown(_) => 10,
-            Expr::IsNotUnknown(_) => 10,
+            Expr::IsNotFalse(..) => 10,
+            Expr::IsNotTrue(..) => 10,
+            Expr::IsUnknown(..) => 10,
+            Expr::IsNotUnknown(..) => 10,
             // EXISTS needs nesting possibly because of NOT, thus inherits its priority
-            Expr::Exists { subquery: _, negated } => if *negated {11} else {-1},
-            Expr::JsonAccess { left: _, operator: _, right: _ } => 7,
-            Expr::Collate { expr: _, collation: _ } => 7,
-            Expr::TypedString { data_type: _, value: _ } => 7,
-            Expr::AtTimeZone { timestamp: _, time_zone: _ } => 7,
-            Expr::IntroducedString { introducer: _, value: _ } => 7,
-            Expr::Interval { value: _, leading_field: _, leading_precision: _, last_field: _, fractional_seconds_precision: _ } => 7,
+            Expr::Exists { negated, .. } => if *negated {11} else {-1},
+            Expr::JsonAccess { .. } => 7,
+            Expr::Collate { .. } => 7,
+            Expr::TypedString { .. } => 7,
+            Expr::AtTimeZone { .. } => 7,
+            Expr::IntroducedString { .. } => 7,
+            Expr::Interval { .. } => 7,
         }
     }
 
@@ -301,16 +293,9 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     }
 
     fn expect_compat(&self, target: &TypesSelectedType, compat_with: &TypesSelectedType) {
-        if !target.is_compat_with(&compat_with) {
+        if !target.is_compat_with(compat_with) {
             self.state_generator.print_stack();
             panic!("Incompatible types: expected compatible with {:?}, got {:?}", compat_with, target);
-        }
-    }
-
-    fn expect_type(&self, target: &TypesSelectedType, expect: &TypesSelectedType) {
-        if target != expect {
-            self.state_generator.print_stack();
-            panic!("Unexpected type: expected {:?}, got {:?}", expect, target);
         }
     }
 
@@ -334,7 +319,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                 match self.next_state().as_str() {
                     "limit" => {
                         self.expect_state("call52_types");
-                        let num = self.handle_types(Some(TypesSelectedType::Numeric), None).1;
+                        let num = self.handle_types(Some(SubgraphType::Numeric), None).1;
                         self.expect_state("FROM");
                         Some(num)
                     },
@@ -367,7 +352,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         loop {
             select_body.from.push(TableWithJoins { relation: match self.next_state().as_str() {
                 "Table" => TableFactor::Table {
-                    name: self.current_query_rm.new_relation().gen_object_name(),
+                    name: self.current_query_rm.new_relation().get_object_name().clone(),
                     alias: None,
                     args: None,
                     with_hints: vec![],
@@ -390,7 +375,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         match self.next_state().as_str() {
             "WHERE" => {
                 self.expect_state("call53_types");
-                select_body.selection = Some(self.handle_types(Some(TypesSelectedType::Val3), None).1);
+                select_body.selection = Some(self.handle_types(Some(SubgraphType::Val3), None).1);
                 self.expect_state("EXIT_WHERE");
             },
             "EXIT_WHERE" => {},
@@ -414,15 +399,19 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             any => self.panic_unexpected(any)
         } {
             match self.next_state().as_str() {
-                "SELECT_wildcard" => select_body.projection.push(SelectItem::Wildcard(WildcardAdditionalOptions {
-                    opt_exclude: None, opt_except: None, opt_rename: None,
-                })),
-                "SELECT_qualified_wildcard" => {
-                    select_body.projection.push(SelectItem::QualifiedWildcard(ObjectName(vec![
-                        self.current_query_rm.get_random_relation().gen_ident()
-                    ]), WildcardAdditionalOptions {
+                "SELECT_wildcard" => {
+                    select_body.projection.push(SelectItem::Wildcard(WildcardAdditionalOptions {
                         opt_exclude: None, opt_except: None, opt_rename: None,
                     }));
+                    continue;
+                },
+                "SELECT_qualified_wildcard" => {
+                    select_body.projection.push(SelectItem::QualifiedWildcard(
+                        self.current_query_rm.get_random_relation().get_object_name().clone(),
+                        WildcardAdditionalOptions {
+                            opt_exclude: None, opt_except: None, opt_rename: None,
+                        }
+                    ));
                 },
                 arm @ ("SELECT_unnamed_expr" | "SELECT_expr_with_alias") => {
                     self.expect_state("call7_types_all");
@@ -623,7 +612,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             },
             "BinaryStringLike" => {
                 self.expect_state("call25_types");
-                let types_value_1 = self.handle_types(Some(TypesSelectedType::String), None).1;
+                let types_value_1 = self.handle_types(Some(SubgraphType::String), None).1;
                 let string_like_not_flag = match self.next_state().as_str() {
                     "BinaryStringLikeNot" => {
                         self.expect_state("BinaryStringLikeIn");
@@ -633,7 +622,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     any => self.panic_unexpected(any)
                 };
                 self.expect_state("call26_types");
-                let types_value_2 = self.handle_types(Some(TypesSelectedType::String), None).1;
+                let types_value_2 = self.handle_types(Some(SubgraphType::String), None).1;
                 Expr::Like {
                     negated: string_like_not_flag,
                     expr: Box::new(types_value_1),
@@ -643,7 +632,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             },
             "BinaryBooleanOpV3" => {
                 self.expect_state("call27_types");
-                let types_value_1 = self.handle_types(Some(TypesSelectedType::Val3), None).1;
+                let types_value_1 = self.handle_types(Some(SubgraphType::Val3), None).1;
                 let binary_bool_op = match self.next_state().as_str() {
                     "BinaryBooleanOpV3AND" => BinaryOperator::And,
                     "BinaryBooleanOpV3OR" => BinaryOperator::Or,
@@ -651,7 +640,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     any => self.panic_unexpected(any)
                 };
                 self.expect_state("call28_types");
-                let types_value_2 = self.handle_types(Some(TypesSelectedType::Val3), None).1;
+                let types_value_2 = self.handle_types(Some(SubgraphType::Val3), None).1;
                 Expr::BinaryOp {
                     left: Box::new(types_value_1),
                     op: binary_bool_op,
@@ -662,12 +651,12 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "false" => Expr::Value(Value::Boolean(false)),
             "Nested_VAL_3" => {
                 self.expect_state("call29_types");
-                Expr::Nested(Box::new(self.handle_types(Some(TypesSelectedType::Val3), None).1))
+                Expr::Nested(Box::new(self.handle_types(Some(SubgraphType::Val3), None).1))
             },
             "UnaryNot_VAL_3" => {
                 self.expect_state("call30_types");
                 Expr::UnaryOp { op: UnaryOperator::Not, expr: Box::new( self.handle_types(
-                    Some(TypesSelectedType::Val3), None
+                    Some(SubgraphType::Val3), None
                 ).1) }
             },
             any => self.panic_unexpected(any)
@@ -693,7 +682,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             },
             "BinaryNumericOp" => {
                 self.expect_state("call48_types");
-                let types_value_1 = self.handle_types(Some(TypesSelectedType::Numeric), None).1;
+                let types_value_1 = self.handle_types(Some(SubgraphType::Numeric), None).1;
                 let numeric_binary_op = match self.next_state().as_str() {
                     "binary_numeric_bin_and" => BinaryOperator::BitwiseAnd,
                     "binary_numeric_bin_or" => BinaryOperator::BitwiseOr,
@@ -705,7 +694,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     any => self.panic_unexpected(any),
                 };
                 self.expect_state("call47_types");
-                let types_value_2 = self.handle_types(Some(TypesSelectedType::Numeric), None).1;
+                let types_value_2 = self.handle_types(Some(SubgraphType::Numeric), None).1;
                 Expr::BinaryOp {
                     left: Box::new(types_value_1),
                     op: numeric_binary_op,
@@ -725,7 +714,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     any => self.panic_unexpected(any),
                 };
                 self.expect_state("call1_types");
-                let types_value = self.handle_types(Some(TypesSelectedType::Numeric), None).1;
+                let types_value = self.handle_types(Some(SubgraphType::Numeric), None).1;
                 Expr::UnaryOp {
                     op: numeric_unary_op,
                     expr: Box::new(types_value)
@@ -733,10 +722,10 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             },
             "numeric_string_Position" => {
                 self.expect_state("call2_types");
-                let types_value_1 = self.handle_types(Some(TypesSelectedType::String), None).1;
+                let types_value_1 = self.handle_types(Some(SubgraphType::String), None).1;
                 self.expect_state("string_position_in");
                 self.expect_state("call3_types");
-                let types_value_2 = self.handle_types(Some(TypesSelectedType::String), None).1;
+                let types_value_2 = self.handle_types(Some(SubgraphType::String), None).1;
                 Expr::Position {
                     expr: Box::new(types_value_1),
                     r#in: Box::new(types_value_2)
@@ -744,7 +733,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             },
             "Nested_numeric" => {
                 self.expect_state("call4_types");
-                let types_value = self.handle_types(Some(TypesSelectedType::Numeric), None).1;
+                let types_value = self.handle_types(Some(SubgraphType::Numeric), None).1;
                 Expr::Nested(Box::new(types_value))
             },
             any => self.panic_unexpected(any)
@@ -761,7 +750,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "string_trim" => {
                 let (trim_where, trim_what) = match self.next_state().as_str() {
                     "call6_types" => {
-                        let types_value = self.handle_types(Some(TypesSelectedType::String), None).1;
+                        let types_value = self.handle_types(Some(SubgraphType::String), None).1;
                         let spec_mode = match self.next_state().as_str() {
                             "BOTH" => TrimWhereField::Both,
                             "LEADING" => TrimWhereField::Leading,
@@ -774,17 +763,17 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     "call5_types" => (None, None),
                     any => self.panic_unexpected(any)
                 };
-                let types_value = self.handle_types(Some(TypesSelectedType::String), None).1;
+                let types_value = self.handle_types(Some(SubgraphType::String), None).1;
                 Expr::Trim {
                     expr: Box::new(types_value), trim_where, trim_what
                 }
             },
             "string_concat" => {
                 self.expect_state("call7_types");
-                let types_value_1 = self.handle_types(Some(TypesSelectedType::String), None).1;
+                let types_value_1 = self.handle_types(Some(SubgraphType::String), None).1;
                 self.expect_state("string_concat_concat");
                 self.expect_state("call8_types");
-                let types_value_2 = self.handle_types(Some(TypesSelectedType::String), None).1;
+                let types_value_2 = self.handle_types(Some(SubgraphType::String), None).1;
                 Expr::BinaryOp {
                     left: Box::new(types_value_1),
                     op: BinaryOperator::StringConcat,
@@ -799,51 +788,40 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
 
     /// subgraph def_types
     fn handle_types(
-        &mut self, equal_to: Option<TypesSelectedType>,
-        compatible_with: Option<TypesSelectedType>
+        &mut self, equal_to: Option<SubgraphType>, compatible_with: Option<TypesSelectedType>
     ) -> (TypesSelectedType, Expr) {
         self.expect_state("types");
         let (types_selected_type, types_value) = match self.next_state().as_str() {
             "types_select_type" => {
                 let types_selected_type = match self.next_state().as_str() {
-                    "types_select_type_3vl" => TypesSelectedType::Val3,
-                    "types_select_type_array" => TypesSelectedType::Array,
-                    "types_select_type_list_expr" => TypesSelectedType::ListExpr,
-                    "types_select_type_numeric" => TypesSelectedType::Numeric,
-                    "types_select_type_string" => TypesSelectedType::String,
+                    "types_select_type_3vl" => SubgraphType::Val3,
+                    "types_select_type_array" => SubgraphType::Array,
+                    "types_select_type_list_expr" => SubgraphType::ListExpr,
+                    "types_select_type_numeric" => SubgraphType::Numeric,
+                    "types_select_type_string" => SubgraphType::String,
                     any => self.panic_unexpected(any)
                 };
-                self.state_generator.push_known(types_selected_type.get_types());
+                self.state_generator.push_known(vec![types_selected_type.clone()]);
                 self.expect_state("types_select_type_end");
-                (types_selected_type, match self.next_state().as_str() {
+                (TypesSelectedType::Type(types_selected_type), match self.next_state().as_str() {
                     "call0_column_spec" => self.handle_column_spec(),
                     "call1_Query" => Expr::Subquery(Box::new(self.handle_query())),
                     any => self.panic_unexpected(any)
                 })
             },
             "types_null" => (TypesSelectedType::Any, Expr::Value(Value::Null)),
-            "call0_numeric" => (TypesSelectedType::Numeric, self.handle_numeric()),
-            "call1_VAL_3" => (TypesSelectedType::Val3, self.handle_val_3()),
-            "call0_string" => (TypesSelectedType::String, self.handle_string()),
-            "call0_list_expr" => {
-                self.state_generator.push_known(match self.state_generator.get_inputs() {
-                    FunctionInputsType::TypeNameList(list) => list,
-                    any => panic!("Couldn't pass {:?} to subgraph def_list_expr", any)
-                });
-                (TypesSelectedType::ListExpr, self.handle_list_expr())
-            },
-            "call0_array" => {
-                self.state_generator.push_known(match self.state_generator.get_inputs() {
-                    FunctionInputsType::TypeNameList(list) => list,
-                    any => panic!("Couldn't pass {:?} to subgraph def_array", any)
-                });
-                (TypesSelectedType::Array, self.handle_array())
-            },
+            "call0_numeric" => (TypesSelectedType::Type(SubgraphType::Numeric), self.handle_numeric()),
+            "call1_VAL_3" => (TypesSelectedType::Type(SubgraphType::Val3), self.handle_val_3()),
+            "call0_string" => (TypesSelectedType::Type(SubgraphType::String), self.handle_string()),
+            "call0_list_expr" => (TypesSelectedType::Type(SubgraphType::ListExpr), self.handle_list_expr()),
+            "call0_array" => (TypesSelectedType::Type(SubgraphType::Array), self.handle_array()),
             any => self.panic_unexpected(any)
         };
         self.expect_state("EXIT_types");
         if let Some(to) = equal_to {
-            self.expect_type(&types_selected_type, &to);
+            if types_selected_type != TypesSelectedType::Type(to.clone()) {
+                panic!("Unexpected type: expected {:?}, got {:?}", to, types_selected_type);
+            }
         }
         if let Some(with) = compatible_with {
             self.expect_compat(&types_selected_type, &with);
@@ -863,28 +841,27 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     /// subgraph def_column_spec
     fn handle_column_spec(&mut self) -> Expr {
         self.expect_state("column_spec");
-        let next_state = self.next_state();
-        let relation = self.current_query_rm.get_random_relation();
-        let ret = match next_state.as_str() {
-            "unqualified_name" => Expr::Identifier(relation.gen_column_ident()),
-            "qualified_name" => Expr::CompoundIdentifier(vec![
-                relation.gen_ident(), relation.gen_column_ident()
-            ]),
-            any => self.panic_unexpected(any)
+        self.expect_state("typed_column_name");
+        let ident_components = {
+            let column_type = self.state_generator.get_inputs();
+            let relation = self.current_query_rm.get_random_relation();
+            let mut ident_components = relation.get_object_name().clone().0;
+            ident_components.push(relation.add_typed_column(column_type.to_data_type()));  /// TODO
+            ident_components
         };
         self.expect_state("EXIT_column_spec");
-        ret
+        Expr::CompoundIdentifier(ident_components)
     }
 
     /// subgraph def_array
     fn handle_array(&mut self) -> Expr {
         self.expect_state("array");
         let array_compat_type = match self.next_state().as_str() {
-            "call12_types" => TypesSelectedType::Numeric,
-            "call13_types" => TypesSelectedType::Val3,
-            "call31_types" => TypesSelectedType::String,
-            "call51_types" => TypesSelectedType::ListExpr,
-            "call14_types" => TypesSelectedType::Array,
+            "call12_types" => SubgraphType::Numeric,
+            "call13_types" => SubgraphType::Val3,
+            "call31_types" => SubgraphType::String,
+            "call51_types" => SubgraphType::ListExpr,
+            "call14_types" => SubgraphType::Array,
             any => self.panic_unexpected(any)
         };
         let types_value = self.handle_types(Some(array_compat_type.clone()), None).1;
@@ -893,7 +870,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             match self.next_state().as_str() {
                 "call50_types" => {
                     self.state_generator.push_compatible(array_compat_type.get_compat_types());
-                    let types_value = self.handle_types(None, Some(array_compat_type.clone())).1;
+                    let types_value = self.handle_types(None, Some(TypesSelectedType::Type(array_compat_type.clone()))).1;
                     array.push(types_value);
                 },
                 "EXIT_array" => break,
@@ -910,11 +887,11 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     fn handle_list_expr(&mut self) -> Expr {
         self.expect_state("list_expr");
         let list_compat_type = match self.next_state().as_str() {
-            "call16_types" => TypesSelectedType::Numeric,
-            "call17_types" => TypesSelectedType::Val3,
-            "call18_types" => TypesSelectedType::String,
-            "call19_types" => TypesSelectedType::ListExpr,
-            "call20_types" => TypesSelectedType::Array,
+            "call16_types" => SubgraphType::Numeric,
+            "call17_types" => SubgraphType::Val3,
+            "call18_types" => SubgraphType::String,
+            "call19_types" => SubgraphType::ListExpr,
+            "call20_types" => SubgraphType::Array,
             any => self.panic_unexpected(any)
         };
         let types_value = self.handle_types(Some(list_compat_type.clone()), None).1;
@@ -923,7 +900,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             match self.next_state().as_str() {
                 "call49_types" => {
                     self.state_generator.push_compatible(list_compat_type.get_compat_types());
-                    let types_value = self.handle_types(None, Some(list_compat_type.clone())).1;
+                    let types_value = self.handle_types(None, Some(TypesSelectedType::Type(list_compat_type.clone()))).1;
                     list_expr.push(types_value);
                 },
                 "EXIT_list_expr" => break,
@@ -936,6 +913,8 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     /// starting point; calls handle_query for the first time
     fn generate(&mut self) -> Query {
         let query = self.handle_query();
+        println!("Relations:\n{}", self.current_query_rm);
+        println!("Query:\n{}", query);
         // reset the generator
         if let Some(state) = self.next_state_opt() {
             panic!("Couldn't reset state_generator: Received {state}");

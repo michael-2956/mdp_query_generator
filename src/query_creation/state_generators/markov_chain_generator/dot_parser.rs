@@ -1,8 +1,9 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr, fmt::Display};
 
 use logos::{Filter, Lexer, Logos};
 use regex::Regex;
 use smol_str::SmolStr;
+use sqlparser::ast::{DataType, ExactNumberInfo, ObjectName, Ident};
 
 use super::error::SyntaxError;
 
@@ -86,6 +87,56 @@ fn block_comment(lex: &mut Lexer<'_, DotToken>) -> Filter<()> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum SubgraphType {
+    Numeric,
+    Val3,
+    Array,
+    ListExpr,
+    String,
+}
+
+impl SubgraphType {
+    pub fn get_all() -> Vec<SubgraphType> {
+        vec![ Self::Numeric, Self::Val3, Self::Array, Self::ListExpr, Self::String ]
+    }
+
+    fn as_str(&self) -> &str {
+        match self {
+            SubgraphType::Numeric => "numeric",
+            SubgraphType::Val3 => "3VL Value",
+            SubgraphType::Array => "array",
+            SubgraphType::ListExpr => "list expr",
+            SubgraphType::String => "string",
+        }
+    }
+
+    fn from_smolstr(smol_str: SmolStr) -> Result<Self, SyntaxError> {
+        SubgraphType::from_str(smol_str.as_str())
+    }
+}
+
+impl FromStr for SubgraphType {
+    type Err = SyntaxError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "numeric" => Ok(SubgraphType::Numeric),
+            "3VL Value" => Ok(SubgraphType::Val3),
+            "array" => Ok(SubgraphType::Array),
+            "list expr" => Ok(SubgraphType::ListExpr),
+            "string" => Ok(SubgraphType::String),
+            any => Err(SyntaxError::new(format!("Type {any} does not exist!")))
+        }
+    }
+}
+
+impl Display for SubgraphType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 /// this structure can be treated in two ways: either
 /// as the output types the function should be restricted
 /// to generate, when in the context of a call node, or
@@ -97,9 +148,17 @@ pub enum FunctionInputsType {
     None,
     Known,
     Compatible,
-    TypeName(SmolStr),
-    TypeNameList(Vec<SmolStr>),
-    TypeNameVariants(Vec<SmolStr>),
+    TypeName(SubgraphType),
+    TypeNameList(Vec<SubgraphType>),
+    TypeNameVariants(Vec<SubgraphType>),
+}
+
+/// splits a string with commas into a list of trimmed identifiers
+fn get_identifier_names(name_list_str: SmolStr) -> Vec<SmolStr> {
+    name_list_str
+        .split(',')
+        .map(|string| SmolStr::new(string.trim()))
+        .collect::<Vec<_>>()
 }
 
 impl FunctionInputsType {
@@ -114,11 +173,28 @@ impl FunctionInputsType {
     }
 
     /// splits a string with commas into a list of trimmed identifiers
-    fn get_identifier_names(name_list_str: SmolStr) -> Vec<SmolStr> {
+    fn parse_types(name_list_str: SmolStr) -> Result<Vec<SubgraphType>, SyntaxError> {
         name_list_str
             .split(',')
-            .map(|string| SmolStr::new(string.trim()))
-            .collect::<Vec<_>>()
+            .map(SubgraphType::from_str)
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    pub fn to_data_type(&self) -> DataType {
+        // TODO: this is a temporary solution
+        let type_name = match self {
+            FunctionInputsType::TypeName(type_name) => type_name,
+            FunctionInputsType::TypeNameList(type_names) if type_names.len() == 1 => type_names.first().unwrap(),
+            any => panic!("Cannot convert to DataType: {:?}", any)
+        };
+        match type_name.as_str() {
+            "numeric" => DataType::Numeric(ExactNumberInfo::None),
+            "3VL Value" => DataType::Boolean,
+            "array" => DataType::Array(Some(Box::new(DataType::Numeric(ExactNumberInfo::None)))),
+            "list expr" => DataType::Custom(ObjectName(vec![Ident::new("row_expression")]), vec![]),
+            "string" => DataType::String,
+            any => panic!("Unexpected type name: {:?}", any)
+        }
     }
 }
 
@@ -129,7 +205,7 @@ pub enum CodeUnit {
     NodeDef {
         name: SmolStr,
         literal: bool,
-        option_name: Option<SmolStr>,
+        type_name: Option<SubgraphType>,
         trigger: Option<(SmolStr, bool)>,
     },
     Call {
@@ -137,7 +213,7 @@ pub enum CodeUnit {
         func_name: SmolStr,
         inputs: FunctionInputsType,
         modifiers: Option<Vec<SmolStr>>,
-        option_name: Option<SmolStr>,
+        type_name: Option<SubgraphType>,
         trigger: Option<(SmolStr, bool)>,
     },
     Edge {
@@ -178,6 +254,15 @@ impl<'a> DotTokenizer<'a> {
     }
 }
 
+macro_rules! return_some_err {
+    ($expr:expr) => {{
+        match $expr {
+            Ok(value) => value,
+            Err(err) => break Some(Err(err)),
+        }
+    }};
+}
+
 impl<'a> Iterator for DotTokenizer<'a> {
     type Item = Result<CodeUnit, SyntaxError>;
 
@@ -204,14 +289,12 @@ impl<'a> Iterator for DotTokenizer<'a> {
                             format!("multiple digraph definitions are not supported")
                         )))
                     }
-                    if let Err(err) = handle_digraph(&mut self.lexer) {
-                        break Some(Err(err))
-                    }
+                    return_some_err!(handle_digraph(&mut self.lexer));
                     self.digraph_defined = true;
                 },
                 DotToken::Subgraph => {
-                    match try_parse_function_def(&mut self.lexer) {
-                        Ok(Some(func @ CodeUnit::Function {..})) => {
+                    match return_some_err!(try_parse_function_def(&mut self.lexer)) {
+                        Some(func @ CodeUnit::Function {..}) => {
                             if self.in_function_definition {
                                 break Some(Err(SyntaxError::new(
                                     format!("nested functional node definitions are not supported")
@@ -221,77 +304,72 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                 break Some(Ok(func))
                             }
                         },
-                        Ok(_) => {  // there is no function
-                            match self.lexer.next()? {
-                                DotToken::OpenDeclaration => ignore_subgraph = true,
-                                _ => break Some(Err(SyntaxError::new(
-                                    format!("Expected subgraph body: {}", self.lexer.slice())
-                                )))
-                            };
+                        _ => match self.lexer.next()? {
+                            DotToken::OpenDeclaration => ignore_subgraph = true,
+                            _ => break Some(Err(SyntaxError::new(
+                                format!("Expected subgraph body: {}", self.lexer.slice())
+                            )))
                         },
-                        Err(err) => break Some(Err(err)),
                     }
                 },
                 DotToken::Identifier(node_name) => {
                     match self.lexer.next() {
                         Some(DotToken::OpenSpecification) => {
-                            match read_opened_node_specification(&mut self.lexer, &node_name) {
-                                Ok(mut node_spec) => {
-                                    let option_name = match node_spec.remove("OPTIONAL") {
-                                        Some(DotToken::QuotedIdentifiers(idents)) => Some(idents),
-                                        _ => None
+                            let mut node_spec = return_some_err!(
+                                read_opened_node_specification(&mut self.lexer, &node_name)
+                            );
+                            let type_name = match node_spec.remove("TYPE_NAME") {
+                                Some(DotToken::QuotedIdentifiers(idents)) => Some(
+                                    return_some_err!(SubgraphType::from_smolstr(idents))
+                                ),
+                                _ => None
+                            };
+
+                            let trigger = match node_spec.remove("TRIGGER") {
+                                Some(DotToken::QuotedIdentifiers(idents)) => {
+                                    let trigger_on = match node_spec.remove("TRIGGER_MODE") {
+                                        Some(DotToken::QuotedIdentifiers(mode_name)) => match mode_name.as_str() {
+                                            mode_name @ ("on" | "off") => Some(mode_name == "on"), _ => None
+                                        }, _ => None,
                                     };
-                                    let trigger = match node_spec.remove("TRIGGER") {
-                                        Some(DotToken::QuotedIdentifiers(idents)) => {
-                                            let trigger_on = match node_spec.remove("TRIGGER_MODE") {
-                                                Some(DotToken::QuotedIdentifiers(mode_name)) => match mode_name.as_str() {
-                                                    mode_name @ ("on" | "off") => Some(mode_name == "on"), _ => None
-                                                }, _ => None,
-                                            };
-                                            let trigger_on = match trigger_on {
-                                                Some(v) => v,
-                                                None => break Some(Err(SyntaxError::new(format!(
-                                                    "Expected trigger_mode=\"on\" or trigger_mode=\"off\" after trigger=\"{idents}\" for node {node_name}"
-                                                )))),
-                                            };
-                                            Some((idents, trigger_on))
-                                        },
-                                        _ => None
+                                    let trigger_on = match trigger_on {
+                                        Some(v) => v,
+                                        None => break Some(Err(SyntaxError::new(format!(
+                                            "Expected trigger_mode=\"on\" or trigger_mode=\"off\" after trigger=\"{idents}\" for node {node_name}"
+                                        )))),
                                     };
-                                    let literal = match node_spec.remove("LITERAL") {
-                                        Some(DotToken::QuotedIdentifiers(idents)) => idents == SmolStr::new("t"),
-                                        _ => false
-                                    };
-                                    if self.call_ident_regex.is_match(&node_name) {
-                                        let (input_type, modifiers) = match parse_function_options(
-                                            &node_name, node_spec, true
-                                        ) {
-                                            Ok(options) => options,
-                                            Err(err) => break Some(Err(err))
-                                        };
-                                        if literal {
-                                            break Some(Err(SyntaxError::new(format!(
-                                                "call nodes can't be declaread as literal (node {node_name})"
-                                            ))));
-                                        }
-                                        break Some(Ok(CodeUnit::Call {
-                                            node_name: node_name.clone(),
-                                            func_name: SmolStr::new(node_name.split_once('_').unwrap().1),
-                                            inputs: input_type,
-                                            modifiers,
-                                            option_name,
-                                            trigger,
-                                        }));
-                                    } else {
-                                        break Some(Ok(CodeUnit::NodeDef {
-                                            name: node_name,
-                                            option_name,
-                                            literal,
-                                            trigger
-                                        }));
-                                    }
+                                    Some((idents, trigger_on))
                                 },
-                                Err(err) => break Some(Err(err))
+                                _ => None
+                            };
+                            let literal = match node_spec.remove("LITERAL") {
+                                Some(DotToken::QuotedIdentifiers(idents)) => idents == SmolStr::new("t"),
+                                _ => false
+                            };
+                            if self.call_ident_regex.is_match(&node_name) {
+                                let (input_type, modifiers) = return_some_err!(
+                                    parse_function_options(&node_name, node_spec, true)
+                                );
+                                if literal {
+                                    break Some(Err(SyntaxError::new(format!(
+                                        "call nodes can't be declaread as literal (node {node_name})"
+                                    ))));
+                                }
+                                break Some(Ok(CodeUnit::Call {
+                                    node_name: node_name.clone(),
+                                    func_name: SmolStr::new(node_name.split_once('_').unwrap().1),
+                                    inputs: input_type,
+                                    modifiers,
+                                    type_name,
+                                    trigger,
+                                }));
+                            } else {
+                                break Some(Ok(CodeUnit::NodeDef {
+                                    name: node_name,
+                                    type_name,
+                                    literal,
+                                    trigger
+                                }));
                             }
                         },
                         Some(DotToken::Arrow) => {
@@ -409,7 +487,7 @@ fn parse_function_options(
             if let Some(special_type) = FunctionInputsType::try_extract_special_type(&idents) {
                 input_type = special_type;
             } else {
-                let idents = FunctionInputsType::get_identifier_names(idents);
+                let idents = FunctionInputsType::parse_types(idents)?;
                 if call {
                     match idents.len() {
                         1 => input_type = FunctionInputsType::TypeName(idents[0].clone()),
@@ -435,7 +513,7 @@ fn parse_function_options(
                 input_type = special_type;
             } else {
                 input_type = FunctionInputsType::TypeNameList(
-                    FunctionInputsType::get_identifier_names(idents),
+                    FunctionInputsType::parse_types(idents)?,
                 );
             }
         } else {
@@ -446,7 +524,7 @@ fn parse_function_options(
     }
     if let Some(token) = node_spec.remove("MODS") {
         if let DotToken::QuotedIdentifiersWithBrackets(value) = token {
-            let mods = FunctionInputsType::get_identifier_names(value)
+            let mods = get_identifier_names(value)
                 .iter()
                 .filter(|el| el.len() > 0)
                 .map(|el| el.to_owned())
