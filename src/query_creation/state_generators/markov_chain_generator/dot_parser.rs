@@ -1,8 +1,8 @@
 use std::{collections::HashMap, str::FromStr, fmt::Display};
 
-use logos::{Filter, Lexer, Logos};
 use regex::Regex;
 use smol_str::SmolStr;
+use logos::{Filter, Lexer, Logos};
 use sqlparser::ast::{DataType, ExactNumberInfo, ObjectName, Ident};
 
 use super::error::SyntaxError;
@@ -114,6 +114,17 @@ impl SubgraphType {
     fn from_smolstr(smol_str: SmolStr) -> Result<Self, SyntaxError> {
         SubgraphType::from_str(smol_str.as_str())
     }
+
+    pub fn to_data_type(&self) -> DataType {
+        /// TODO: this is a temporary solution
+        match self {
+            SubgraphType::Numeric => DataType::Numeric(ExactNumberInfo::None),
+            SubgraphType::Val3 => DataType::Boolean,
+            SubgraphType::Array => DataType::Array(Some(Box::new(DataType::Numeric(ExactNumberInfo::None)))),
+            SubgraphType::ListExpr => DataType::Custom(ObjectName(vec![Ident::new("row_expression")]), vec![]),
+            SubgraphType::String => DataType::String,
+        }
+    }
 }
 
 impl FromStr for SubgraphType {
@@ -144,12 +155,22 @@ impl Display for SubgraphType {
 /// in function definition
 #[derive(Debug, Clone, PartialEq)]
 pub enum FunctionInputsType {
+    /// Used in function calls to choose all types out of the allowed type list
     Any,
+    /// Used in function calls to choose none of the types out of the allowed type list
+    /// Used in function declarations to indicate that no types are accepted.
     None,
+    /// Used in function calls to be able to set the type later
     Known,
+    /// Used in function calls to be able to set the type later. Similar to known, but indicates type compatibility.
+    /// Will be extended in the future to link to the types call node which would supply the type
     Compatible,
+    /// Used in function calls to select a type among type variants.
     TypeName(SubgraphType),
+    /// Used in function calls to select multiple types among the allowed type list.
+    /// Used in function declarations to specify the allowed type list, of which multiple can be selected.
     TypeNameList(Vec<SubgraphType>),
+    /// Used in function declarations to specify possible type variants, of which only one can be selected.
     TypeNameVariants(Vec<SubgraphType>),
 }
 
@@ -178,23 +199,6 @@ impl FunctionInputsType {
             .split(',')
             .map(SubgraphType::from_str)
             .collect::<Result<Vec<_>, _>>()
-    }
-
-    pub fn to_data_type(&self) -> DataType {
-        // TODO: this is a temporary solution
-        let type_name = match self {
-            FunctionInputsType::TypeName(type_name) => type_name,
-            FunctionInputsType::TypeNameList(type_names) if type_names.len() == 1 => type_names.first().unwrap(),
-            any => panic!("Cannot convert to DataType: {:?}", any)
-        };
-        match type_name.as_str() {
-            "numeric" => DataType::Numeric(ExactNumberInfo::None),
-            "3VL Value" => DataType::Boolean,
-            "array" => DataType::Array(Some(Box::new(DataType::Numeric(ExactNumberInfo::None)))),
-            "list expr" => DataType::Custom(ObjectName(vec![Ident::new("row_expression")]), vec![]),
-            "string" => DataType::String,
-            any => panic!("Unexpected type name: {:?}", any)
-        }
     }
 }
 
@@ -474,7 +478,7 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<CodeUn
     }
 }
 
-/// parse funciton options, either in function declaration or in function call
+/// parse function options, either in function declaration or in function call
 fn parse_function_options(
     node_name: &SmolStr,
     mut node_spec: HashMap<SmolStr, DotToken>,

@@ -7,11 +7,11 @@ use sqlparser::ast::{
     TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, Array, SelectItem, WildcardAdditionalOptions,
 };
 
-use super::{super::unwrap_variant, state_generators::SubgraphType};
+use super::{super::unwrap_variant, state_generators::{SubgraphType, CallTypes}};
 pub use self::query_info::TypesSelectedType;
 use self::query_info::RelationManager;
 
-use super::state_generators::{MarkovChainGenerator, FunctionInputsType, dynamic_models::DynamicModel, state_choosers::StateChooser};
+use super::state_generators::{MarkovChainGenerator, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
 pub struct QueryGenerator<DynMod: DynamicModel, StC: StateChooser> {
     state_generator: MarkovChainGenerator<StC>,
@@ -330,8 +330,8 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             any => self.panic_unexpected(any)
         };
 
-        if let FunctionInputsType::TypeName(type_name) = self.state_generator.get_inputs() {
-            println!("TODO: Enforce single column & column type (Query): {type_name}")
+        if let CallTypes::TypeList(types) = self.state_generator.get_selected_types() {
+            println!("TODO: Enforce column & column types (Query): {:?}", types)
         }
         let mut select_body = Select {
             distinct: false,
@@ -465,7 +465,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "IsDistinctFrom" => {
                 self.expect_state("call1_types_all");
                 let (types_selected_type, types_value_1) = self.handle_types_all();
-                self.state_generator.push_compatible(types_selected_type.get_compat_types());
+                self.state_generator.push_compatible_list(types_selected_type.get_compat_types());
                 let is_distinct_not_flag = match self.next_state().as_str() {
                     "IsDistinctNOT" => {
                         self.expect_state("DISTINCT");
@@ -499,7 +499,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "InList" => {
                 self.expect_state("call2_types_all");
                 let (types_selected_type, types_value) = self.handle_types_all();
-                self.state_generator.push_compatible(types_selected_type.get_compat_types());
+                self.state_generator.push_compatible_list(types_selected_type.get_compat_types());
                 let in_list_not_flag = match self.next_state().as_str() {
                     "InListNot" => {
                         self.expect_state("InListIn");
@@ -518,7 +518,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "InSubquery" => {
                 self.expect_state("call3_types_all");
                 let (types_selected_type, types_value) = self.handle_types_all();
-                self.state_generator.push_compatible(types_selected_type.get_compat_types());
+                self.state_generator.push_compatible_list(types_selected_type.get_compat_types());
                 let in_subquery_not_flag = match self.next_state().as_str() {
                     "InSubqueryNot" => {
                         self.expect_state("InSubqueryIn");
@@ -547,11 +547,11 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     "BetweenBetween" => false,
                     any => self.panic_unexpected(any)
                 };
-                self.state_generator.push_compatible(type_names.clone());
+                self.state_generator.push_compatible_list(type_names.clone());
                 self.expect_state("call22_types");
                 let types_value_2 = self.handle_types(None, Some(types_selected_type.clone())).1;
                 self.expect_state("BetweenBetweenAnd");
-                self.state_generator.push_compatible(type_names);
+                self.state_generator.push_compatible_list(type_names);
                 self.expect_state("call23_types");
                 let types_value_3 = self.handle_types(None, Some(types_selected_type)).1;
                 Expr::Between {
@@ -564,7 +564,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "BinaryComp" => {
                 self.expect_state("call5_types_all");
                 let (types_selected_type, types_value_1) = self.handle_types_all();
-                self.state_generator.push_compatible(types_selected_type.get_compat_types());
+                self.state_generator.push_compatible_list(types_selected_type.get_compat_types());
                 let binary_comp_op = match self.next_state().as_str() {
                     "BinaryCompEqual" => BinaryOperator::Eq,
                     "BinaryCompLess" => BinaryOperator::Lt,
@@ -592,7 +592,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     any => self.panic_unexpected(any)
                 };
                 self.expect_state("AnyAllSelectIter");
-                self.state_generator.push_compatible(types_selected_type.get_compat_types());
+                self.state_generator.push_compatible_list(types_selected_type.get_compat_types());
                 let iterable = Box::new(match self.next_state().as_str() {
                     "call4_Query" => Expr::Subquery(Box::new(self.handle_query())),
                     "call1_array" => self.handle_array(),
@@ -801,7 +801,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     "types_select_type_string" => SubgraphType::String,
                     any => self.panic_unexpected(any)
                 };
-                self.state_generator.push_known(vec![types_selected_type.clone()]);
+                self.state_generator.push_known_list(vec![types_selected_type.clone()]);
                 self.expect_state("types_select_type_end");
                 (TypesSelectedType::Type(types_selected_type), match self.next_state().as_str() {
                     "call0_column_spec" => self.handle_column_spec(),
@@ -843,10 +843,10 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         self.expect_state("column_spec");
         self.expect_state("typed_column_name");
         let ident_components = {
-            let column_type = self.state_generator.get_inputs();
+            let column_type = unwrap_variant!(self.state_generator.get_selected_types(), CallTypes::Type);
             let relation = self.current_query_rm.get_random_relation();
             let mut ident_components = relation.get_object_name().clone().0;
-            ident_components.push(relation.add_typed_column(column_type.to_data_type()));  /// TODO
+            ident_components.push(relation.add_typed_column(column_type.to_data_type()));
             ident_components
         };
         self.expect_state("EXIT_column_spec");
@@ -869,7 +869,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         loop {
             match self.next_state().as_str() {
                 "call50_types" => {
-                    self.state_generator.push_compatible(array_compat_type.get_compat_types());
+                    self.state_generator.push_compatible_list(array_compat_type.get_compat_types());
                     let types_value = self.handle_types(None, Some(TypesSelectedType::Type(array_compat_type.clone()))).1;
                     array.push(types_value);
                 },
@@ -899,7 +899,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         loop {
             match self.next_state().as_str() {
                 "call49_types" => {
-                    self.state_generator.push_compatible(list_compat_type.get_compat_types());
+                    self.state_generator.push_compatible_list(list_compat_type.get_compat_types());
                     let types_value = self.handle_types(None, Some(TypesSelectedType::Type(list_compat_type.clone()))).1;
                     list_expr.push(types_value);
                 },

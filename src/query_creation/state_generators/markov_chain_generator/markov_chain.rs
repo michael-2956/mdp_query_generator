@@ -36,6 +36,43 @@ pub enum CallModifiers {
     StaticList(Vec<SmolStr>),
 }
 
+#[derive(Clone, Debug)]
+pub enum CallTypes {
+    /// Сhoose none of the types out of the allowed type list
+    None,
+    /// Used to be able to set the type later.
+    /// Is transformed into a TypeList(..).
+    KnownList,
+    /// Used to be able to set the type later. Similar to known, but indicates type compatibility.
+    /// Will be extended in the future to link to the types call node which would supply the type.
+    /// Is later transformed into a TypeList(..).
+    Compatible,
+    /// Select a type among type variants.
+    Type(SubgraphType),
+    /// Select multiple types among possible type variants.
+    TypeList(Vec<SubgraphType>),
+}
+
+impl CallTypes {
+    fn from_function_inputs_type(node_name: &SmolStr, accepted_types: &FunctionTypes, input: FunctionInputsType) -> CallTypes {
+        match input {
+            FunctionInputsType::Any => {
+                match accepted_types {
+                    FunctionTypes::TypeList(list) => CallTypes::TypeList(list.clone()),
+                    FunctionTypes::TypeVariants(_) => panic!("Incorrect input type for node {node_name}: Any. Function only accepts type variants."),
+                    _ => todo!()
+                }
+            },
+            FunctionInputsType::None => CallTypes::None,
+            FunctionInputsType::Known => CallTypes::KnownList,
+            FunctionInputsType::Compatible => CallTypes::Compatible,
+            FunctionInputsType::TypeName(tp) => CallTypes::Type(tp),
+            FunctionInputsType::TypeNameList(tp_list) => CallTypes::TypeList(tp_list),
+            any => panic!("Incorrect input type for node {node_name}: {:?}", any),
+        }
+    }
+}
+
 /// represents the call parameters passed to a function
 /// called with a call node
 #[derive(Clone, Debug)]
@@ -44,11 +81,32 @@ pub struct CallParams {
     pub func_name: SmolStr,
     /// the output types the called function
     /// should be restricted to generate
-    pub inputs: FunctionInputsType,
+    pub selected_types: CallTypes,
     /// the special modifiers passed to the
     /// function called, which affect function
     /// behaviour
     pub modifiers: CallModifiers,
+}
+
+#[derive(Clone, Debug)]
+pub enum FunctionTypes {
+    /// Indicate that no types are accepted.
+    None,
+    /// Specify the allowed type list, of which multiple can be selected.
+    TypeList(Vec<SubgraphType>),
+    /// Specify possible type variants, of which only one can be selected.
+    TypeVariants(Vec<SubgraphType>),
+}
+
+impl FunctionTypes {
+    fn from_function_inputs_type(source_node_name: SmolStr, input: FunctionInputsType) -> FunctionTypes {
+        match input {
+            FunctionInputsType::None => FunctionTypes::None,
+            FunctionInputsType::TypeNameList(list) => FunctionTypes::TypeList(list),
+            FunctionInputsType::TypeNameVariants(variants) => FunctionTypes::TypeVariants(variants),
+            any => panic!("Incorrect input type for function {}: {:?}", source_node_name, any),
+        }
+    }
 }
 
 /// represents a functional subgraph
@@ -64,7 +122,7 @@ pub struct Function {
     /// the output types the function supports to
     /// be restricted to generate, affecting optional
     /// nodes
-    pub input_type: FunctionInputsType,
+    pub accepted_types: FunctionTypes,
     /// a vector of special function modifiers. Affects
     /// the function behaviour, but not the nodes
     pub modifiers: Option<Vec<SmolStr>>,
@@ -81,9 +139,9 @@ impl Function {
     /// create Function struct from its parsed parameters
     fn new(definition: dot_parser::Function) -> Self {
         Function {
-            source_node_name: definition.source_node_name,
+            source_node_name: definition.source_node_name.clone(),
             exit_node_name: definition.exit_node_name,
-            input_type: definition.input_type,
+            accepted_types: FunctionTypes::from_function_inputs_type(definition.source_node_name, definition.input_type),
             modifiers: definition.modifiers,
             chain: HashMap::<_, _>::new(),
         }
@@ -181,8 +239,15 @@ impl MarkovChain {
                         },
                         None => CallModifiers::None,
                     };
+                    let selected_types = if let Some(function) = &current_function {
+                        CallTypes::from_function_inputs_type(&node_name, &function.accepted_types, inputs)
+                    } else {
+                        return Err(SyntaxError::new(format!(
+                            "Unexpected node definition: {node_name} [...]"
+                        )));
+                    };
                     define_node(&mut current_function, &mut node_params, node_name, Some(CallParams {
-                        func_name, inputs, modifiers
+                        func_name, selected_types, modifiers
                     }), type_name, false, trigger)?;
                 }
                 dot_parser::CodeUnit::Edge {
@@ -233,37 +298,24 @@ impl MarkovChain {
                         )
                     };
 
-                    match call_params.inputs.clone() {
-                        FunctionInputsType::TypeName(name) => {
-                            if let FunctionInputsType::TypeNameVariants(variants) = &function.input_type {
-                                if !variants.contains(&name) {
-                                    return Err(SyntaxError::new(gen_type_error(format!(
-                                        "Expected one of {:?}, got {:?}", function.input_type, call_params.inputs
-                                    ))));
-                                }
-                            } else {
-                                return Err(SyntaxError::new(gen_type_error(format!(
-                                    "Got {:?}, but the function type is {:?}", call_params.inputs, function.input_type,
-                                ))));
-                            }
-                        },
-                        FunctionInputsType::TypeNameList(types_list) => {
-                            if let FunctionInputsType::TypeNameList(func_types_list) = &function.input_type {
-                                for c_type in types_list {
-                                    if !func_types_list.contains(&c_type) {
-                                        return Err(SyntaxError::new(gen_type_error(format!(
-                                            "type {} is not in {:?}", c_type, function.input_type
-                                        ))));
-                                    }
-                                }
-                            } else {
-                                return Err(SyntaxError::new(gen_type_error(format!(
-                                    "Got {:?}, but the function type is {:?}", call_params.inputs, function.input_type,
-                                ))));
-                            }
-                        },
-                        _ => {}
-                    };
+                    match (&call_params.selected_types, &function.accepted_types) {
+                        (
+                            CallTypes::Type(name),
+                            FunctionTypes::TypeVariants(variants)
+                        ) if variants.contains(name) => {},
+                        (
+                            CallTypes::TypeList(types_list),
+                            FunctionTypes::TypeList(func_types_list)
+                        ) if types_list.iter().all(|t| func_types_list.contains(t)) => {},
+                        (CallTypes::None, FunctionTypes::TypeList(..)) => {},
+                        (
+                            CallTypes::KnownList | CallTypes::Compatible,
+                            FunctionTypes::TypeList(..) | FunctionTypes::TypeVariants(..)
+                        ) => {},
+                        _ => return Err(SyntaxError::new(gen_type_error(format!(
+                            "Got {:?}, but the function type is {:?}", call_params.selected_types, function.accepted_types,
+                        ))))
+                    }
 
                     if call_params.modifiers != CallModifiers::None {
                         if let Some(ref func_modifiers) = function.modifiers {
@@ -274,7 +326,7 @@ impl MarkovChain {
                                     for c_mod in modifiers {
                                         if !func_modifiers.contains(&c_mod) {
                                             return Err(SyntaxError::new(gen_type_error(format!(
-                                                "modifier {} is not in {:?}", c_mod, func_modifiers
+                                                "Modifier {} is not in {:?}", c_mod, func_modifiers
                                             ))));
                                         }
                                     }
@@ -397,19 +449,19 @@ fn define_node(
     Ok(())
 }
 
-/// Perform syntax checks for optional nodes
+/// Perform checks for typed nodes
 fn check_type(current_function: &Function, node_name: &SmolStr, type_name_opt: &Option<SubgraphType>) -> Result<(), SyntaxError> {
     if let Some(type_name) = type_name_opt {
-        if !(match &current_function.input_type {
-            FunctionInputsType::TypeNameList(list) => list,
-            FunctionInputsType::TypeNameVariants(list) => list,
+        if !(match &current_function.accepted_types {
+            FunctionTypes::TypeList(list) => list,
+            FunctionTypes::TypeVariants(list) => list,
             _ => return Err(SyntaxError::new(format!(
-                "Unexpected optional node: {node_name}. Function does not acccept arguments"
+                "Unexpected typed node: {node_name}. Function does not acccept arguments"
             )))
         }.contains(type_name)) {
             return Err(SyntaxError::new(format!(
                 "Unexpected option: {type_name} Expected one of: {:?}",
-                current_function.input_type
+                current_function.accepted_types
             )))
         }
     }
