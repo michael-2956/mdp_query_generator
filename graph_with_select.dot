@@ -21,7 +21,7 @@
 # from the respective stacks
 
 # 4. Typed node (with a question mark at the end in definition label):
-# {node_name} [TYPE_NAME="option_name"]
+# {node_name} [TYPE_NAME="type_name"]
 # TYPE_NAME is the name of a type listed in function declaration.
 # The node will be turned off or on respective to the types passed to function call.
 
@@ -60,7 +60,7 @@
 
 digraph G {
     subgraph def_Query {
-        Query [TYPES="[any]", MODS="[single value]", label="Query\ntypes(ordered)=[...]\nmods=[single value]", shape=octagon, style=filled, color=green]
+        Query [TYPES="[numeric, 3VL Value, array, list expr, string]", MODS="[single value, constrain types]", label="Query\ntypes(constrain types?, ordered)=[numeric, 3VL Value, array, list expr, string]\nmods=[single value]", shape=octagon, style=filled, color=green]
         EXIT_Query [label="EXIT Query"]
 
         FROM []

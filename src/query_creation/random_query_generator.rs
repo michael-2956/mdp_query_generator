@@ -7,7 +7,7 @@ use sqlparser::ast::{
     TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, Array, SelectItem, WildcardAdditionalOptions,
 };
 
-use super::{super::unwrap_variant, state_generators::{SubgraphType, CallTypes}};
+use super::{super::{unwrap_variant, unwrap_variant_and_else}, state_generators::{SubgraphType, CallTypes}};
 pub use self::query_info::TypesSelectedType;
 use self::query_info::RelationManager;
 
@@ -801,11 +801,16 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     "types_select_type_string" => SubgraphType::String,
                     any => self.panic_unexpected(any)
                 };
-                self.state_generator.push_known_list(vec![types_selected_type.clone()]);
                 self.expect_state("types_select_type_end");
-                (TypesSelectedType::Type(types_selected_type), match self.next_state().as_str() {
-                    "call0_column_spec" => self.handle_column_spec(),
-                    "call1_Query" => Expr::Subquery(Box::new(self.handle_query())),
+                (TypesSelectedType::Type(types_selected_type.clone()), match self.next_state().as_str() {
+                    "call0_column_spec" => {
+                        self.state_generator.push_known(types_selected_type);
+                        self.handle_column_spec()
+                    },
+                    "call1_Query" => {
+                        self.state_generator.push_known_list(vec![types_selected_type]);
+                        Expr::Subquery(Box::new(self.handle_query()))
+                    },
                     any => self.panic_unexpected(any)
                 })
             },
@@ -819,7 +824,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         };
         self.expect_state("EXIT_types");
         if let Some(to) = equal_to {
-            if types_selected_type != TypesSelectedType::Type(to.clone()) {
+            if !types_selected_type.is_equal_to(&TypesSelectedType::Type(to.clone())) {
                 panic!("Unexpected type: expected {:?}, got {:?}", to, types_selected_type);
             }
         }
@@ -843,7 +848,9 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         self.expect_state("column_spec");
         self.expect_state("typed_column_name");
         let ident_components = {
-            let column_type = unwrap_variant!(self.state_generator.get_selected_types(), CallTypes::Type);
+            let column_type = unwrap_variant_and_else!(
+                self.state_generator.get_selected_types(), CallTypes::Type, || self.state_generator.print_stack()
+            );
             let relation = self.current_query_rm.get_random_relation();
             let mut ident_components = relation.get_object_name().clone().0;
             ident_components.push(relation.add_typed_column(column_type.to_data_type()));
@@ -913,8 +920,8 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     /// starting point; calls handle_query for the first time
     fn generate(&mut self) -> Query {
         let query = self.handle_query();
-        println!("Relations:\n{}", self.current_query_rm);
-        println!("Query:\n{}", query);
+        // println!("Relations:\n{}", self.current_query_rm);
+        // println!("Query:\n{}", query);
         // reset the generator
         if let Some(state) = self.next_state_opt() {
             panic!("Couldn't reset state_generator: Received {state}");

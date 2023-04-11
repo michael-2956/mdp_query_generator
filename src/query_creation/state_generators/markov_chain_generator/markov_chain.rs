@@ -5,7 +5,7 @@ use core::fmt::Debug;
 use smol_str::SmolStr;
 
 use super::{
-    dot_parser, dot_parser::{DotTokenizer, FunctionInputsType, SubgraphType}, error::SyntaxError,
+    dot_parser, dot_parser::{DotTokenizer, FunctionInputsType, SubgraphType, CodeUnit}, error::SyntaxError,
 };
 
 /// this structure contains all the parsed graph functions
@@ -40,7 +40,10 @@ pub enum CallModifiers {
 pub enum CallTypes {
     /// Сhoose none of the types out of the allowed type list
     None,
-    /// Used to be able to set the type later.
+    /// Used to be able to set the type later in the handler code.
+    /// Is transformed into a Type(..).
+    Known,
+    /// Used to be able to set the type later in the handler code..
     /// Is transformed into a TypeList(..).
     KnownList,
     /// Used to be able to set the type later. Similar to known, but indicates type compatibility.
@@ -58,13 +61,14 @@ impl CallTypes {
         match input {
             FunctionInputsType::Any => {
                 match accepted_types {
+                    FunctionTypes::None => panic!("Incorrect input type for node {node_name}: Any. Function does not accept arguments."),
                     FunctionTypes::TypeList(list) => CallTypes::TypeList(list.clone()),
                     FunctionTypes::TypeVariants(_) => panic!("Incorrect input type for node {node_name}: Any. Function only accepts type variants."),
-                    _ => todo!()
                 }
             },
             FunctionInputsType::None => CallTypes::None,
-            FunctionInputsType::Known => CallTypes::KnownList,
+            FunctionInputsType::Known => CallTypes::Known,
+            FunctionInputsType::KnownList => CallTypes::KnownList,
             FunctionInputsType::Compatible => CallTypes::Compatible,
             FunctionInputsType::TypeName(tp) => CallTypes::Type(tp),
             FunctionInputsType::TypeNameList(tp_list) => CallTypes::TypeList(tp_list),
@@ -198,17 +202,29 @@ impl MarkovChain {
         // stores node parameters map, needed for faster graph creation & type checks
         let mut node_params = HashMap::<SmolStr, NodeParams>::new();
         let mut current_function = Option::<Function>::None;
-        for token in DotTokenizer::from_str(&source) {
-            match token? {
+        let tokens = DotTokenizer::from_str(&source).collect::<Result<Vec<CodeUnit>, SyntaxError>>()?;
+        // Run through all function definitions
+        for token in &tokens {
+            match token {
                 dot_parser::CodeUnit::Function(definition) => {
-                    current_function = Some(Function::new(definition.clone()));
-                    define_node(&mut current_function, &mut node_params, definition.source_node_name, None, None, false, None)?;
-                    define_node(&mut current_function, &mut node_params, definition.exit_node_name, None, None, false, None)?;
+                    let mut function = Some(Function::new(definition.clone()));
+                    define_node(&mut function, &mut node_params, definition.source_node_name.clone(), None, None, false, None)?;
+                    define_node(&mut function, &mut node_params, definition.exit_node_name.clone(), None, None, false, None)?;
+                    let function = function.unwrap();
+                    functions.insert(function.source_node_name.clone(), function);
+                },
+                _ => {}
+            }
+        }
+        // Fill in function bodies
+        for token in tokens {
+            match token {
+                dot_parser::CodeUnit::Function(definition) => {
+                    current_function = Some(functions.remove(&definition.source_node_name).unwrap());
                 }
                 dot_parser::CodeUnit::CloseDeclaration => {
-                    if let Some(function) = current_function {
+                    if let Some(function) = current_function.take() {
                         functions.insert(function.source_node_name.clone(), function);
-                        current_function = None;
                     } else {
                         return Err(SyntaxError::new(format!("Unexpected CloseDeclaration")));
                     }
@@ -239,16 +255,27 @@ impl MarkovChain {
                         },
                         None => CallModifiers::None,
                     };
-                    let selected_types = if let Some(function) = &current_function {
-                        CallTypes::from_function_inputs_type(&node_name, &function.accepted_types, inputs)
-                    } else {
-                        return Err(SyntaxError::new(format!(
-                            "Unexpected node definition: {node_name} [...]"
-                        )));
+                    let selected_types = {
+                        let accepted_types = if let Some(ref function) = current_function {
+                            if function.source_node_name == func_name {
+                                &function.accepted_types
+                            } else {
+                                &functions.get(&func_name).ok_or_else(|| SyntaxError::new(format!(
+                                    "Call node {node_name} calls non-existing function: {func_name}"
+                                )))?.accepted_types
+                            }
+                        } else {
+                            return Err(SyntaxError::new(format!(
+                                "Unexpected node definition: {node_name} [...]"
+                            )));
+                        };
+                        CallTypes::from_function_inputs_type(
+                            &node_name, accepted_types, inputs
+                        )
                     };
-                    define_node(&mut current_function, &mut node_params, node_name, Some(CallParams {
-                        func_name, selected_types, modifiers
-                    }), type_name, false, trigger)?;
+                    define_node(&mut current_function, &mut node_params, node_name, Some(
+                        CallParams { func_name, selected_types, modifiers }
+                    ), type_name, false, trigger)?;
                 }
                 dot_parser::CodeUnit::Edge {
                     node_name_from,
@@ -307,11 +334,12 @@ impl MarkovChain {
                             CallTypes::TypeList(types_list),
                             FunctionTypes::TypeList(func_types_list)
                         ) if types_list.iter().all(|t| func_types_list.contains(t)) => {},
-                        (CallTypes::None, FunctionTypes::TypeList(..)) => {},
+                        (CallTypes::None, FunctionTypes::TypeList(..) | FunctionTypes::None) => {},
                         (
-                            CallTypes::KnownList | CallTypes::Compatible,
-                            FunctionTypes::TypeList(..) | FunctionTypes::TypeVariants(..)
+                            CallTypes::Compatible, FunctionTypes::TypeList(..) | FunctionTypes::TypeVariants(..)
                         ) => {},
+                        (CallTypes::Known, FunctionTypes::TypeVariants(..)) => {},
+                        (CallTypes::KnownList, FunctionTypes::TypeList(..)) => {},
                         _ => return Err(SyntaxError::new(gen_type_error(format!(
                             "Got {:?}, but the function type is {:?}", call_params.selected_types, function.accepted_types,
                         ))))
@@ -432,7 +460,7 @@ fn define_node(
         node_name: SmolStr, call_params: Option<CallParams>, type_name_opt: Option<SubgraphType>,
         literal: bool, trigger: Option<(SmolStr, bool)>
     ) -> Result<(), SyntaxError> {
-    if let Some(ref mut function) = current_function {
+    if let Some(function) = current_function {
         check_type(&function, &node_name, &type_name_opt)?;
         check_trigger(&function, &node_name, &trigger)?;
         function.chain.insert(node_name.clone(), Vec::<_>::new());

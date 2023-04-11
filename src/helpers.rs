@@ -8,3 +8,15 @@ macro_rules! unwrap_variant {
         }
     } };
 }
+
+#[macro_export]
+macro_rules! unwrap_variant_and_else {
+    ($target: expr, $pat: path, $l: expr) => { {
+        if let $pat(a) = $target {
+            a
+        } else {
+            $l();
+            panic!("Failed to unwrap variant: {} to {}", stringify!($target), stringify!($pat));
+        }
+    } };
+}

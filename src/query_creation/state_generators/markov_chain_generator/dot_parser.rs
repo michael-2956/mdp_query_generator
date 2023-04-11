@@ -116,7 +116,8 @@ impl SubgraphType {
     }
 
     pub fn to_data_type(&self) -> DataType {
-        /// TODO: this is a temporary solution
+        // TODO: this is a temporary solution
+        // Select among types variants.
         match self {
             SubgraphType::Numeric => DataType::Numeric(ExactNumberInfo::None),
             SubgraphType::Val3 => DataType::Boolean,
@@ -160,8 +161,10 @@ pub enum FunctionInputsType {
     /// Used in function calls to choose none of the types out of the allowed type list
     /// Used in function declarations to indicate that no types are accepted.
     None,
-    /// Used in function calls to be able to set the type later
+    /// Used in function calls to be able to set the type variant later
     Known,
+    /// Used in function calls to be able to set the type list later
+    KnownList,
     /// Used in function calls to be able to set the type later. Similar to known, but indicates type compatibility.
     /// Will be extended in the future to link to the types call node which would supply the type
     Compatible,
@@ -184,10 +187,10 @@ fn get_identifier_names(name_list_str: SmolStr) -> Vec<SmolStr> {
 
 impl FunctionInputsType {
     /// tries to match a special type (any, known, compatible)
-    fn try_extract_special_type(idents: &SmolStr) -> Option<FunctionInputsType> {
+    fn try_extract_special_type(idents: &SmolStr, multiple: bool) -> Option<FunctionInputsType> {
         match idents.as_str() {
             "any" => Some(FunctionInputsType::Any),
-            "known" => Some(FunctionInputsType::Known),
+            "known" => Some(if multiple {FunctionInputsType::KnownList} else {FunctionInputsType::Known}),
             "compatible" => Some(FunctionInputsType::Compatible),
             _ => None,
         }
@@ -197,6 +200,7 @@ impl FunctionInputsType {
     fn parse_types(name_list_str: SmolStr) -> Result<Vec<SubgraphType>, SyntaxError> {
         name_list_str
             .split(',')
+            .map(|x| x.trim())
             .map(SubgraphType::from_str)
             .collect::<Result<Vec<_>, _>>()
     }
@@ -488,7 +492,7 @@ fn parse_function_options(
     let mut modifiers = Option::<Vec<SmolStr>>::None;
     if let Some(token) = node_spec.remove("TYPE") {
         if let DotToken::QuotedIdentifiers(idents) = token {
-            if let Some(special_type) = FunctionInputsType::try_extract_special_type(&idents) {
+            if let Some(special_type) = FunctionInputsType::try_extract_special_type(&idents, false) {
                 input_type = special_type;
             } else {
                 let idents = FunctionInputsType::parse_types(idents)?;
@@ -513,7 +517,7 @@ fn parse_function_options(
     }
     if let Some(token) = node_spec.remove("TYPES") {
         if let DotToken::QuotedIdentifiersWithBrackets(idents) = token {
-            if let Some(special_type) = FunctionInputsType::try_extract_special_type(&idents) {
+            if let Some(special_type) = FunctionInputsType::try_extract_special_type(&idents, true) {
                 input_type = special_type;
             } else {
                 input_type = FunctionInputsType::TypeNameList(

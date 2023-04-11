@@ -9,6 +9,8 @@ use std::path::Path;
 use core::fmt::Debug;
 use smol_str::SmolStr;
 
+use crate::{unwrap_variant, query_creation::state_generators::markov_chain_generator::markov_chain::FunctionTypes};
+
 use self::{
     markov_chain::{
         MarkovChain, NodeParams, CallParams, CallModifiers
@@ -27,9 +29,12 @@ pub use dot_parser::SubgraphType;
 /// needed.
 #[derive(Debug, Clone)]
 pub struct MarkovChainGenerator<StC: StateChooser> {
+    /// this stack contains information about the known type name lists
+    /// inferred when [known] is used in TYPES
+    known_type_list_stack: Vec<Vec<SubgraphType>>,
     /// this stack contains information about the known type names
-    /// inferred when [known] is used in [TYPES]
-    known_type_name_stack: Vec<Vec<SubgraphType>>,
+    /// inferred when known is used in TYPE
+    known_type_name_stack: Vec<SubgraphType>,
     /// this stack contains information about the compatible type names
     /// inferred when [compatible] is used in [TYPES]
     compatible_type_name_stack: Vec<Vec<SubgraphType>>,
@@ -69,9 +74,10 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             markov_chain: chain,
             call_stack: vec![],
             pending_call: None,
+            known_type_list_stack: vec![],
             known_type_name_stack: vec![],
             compatible_type_name_stack: vec![],
-            state_chooser: Box::new(StC::new())
+            state_chooser: Box::new(StC::new()),
         };
         self_.reset();
         Ok(self_)
@@ -87,12 +93,15 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
     /// used when the markov chain reaches end, for the object to be iterable multiple times
     pub fn reset(&mut self) {
+        let accepted_types = unwrap_variant!(self.markov_chain.functions.get("Query").expect(
+            "Graph should have an entry function named Query, with TYPES=[...]"
+        ).accepted_types.clone(), FunctionTypes::TypeList);
         self.call_stack = vec![StackItem::from_call_params(CallParams {
             func_name: SmolStr::new("Query"),
-            selected_types: CallTypes::None,
+            selected_types: CallTypes::TypeList(accepted_types),
             modifiers: CallModifiers::None
         })];
-        self.known_type_name_stack = vec![];
+        self.known_type_list_stack = vec![];
         self.compatible_type_name_stack = vec![];
     }
 
@@ -106,9 +115,14 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         self.call_stack.last().unwrap().function_params.modifiers.clone()
     }
 
-    /// push the known type list for the next node that will use the type=[known]
+    /// push the known type for the next node that will use the type=known
+    pub fn push_known(&mut self, type_name: SubgraphType) {
+        self.known_type_name_stack.push(type_name);
+    }
+
+    /// push the known type list for the next node that will use the types=[known]
     pub fn push_known_list(&mut self, type_list: Vec<SubgraphType>) {
-        self.known_type_name_stack.push(type_list);
+        self.known_type_list_stack.push(type_list);
     }
 
     /// push the compatible type list for the next node that will use the type=[compatible]
@@ -117,14 +131,19 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 
     /// pop the known type for the current node which will uses type=[known]
-    fn pop_known(&mut self) -> Vec<SubgraphType> {
-        match self.known_type_name_stack.pop() {
-            Some(item) => item,
-            None => {
-                self.print_stack();
-                panic!("No known type name found!")
-            },
-        }
+    fn pop_known(&mut self) -> SubgraphType {
+        self.known_type_name_stack.pop().unwrap_or_else(|| {
+            self.print_stack();
+            panic!("No known type name found!")
+        })
+    }
+
+    /// pop the known type for the current node which will uses type=[known]
+    fn pop_known_list(&mut self) -> Vec<SubgraphType> {
+        self.known_type_list_stack.pop().unwrap_or_else(|| {
+            self.print_stack();
+            panic!("No known type list found!")
+        })
     }
 
     /// pop the compatible type for the current node which will uses type=[compatible]
@@ -165,7 +184,8 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     pub fn next(&mut self, dyn_model: &mut (impl DynamicModel + ?Sized)) -> Option<<Self as Iterator>::Item> {
         if let Some(call_params) = self.pending_call.take() {
             let inputs = match call_params.selected_types {
-                CallTypes::KnownList => CallTypes::TypeList(self.pop_known()),
+                CallTypes::Known => CallTypes::Type(self.pop_known()),
+                CallTypes::KnownList => CallTypes::TypeList(self.pop_known_list()),
                 CallTypes::Compatible => CallTypes::TypeList(self.pop_compatible()),
                 any => any,
             };
