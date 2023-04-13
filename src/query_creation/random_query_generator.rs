@@ -330,9 +330,6 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             any => self.panic_unexpected(any)
         };
 
-        if let CallTypes::TypeList(types) = self.state_generator.get_selected_types() {
-            println!("TODO: Enforce column & column types (Query): {:?}", types)
-        }
         let mut select_body = Select {
             distinct: false,
             top: None,
@@ -395,6 +392,10 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         self.expect_state("SELECT_projection");
         while match self.next_state().as_str() {
             "SELECT_list" => true,
+            "SELECT_list_multiple_values_single_value_false" => {
+                self.expect_state("SELECT_list");
+                true
+            },
             "EXIT_SELECT" => false,
             any => self.panic_unexpected(any)
         } {
@@ -414,8 +415,8 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     ));
                 },
                 arm @ ("SELECT_unnamed_expr" | "SELECT_expr_with_alias") => {
-                    self.expect_state("call7_types_all");
-                    let expr = self.handle_types_all().1;
+                    self.expect_state("call54_types");
+                    let expr = self.handle_types(None, None).1;
                     select_body.projection.push(match arm {
                         "SELECT_unnamed_expr" => SelectItem::UnnamedExpr(expr),
                         "SELECT_expr_with_alias" => SelectItem::ExprWithAlias {
@@ -791,43 +792,46 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         &mut self, equal_to: Option<SubgraphType>, compatible_with: Option<TypesSelectedType>
     ) -> (TypesSelectedType, Expr) {
         self.expect_state("types");
-        let (types_selected_type, types_value) = match self.next_state().as_str() {
-            "types_select_type" => {
-                let types_selected_type = match self.next_state().as_str() {
-                    "types_select_type_3vl" => SubgraphType::Val3,
-                    "types_select_type_array" => SubgraphType::Array,
-                    "types_select_type_list_expr" => SubgraphType::ListExpr,
-                    "types_select_type_numeric" => SubgraphType::Numeric,
-                    "types_select_type_string" => SubgraphType::String,
-                    any => self.panic_unexpected(any)
-                };
-                self.expect_state("types_select_type_end");
-                (TypesSelectedType::Type(types_selected_type.clone()), match self.next_state().as_str() {
+        let types_selected_type = match self.next_state().as_str() {
+            "types_select_type_3vl" => SubgraphType::Val3,
+            "types_select_type_array" => SubgraphType::Array,
+            "types_select_type_list_expr" => SubgraphType::ListExpr,
+            "types_select_type_numeric" => SubgraphType::Numeric,
+            "types_select_type_string" => SubgraphType::String,
+            "types_null" => {
+                self.expect_state("EXIT_types");
+                return (TypesSelectedType::Any, Expr::Value(Value::Null))
+            },
+            any => self.panic_unexpected(any),
+        };
+        let types_value = match self.next_state().as_str() {
+            "types_select_type_noexpr" => {
+                match self.next_state().as_str() {
                     "call0_column_spec" => {
-                        self.state_generator.push_known(types_selected_type);
+                        self.state_generator.push_known(types_selected_type.clone());
                         self.handle_column_spec()
                     },
                     "call1_Query" => {
-                        self.state_generator.push_known_list(vec![types_selected_type]);
+                        self.state_generator.push_known_list(vec![types_selected_type.clone()]);
                         Expr::Subquery(Box::new(self.handle_query()))
                     },
                     any => self.panic_unexpected(any)
-                })
+                }
             },
-            "types_null" => (TypesSelectedType::Any, Expr::Value(Value::Null)),
-            "call0_numeric" => (TypesSelectedType::Type(SubgraphType::Numeric), self.handle_numeric()),
-            "call1_VAL_3" => (TypesSelectedType::Type(SubgraphType::Val3), self.handle_val_3()),
-            "call0_string" => (TypesSelectedType::Type(SubgraphType::String), self.handle_string()),
-            "call0_list_expr" => (TypesSelectedType::Type(SubgraphType::ListExpr), self.handle_list_expr()),
-            "call0_array" => (TypesSelectedType::Type(SubgraphType::Array), self.handle_array()),
+            "call0_numeric" if types_selected_type == SubgraphType::Numeric => self.handle_numeric(),
+            "call1_VAL_3" if types_selected_type == SubgraphType::Val3 => self.handle_val_3(),
+            "call0_string" if types_selected_type == SubgraphType::String => self.handle_string(),
+            "call0_list_expr" if types_selected_type == SubgraphType::ListExpr => self.handle_list_expr(),
+            "call0_array" if types_selected_type == SubgraphType::Array => self.handle_array(),
             any => self.panic_unexpected(any)
         };
         self.expect_state("EXIT_types");
         if let Some(to) = equal_to {
-            if !types_selected_type.is_equal_to(&TypesSelectedType::Type(to.clone())) {
+            if types_selected_type != to {
                 panic!("Unexpected type: expected {:?}, got {:?}", to, types_selected_type);
             }
         }
+        let types_selected_type = TypesSelectedType::Type(types_selected_type);
         if let Some(with) = compatible_with {
             self.expect_compat(&types_selected_type, &with);
         }
@@ -920,8 +924,8 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     /// starting point; calls handle_query for the first time
     fn generate(&mut self) -> Query {
         let query = self.handle_query();
-        // println!("Relations:\n{}", self.current_query_rm);
-        // println!("Query:\n{}", query);
+        println!("Relations:\n{}", self.current_query_rm);
+        println!("Query:\n{}\n", query);
         // reset the generator
         if let Some(state) = self.next_state_opt() {
             panic!("Couldn't reset state_generator: Received {state}");

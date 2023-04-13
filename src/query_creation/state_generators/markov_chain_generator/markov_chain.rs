@@ -31,8 +31,11 @@ pub struct NodeParams {
 /// pass-through (pass current funciton's arguments)
 #[derive(Clone, Debug, PartialEq)]
 pub enum CallModifiers {
+    /// none of the modifiers are activated
     None,
+    /// Used when we want to pass the function's modifiers further
     PassThrough,
+    /// USed to specify a static list of modifiers
     StaticList(Vec<SmolStr>),
 }
 
@@ -50,6 +53,8 @@ pub enum CallTypes {
     /// Will be extended in the future to link to the types call node which would supply the type.
     /// Is later transformed into a TypeList(..).
     Compatible,
+    /// Used when we want to pass the function's type constraints further
+    PassThrough,
     /// Select a type among type variants.
     Type(SubgraphType),
     /// Select multiple types among possible type variants.
@@ -70,6 +75,7 @@ impl CallTypes {
             FunctionInputsType::Known => CallTypes::Known,
             FunctionInputsType::KnownList => CallTypes::KnownList,
             FunctionInputsType::Compatible => CallTypes::Compatible,
+            FunctionInputsType::PassThrough => CallTypes::PassThrough,
             FunctionInputsType::TypeName(tp) => CallTypes::Type(tp),
             FunctionInputsType::TypeNameList(tp_list) => CallTypes::TypeList(tp_list),
             any => panic!("Incorrect input type for node {node_name}: {:?}", any),
@@ -336,8 +342,9 @@ impl MarkovChain {
                         ) if types_list.iter().all(|t| func_types_list.contains(t)) => {},
                         (CallTypes::None, FunctionTypes::TypeList(..) | FunctionTypes::None) => {},
                         (
-                            CallTypes::Compatible, FunctionTypes::TypeList(..) | FunctionTypes::TypeVariants(..)
+                            CallTypes::PassThrough, FunctionTypes::TypeList(..) | FunctionTypes::TypeVariants(..)
                         ) => {},
+                        (CallTypes::Compatible, FunctionTypes::TypeList(..)) => {},
                         (CallTypes::Known, FunctionTypes::TypeVariants(..)) => {},
                         (CallTypes::KnownList, FunctionTypes::TypeList(..)) => {},
                         _ => return Err(SyntaxError::new(gen_type_error(format!(

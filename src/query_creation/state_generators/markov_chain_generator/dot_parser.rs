@@ -168,6 +168,8 @@ pub enum FunctionInputsType {
     /// Used in function calls to be able to set the type later. Similar to known, but indicates type compatibility.
     /// Will be extended in the future to link to the types call node which would supply the type
     Compatible,
+    /// Used in function calls to pass the function's type constraints further
+    PassThrough,
     /// Used in function calls to select a type among type variants.
     TypeName(SubgraphType),
     /// Used in function calls to select multiple types among the allowed type list.
@@ -190,8 +192,9 @@ impl FunctionInputsType {
     fn try_extract_special_type(idents: &SmolStr, multiple: bool) -> Option<FunctionInputsType> {
         match idents.as_str() {
             "any" => Some(FunctionInputsType::Any),
-            "known" => Some(if multiple {FunctionInputsType::KnownList} else {FunctionInputsType::Known}),
+            "..." => Some(FunctionInputsType::PassThrough),
             "compatible" => Some(FunctionInputsType::Compatible),
+            "known" => Some(if multiple {FunctionInputsType::KnownList} else {FunctionInputsType::Known}),
             _ => None,
         }
     }

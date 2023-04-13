@@ -187,6 +187,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
                 CallTypes::Known => CallTypes::Type(self.pop_known()),
                 CallTypes::KnownList => CallTypes::TypeList(self.pop_known_list()),
                 CallTypes::Compatible => CallTypes::TypeList(self.pop_compatible()),
+                CallTypes::PassThrough => self.call_stack.last().unwrap().function_params.selected_types.clone(),
                 any => any,
             };
             self.call_stack.push(StackItem::from_call_params(CallParams {
