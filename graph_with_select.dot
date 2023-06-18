@@ -145,15 +145,15 @@ digraph G {
         // SELECT_percent_end -> SELECT_projection
 
         SELECT_list [label="SELECT list"]
-        SELECT_wildcard[label="*"]
-        SELECT_qualified_wildcard[label="qualified wildcard"]
+        // SELECT_wildcard[label="*"]
+        // SELECT_qualified_wildcard[label="qualified wildcard"]
         SELECT_unnamed_expr[label="unnamed expression"]
         SELECT_expr_with_alias[label="expression with alias"]
         SELECT_list_multiple_values[label="SELECT list multiple values"]
 
         SELECT_projection -> SELECT_list
-        SELECT_list -> SELECT_wildcard
-        SELECT_list -> SELECT_qualified_wildcard
+        // SELECT_list -> SELECT_wildcard
+        // SELECT_list -> SELECT_qualified_wildcard
         SELECT_list -> SELECT_unnamed_expr
         SELECT_list -> SELECT_expr_with_alias
         call54_types [label="TYPES: [...types]", TYPES="[...]", shape=rectangle, style=filled, color=lightblue]
@@ -161,8 +161,8 @@ digraph G {
         SELECT_expr_with_alias -> call54_types
 
         // call0_aggregate_function [label="aggregate function*", TYPES="[known]", shape=rectangle, style=filled, color=peru]
-        SELECT_wildcard -> EXIT_SELECT  // SELECT_list_multiple_values // call0_aggregate_function
-        SELECT_qualified_wildcard -> SELECT_list_multiple_values // call0_aggregate_function
+        // SELECT_wildcard -> EXIT_SELECT  // SELECT_list_multiple_values // call0_aggregate_function
+        // SELECT_qualified_wildcard -> SELECT_list_multiple_values // call0_aggregate_function
         // call0_aggregate_function -> SELECT_list_multiple_values
         call54_types -> SELECT_list_multiple_values // call0_aggregate_function
         SELECT_list_multiple_values -> EXIT_SELECT

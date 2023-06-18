@@ -98,20 +98,20 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         ).accepted_types.clone(), FunctionTypes::TypeList);
         self.call_stack = vec![StackItem::from_call_params(CallParams {
             func_name: SmolStr::new("Query"),
-            selected_types: CallTypes::TypeList(accepted_types),
-            modifiers: CallModifiers::None
+            selected_types: CallTypes::TypeList(accepted_types),  // CallTypes::TypeList(vec![SubgraphType::Numeric]),  // 
+            modifiers: CallModifiers::None  // CallModifiers::StaticList(vec![SmolStr::new("single value")])  //
         })];
         self.known_type_list_stack = vec![];
         self.compatible_type_name_stack = vec![];
     }
 
     /// get current function inputs list
-    pub fn get_selected_types(&self) -> CallTypes {
+    pub fn get_fn_selected_types(&self) -> CallTypes {
         self.call_stack.last().unwrap().function_params.selected_types.clone()
     }
 
     /// get crrent function modifiers list
-    pub fn get_modifiers(&self) -> CallModifiers {
+    pub fn get_fn_modifiers(&self) -> CallModifiers {
         self.call_stack.last().unwrap().function_params.modifiers.clone()
     }
 
@@ -147,7 +147,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 
     /// pop the compatible type for the current node which will uses type=[compatible]
-    fn pop_compatible(&mut self) -> Vec<SubgraphType> {
+    fn pop_compatible_list(&mut self) -> Vec<SubgraphType> {
         match self.compatible_type_name_stack.pop() {
             Some(item) => item,
             None => {
@@ -186,7 +186,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             let inputs = match call_params.selected_types {
                 CallTypes::Known => CallTypes::Type(self.pop_known()),
                 CallTypes::KnownList => CallTypes::TypeList(self.pop_known_list()),
-                CallTypes::Compatible => CallTypes::TypeList(self.pop_compatible()),
+                CallTypes::Compatible => CallTypes::TypeList(self.pop_compatible_list()),
                 CallTypes::PassThrough => self.call_stack.last().unwrap().function_params.selected_types.clone(),
                 any => any,
             };
@@ -216,6 +216,11 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             self.call_stack.pop();
             return Some(current_node.name)
         }
+        // let mut hashmap: HashMap<String, fn() -> bool> = HashMap::new();
+        // // Call functions based on the key
+        // if let Some(func) = hashmap.get("one") {
+        //     let a = func();
+        // }
 
         let cur_node_outgoing = function.chain.get(&current_node.name).unwrap();
 

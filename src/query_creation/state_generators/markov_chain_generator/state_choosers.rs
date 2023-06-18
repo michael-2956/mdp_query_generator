@@ -10,7 +10,7 @@ use super::markov_chain::NodeParams;
 
 pub trait StateChooser: Debug + Clone {
     fn new() -> Self where Self: Sized;
-    fn choose_destination(&mut self, cur_node_outgoing: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams>;
+    fn choose_destination(&mut self, outgoing_states: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams>;
 }
 
 #[derive(Debug, Clone)]
@@ -23,9 +23,9 @@ impl StateChooser for ProbabilisticStateChooser {
         Self { rng: ChaCha8Rng::seed_from_u64(1), }
     }
 
-    fn choose_destination(&mut self, cur_node_outgoing: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams> {
+    fn choose_destination(&mut self, outgoing_states: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams> {
         let cur_node_outgoing: Vec<(f64, NodeParams)> = {
-            let cur_node_outgoing = cur_node_outgoing.iter().map(|el| {
+            let cur_node_outgoing = outgoing_states.iter().map(|el| {
                 (if el.0 { 0f64 } else { el.1 }, el.2.clone())
             }).collect::<Vec<_>>();
             let max_level: f64 = cur_node_outgoing.iter().map(|el| { el.0 }).sum();
@@ -538,18 +538,18 @@ impl StateChooser for DeterministicStateChooser {
         }
     }
 
-    fn choose_destination(&mut self, cur_node_outgoing: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams> {
-        if cur_node_outgoing.len() == 0 {
+    fn choose_destination(&mut self, outgoing_states: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams> {
+        if outgoing_states.len() == 0 {
             println!("List of outgoing nodes is empty!");
             return None
         }
-        if cur_node_outgoing.len() == 1 { return Some(cur_node_outgoing[0].2.clone()) }
+        if outgoing_states.len() == 1 { return Some(outgoing_states[0].2.clone()) }
         let node_name = self.state_list[self.state_index].clone();
         self.state_index += 1;
-        match cur_node_outgoing.iter().find(|node| node.2.name == node_name) {
+        match outgoing_states.iter().find(|node| node.2.name == node_name) {
             Some(node) => Some(node.2.clone()),
             None => {
-                println!("None of {:?} matches \"{node_name}\" inferred from query", cur_node_outgoing);
+                println!("None of {:?} matches \"{node_name}\" inferred from query", outgoing_states);
                 None
             },
         }

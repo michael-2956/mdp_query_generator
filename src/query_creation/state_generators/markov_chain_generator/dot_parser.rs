@@ -87,7 +87,7 @@ fn block_comment(lex: &mut Lexer<'_, DotToken>) -> Filter<()> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SubgraphType {
     Numeric,
     Val3,

@@ -1,6 +1,8 @@
 #[macro_use]
 mod query_info;
 
+use rand::{SeedableRng, Rng};
+use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
     Expr, Ident, Query, Select, SetExpr, TableAlias, TableFactor,
@@ -9,7 +11,7 @@ use sqlparser::ast::{
 
 use super::{super::{unwrap_variant, unwrap_variant_and_else}, state_generators::{SubgraphType, CallTypes}};
 pub use self::query_info::TypesSelectedType;
-use self::query_info::RelationManager;
+use self::query_info::{RelationManager, Projection};
 
 use super::state_generators::{MarkovChainGenerator, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
@@ -17,7 +19,9 @@ pub struct QueryGenerator<DynMod: DynamicModel, StC: StateChooser> {
     state_generator: MarkovChainGenerator<StC>,
     dynamic_model: Box<DynMod>,
     current_query_rm: RelationManager,
+    from_relations_selection_stack: Vec<Vec<Projection>>,
     free_projection_alias_index: u32,
+    rng: ChaCha8Rng,
 }
 
 trait ExpressionNesting {
@@ -259,15 +263,15 @@ impl ExpressionPriority for Expr {
     }
 }
 
-/// TODO: Nesting to prevent hierarchy conflicts
-
 impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     pub fn from_state_generator(state_generator: MarkovChainGenerator<StC>) -> Self {
         QueryGenerator::<DynMod, StC> {
             state_generator,
             dynamic_model: Box::new(DynMod::new()),
             current_query_rm: RelationManager::new(),
+            from_relations_selection_stack: vec![],
             free_projection_alias_index: 1,
+            rng: ChaCha8Rng::seed_from_u64(1),
         }
     }
 
@@ -305,9 +309,16 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         Ident { value: name.clone(), quote_style: None }
     }
 
+    fn get_random_from_projection(&mut self) -> &mut Projection {
+        let current_from_relations = self.from_relations_selection_stack.last_mut().unwrap();
+        let num_skip = self.rng.gen_range(0..current_from_relations.len());
+        current_from_relations.iter_mut().skip(num_skip).next().unwrap()
+    }
+
     /// subgraph def_Query
     fn handle_query(&mut self) -> Query {
         self.dynamic_model.notify_subquery_creation_begin();
+        self.from_relations_selection_stack.push(vec![]);
         self.expect_state("Query");
 
         let select_limit = match self.next_state().as_str() {
@@ -348,20 +359,29 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
 
         loop {
             select_body.from.push(TableWithJoins { relation: match self.next_state().as_str() {
-                "Table" => TableFactor::Table {
-                    name: self.current_query_rm.new_relation().get_object_name().clone(),
-                    alias: None,
-                    args: None,
-                    with_hints: vec![],
-                    columns_definition: None,
+                "Table" => {
+                    let relation = self.current_query_rm.new_relation();
+                    let projection = relation.get_projection();
+                    self.from_relations_selection_stack.last_mut().unwrap().push(projection.clone());
+                    TableFactor::Table {
+                        name: projection.alias.clone(),
+                        alias: None,
+                        args: None,
+                        with_hints: vec![],
+                        columns_definition: None,
+                    }
                 },
-                "call0_Query" => TableFactor::Derived {
-                    lateral: false,
-                    subquery: Box::new(self.handle_query()),
-                    alias: Some(TableAlias {
-                        name: self.current_query_rm.new_ident(),
-                        columns: vec![],
-                    })
+                "call0_Query" => {
+                    let query = self.handle_query();
+                    // let selection = unwrap_variant!(*query.body.clone(), SetExpr::Select).projection;
+                    TableFactor::Derived {
+                        lateral: false,
+                        subquery: Box::new(query),
+                        alias: Some(TableAlias {
+                            name: self.current_query_rm.new_ident(),
+                            columns: vec![],
+                        })
+                    }
                 },
                 "EXIT_FROM" => break,
                 any => self.panic_unexpected(any)
@@ -408,7 +428,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                 },
                 "SELECT_qualified_wildcard" => {
                     select_body.projection.push(SelectItem::QualifiedWildcard(
-                        self.current_query_rm.get_random_relation().get_object_name().clone(),
+                        self.get_random_from_projection().alias.clone(),
                         WildcardAdditionalOptions {
                             opt_exclude: None, opt_except: None, opt_rename: None,
                         }
@@ -432,6 +452,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
 
         self.expect_state("EXIT_Query");
         self.dynamic_model.notify_subquery_creation_end();
+        self.from_relations_selection_stack.pop();
         Query {
             with: None,
             body: Box::new(SetExpr::Select(Box::new(select_body))),
@@ -853,12 +874,12 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         self.expect_state("typed_column_name");
         let ident_components = {
             let column_type = unwrap_variant_and_else!(
-                self.state_generator.get_selected_types(), CallTypes::Type, || self.state_generator.print_stack()
+                self.state_generator.get_fn_selected_types(), CallTypes::Type, || self.state_generator.print_stack()
             );
-            let relation = self.current_query_rm.get_random_relation();
-            let mut ident_components = relation.get_object_name().clone().0;
-            ident_components.push(relation.add_typed_column(column_type.to_data_type()));
-            ident_components
+            // TODO: this has 2 cases: a new column for a relation or a constrained column selection
+            // Question: Should (ObejectName, vec of cols) be a separate struct that would have a
+            // method performing the following action in dep of the type of Relation (rel/query)?
+            self.get_random_from_projection().get_random_column_with_type(column_type)
         };
         self.expect_state("EXIT_column_spec");
         Expr::CompoundIdentifier(ident_components)
