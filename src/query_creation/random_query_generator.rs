@@ -1,25 +1,24 @@
 #[macro_use]
 mod query_info;
 
-use rand::{SeedableRng, Rng};
+use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
-    Expr, Ident, Query, Select, SetExpr, TableAlias, TableFactor,
-    TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, Array, SelectItem, WildcardAdditionalOptions,
+    Expr, Ident, Query, Select, SetExpr, TableFactor,
+    TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, Array, SelectItem, WildcardAdditionalOptions, ObjectName,
 };
 
 use super::{super::{unwrap_variant, unwrap_variant_and_else}, state_generators::{SubgraphType, CallTypes}};
-pub use self::query_info::TypesSelectedType;
-use self::query_info::{RelationManager, Projection};
+use self::query_info::{FromContents, DatabaseSchema};
 
 use super::state_generators::{MarkovChainGenerator, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
 pub struct QueryGenerator<DynMod: DynamicModel, StC: StateChooser> {
     state_generator: MarkovChainGenerator<StC>,
     dynamic_model: Box<DynMod>,
-    current_query_rm: RelationManager,
-    from_relations_selection_stack: Vec<Vec<Projection>>,
+    database_schema: DatabaseSchema,
+    from_contents_stack: Vec<FromContents>,
     free_projection_alias_index: u32,
     rng: ChaCha8Rng,
 }
@@ -264,12 +263,12 @@ impl ExpressionPriority for Expr {
 }
 
 impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
-    pub fn from_state_generator(state_generator: MarkovChainGenerator<StC>) -> Self {
+    pub fn from_state_generator_and_schema(state_generator: MarkovChainGenerator<StC>, schema_source: &str) -> Self {
         QueryGenerator::<DynMod, StC> {
             state_generator,
             dynamic_model: Box::new(DynMod::new()),
-            current_query_rm: RelationManager::new(),
-            from_relations_selection_stack: vec![],
+            database_schema: DatabaseSchema::parse_schema(schema_source),
+            from_contents_stack: vec![],
             free_projection_alias_index: 1,
             rng: ChaCha8Rng::seed_from_u64(1),
         }
@@ -296,29 +295,23 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         }
     }
 
-    fn expect_compat(&self, target: &TypesSelectedType, compat_with: &TypesSelectedType) {
+    fn expect_compat(&self, target: &SubgraphType, compat_with: &SubgraphType) {
         if !target.is_compat_with(compat_with) {
             self.state_generator.print_stack();
             panic!("Incompatible types: expected compatible with {:?}, got {:?}", compat_with, target);
         }
     }
 
-    pub fn gen_select_alias(&mut self) -> Ident {
+    pub fn gen_select_alias(&mut self) -> ObjectName {
         let name = format!("C{}", self.free_projection_alias_index);
         self.free_projection_alias_index += 1;
-        Ident { value: name.clone(), quote_style: None }
-    }
-
-    fn get_random_from_projection(&mut self) -> &mut Projection {
-        let current_from_relations = self.from_relations_selection_stack.last_mut().unwrap();
-        let num_skip = self.rng.gen_range(0..current_from_relations.len());
-        current_from_relations.iter_mut().skip(num_skip).next().unwrap()
+        ObjectName(vec![Ident { value: name.clone(), quote_style: None }])
     }
 
     /// subgraph def_Query
-    fn handle_query(&mut self) -> Query {
+    fn handle_query(&mut self) -> (Query, Vec<(Option<ObjectName>, SubgraphType)>) {
         self.dynamic_model.notify_subquery_creation_begin();
-        self.from_relations_selection_stack.push(vec![]);
+        self.from_contents_stack.push(FromContents::new());
         self.expect_state("Query");
 
         let select_limit = match self.next_state().as_str() {
@@ -360,27 +353,23 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         loop {
             select_body.from.push(TableWithJoins { relation: match self.next_state().as_str() {
                 "Table" => {
-                    let relation = self.current_query_rm.new_relation();
-                    let projection = relation.get_projection();
-                    self.from_relations_selection_stack.last_mut().unwrap().push(projection.clone());
+                    let create_table_st = self.database_schema.get_random_table_def(&mut self.rng);
+                    let alias = self.from_contents_stack.last_mut().unwrap().append_table(create_table_st);
                     TableFactor::Table {
-                        name: projection.alias.clone(),
-                        alias: None,
+                        name: create_table_st.name.clone(),
+                        alias: Some(alias),
                         args: None,
                         with_hints: vec![],
                         columns_definition: None,
                     }
                 },
                 "call0_Query" => {
-                    let query = self.handle_query();
-                    // let selection = unwrap_variant!(*query.body.clone(), SetExpr::Select).projection;
+                    let (query, column_idents_and_graph_types) = self.handle_query();
+                    let alias = self.from_contents_stack.last_mut().unwrap().append_query(column_idents_and_graph_types);
                     TableFactor::Derived {
                         lateral: false,
                         subquery: Box::new(query),
-                        alias: Some(TableAlias {
-                            name: self.current_query_rm.new_ident(),
-                            columns: vec![],
-                        })
+                        alias: Some(alias)
                     }
                 },
                 "EXIT_FROM" => break,
@@ -409,6 +398,8 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             any => self.panic_unexpected(any)
         };
 
+        let mut column_idents_and_graph_types = vec![];
+
         self.expect_state("SELECT_projection");
         while match self.next_state().as_str() {
             "SELECT_list" => true,
@@ -421,14 +412,34 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         } {
             match self.next_state().as_str() {
                 "SELECT_wildcard" => {
+                    column_idents_and_graph_types = [
+                        column_idents_and_graph_types,
+                        self.from_contents_stack
+                            .last()
+                            .unwrap()
+                            .get_wildcard_columns()
+                            .into_iter()
+                            .map(|x| (Some(x.0), x.1))
+                            .collect::<Vec<_>>()
+                    ].concat();
                     select_body.projection.push(SelectItem::Wildcard(WildcardAdditionalOptions {
                         opt_exclude: None, opt_except: None, opt_rename: None,
                     }));
                     continue;
                 },
                 "SELECT_qualified_wildcard" => {
+                    let from_contents = self.from_contents_stack.last().unwrap();
+                    let (alias, relation) = from_contents.get_random_relation(&mut self.rng);
+                    column_idents_and_graph_types = [
+                        column_idents_and_graph_types,
+                        relation
+                            .get_columns_with_types()
+                            .into_iter()
+                            .map(|x| (Some(x.0), x.1))
+                            .collect::<Vec<_>>()
+                    ].concat();
                     select_body.projection.push(SelectItem::QualifiedWildcard(
-                        self.get_random_from_projection().alias.clone(),
+                        alias.to_owned(),
                         WildcardAdditionalOptions {
                             opt_exclude: None, opt_except: None, opt_rename: None,
                         }
@@ -436,14 +447,21 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                 },
                 arm @ ("SELECT_unnamed_expr" | "SELECT_expr_with_alias") => {
                     self.expect_state("call54_types");
-                    let expr = self.handle_types(None, None).1;
-                    select_body.projection.push(match arm {
-                        "SELECT_unnamed_expr" => SelectItem::UnnamedExpr(expr),
-                        "SELECT_expr_with_alias" => SelectItem::ExprWithAlias {
-                            expr, alias: self.gen_select_alias(),
+                    let (subgraph_type, expr) = self.handle_types(None, None);
+                    let (alias, select_item) = match arm {
+                        "SELECT_unnamed_expr" => (
+                            None, SelectItem::UnnamedExpr(expr)
+                        ),
+                        "SELECT_expr_with_alias" => {
+                            let select_alias = self.gen_select_alias();
+                            (Some(select_alias.clone()), SelectItem::ExprWithAlias {
+                                expr, alias: select_alias.0[0].clone(),
+                            })
                         },
                         any => self.panic_unexpected(any)
-                    });
+                    };
+                    select_body.projection.push(select_item);
+                    column_idents_and_graph_types.push((alias, subgraph_type));
                 },
                 any => self.panic_unexpected(any)
             };
@@ -452,8 +470,8 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
 
         self.expect_state("EXIT_Query");
         self.dynamic_model.notify_subquery_creation_end();
-        self.from_relations_selection_stack.pop();
-        Query {
+        self.from_contents_stack.pop();
+        (Query {
             with: None,
             body: Box::new(SetExpr::Select(Box::new(select_body))),
             order_by: vec![],
@@ -461,7 +479,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             offset: None,
             fetch: None,
             locks: vec![],
-        }
+        }, column_idents_and_graph_types)
     }
 
     /// subgraph def_VAL_3
@@ -514,7 +532,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     any => self.panic_unexpected(any)
                 };
                 Expr::Exists {
-                    subquery: Box::new(self.handle_query()),
+                    subquery: Box::new(self.handle_query().0),
                     negated: exists_not_flag
                 }
             },
@@ -550,7 +568,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     any => self.panic_unexpected(any)
                 };
                 self.expect_state("call3_Query");
-                let query = self.handle_query();
+                let query = self.handle_query().0;
                 Expr::InSubquery {
                     expr: Box::new(types_value),
                     subquery: Box::new(query),
@@ -616,7 +634,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                 self.expect_state("AnyAllSelectIter");
                 self.state_generator.push_compatible_list(types_selected_type.get_compat_types());
                 let iterable = Box::new(match self.next_state().as_str() {
-                    "call4_Query" => Expr::Subquery(Box::new(self.handle_query())),
+                    "call4_Query" => Expr::Subquery(Box::new(self.handle_query().0)),
                     "call1_array" => self.handle_array(),
                     any => self.panic_unexpected(any)
                 });
@@ -810,10 +828,10 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
 
     /// subgraph def_types
     fn handle_types(
-        &mut self, equal_to: Option<SubgraphType>, compatible_with: Option<TypesSelectedType>
-    ) -> (TypesSelectedType, Expr) {
+        &mut self, equal_to: Option<SubgraphType>, compatible_with: Option<SubgraphType>
+    ) -> (SubgraphType, Expr) {
         self.expect_state("types");
-        let types_selected_type = match self.next_state().as_str() {
+        let selected_type = match self.next_state().as_str() {
             "types_select_type_3vl" => SubgraphType::Val3,
             "types_select_type_array" => SubgraphType::Array,
             "types_select_type_list_expr" => SubgraphType::ListExpr,
@@ -821,7 +839,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "types_select_type_string" => SubgraphType::String,
             "types_null" => {
                 self.expect_state("EXIT_types");
-                return (TypesSelectedType::Any, Expr::Value(Value::Null))
+                return (SubgraphType::Null, Expr::Value(Value::Null))
             },
             any => self.panic_unexpected(any),
         };
@@ -829,38 +847,37 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "types_select_type_noexpr" => {
                 match self.next_state().as_str() {
                     "call0_column_spec" => {
-                        self.state_generator.push_known(types_selected_type.clone());
+                        self.state_generator.push_known(selected_type.clone());
                         self.handle_column_spec()
                     },
                     "call1_Query" => {
-                        self.state_generator.push_known_list(vec![types_selected_type.clone()]);
-                        Expr::Subquery(Box::new(self.handle_query()))
+                        self.state_generator.push_known_list(vec![selected_type.clone()]);
+                        Expr::Subquery(Box::new(self.handle_query().0))
                     },
                     any => self.panic_unexpected(any)
                 }
             },
-            "call0_numeric" if types_selected_type == SubgraphType::Numeric => self.handle_numeric(),
-            "call1_VAL_3" if types_selected_type == SubgraphType::Val3 => self.handle_val_3(),
-            "call0_string" if types_selected_type == SubgraphType::String => self.handle_string(),
-            "call0_list_expr" if types_selected_type == SubgraphType::ListExpr => self.handle_list_expr(),
-            "call0_array" if types_selected_type == SubgraphType::Array => self.handle_array(),
+            "call0_numeric" if selected_type == SubgraphType::Numeric => self.handle_numeric(),
+            "call1_VAL_3" if selected_type == SubgraphType::Val3 => self.handle_val_3(),
+            "call0_string" if selected_type == SubgraphType::String => self.handle_string(),
+            "call0_list_expr" if selected_type == SubgraphType::ListExpr => self.handle_list_expr(),
+            "call0_array" if selected_type == SubgraphType::Array => self.handle_array(),
             any => self.panic_unexpected(any)
         };
         self.expect_state("EXIT_types");
         if let Some(to) = equal_to {
-            if types_selected_type != to {
-                panic!("Unexpected type: expected {:?}, got {:?}", to, types_selected_type);
+            if selected_type != to {
+                panic!("Unexpected type: expected {:?}, got {:?}", to, selected_type);
             }
         }
-        let types_selected_type = TypesSelectedType::Type(types_selected_type);
         if let Some(with) = compatible_with {
-            self.expect_compat(&types_selected_type, &with);
+            self.expect_compat(&selected_type, &with);
         }
-        (types_selected_type, types_value.nest_children_if_needed())
+        (selected_type, types_value.nest_children_if_needed())
     }
 
     /// subgraph def_types_all
-    fn handle_types_all(&mut self) -> (TypesSelectedType, Expr) {
+    fn handle_types_all(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("types_all");
         self.expect_state("call0_types");
         let ret = self.handle_types(None, None);
@@ -879,7 +896,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             // TODO: this has 2 cases: a new column for a relation or a constrained column selection
             // Question: Should (ObejectName, vec of cols) be a separate struct that would have a
             // method performing the following action in dep of the type of Relation (rel/query)?
-            self.get_random_from_projection().get_random_column_with_type(column_type)
+            self.from_contents_stack.last().unwrap().get_random_column_with_type(&mut self.rng, &column_type)
         };
         self.expect_state("EXIT_column_spec");
         Expr::CompoundIdentifier(ident_components)
@@ -902,7 +919,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             match self.next_state().as_str() {
                 "call50_types" => {
                     self.state_generator.push_compatible_list(array_compat_type.get_compat_types());
-                    let types_value = self.handle_types(None, Some(TypesSelectedType::Type(array_compat_type.clone()))).1;
+                    let types_value = self.handle_types(None, Some(array_compat_type.clone())).1;
                     array.push(types_value);
                 },
                 "EXIT_array" => break,
@@ -932,7 +949,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             match self.next_state().as_str() {
                 "call49_types" => {
                     self.state_generator.push_compatible_list(list_compat_type.get_compat_types());
-                    let types_value = self.handle_types(None, Some(TypesSelectedType::Type(list_compat_type.clone()))).1;
+                    let types_value = self.handle_types(None, Some(list_compat_type.clone())).1;
                     list_expr.push(types_value);
                 },
                 "EXIT_list_expr" => break,
@@ -944,14 +961,13 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
 
     /// starting point; calls handle_query for the first time
     fn generate(&mut self) -> Query {
-        let query = self.handle_query();
-        println!("Relations:\n{}", self.current_query_rm);
+        let query = self.handle_query().0;
+        println!("Relations:\n{}", self.database_schema);
         println!("Query:\n{}\n", query);
         // reset the generator
         if let Some(state) = self.next_state_opt() {
             panic!("Couldn't reset state_generator: Received {state}");
         }
-        self.current_query_rm = RelationManager::new();
         self.dynamic_model = Box::new(DynMod::new());
         query
     }

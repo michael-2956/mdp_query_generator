@@ -94,11 +94,12 @@ pub enum SubgraphType {
     Array,
     ListExpr,
     String,
+    Null,
 }
 
 impl SubgraphType {
     pub fn get_all() -> Vec<SubgraphType> {
-        vec![ Self::Numeric, Self::Val3, Self::Array, Self::ListExpr, Self::String ]
+        vec![ Self::Numeric, Self::Val3, Self::Array, Self::ListExpr, Self::String, Self::Null ]
     }
 
     fn as_str(&self) -> &str {
@@ -108,6 +109,7 @@ impl SubgraphType {
             SubgraphType::Array => "array",
             SubgraphType::ListExpr => "list expr",
             SubgraphType::String => "string",
+            SubgraphType::Null => "null",
         }
     }
 
@@ -115,15 +117,30 @@ impl SubgraphType {
         SubgraphType::from_str(smol_str.as_str())
     }
 
+    pub fn from_data_type(data_type: &DataType) -> Self {
+        match data_type {
+            DataType::Integer(_) => Self::Numeric,  /// TODO
+            DataType::Varchar(_) => Self::String,
+            DataType::CharVarying(_) => Self::String,
+            DataType::Char(_) => Self::String,  /// TODO
+            DataType::Numeric(_) => Self::Numeric,
+            DataType::Date => Self::Numeric,  /// TODO
+            DataType::Boolean => Self::Val3,
+            DataType::Array(_) => Self::Array,
+            any => panic!("DataType not implemented: {any}"),
+        }
+    }
+
     pub fn to_data_type(&self) -> DataType {
         // TODO: this is a temporary solution
-        // Select among types variants.
+        // Select among type variants.
         match self {
             SubgraphType::Numeric => DataType::Numeric(ExactNumberInfo::None),
             SubgraphType::Val3 => DataType::Boolean,
             SubgraphType::Array => DataType::Array(Some(Box::new(DataType::Numeric(ExactNumberInfo::None)))),
             SubgraphType::ListExpr => DataType::Custom(ObjectName(vec![Ident::new("row_expression")]), vec![]),
             SubgraphType::String => DataType::String,
+            SubgraphType::Null => panic!("Can't convert SubgraphType::Null to DataType"),
         }
     }
 }

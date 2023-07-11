@@ -1,18 +1,17 @@
 use std::collections::HashMap;
 
-use rand::{SeedableRng, Rng};
+use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
-use super::super::super::unwrap_variant;
 use super::super::state_generators::SubgraphType;
-use sqlparser::ast::{Ident, ObjectName, Statement, ColumnDef, HiveDistributionStyle, TableConstraint, HiveFormat, SqlOption, FileFormat, Query, OnCommit};
+use sqlparser::{ast::{Ident, ObjectName, Statement, ColumnDef, HiveDistributionStyle, TableConstraint, HiveFormat, SqlOption, FileFormat, Query, OnCommit, TableAlias}, dialect::PostgreSqlDialect, parser::Parser};
 
 macro_rules! define_impersonation {
     ($impersonator:ident, $enum_name:ident, $variant:ident, { $($field:ident: $type:ty),* $(,)? }) => {
         #[derive(Debug, Clone)]
-        struct $impersonator {
+        pub struct $impersonator {
             $(
-                $field: $type,
+                pub $field: $type,
             )*
         }
 
@@ -23,6 +22,26 @@ macro_rules! define_impersonation {
                     $(
                         $field: impersonator.$field,
                     )*
+                }
+            }
+        }
+
+        impl TryFrom<$enum_name> for $impersonator {
+            type Error = &'static str;
+
+            fn try_from(value: $enum_name) -> Result<Self, Self::Error> {
+                if let $enum_name::$variant {
+                    $(
+                        $field,
+                    )*
+                } = value {
+                    Ok($impersonator {
+                        $(
+                            $field,
+                        )*
+                    })
+                } else {
+                    Err("Incorrect enum variant to create impersonation")
                 }
             }
         }
@@ -65,33 +84,172 @@ define_impersonation!(CreateTableSt, Statement, CreateTable, {
     on_cluster: Option<String>,
 });
 
-#[derive(Debug, Clone)]
-pub struct Projection {
-    pub alias: ObjectName,
-    /// A HashMap with column names by graph types
-    pub columns: HashMap<SubgraphType, Vec<ObjectName>>,
-    rng: ChaCha8Rng,
+pub struct DatabaseSchema {
+    pub table_defs: Vec<CreateTableSt>
 }
 
-impl Projection {
-    fn with_name(name: SmolStr) -> Self {
+impl std::fmt::Display for DatabaseSchema {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.table_defs.iter().try_for_each(
+            |create_table_st| writeln!(f, "{};", create_table_st)
+        )
+    }
+}
+
+impl DatabaseSchema {
+    pub fn parse_schema(source: &str) -> Self {
+        let dialect = PostgreSqlDialect {};
+        let ast = match Parser::parse_sql(&dialect, source) {
+            Ok(ast) => ast,
+            Err(err) => {
+                println!("Schema file parsing error! {}", err);
+                panic!();
+            },
+        };
         Self {
-            alias: ObjectName(vec![Ident::new(name)]),
-            columns: HashMap::new(),
-            rng: ChaCha8Rng::seed_from_u64(1),
+            table_defs: ast.into_iter().map(|x| x.try_into().unwrap()).collect()
         }
     }
 
-    fn append_graph_type(&mut self, column_name: ObjectName, graph_type: SubgraphType) {
+    pub fn get_random_table_def(&self, rng: &mut ChaCha8Rng) -> &CreateTableSt {
+        &self.table_defs[rng.gen_range(0..self.table_defs.len())]
+    }
+}
+
+pub struct FromContents {
+    /// maps aliases to relations themselves
+    relations: HashMap<ObjectName, Relation>,
+    free_relation_name_index: usize,
+}
+
+impl FromContents {
+    pub fn new() -> Self {
+        Self { relations: HashMap::new(), free_relation_name_index: 0 }
+    }
+
+    fn create_alias(&mut self) -> SmolStr {
+        let name = SmolStr::new(format!("T{}", self.free_relation_name_index));
+        self.free_relation_name_index += 1;
+        name
+    }
+
+    fn get_table_alias(alias: SmolStr) -> TableAlias {
+        TableAlias { name: Ident { value: alias.to_string(), quote_style: None }, columns: vec![] }
+    }
+
+    pub fn is_type_available(&self, graph_type: &SubgraphType) -> bool {
+        self.relations.iter().any(|x| x.1.is_type_available(graph_type))
+    }
+
+    pub fn get_random_column_with_type(&self, rng: &mut ChaCha8Rng, graph_type: &SubgraphType) -> Vec<Ident> {
+        let relations_with_type: Vec<&Relation> = self.relations
+            .iter()
+            .filter(|x| x.1.is_type_available(graph_type))
+            .map(|x| x.1)
+            .collect::<Vec<_>>();
+        let selected_relation = relations_with_type[rng.gen_range(0..relations_with_type.len())];
+        selected_relation.get_random_column_with_type(rng, graph_type)
+    }
+
+    /// Returns a relation and its alias
+    pub fn get_random_relation(&self, rng: &mut ChaCha8Rng) -> (&ObjectName, &Relation) {
+        self.relations.iter().skip(rng.gen_range(0..self.relations.len())).next().unwrap()
+    }
+
+    /// Returns columns in the following format: alias.column_name
+    pub fn get_columns_by_alias(&self, alias: &ObjectName) -> Vec<(ObjectName, SubgraphType)> {
+        self.relations
+            .get(alias)
+            .unwrap()
+            .get_columns_with_types()
+            .into_iter()
+            .map(|x| (
+                ObjectName([alias.0.to_owned(), x.0.0].concat()),
+                x.1
+            ))
+            .collect::<_>()
+    }
+
+    /// Returns columns in the following format: alias.column_name
+    pub fn get_wildcard_columns(&self) -> Vec<(ObjectName, SubgraphType)> {
+        self.relations
+            .keys()
+            .map(|x| self.get_columns_by_alias(x))
+            .collect::<Vec<_>>()
+            .concat()
+    }
+
+    pub fn append_table(&mut self, create_table_st: &CreateTableSt) -> TableAlias {
+        let alias = self.create_alias();
+        let relation = Relation::from_table(alias.clone(), create_table_st);
+        self.relations.insert(relation.alias.clone(), relation);
+        Self::get_table_alias(alias)
+    }
+
+    pub fn append_query(&mut self, column_idents_and_graph_types: Vec<(Option<ObjectName>, SubgraphType)>) -> TableAlias {
+        let alias = self.create_alias();
+        let relation = Relation::from_query(alias.clone(), column_idents_and_graph_types);
+        self.relations.insert(relation.alias.clone(), relation);
+        Self::get_table_alias(alias)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Relation {
+    /// projection alias
+    pub alias: ObjectName,
+    /// A HashMap with column names by graph types
+    pub columns: HashMap<SubgraphType, Vec<ObjectName>>,
+}
+
+impl Relation {
+    fn with_alias(alias: SmolStr) -> Self {
+        Self {
+            alias: ObjectName(vec![Ident::new(alias)]),
+            columns: HashMap::new(),
+        }
+    }
+
+    fn from_table(alias: SmolStr, create_table: &CreateTableSt) -> Self {
+        let mut _self = Relation::with_alias(alias);
+        for column in &create_table.columns {
+            let graph_type = SubgraphType::from_data_type(&column.data_type);
+            _self.append_column(ObjectName(vec![column.name.clone()]), graph_type);
+        }
+        _self
+    }
+
+    fn from_query(alias: SmolStr, column_idents_and_graph_types: Vec<(Option<ObjectName>, SubgraphType)>) -> Self {
+        let mut _self = Relation::with_alias(alias);
+        for (column_name, graph_type) in column_idents_and_graph_types {
+            if let Some(column_name) = column_name {
+                _self.append_column(column_name, graph_type);
+            }
+        }
+        _self
+    }
+
+    fn append_column(&mut self, column_name: ObjectName, graph_type: SubgraphType) {
         self.columns.entry(graph_type)
             .and_modify(|v| v.push(column_name.clone()))
             .or_insert(vec![column_name.clone()]);
     }
 
+    pub fn is_type_available(&self, graph_type: &SubgraphType) -> bool {
+        self.columns.contains_key(graph_type)
+    }
+
+    pub fn get_columns_with_types(&self) -> Vec<(ObjectName, SubgraphType)> {
+        self.columns
+            .iter()
+            .map(|x| (x.1.last().unwrap().clone(), x.0.to_owned()))
+            .collect()
+    }
+
     /// Retrieve an identifier vector of a random column of the specified type.
-    pub fn get_random_column_with_type(&mut self, graph_type: SubgraphType) -> Vec<Ident> {
-        let type_columns = self.columns.get(&graph_type).unwrap();
-        let num_skip = self.rng.gen_range(0..type_columns.len());
+    pub fn get_random_column_with_type(&self, rng: &mut ChaCha8Rng, graph_type: &SubgraphType) -> Vec<Ident> {
+        let type_columns = self.columns.get(graph_type).unwrap();
+        let num_skip = rng.gen_range(0..type_columns.len());
         vec![
             self.alias.0.clone(),
             type_columns.iter().skip(num_skip).next().unwrap().0.clone()
@@ -99,148 +257,20 @@ impl Projection {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct TableRelation {
-    create_table: CreateTableSt,
-    free_column_name_index: u32,
-    projection: Projection,
-}
-
-impl std::fmt::Display for TableRelation {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.create_table)
-    }
-}
-
-impl TableRelation {
-    fn with_name(name: SmolStr) -> Self {
-        let projection = Projection::with_name(name);
-        Self {
-            free_column_name_index: 1,
-            create_table: CreateTableSt {
-                or_replace: false,
-                temporary: false,
-                external: false,
-                global: None,
-                if_not_exists: false,
-                transient: false,
-                name: projection.alias.clone(),
-                columns: vec![],
-                constraints: vec![],
-                hive_distribution: HiveDistributionStyle::NONE,
-                hive_formats: None,
-                table_properties: vec![],
-                with_options: vec![],
-                file_format: None,
-                location: None,
-                query: None,
-                without_rowid: false,
-                like: None,
-                clone: None,
-                engine: None,
-                default_charset: None,
-                collation: None,
-                on_commit: None,
-                on_cluster: None,
-            },
-            projection: projection,
-        }
-    }
-
-    pub fn get_projection(&self) -> &Projection {
-        &self.projection
-    }
-
-    pub fn add_typed_column(&mut self, graph_type: SubgraphType) -> Ident {
-        let data_type = graph_type.clone().to_data_type();
-        let name: String = format!("C{}", self.free_column_name_index);
-        self.free_column_name_index += 1;
-
-        let column_ident = Ident { value: name.clone(), quote_style: None };
-        let column_name = ObjectName(vec![column_ident.clone()]);
-        self.projection.append_graph_type(column_name, graph_type);
-
-        self.create_table.columns.push(ColumnDef {
-            name: column_ident,
-            data_type: data_type,
-            collation: None,
-            options: vec![]
-        });
-        self.create_table.columns.last().unwrap().name.clone()
-    }
-}
-
-pub struct RelationManager {
-    relations: HashMap<ObjectName, TableRelation>,
-    free_relation_name_index: u32,
-}
-
-impl std::fmt::Display for RelationManager {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.relations.iter().try_for_each(
-            |relation| writeln!(f, "{};", relation.1)
-        )
-    }
-}
-
-impl RelationManager {
-    pub fn new() -> Self {
-        Self {
-            relations: HashMap::<_, _>::new(),
-            free_relation_name_index: 1,
-        }
-    }
-
-    fn new_name(&mut self) -> SmolStr {
-        let name = SmolStr::new(format!("T{}", self.free_relation_name_index));
-        self.free_relation_name_index += 1;
-        name
-    }
-
-    pub fn new_relation(&mut self) -> &mut TableRelation {
-        let name = self.new_name();
-        let relation = TableRelation::with_name(name);
-        let o_name = relation.get_projection().alias.clone();
-        self.relations.insert(o_name.clone(), relation);
-        self.relations.get_mut(&o_name).unwrap()
-    }
-
-    pub fn get_relation_by_oname(&mut self, key: &ObjectName) -> &mut TableRelation {
-        self.relations.get_mut(key).unwrap()
-    }
-
-    pub fn new_ident(&mut self) -> Ident {
-        Ident::new(self.new_name())
-    }
-}
-
 impl SubgraphType {
     /// get a list of compatible types
     pub fn get_compat_types(&self) -> Vec<SubgraphType> {
-        vec![self.clone()]
-    }
-}
-
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum TypesSelectedType {
-    Type(SubgraphType), Any
-}
-
-impl TypesSelectedType {
-    /// get a list of compatible types
-    pub fn get_compat_types(&self) -> Vec<SubgraphType> {
         match self {
-            Self::Any => SubgraphType::get_all(),
-            Self::Type(type_name) => type_name.get_compat_types(),
+            Self::Null => SubgraphType::get_all(),
+            any => vec![any.clone()],
         }
     }
 
-    pub fn is_equal_to(&self, other: &TypesSelectedType) -> bool {
-        *other == Self::Any || *self == Self::Any || *other == *self
-    }
-
-    pub fn is_compat_with(&self, other: &TypesSelectedType) -> bool {
-        self.is_equal_to(other) || self.get_compat_types().contains(unwrap_variant!(other, TypesSelectedType::Type))
+    /// checks is self is contertable to other
+    pub fn is_compat_with(&self, other: &SubgraphType) -> bool {
+        *other == Self::Null ||
+        *self == Self::Null ||
+        *other == *self ||
+        self.get_compat_types().contains(other)
     }
 }

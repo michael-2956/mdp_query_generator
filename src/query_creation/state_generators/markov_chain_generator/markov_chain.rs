@@ -158,6 +158,7 @@ impl Function {
     }
 }
 
+
 #[derive(Clone, Eq, PartialEq)]
 struct BinaryHeapNode {
     calls_from_src: usize,

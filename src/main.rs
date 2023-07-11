@@ -1,4 +1,4 @@
-use std::{path::PathBuf, io::Write};
+use std::{path::PathBuf, io::{Write, self, Read}, fs::File};
 
 use equivalence_testing::{query_creation::{
     random_query_generator::{QueryGenerator},
@@ -24,10 +24,13 @@ struct ProgramArgs {
     /// Use AntiCallModel for dynamic probabilities
     #[structopt(short, long)]
     anticall_model: bool,
+    /// Filename with the database Schema
+    #[structopt(short = "s", long = "table-schema")]
+    db_schema_fname: String,
 }
 
-fn run_generation<DynMod: DynamicModel, StC: StateChooser>(markov_generator: MarkovChainGenerator<StC>, num_generate: usize) {
-    let mut generator = QueryGenerator::<DynMod, StC>::from_state_generator(markov_generator);
+fn run_generation<DynMod: DynamicModel, StC: StateChooser>(markov_generator: MarkovChainGenerator<StC>, num_generate: usize, schema_source: &str) {
+    let mut generator = QueryGenerator::<DynMod, StC>::from_state_generator_and_schema(markov_generator, schema_source);
 
     let mut num_generated = 0;
     let mut num_equivalent = 0;
@@ -57,7 +60,7 @@ fn run_generation<DynMod: DynamicModel, StC: StateChooser>(markov_generator: Mar
     println!("Equivalence: {} / {}", num_equivalent, num_generated);
 }
 
-fn select_model_and_run_generation<StC: StateChooser>(program_args: ProgramArgs) {
+fn select_model_and_run_generation<StC: StateChooser>(program_args: ProgramArgs, schema_source: &str) {
     let markov_generator = match MarkovChainGenerator::<StC>::parse_graph_from_file(
         &program_args.input
     ) {
@@ -69,14 +72,20 @@ fn select_model_and_run_generation<StC: StateChooser>(program_args: ProgramArgs)
     };
 
     if program_args.anticall_model {
-        run_generation::<AntiCallModel, _>(markov_generator, program_args.num_generate);
+        run_generation::<AntiCallModel, _>(markov_generator, program_args.num_generate, schema_source);
     } else {
-        run_generation::<MarkovModel, _>(markov_generator, program_args.num_generate);
+        run_generation::<MarkovModel, _>(markov_generator, program_args.num_generate, schema_source);
     };
 }
 
-fn main() {
+fn main() -> io::Result<()> {
     let program_args = ProgramArgs::from_args();
 
-    select_model_and_run_generation::<ProbabilisticStateChooser>(program_args);
+    let mut schema_file = File::open(program_args.db_schema_fname.clone())?;
+    let mut schema_source = String::new();
+    schema_file.read_to_string(&mut schema_source)?;
+
+    select_model_and_run_generation::<ProbabilisticStateChooser>(program_args, &schema_source);
+
+    Ok(())
 }

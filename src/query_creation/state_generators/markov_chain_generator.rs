@@ -4,7 +4,7 @@ mod markov_chain;
 mod dot_parser;
 mod error;
 
-use std::path::Path;
+use std::{path::Path, collections::HashSet};
 
 use core::fmt::Debug;
 use smol_str::SmolStr;
@@ -13,7 +13,7 @@ use crate::{unwrap_variant, query_creation::state_generators::markov_chain_gener
 
 use self::{
     markov_chain::{
-        MarkovChain, NodeParams, CallParams, CallModifiers
+        MarkovChain, NodeParams, CallParams, CallModifiers, Function
     }, error::SyntaxError
 };
 
@@ -47,15 +47,31 @@ pub struct MarkovChainGenerator<StC: StateChooser> {
 #[derive(Clone, Debug)]
 struct StackItem {
     function_params: CallParams,
+    off_nodes_set: HashSet<SmolStr>,
     current_node_name: SmolStr,
     next_node: NodeParams,
 }
 
 impl StackItem {
-    fn from_call_params(call_params: CallParams) -> Self {
+    fn from_call_params(call_params: CallParams, function_opt: Option<&Function>) -> Self {
         let func_name = call_params.func_name.clone();
+        let off_nodes_set = if let Some(function) = function_opt {
+            // function.chain
+            // for (node_name, outgoing) in &function.chain {
+
+            // }
+            // function.
+            // function.chain
+            //     .iter()
+            //     .map(|x| x.0.clone())
+            //     .filter(|x| check_node_off(&call_params, node_params))
+            HashSet::new()
+        } else {
+            HashSet::new()
+        };
         Self {
             function_params: call_params,
+            off_nodes_set: off_nodes_set,
             current_node_name: SmolStr::new("-"),
             next_node: NodeParams {
                 name: func_name,
@@ -100,7 +116,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             func_name: SmolStr::new("Query"),
             selected_types: CallTypes::TypeList(accepted_types),  // CallTypes::TypeList(vec![SubgraphType::Numeric]),  // 
             modifiers: CallModifiers::None  // CallModifiers::StaticList(vec![SmolStr::new("single value")])  //
-        })];
+        }, None)];
         self.known_type_list_stack = vec![];
         self.compatible_type_name_stack = vec![];
     }
@@ -190,11 +206,14 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
                 CallTypes::PassThrough => self.call_stack.last().unwrap().function_params.selected_types.clone(),
                 any => any,
             };
+            let function = Some(
+                self.markov_chain.functions.get(&call_params.func_name).unwrap()
+            );
             self.call_stack.push(StackItem::from_call_params(CallParams {
                 func_name: call_params.func_name,
                 selected_types: inputs,
                 modifiers: call_params.modifiers,
-            }));
+            }, function));
         }
 
         dyn_model.notify_call_stack_length(self.call_stack.len());
