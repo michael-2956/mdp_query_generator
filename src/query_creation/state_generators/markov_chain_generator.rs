@@ -4,7 +4,7 @@ mod markov_chain;
 mod dot_parser;
 mod error;
 
-use std::{path::Path, collections::HashMap};
+use std::{path::Path, collections::{HashMap, HashSet, VecDeque}};
 
 use core::fmt::Debug;
 use smol_str::SmolStr;
@@ -13,8 +13,8 @@ use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_gene
 
 use self::{
     markov_chain::{
-        MarkovChain, NodeParams, CallParams, CallModifiers
-    }, error::SyntaxError, dot_parser::NodeCommon
+        MarkovChain, NodeParams, CallParams, CallModifiers, Function
+    }, error::SyntaxError, dot_parser::{NodeCommon}
 };
 
 use state_choosers::StateChooser;
@@ -173,6 +173,40 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 }
 
+fn check_node_off_dfs(
+    funciton: &Function,
+    function_call_params: &CallParams,
+    call_triggers: &HashMap<SmolStr, CallTrigger>,
+    query_context_manager: &QueryContextManager,
+    node_common: &NodeCommon
+) -> bool {
+    if check_node_off(function_call_params, call_triggers, query_context_manager, node_common) {
+        return true
+    }
+
+    let mut visited = HashSet::new();
+    let mut stack = VecDeque::new();
+    stack.push_back(node_common.name.clone());
+
+    while let Some(current_node) = stack.pop_back() {
+        if current_node == funciton.exit_node_name {
+            return false;
+        }
+        if visited.insert(current_node.clone()) {
+            if let Some(node_outgoing) = funciton.chain.get(&current_node) {
+                stack.extend(node_outgoing
+                    .iter()
+                    .filter(|x| !visited.contains(&x.1.node_common.name) && !check_node_off(
+                        function_call_params, call_triggers, query_context_manager, &x.1.node_common
+                    ))
+                    .map(|x| x.1.node_common.name.clone())
+                );
+            }
+        }
+    }
+    true
+}
+
 fn check_node_off(
         function_call_params: &CallParams,
         call_triggers: &HashMap<SmolStr, CallTrigger>,
@@ -201,7 +235,7 @@ fn check_node_off(
         off = off || match call_triggers.get(trigger_name) {
             Some(call_trigger) => !(call_trigger.0)(query_context_manager),
             None => panic!("Call trigger wasn't registered: {}", trigger_name),
-        }
+        };
     }
     return off;
 }
@@ -242,16 +276,11 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             self.call_stack.pop();
             return Some(current_node.node_common.name)
         }
-        // let mut hashmap: HashMap<String, fn() -> bool> = HashMap::new();
-        // // Call functions based on the key
-        // if let Some(func) = hashmap.get("one") {
-        //     let a = func();
-        // }
 
         let cur_node_outgoing = function.chain.get(&current_node.node_common.name).unwrap();
 
         let cur_node_outgoing = cur_node_outgoing.iter().map(|el| {
-            (check_node_off(&stack_item.function_params, &self.call_triggers, query_context_manager, &el.1.node_common), el.0, el.1.clone())
+            (check_node_off_dfs(function, &stack_item.function_params, &self.call_triggers, query_context_manager, &el.1.node_common), el.0, el.1.clone())
         }).collect::<Vec<_>>();
 
         let cur_node_outgoing = dynamic_model.assign_probabilities(cur_node_outgoing);
@@ -259,7 +288,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         let destination = self.state_chooser.choose_destination(cur_node_outgoing);
 
         if let Some(destination) = destination {
-            if check_node_off(&stack_item.function_params, &self.call_triggers, query_context_manager, &destination.node_common) {
+            if check_node_off_dfs(function, &stack_item.function_params, &self.call_triggers, query_context_manager, &destination.node_common) {
                 panic!("Chosen node is off: {} (after {})", destination.node_common.name, current_node.node_common.name);
             }
             stack_item.current_node_name = current_node.node_common.name.clone();

@@ -28,6 +28,7 @@ impl StateChooser for ProbabilisticStateChooser {
             let cur_node_outgoing = outgoing_states.iter().map(|el| {
                 (if el.0 { 0f64 } else { el.1 }, el.2.clone())
             }).collect::<Vec<_>>();
+            // Rebalancing on the current level only as a temporary work-around
             let max_level: f64 = cur_node_outgoing.iter().map(|el| { el.0 }).sum();
             cur_node_outgoing.into_iter().map(|el| { (el.0 / max_level, el.1) }).collect()
         };
