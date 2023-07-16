@@ -198,24 +198,24 @@ impl FromContents {
     }
 
     /// Returns columns in the following format: alias.column_name
-    pub fn get_columns_by_alias(&self, alias: &ObjectName) -> Vec<(ObjectName, SubgraphType)> {
+    pub fn get_columns_by_relation_alias(&self, alias: &ObjectName) -> Vec<(Option<ObjectName>, SubgraphType)> {
         self.relations
             .get(alias)
             .unwrap()
             .get_columns_with_types()
             .into_iter()
             .map(|x| (
-                ObjectName([alias.0.to_owned(), x.0.0].concat()),
+                x.0.map(|y| ObjectName([alias.0.to_owned(), y.0].concat())),
                 x.1
             ))
             .collect::<_>()
     }
 
     /// Returns columns in the following format: alias.column_name
-    pub fn get_wildcard_columns(&self) -> Vec<(ObjectName, SubgraphType)> {
+    pub fn get_wildcard_columns(&self) -> Vec<(Option<ObjectName>, SubgraphType)> {
         self.relations
             .keys()
-            .map(|x| self.get_columns_by_alias(x))
+            .map(|x| self.get_columns_by_relation_alias(x))
             .collect::<Vec<_>>()
             .concat()
     }
@@ -241,6 +241,9 @@ pub struct Relation {
     pub alias: ObjectName,
     /// A HashMap with column names by graph types
     pub columns: HashMap<SubgraphType, Vec<ObjectName>>,
+    /// A list of unnamed column's types, as they
+    /// can be referenced with wildcards
+    pub unnamed_columns: Vec<SubgraphType>,
 }
 
 impl Relation {
@@ -248,6 +251,7 @@ impl Relation {
         Self {
             alias: ObjectName(vec![Ident::new(alias)]),
             columns: HashMap::new(),
+            unnamed_columns: vec![],
         }
     }
 
@@ -265,6 +269,8 @@ impl Relation {
         for (column_name, graph_type) in column_idents_and_graph_types {
             if let Some(column_name) = column_name {
                 _self.append_column(column_name, graph_type);
+            } else {
+                _self.unnamed_columns.push(graph_type);
             }
         }
         _self
@@ -280,10 +286,16 @@ impl Relation {
         self.columns.contains_key(graph_type)
     }
 
-    pub fn get_columns_with_types(&self) -> Vec<(ObjectName, SubgraphType)> {
+    /// get all columns with their types, including the unnamed ones
+    pub fn get_columns_with_types(&self) -> Vec<(Option<ObjectName>, SubgraphType)> {
         self.columns
             .iter()
-            .map(|x| (x.1.last().unwrap().clone(), x.0.to_owned()))
+            .map(|x| (Some(x.1.last().unwrap().clone()), x.0.to_owned()))
+            .chain(
+                self.unnamed_columns
+                    .iter()
+                    .map(|x| (None, x.to_owned()))
+            )
             .collect()
     }
 

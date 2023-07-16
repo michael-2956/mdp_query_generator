@@ -428,9 +428,6 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                         self.query_context_manager
                             .from()
                             .get_wildcard_columns()
-                            .into_iter()
-                            .map(|x| (Some(x.0), x.1))
-                            .collect::<Vec<_>>()
                     ].concat();
                     select_body.projection.push(SelectItem::Wildcard(WildcardAdditionalOptions {
                         opt_exclude: None, opt_except: None, opt_rename: None,
@@ -442,11 +439,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     let (alias, relation) = from_contents.get_random_relation(&mut self.rng);
                     column_idents_and_graph_types = [
                         column_idents_and_graph_types,
-                        relation
-                            .get_columns_with_types()
-                            .into_iter()
-                            .map(|x| (Some(x.0), x.1))
-                            .collect::<Vec<_>>()
+                        relation.get_columns_with_types()
                     ].concat();
                     select_body.projection.push(SelectItem::QualifiedWildcard(
                         alias.to_owned(),
