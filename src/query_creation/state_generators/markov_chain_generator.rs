@@ -57,8 +57,8 @@ pub struct MarkovChainGenerator<StC: StateChooser> {
 #[derive(Clone, Debug)]
 struct StackItem {
     function_params: CallParams,
-    current_node_name: SmolStr,
-    next_node: NodeParams,
+    previous_node_name: SmolStr,
+    last_node: NodeParams,
 }
 
 impl StackItem {
@@ -66,8 +66,8 @@ impl StackItem {
         let func_name = call_params.func_name.clone();
         Self {
             function_params: call_params,
-            current_node_name: SmolStr::new("-"),
-            next_node: NodeParams {
+            previous_node_name: SmolStr::new("-"),
+            last_node: NodeParams {
                 node_common: NodeCommon::with_name(func_name),
                 call_params: None,
                 literal: false,
@@ -80,7 +80,7 @@ impl StackItem {
 impl<StC: StateChooser> MarkovChainGenerator<StC> {
     pub fn parse_graph_from_file<P: AsRef<Path>>(source_path: P) -> Result<Self, SyntaxError> {
         let chain = MarkovChain::parse_dot(source_path)?;
-        let mut self_ = MarkovChainGenerator::<StC> {
+        let mut _self = MarkovChainGenerator::<StC> {
             markov_chain: chain,
             call_stack: vec![],
             pending_call: None,
@@ -90,8 +90,8 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             state_chooser: Box::new(StC::new()),
             call_triggers: HashMap::new(),
         };
-        self_.reset();
-        Ok(self_)
+        _self.reset();
+        Ok(_self)
     }
 
     pub fn register_call_trigger(&mut self, trigger_name: SmolStr, call_trigger: fn(&QueryContextManager) -> bool) {
@@ -102,7 +102,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     pub fn print_stack(&self) {
         println!("Call stack:");
         for stack_item in &self.call_stack {
-            println!("{} ({:?}) [{}]:", stack_item.function_params.func_name, stack_item.function_params.selected_types, stack_item.current_node_name)
+            println!("{} ({:?}) [{}]:", stack_item.function_params.func_name, stack_item.function_params.selected_types, stack_item.previous_node_name)
         }
     }
 
@@ -111,11 +111,13 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         let accepted_types = unwrap_variant!(self.markov_chain.functions.get("Query").expect(
             "Graph should have an entry function named Query, with TYPES=[...]"
         ).accepted_types.clone(), FunctionTypes::TypeList);
-        self.call_stack = vec![StackItem::from_call_params(CallParams {
+
+        self.pending_call = Some(CallParams {
             func_name: SmolStr::new("Query"),
             selected_types: CallTypes::TypeList(accepted_types),  // CallTypes::TypeList(vec![SubgraphType::Numeric]),  // 
             modifiers: CallModifiers::None  // CallModifiers::StaticList(vec![SmolStr::new("single value")])  //
-        })];
+        });
+
         self.known_type_list_stack = vec![];
         self.compatible_type_name_stack = vec![];
     }
@@ -243,6 +245,7 @@ fn check_node_off(
 impl<StC: StateChooser> MarkovChainGenerator<StC> {
     pub fn next(&mut self, query_context_manager: &QueryContextManager, dynamic_model: &mut (impl DynamicModel + ?Sized)) -> Option<<Self as Iterator>::Item> {
         if let Some(call_params) = self.pending_call.take() {
+            // if the last node requested a call, update stack and return function's first state
             let inputs = match call_params.selected_types {
                 CallTypes::Known => CallTypes::Type(self.pop_known()),
                 CallTypes::KnownList => CallTypes::TypeList(self.pop_known_list()),
@@ -251,54 +254,64 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
                 any => any,
             };
             self.call_stack.push(StackItem::from_call_params(CallParams {
-                func_name: call_params.func_name,
+                func_name: call_params.func_name.clone(),
                 selected_types: inputs,
                 modifiers: call_params.modifiers,
             }));
+            return Some(call_params.func_name);
         }
 
-        dynamic_model.notify_call_stack_length(self.call_stack.len());
+        // search for the last node which isn't an exit node
+        let (function, last_node) = loop {
+            {
+                let stack_item = match self.call_stack.last() {
+                    Some(stack_item) => stack_item,
+                    None => {
+                        self.reset();
+                        return None;
+                    },
+                };
 
-        let stack_item = match self.call_stack.last_mut() {
-            Some(stack_item) => stack_item,
-            None => {
-                self.reset();
-                return None;
-            },
+                let last_node = stack_item.last_node.clone();
+                let function = self.markov_chain.functions.get(&stack_item.function_params.func_name).unwrap();
+
+                if last_node.node_common.name != function.exit_node_name {
+                    break (function, last_node);
+                }
+            }
+            self.call_stack.pop();
         };
 
-        let current_node = stack_item.next_node.clone();
+        dynamic_model.notify_call_stack_length(self.call_stack.len());
+        dynamic_model.update_current_state(&last_node.node_common.name);
 
-        dynamic_model.update_current_state(&current_node.node_common.name);
+        let stack_item = self.call_stack.last_mut().unwrap();
 
-        let function = self.markov_chain.functions.get(&stack_item.function_params.func_name).unwrap();
-        if current_node.node_common.name == function.exit_node_name {
-            self.call_stack.pop();
-            return Some(current_node.node_common.name)
-        }
+        let last_node_outgoing = function.chain.get(&last_node.node_common.name).unwrap();
 
-        let cur_node_outgoing = function.chain.get(&current_node.node_common.name).unwrap();
-
-        let cur_node_outgoing = cur_node_outgoing.iter().map(|el| {
+        let last_node_outgoing = last_node_outgoing.iter().map(|el| {
             (check_node_off_dfs(function, &stack_item.function_params, &self.call_triggers, query_context_manager, &el.1.node_common), el.0, el.1.clone())
         }).collect::<Vec<_>>();
 
-        let cur_node_outgoing = dynamic_model.assign_probabilities(cur_node_outgoing);
+        let last_node_outgoing = dynamic_model.assign_probabilities(last_node_outgoing);
 
-        let destination = self.state_chooser.choose_destination(cur_node_outgoing);
+        let destination = self.state_chooser.choose_destination(last_node_outgoing);
 
         if let Some(destination) = destination {
             if check_node_off_dfs(function, &stack_item.function_params, &self.call_triggers, query_context_manager, &destination.node_common) {
-                panic!("Chosen node is off: {} (after {})", destination.node_common.name, current_node.node_common.name);
+                panic!("Chosen node is off: {} (after {})", destination.node_common.name, last_node.node_common.name);
             }
-            stack_item.current_node_name = current_node.node_common.name.clone();
-            stack_item.next_node = destination.clone();
+            stack_item.previous_node_name = last_node.node_common.name.clone();
+            stack_item.last_node = destination.clone();
         } else {
             self.print_stack();
-            panic!("No destination found for {}.", current_node.node_common.name);
+            panic!("No destination found for {}.", last_node.node_common.name);
         }
 
-        if let Some(call_params) = &current_node.call_params {
+        // stack_item.last_node is now the current node
+
+        if let Some(call_params) = &stack_item.last_node.call_params {
+            // if it is a call node, we have a new pending call
             let mut prepared_call_params = call_params.clone();
             prepared_call_params.modifiers = match prepared_call_params.modifiers {
                 CallModifiers::PassThrough => stack_item.function_params.modifiers.clone(),
@@ -307,7 +320,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             self.pending_call = Some(prepared_call_params);
         }
 
-        Some(current_node.node_common.name)
+        Some(stack_item.last_node.node_common.name.clone())
     }
 }
 
