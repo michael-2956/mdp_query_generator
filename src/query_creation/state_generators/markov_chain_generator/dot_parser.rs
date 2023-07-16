@@ -226,23 +226,38 @@ impl FunctionInputsType {
     }
 }
 
+/// This structure contains common fields for a node definition.
+#[derive(Clone, Debug)]
+pub struct NodeCommon {
+    /// Node identifier
+    pub name: SmolStr,
+    /// Type name if specified (basically an on trigger)
+    pub type_name: Option<SubgraphType>,
+    /// Graph trigger with mode is specified
+    pub trigger: Option<(SmolStr, bool)>,
+    /// Name of the call trigger is specified
+    pub call_trigger_name: Option<SmolStr>,
+}
+
+impl NodeCommon {
+    pub fn with_name(name: SmolStr) -> Self {
+        Self { name: name, type_name: None, trigger: None, call_trigger_name: None }
+    }
+}
+
 /// a code unit represents a distinct command in code.
 #[derive(Debug)]
 pub enum CodeUnit {
     Function(Function),
-    NodeDef {
-        name: SmolStr,
+    RegularNode {
+        node_common: NodeCommon,
         literal: bool,
-        type_name: Option<SubgraphType>,
-        trigger: Option<(SmolStr, bool)>,
     },
-    Call {
-        node_name: SmolStr,
+    CallNode {
+        node_common: NodeCommon,
         func_name: SmolStr,
         inputs: FunctionInputsType,
         modifiers: Option<Vec<SmolStr>>,
-        type_name: Option<SubgraphType>,
-        trigger: Option<(SmolStr, bool)>,
     },
     Edge {
         node_name_from: SmolStr,
@@ -370,10 +385,26 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                 },
                                 _ => None
                             };
+
+                            let call_trigger_name = match node_spec.remove("CALL_TRIGGER") {
+                                Some(DotToken::QuotedIdentifiers(idents)) => {
+                                    Some(idents)
+                                },
+                                _ => None,
+                            };
+
                             let literal = match node_spec.remove("LITERAL") {
                                 Some(DotToken::QuotedIdentifiers(idents)) => idents == SmolStr::new("t"),
                                 _ => false
                             };
+
+                            let node_common = NodeCommon {
+                                name: node_name.clone(),
+                                type_name,
+                                trigger,
+                                call_trigger_name,
+                            };
+
                             if self.call_ident_regex.is_match(&node_name) {
                                 let (input_type, modifiers) = return_some_err!(
                                     parse_function_options(&node_name, node_spec, true)
@@ -383,20 +414,16 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                         "call nodes can't be declaread as literal (node {node_name})"
                                     ))));
                                 }
-                                break Some(Ok(CodeUnit::Call {
-                                    node_name: node_name.clone(),
+                                break Some(Ok(CodeUnit::CallNode {
+                                    node_common,
                                     func_name: SmolStr::new(node_name.split_once('_').unwrap().1),
                                     inputs: input_type,
                                     modifiers,
-                                    type_name,
-                                    trigger,
                                 }));
                             } else {
-                                break Some(Ok(CodeUnit::NodeDef {
-                                    name: node_name,
-                                    type_name,
+                                break Some(Ok(CodeUnit::RegularNode {
+                                    node_common,
                                     literal,
-                                    trigger
                                 }));
                             }
                         },

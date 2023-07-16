@@ -4,17 +4,17 @@ mod markov_chain;
 mod dot_parser;
 mod error;
 
-use std::{path::Path, collections::HashSet};
+use std::{path::Path, collections::HashMap};
 
 use core::fmt::Debug;
 use smol_str::SmolStr;
 
-use crate::{unwrap_variant, query_creation::state_generators::markov_chain_generator::markov_chain::FunctionTypes};
+use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_generator::markov_chain::FunctionTypes, random_query_generator::query_info::QueryContextManager}};
 
 use self::{
     markov_chain::{
-        MarkovChain, NodeParams, CallParams, CallModifiers, Function
-    }, error::SyntaxError
+        MarkovChain, NodeParams, CallParams, CallModifiers
+    }, error::SyntaxError, dot_parser::NodeCommon
 };
 
 use state_choosers::StateChooser;
@@ -22,6 +22,15 @@ use dynamic_models::{MarkovModel, DynamicModel};
 
 pub use self::markov_chain::CallTypes;
 pub use dot_parser::SubgraphType;
+
+#[derive(Clone)]
+struct CallTrigger(fn(&QueryContextManager) -> bool);
+
+impl Debug for CallTrigger {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ptr to {{fn(&QueryContentsManager) -> bool}}")
+    }
+}
 
 /// The markov chain generator. Runs the functional
 /// subgraphs parsed from the .dot file. Manages the
@@ -42,42 +51,27 @@ pub struct MarkovChainGenerator<StC: StateChooser> {
     call_stack: Vec<StackItem>,
     pending_call: Option<CallParams>,
     state_chooser: Box<StC>,
+    call_triggers: HashMap<SmolStr, CallTrigger>,
 }
 
 #[derive(Clone, Debug)]
 struct StackItem {
     function_params: CallParams,
-    off_nodes_set: HashSet<SmolStr>,
     current_node_name: SmolStr,
     next_node: NodeParams,
 }
 
 impl StackItem {
-    fn from_call_params(call_params: CallParams, function_opt: Option<&Function>) -> Self {
+    fn from_call_params(call_params: CallParams) -> Self {
         let func_name = call_params.func_name.clone();
-        let off_nodes_set = if let Some(function) = function_opt {
-            // function.chain
-            // for (node_name, outgoing) in &function.chain {
-
-            // }
-            // function.
-            // function.chain
-            //     .iter()
-            //     .map(|x| x.0.clone())
-            //     .filter(|x| check_node_off(&call_params, node_params))
-            HashSet::new()
-        } else {
-            HashSet::new()
-        };
         Self {
             function_params: call_params,
-            off_nodes_set: off_nodes_set,
             current_node_name: SmolStr::new("-"),
             next_node: NodeParams {
-                name: func_name,
-                call_params: None, type_name: None,
-                literal: false, min_calls_until_function_exit: 0,
-                trigger: None
+                node_common: NodeCommon::with_name(func_name),
+                call_params: None,
+                literal: false,
+                min_calls_until_function_exit: 0,
             }
         }
     }
@@ -94,9 +88,14 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             known_type_name_stack: vec![],
             compatible_type_name_stack: vec![],
             state_chooser: Box::new(StC::new()),
+            call_triggers: HashMap::new(),
         };
         self_.reset();
         Ok(self_)
+    }
+
+    pub fn register_call_trigger(&mut self, trigger_name: SmolStr, call_trigger: fn(&QueryContextManager) -> bool) {
+        self.call_triggers.insert(trigger_name, CallTrigger(call_trigger));
     }
 
     /// used to print the call stack of the markov chain functions
@@ -116,7 +115,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             func_name: SmolStr::new("Query"),
             selected_types: CallTypes::TypeList(accepted_types),  // CallTypes::TypeList(vec![SubgraphType::Numeric]),  // 
             modifiers: CallModifiers::None  // CallModifiers::StaticList(vec![SmolStr::new("single value")])  //
-        }, None)];
+        })];
         self.known_type_list_stack = vec![];
         self.compatible_type_name_stack = vec![];
     }
@@ -174,9 +173,14 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 }
 
-fn check_node_off(function_call_params: &CallParams, node_params: &NodeParams) -> bool {
+fn check_node_off(
+        function_call_params: &CallParams,
+        call_triggers: &HashMap<SmolStr, CallTrigger>,
+        query_context_manager: &QueryContextManager,
+        node_common: &NodeCommon
+    ) -> bool {
     let mut off = false;
-    if let Some(ref option_name) = node_params.type_name {
+    if let Some(ref option_name) = node_common.type_name {
         off = match function_call_params.selected_types {
             CallTypes::None => true,
             CallTypes::Type(ref t_name) => if t_name != option_name { true } else { false },
@@ -184,8 +188,8 @@ fn check_node_off(function_call_params: &CallParams, node_params: &NodeParams) -
             _ => panic!("Expected None, TypeName or a TypeNameList for function selected types")
         };
     }
-    if let Some((ref trigger_name, ref trigger_on)) = node_params.trigger {
-        off = match function_call_params.modifiers {
+    if let Some((ref trigger_name, ref trigger_on)) = node_common.trigger {
+        off = off || match function_call_params.modifiers {
             CallModifiers::None => *trigger_on,
             CallModifiers::PassThrough => panic!("CallModifiers::PassThrough was not substituted for CallModifiers::StaticList!"),
             CallModifiers::StaticList(ref modifiers) => {
@@ -193,11 +197,17 @@ fn check_node_off(function_call_params: &CallParams, node_params: &NodeParams) -
             },
         };
     }
+    if let Some(ref trigger_name) = node_common.call_trigger_name {
+        off = off || match call_triggers.get(trigger_name) {
+            Some(call_trigger) => !(call_trigger.0)(query_context_manager),
+            None => panic!("Call trigger wasn't registered: {}", trigger_name),
+        }
+    }
     return off;
 }
 
 impl<StC: StateChooser> MarkovChainGenerator<StC> {
-    pub fn next(&mut self, dyn_model: &mut (impl DynamicModel + ?Sized)) -> Option<<Self as Iterator>::Item> {
+    pub fn next(&mut self, query_context_manager: &QueryContextManager, dynamic_model: &mut (impl DynamicModel + ?Sized)) -> Option<<Self as Iterator>::Item> {
         if let Some(call_params) = self.pending_call.take() {
             let inputs = match call_params.selected_types {
                 CallTypes::Known => CallTypes::Type(self.pop_known()),
@@ -206,17 +216,14 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
                 CallTypes::PassThrough => self.call_stack.last().unwrap().function_params.selected_types.clone(),
                 any => any,
             };
-            let function = Some(
-                self.markov_chain.functions.get(&call_params.func_name).unwrap()
-            );
             self.call_stack.push(StackItem::from_call_params(CallParams {
                 func_name: call_params.func_name,
                 selected_types: inputs,
                 modifiers: call_params.modifiers,
-            }, function));
+            }));
         }
 
-        dyn_model.notify_call_stack_length(self.call_stack.len());
+        dynamic_model.notify_call_stack_length(self.call_stack.len());
 
         let stack_item = match self.call_stack.last_mut() {
             Some(stack_item) => stack_item,
@@ -228,12 +235,12 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
         let current_node = stack_item.next_node.clone();
 
-        dyn_model.update_current_state(&current_node.name);
+        dynamic_model.update_current_state(&current_node.node_common.name);
 
         let function = self.markov_chain.functions.get(&stack_item.function_params.func_name).unwrap();
-        if current_node.name == function.exit_node_name {
+        if current_node.node_common.name == function.exit_node_name {
             self.call_stack.pop();
-            return Some(current_node.name)
+            return Some(current_node.node_common.name)
         }
         // let mut hashmap: HashMap<String, fn() -> bool> = HashMap::new();
         // // Call functions based on the key
@@ -241,25 +248,25 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         //     let a = func();
         // }
 
-        let cur_node_outgoing = function.chain.get(&current_node.name).unwrap();
+        let cur_node_outgoing = function.chain.get(&current_node.node_common.name).unwrap();
 
         let cur_node_outgoing = cur_node_outgoing.iter().map(|el| {
-            (check_node_off(&stack_item.function_params, &el.1), el.0, el.1.clone())
+            (check_node_off(&stack_item.function_params, &self.call_triggers, query_context_manager, &el.1.node_common), el.0, el.1.clone())
         }).collect::<Vec<_>>();
 
-        let cur_node_outgoing = dyn_model.assign_probabilities(cur_node_outgoing);
+        let cur_node_outgoing = dynamic_model.assign_probabilities(cur_node_outgoing);
 
         let destination = self.state_chooser.choose_destination(cur_node_outgoing);
 
         if let Some(destination) = destination {
-            if check_node_off(&stack_item.function_params, &destination) {
-                panic!("Chosen node is off: {} (after {})", destination.name, current_node.name);
+            if check_node_off(&stack_item.function_params, &self.call_triggers, query_context_manager, &destination.node_common) {
+                panic!("Chosen node is off: {} (after {})", destination.node_common.name, current_node.node_common.name);
             }
-            stack_item.current_node_name = current_node.name.clone();
+            stack_item.current_node_name = current_node.node_common.name.clone();
             stack_item.next_node = destination.clone();
         } else {
             self.print_stack();
-            panic!("No destination found for {}.", current_node.name);
+            panic!("No destination found for {}.", current_node.node_common.name);
         }
 
         if let Some(call_params) = &current_node.call_params {
@@ -271,7 +278,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             self.pending_call = Some(prepared_call_params);
         }
 
-        Some(current_node.name)
+        Some(current_node.node_common.name)
     }
 }
 
@@ -279,6 +286,6 @@ impl<StC: StateChooser> Iterator for MarkovChainGenerator<StC> {
     type Item = SmolStr;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.next(&mut MarkovModel::new())
+        self.next(&QueryContextManager::new(), &mut MarkovModel::new())
     }
 }

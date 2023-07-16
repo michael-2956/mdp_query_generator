@@ -116,6 +116,47 @@ impl DatabaseSchema {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct QueryContextManager {
+    from_contents_stack: Vec<FromContents>,
+    selected_type: Option<SubgraphType>,
+}
+
+impl QueryContextManager {
+    pub fn new() -> Self {
+        Self { 
+            from_contents_stack: vec![],
+            selected_type: None,
+        }
+    }
+
+    pub fn on_query_generation_start(&mut self) {
+        self.from_contents_stack.push(FromContents::new());
+    }
+
+    pub fn from(&self) -> &FromContents {
+        self.from_contents_stack.last().unwrap()
+    }
+
+    pub fn from_mut(&mut self) -> &mut FromContents {
+        self.from_contents_stack.last_mut().unwrap()
+    }
+
+    /// Update the current selected type 
+    pub fn update_selected_type(&mut self, subgraph_type: SubgraphType) {
+        self.selected_type = Some(subgraph_type);
+    }
+
+    pub fn get_selected_type(&self) -> &SubgraphType {
+        self.selected_type.as_ref().unwrap()
+    }
+
+    pub fn on_query_generation_end(&mut self) {
+        self.from_contents_stack.pop();
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct FromContents {
     /// maps aliases to relations themselves
     relations: HashMap<ObjectName, Relation>,

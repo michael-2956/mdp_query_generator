@@ -5,7 +5,7 @@ use core::fmt::Debug;
 use smol_str::SmolStr;
 
 use super::{
-    dot_parser, dot_parser::{DotTokenizer, FunctionInputsType, SubgraphType, CodeUnit}, error::SyntaxError,
+    dot_parser, dot_parser::{DotTokenizer, FunctionInputsType, SubgraphType, CodeUnit, NodeCommon}, error::SyntaxError,
 };
 
 /// this structure contains all the parsed graph functions
@@ -18,12 +18,10 @@ pub struct MarkovChain {
 /// its possible properties and modifiers
 #[derive(Clone, Debug)]
 pub struct NodeParams {
-    pub name: SmolStr,
+    pub node_common: NodeCommon,
     pub call_params: Option<CallParams>,
-    pub type_name: Option<SubgraphType>,
     pub literal: bool,
     pub min_calls_until_function_exit: usize,
-    pub trigger: Option<(SmolStr, bool)>
 }
 
 /// represents modifiers passed in call parameters.
@@ -215,8 +213,8 @@ impl MarkovChain {
             match token {
                 dot_parser::CodeUnit::Function(definition) => {
                     let mut function = Some(Function::new(definition.clone()));
-                    define_node(&mut function, &mut node_params, definition.source_node_name.clone(), None, None, false, None)?;
-                    define_node(&mut function, &mut node_params, definition.exit_node_name.clone(), None, None, false, None)?;
+                    define_node(&mut function, &mut node_params, NodeCommon::with_name(definition.source_node_name.clone()), None, false)?;
+                    define_node(&mut function, &mut node_params, NodeCommon::with_name(definition.exit_node_name.clone()), None, false)?;
                     let function = function.unwrap();
                     functions.insert(function.source_node_name.clone(), function);
                 },
@@ -236,23 +234,21 @@ impl MarkovChain {
                         return Err(SyntaxError::new(format!("Unexpected CloseDeclaration")));
                     }
                 }
-                dot_parser::CodeUnit::NodeDef { name, type_name: option_name, literal, trigger } => {
-                    define_node(&mut current_function, &mut node_params, name, None, option_name, literal, trigger)?;
+                dot_parser::CodeUnit::RegularNode { node_common, literal} => {
+                    define_node(&mut current_function, &mut node_params, node_common, None, literal)?;
                 }
-                dot_parser::CodeUnit::Call {
-                    node_name,
+                dot_parser::CodeUnit::CallNode {
+                    node_common,
                     func_name,
                     inputs,
                     modifiers,
-                    type_name,
-                    trigger,
                 } => {
                     let modifiers = match modifiers {
                         Some(modifiers) => {
                             if modifiers.contains(&SmolStr::new("...")) {
                                 if modifiers.len() != 1 {
                                     return Err(SyntaxError::new(format!(
-                                        "{node_name}: when modifier '...' is present, it should be the only modifier, but got {:?}", modifiers
+                                        "{}: when modifier '...' is present, it should be the only modifier, but got {:?}", node_common.name, modifiers
                                     )));
                                 }
                                 CallModifiers::PassThrough
@@ -268,21 +264,21 @@ impl MarkovChain {
                                 &function.accepted_types
                             } else {
                                 &functions.get(&func_name).ok_or_else(|| SyntaxError::new(format!(
-                                    "Call node {node_name} calls non-existing function: {func_name}"
+                                    "Call node {} calls non-existing function: {func_name}", node_common.name
                                 )))?.accepted_types
                             }
                         } else {
                             return Err(SyntaxError::new(format!(
-                                "Unexpected node definition: {node_name} [...]"
+                                "Unexpected node definition: {} [...]", node_common.name
                             )));
                         };
                         CallTypes::from_function_inputs_type(
-                            &node_name, accepted_types, inputs
+                            &node_common.name, accepted_types, inputs
                         )
                     };
-                    define_node(&mut current_function, &mut node_params, node_name, Some(
+                    define_node(&mut current_function, &mut node_params, node_common, Some(
                         CallParams { func_name, selected_types, modifiers }
-                    ), type_name, false, trigger)?;
+                    ), false)?;
                 }
                 dot_parser::CodeUnit::Edge {
                     node_name_from,
@@ -377,7 +373,7 @@ impl MarkovChain {
                 } else {
                     return Err(SyntaxError::new(format!(
                         "Function is not defined: {node_name} (function {})",
-                        params.name
+                        params.node_common.name
                     )));
                 }
             }
@@ -429,16 +425,16 @@ impl MarkovChain {
                         }
                     }
                     for out_node_name in function.chain.get_key_value(&node_name).unwrap().1 {
-                        // out_node_name.1.name
+                        // out_node_name.1.node_common.name
                         let node_calls_from_src = calls_from_src + (out_node_name.1.call_params.is_some() as usize);
                         let current_min_calls_from_src = min_calls_from_src_map.entry(
-                            out_node_name.1.name.clone()
+                            out_node_name.1.node_common.name.clone()
                         ).or_insert(usize::MAX);
                         if node_calls_from_src < *current_min_calls_from_src {
                             *current_min_calls_from_src = node_calls_from_src;
                             priority_queue.push(BinaryHeapNode {
                                 calls_from_src: node_calls_from_src,
-                                node_name: out_node_name.1.name.clone(),
+                                node_name: out_node_name.1.node_common.name.clone(),
                             });
                         }
                     }
@@ -448,13 +444,13 @@ impl MarkovChain {
         for (_, function) in functions {
             for (_, out_nodes) in function.chain.iter_mut() {
                 for out_node in out_nodes {
-                    if let Some(min_calls) = min_calls_till_exit.get_key_value(&out_node.1.name) {
+                    if let Some(min_calls) = min_calls_till_exit.get_key_value(&out_node.1.node_common.name) {
                         if *min_calls.1 == usize::MAX {
-                            panic!("Node {} does not reach function exit", out_node.1.name);
+                            panic!("Node {} does not reach function exit", out_node.1.node_common.name);
                         }
                         out_node.1.min_calls_until_function_exit = *min_calls.1;
                     } else {
-                        panic!("Node {} was not marked with minimum distance.", out_node.1.name);
+                        panic!("Node {} was not marked with minimum distance.", out_node.1.node_common.name);
                     }
                 }
             }
@@ -465,21 +461,19 @@ impl MarkovChain {
 /// add a node to the current function graph & node_params map; Perform syntax checks for optional nodes
 fn define_node(
         current_function: &mut Option<Function>, node_params: &mut HashMap<SmolStr, NodeParams>,
-        node_name: SmolStr, call_params: Option<CallParams>, type_name_opt: Option<SubgraphType>,
-        literal: bool, trigger: Option<(SmolStr, bool)>
+        node_common: NodeCommon, call_params: Option<CallParams>, literal: bool
     ) -> Result<(), SyntaxError> {
     if let Some(function) = current_function {
-        check_type(&function, &node_name, &type_name_opt)?;
-        check_trigger(&function, &node_name, &trigger)?;
-        function.chain.insert(node_name.clone(), Vec::<_>::new());
-        node_params.insert(node_name.clone(), NodeParams {
-            name: node_name, call_params, type_name: type_name_opt,
+        check_type(&function, &node_common.name, &node_common.type_name)?;
+        check_trigger(&function, &node_common.name, &node_common.trigger)?;
+        function.chain.insert(node_common.name.clone(), Vec::<_>::new());
+        node_params.insert(node_common.name.clone(), NodeParams {
+            node_common: node_common, call_params,
             literal, min_calls_until_function_exit: 0,
-            trigger
         });
     } else {
         return Err(SyntaxError::new(format!(
-            "Unexpected node definition: {node_name} [...]"
+            "Unexpected node definition: {} [...]", node_common.name
         )));
     }
     Ok(())

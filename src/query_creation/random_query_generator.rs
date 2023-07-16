@@ -1,7 +1,7 @@
 #[macro_use]
-mod query_info;
+pub mod query_info;
 
-use rand::SeedableRng;
+use rand::{SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
@@ -10,7 +10,7 @@ use sqlparser::ast::{
 };
 
 use super::{super::{unwrap_variant, unwrap_variant_and_else}, state_generators::{SubgraphType, CallTypes}};
-use self::query_info::{FromContents, DatabaseSchema};
+use self::query_info::{DatabaseSchema, QueryContextManager};
 
 use super::state_generators::{MarkovChainGenerator, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
@@ -18,7 +18,7 @@ pub struct QueryGenerator<DynMod: DynamicModel, StC: StateChooser> {
     state_generator: MarkovChainGenerator<StC>,
     dynamic_model: Box<DynMod>,
     database_schema: DatabaseSchema,
-    from_contents_stack: Vec<FromContents>,
+    query_context_manager: QueryContextManager,
     free_projection_alias_index: u32,
     rng: ChaCha8Rng,
 }
@@ -264,18 +264,29 @@ impl ExpressionPriority for Expr {
 
 impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     pub fn from_state_generator_and_schema(state_generator: MarkovChainGenerator<StC>, schema_source: &str) -> Self {
-        QueryGenerator::<DynMod, StC> {
+        let mut _self = QueryGenerator::<DynMod, StC> {
             state_generator,
             dynamic_model: Box::new(DynMod::new()),
             database_schema: DatabaseSchema::parse_schema(schema_source),
-            from_contents_stack: vec![],
+            query_context_manager: QueryContextManager::new(),
             free_projection_alias_index: 1,
             rng: ChaCha8Rng::seed_from_u64(1),
-        }
+        };
+
+        println!("Relations:\n{}", _self.database_schema);
+
+        _self.state_generator.register_call_trigger(
+            SmolStr::new("is_column_type_available"),
+            |query_context_manager| {
+                query_context_manager.from().is_type_available(query_context_manager.get_selected_type())
+            }
+        );
+
+        _self
     }
 
     fn next_state_opt(&mut self) -> Option<SmolStr> {
-        self.state_generator.next(&mut *self.dynamic_model)
+        self.state_generator.next(&self.query_context_manager, &mut *self.dynamic_model)
     }
 
     fn next_state(&mut self) -> SmolStr {
@@ -311,7 +322,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     /// subgraph def_Query
     fn handle_query(&mut self) -> (Query, Vec<(Option<ObjectName>, SubgraphType)>) {
         self.dynamic_model.notify_subquery_creation_begin();
-        self.from_contents_stack.push(FromContents::new());
+        self.query_context_manager.on_query_generation_start();
         self.expect_state("Query");
 
         let select_limit = match self.next_state().as_str() {
@@ -354,7 +365,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             select_body.from.push(TableWithJoins { relation: match self.next_state().as_str() {
                 "Table" => {
                     let create_table_st = self.database_schema.get_random_table_def(&mut self.rng);
-                    let alias = self.from_contents_stack.last_mut().unwrap().append_table(create_table_st);
+                    let alias = self.query_context_manager.from_mut().append_table(create_table_st);
                     TableFactor::Table {
                         name: create_table_st.name.clone(),
                         alias: Some(alias),
@@ -365,7 +376,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                 },
                 "call0_Query" => {
                     let (query, column_idents_and_graph_types) = self.handle_query();
-                    let alias = self.from_contents_stack.last_mut().unwrap().append_query(column_idents_and_graph_types);
+                    let alias = self.query_context_manager.from_mut().append_query(column_idents_and_graph_types);
                     TableFactor::Derived {
                         lateral: false,
                         subquery: Box::new(query),
@@ -414,9 +425,8 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                 "SELECT_wildcard" => {
                     column_idents_and_graph_types = [
                         column_idents_and_graph_types,
-                        self.from_contents_stack
-                            .last()
-                            .unwrap()
+                        self.query_context_manager
+                            .from()
                             .get_wildcard_columns()
                             .into_iter()
                             .map(|x| (Some(x.0), x.1))
@@ -428,7 +438,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     continue;
                 },
                 "SELECT_qualified_wildcard" => {
-                    let from_contents = self.from_contents_stack.last().unwrap();
+                    let from_contents = self.query_context_manager.from();
                     let (alias, relation) = from_contents.get_random_relation(&mut self.rng);
                     column_idents_and_graph_types = [
                         column_idents_and_graph_types,
@@ -470,7 +480,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
 
         self.expect_state("EXIT_Query");
         self.dynamic_model.notify_subquery_creation_end();
-        self.from_contents_stack.pop();
+        self.query_context_manager.on_query_generation_end();
         (Query {
             with: None,
             body: Box::new(SetExpr::Select(Box::new(select_body))),
@@ -843,6 +853,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             },
             any => self.panic_unexpected(any),
         };
+        self.query_context_manager.update_selected_type(selected_type.clone());
         let types_value = match self.next_state().as_str() {
             "types_select_type_noexpr" => {
                 match self.next_state().as_str() {
@@ -896,7 +907,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             // TODO: this has 2 cases: a new column for a relation or a constrained column selection
             // Question: Should (ObejectName, vec of cols) be a separate struct that would have a
             // method performing the following action in dep of the type of Relation (rel/query)?
-            self.from_contents_stack.last().unwrap().get_random_column_with_type(&mut self.rng, &column_type)
+            self.query_context_manager.from().get_random_column_with_type(&mut self.rng, &column_type)
         };
         self.expect_state("EXIT_column_spec");
         Expr::CompoundIdentifier(ident_components)
@@ -962,7 +973,6 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     /// starting point; calls handle_query for the first time
     fn generate(&mut self) -> Query {
         let query = self.handle_query().0;
-        println!("Relations:\n{}", self.database_schema);
         println!("Query:\n{}\n", query);
         // reset the generator
         if let Some(state) = self.next_state_opt() {

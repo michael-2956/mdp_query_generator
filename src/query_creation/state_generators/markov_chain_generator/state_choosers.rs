@@ -546,7 +546,7 @@ impl StateChooser for DeterministicStateChooser {
         if outgoing_states.len() == 1 { return Some(outgoing_states[0].2.clone()) }
         let node_name = self.state_list[self.state_index].clone();
         self.state_index += 1;
-        match outgoing_states.iter().find(|node| node.2.name == node_name) {
+        match outgoing_states.iter().find(|node| node.2.node_common.name == node_name) {
             Some(node) => Some(node.2.clone()),
             None => {
                 println!("None of {:?} matches \"{node_name}\" inferred from query", outgoing_states);

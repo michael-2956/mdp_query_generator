@@ -73,7 +73,7 @@ impl DynamicModel for AntiCallModel {
             if ![  // TODO: the following is for DEBUG purposes
                 "SELECT_wildcard", "SELECT_qualified_wildcard", "types_null",
                 "call0_list_expr", "call0_array", "call0_numeric", "call1_VAL_3", "call0_string", // "call1_Query",
-            ].contains(&el.2.name.as_str()) || self.stats.current_stack_length > 3 {
+            ].contains(&el.2.node_common.name.as_str()) || self.stats.current_stack_length > 3 {
                 el.1 / f64::powf(prob_multiplier, el.2.min_calls_until_function_exit as f64)
             } else { 0f64 },
             el.2

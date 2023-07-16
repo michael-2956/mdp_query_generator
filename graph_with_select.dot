@@ -16,8 +16,8 @@
 # }
 # 2) Calls (execution will move to a root of a different subgraph):
 #     call{caller_num}_{node_name} [
-#         TYPES="[{type_name}, ...]" OR "[any]" OR "[known]" OR "[compatible]" OR "[...]" (passes all argument triggers further),
-#         TYPE="{type_name}" OR "known" OR "..." (passes all argument triggers further),
+#         TYPES="[{type_name}, ...]" OR "[any]" OR "[known]" OR "[compatible]" OR "[...]" (passes all argument types further),
+#         TYPE="{type_name}" OR "known" OR "..." (passes all argument types further),
 #         MODS="[{mod_name}, ...]" OR "[...]" (passes all argument triggers further),
 #         ...
 #     ]
@@ -31,6 +31,15 @@
 # {node_name} [TYPE_NAME="type_name"]
 # TYPE_NAME is the name of a type listed in function declaration.
 # The node will be turned off or on respective to the types passed to function call.
+
+# 4.1 A node with a trigger
+# {node_name} [trigger="[trig_name]", trigger_mode="on"/"off"]
+# if `trigger` is present in the modifiers, turn the node on or off according to the trigger_mode.
+
+# 4.2 A node with a call trigger
+# {node_name} [call_trigger="[call_trig_name]"]
+# if the function corresponding to call_trig_name returns true (handler registered in code),
+# the node is on. Otherwise, it is off.
 
 # 5. Exit a callable node:
 # EXIT_{node_name} [label="EXIT {node_label}"]
@@ -512,7 +521,7 @@ digraph G {
         types -> types_select_type_string
         types_select_type_string -> types_select_type_noexpr
 
-        call0_column_spec [TYPE="known", trigger="no column spec", trigger_mode="off", label="column specifier\nTYPE: type\nmod.: 'no column spec'", shape=rectangle, style=filled, color=gold]
+        call0_column_spec [TYPE="known", call_trigger="is_column_type_available", trigger="no column spec", trigger_mode="off", label="column specifier\nTYPE: type\nmod.: 'no column spec'", shape=rectangle, style=filled, color=gold]
         types_select_type_noexpr -> call0_column_spec
         call0_column_spec -> EXIT_types
 
