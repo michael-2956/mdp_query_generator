@@ -9,8 +9,10 @@ use sqlparser::ast::{
     TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, Array, SelectItem, WildcardAdditionalOptions, ObjectName,
 };
 
-use super::{super::{unwrap_variant, unwrap_variant_and_else}, state_generators::{SubgraphType, CallTypes}};
+use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generators::{SubgraphType, CallTypes}};
 use self::query_info::{DatabaseSchema, QueryContextManager};
+
+use crate::query_creation::state_generators::markov_chain_generator::markov_chain::FunctionTypes;
 
 use super::state_generators::{MarkovChainGenerator, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
@@ -278,7 +280,14 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         _self.state_generator.register_call_trigger(
             SmolStr::new("is_column_type_available"),
             |query_context_manager| {
-                query_context_manager.from().is_type_available(query_context_manager.get_selected_type())
+                query_context_manager
+                    .get_selected_types()
+                    .into_iter()
+                    .any(|x|
+                        query_context_manager
+                            .from()
+                            .is_type_available(x)
+                    )
             }
         );
 
@@ -638,7 +647,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                 self.state_generator.push_compatible_list(types_selected_type.get_compat_types());
                 let iterable = Box::new(match self.next_state().as_str() {
                     "call4_Query" => Expr::Subquery(Box::new(self.handle_query().0)),
-                    "call1_array" => self.handle_array(),
+                    "call1_array" => self.handle_array().1,
                     any => self.panic_unexpected(any)
                 });
                 self.expect_state("AnyAllAnyAll");
@@ -831,12 +840,15 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
 
     /// subgraph def_types
     fn handle_types(
-        &mut self, equal_to: Option<SubgraphType>, compatible_with: Option<SubgraphType>
+        &mut self, check_generated_by: Option<SubgraphType>, check_compatible_with: Option<SubgraphType>
     ) -> (SubgraphType, Expr) {
         self.expect_state("types");
-        let selected_type = match self.next_state().as_str() {
+        let argument_selected_types = unwrap_variant_or_else!(
+            self.state_generator.get_fn_selected_types(), CallTypes::TypeList, || self.state_generator.print_stack()
+        );
+        let mut selected_type = match self.next_state().as_str() {
             "types_select_type_3vl" => SubgraphType::Val3,
-            "types_select_type_array" => SubgraphType::Array,
+            "types_select_type_array" => SubgraphType::Array(Box::new(SubgraphType::Undetermined)),
             "types_select_type_list_expr" => SubgraphType::ListExpr,
             "types_select_type_numeric" => SubgraphType::Numeric,
             "types_select_type_string" => SubgraphType::String,
@@ -846,17 +858,32 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             },
             any => self.panic_unexpected(any),
         };
-        self.query_context_manager.update_selected_type(selected_type.clone());
+        let allowed_type_list = match selected_type.clone() {
+            SubgraphType::Array(..) => argument_selected_types
+                .iter()
+                .filter(|x| matches!(x, SubgraphType::Array(..)))
+                .map(|x| x.to_owned())
+                .collect::<Vec<_>>(),
+            any => vec![any]
+        };
+        self.query_context_manager.update_selected_types(allowed_type_list.clone());
         let types_value = match self.next_state().as_str() {
             "types_select_type_noexpr" => {
                 match self.next_state().as_str() {
                     "call0_column_spec" => {
-                        self.state_generator.push_known(selected_type.clone());
-                        self.handle_column_spec()
+                        self.state_generator.push_known_list(allowed_type_list);
+                        let (column_type, expr) = self.handle_column_spec();
+                        selected_type = column_type;
+                        expr
                     },
                     "call1_Query" => {
-                        self.state_generator.push_known_list(vec![selected_type.clone()]);
-                        Expr::Subquery(Box::new(self.handle_query().0))
+                        self.state_generator.push_known_list(allowed_type_list);
+                        let (subquery, column_types) = self.handle_query();
+                        selected_type = match column_types.len() {
+                            1 => column_types[0].1.clone(),
+                            any => panic!("Subquery should have selected a single column, but selected {any}"),
+                        };
+                        Expr::Subquery(Box::new(subquery))
                     },
                     any => self.panic_unexpected(any)
                 }
@@ -865,16 +892,31 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "call1_VAL_3" if selected_type == SubgraphType::Val3 => self.handle_val_3(),
             "call0_string" if selected_type == SubgraphType::String => self.handle_string(),
             "call0_list_expr" if selected_type == SubgraphType::ListExpr => self.handle_list_expr(),
-            "call0_array" if selected_type == SubgraphType::Array => self.handle_array(),
+            "call0_array" if matches!(selected_type, SubgraphType::Array(..)) => {
+                let mut array_inner_type_list = match allowed_type_list.len() {
+                    0 => panic!("allowed_type_list is empty"),
+                    _ => allowed_type_list.into_iter().map(|x| *unwrap_variant!(x, SubgraphType::Array)).collect::<Vec<_>>()
+                };
+                if array_inner_type_list == vec![SubgraphType::Undetermined] {
+                    array_inner_type_list = unwrap_variant!(
+                        self.state_generator.get_pending_call_accepted_types(), FunctionTypes::TypeList
+                    );
+                }
+                self.state_generator.push_known_list(array_inner_type_list);
+                let (real_array_type, expr) = self.handle_array();
+                selected_type = real_array_type;
+                expr
+            },
             any => self.panic_unexpected(any)
         };
         self.expect_state("EXIT_types");
-        if let Some(to) = equal_to {
-            if selected_type != to {
+
+        if let Some(to) = check_generated_by {
+            if !selected_type.is_same_or_more_determined(&to) {
                 panic!("Unexpected type: expected {:?}, got {:?}", to, selected_type);
             }
         }
-        if let Some(with) = compatible_with {
+        if let Some(with) = check_compatible_with {
             self.expect_compat(&selected_type, &with);
         }
         (selected_type, types_value.nest_children_if_needed())
@@ -890,50 +932,69 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     }
 
     /// subgraph def_column_spec
-    fn handle_column_spec(&mut self) -> Expr {
+    fn handle_column_spec(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("column_spec");
         self.expect_state("typed_column_name");
-        let ident_components = {
-            let column_type = unwrap_variant_and_else!(
-                self.state_generator.get_fn_selected_types(), CallTypes::Type, || self.state_generator.print_stack()
+        let (selected_type, ident_components) = {
+            let column_types = unwrap_variant_or_else!(
+                self.state_generator.get_fn_selected_types(), CallTypes::TypeList, || self.state_generator.print_stack()
             );
-            // TODO: this has 2 cases: a new column for a relation or a constrained column selection
-            // Question: Should (ObejectName, vec of cols) be a separate struct that would have a
-            // method performing the following action in dep of the type of Relation (rel/query)?
-            self.query_context_manager.from().get_random_column_with_type(&mut self.rng, &column_type)
+            self.query_context_manager.from().get_random_column_with_type_of(&mut self.rng, &column_types)
         };
         self.expect_state("EXIT_column_spec");
-        Expr::CompoundIdentifier(ident_components)
+        (selected_type, Expr::CompoundIdentifier(ident_components))
     }
 
     /// subgraph def_array
-    fn handle_array(&mut self) -> Expr {
+    fn handle_array(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("array");
-        let array_compat_type = match self.next_state().as_str() {
+        let selected_inner_types = unwrap_variant_or_else!(
+            self.state_generator.get_fn_selected_types(), CallTypes::TypeList, || self.state_generator.print_stack()
+        );
+        let mut inner_type = match self.next_state().as_str() {
             "call12_types" => SubgraphType::Numeric,
             "call13_types" => SubgraphType::Val3,
             "call31_types" => SubgraphType::String,
             "call51_types" => SubgraphType::ListExpr,
-            "call14_types" => SubgraphType::Array,
+            "call14_types" => {
+                self.state_generator.push_known_list(
+                    selected_inner_types
+                        .iter()
+                        .filter(|x| matches!(x, SubgraphType::Array(..)))
+                        .map(|x| x.to_owned())
+                        .collect::<Vec<_>>()
+                );
+                SubgraphType::Array(Box::new(SubgraphType::Undetermined))
+            },
             any => self.panic_unexpected(any)
         };
-        let types_value = self.handle_types(Some(array_compat_type.clone()), None).1;
-        let mut array: Vec<Expr> = vec![types_value];
+        let (types_selected_type, types_value) = self.handle_types(Some(inner_type.clone()), None);
+        match types_selected_type {
+            SubgraphType::Array(inner) if *inner == SubgraphType::Undetermined => {self.state_generator.print_stack(); panic!(
+                "Types didn't determine inner array type for array!"
+            )},
+            SubgraphType::Array(inner) if matches!(inner_type, SubgraphType::Array(..)) => {
+                inner_type = SubgraphType::Array(inner);
+            },
+            any if any != inner_type => panic!("Types didn't output correct type for the first element of an array!"),
+            _ => {}
+        }
+        let mut array = vec![types_value];
         loop {
             match self.next_state().as_str() {
                 "call50_types" => {
-                    self.state_generator.push_compatible_list(array_compat_type.get_compat_types());
-                    let types_value = self.handle_types(None, Some(array_compat_type.clone())).1;
+                    self.state_generator.push_compatible_list(inner_type.get_compat_types());
+                    let types_value = self.handle_types(None, Some(inner_type.clone())).1;
                     array.push(types_value);
                 },
                 "EXIT_array" => break,
                 any => self.panic_unexpected(any)
             }
         }
-        Expr::Array(Array {
+        (SubgraphType::Array(Box::new(inner_type)), Expr::Array(Array {
             elem: array,
             named: true
-        })
+        }))
     }
 
     /// subgraph def_list_expr
@@ -944,7 +1005,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "call17_types" => SubgraphType::Val3,
             "call18_types" => SubgraphType::String,
             "call19_types" => SubgraphType::ListExpr,
-            "call20_types" => SubgraphType::Array,
+            "call20_types" => SubgraphType::Array(Box::new(SubgraphType::Undetermined)),
             any => self.panic_unexpected(any)
         };
         let types_value = self.handle_types(Some(list_compat_type.clone()), None).1;
@@ -966,7 +1027,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     /// starting point; calls handle_query for the first time
     fn generate(&mut self) -> Query {
         let query = self.handle_query().0;
-        println!("Query:\n{}\n", query);
+        // println!("Query:\n{}\n", query);
         // reset the generator
         if let Some(state) = self.next_state_opt() {
             panic!("Couldn't reset state_generator: Received {state}");

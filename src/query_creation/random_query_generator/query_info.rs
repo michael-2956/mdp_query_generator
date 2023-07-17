@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
+use crate::unwrap_variant;
+
 use super::super::state_generators::SubgraphType;
 use sqlparser::{ast::{Ident, ObjectName, Statement, ColumnDef, HiveDistributionStyle, TableConstraint, HiveFormat, SqlOption, FileFormat, Query, OnCommit, TableAlias}, dialect::PostgreSqlDialect, parser::Parser};
 
@@ -119,14 +121,14 @@ impl DatabaseSchema {
 #[derive(Debug, Clone)]
 pub struct QueryContextManager {
     from_contents_stack: Vec<FromContents>,
-    selected_type: Option<SubgraphType>,
+    selected_types: Option<Vec<SubgraphType>>,
 }
 
 impl QueryContextManager {
     pub fn new() -> Self {
         Self { 
             from_contents_stack: vec![],
-            selected_type: None,
+            selected_types: None,
         }
     }
 
@@ -142,13 +144,13 @@ impl QueryContextManager {
         self.from_contents_stack.last_mut().unwrap()
     }
 
-    /// Update the current selected type 
-    pub fn update_selected_type(&mut self, subgraph_type: SubgraphType) {
-        self.selected_type = Some(subgraph_type);
+    /// Update the current selected types 
+    pub fn update_selected_types(&mut self, subgraph_type: Vec<SubgraphType>) {
+        self.selected_types = Some(subgraph_type);
     }
 
-    pub fn get_selected_type(&self) -> &SubgraphType {
-        self.selected_type.as_ref().unwrap()
+    pub fn get_selected_types(&self) -> &Vec<SubgraphType> {
+        self.selected_types.as_ref().unwrap()
     }
 
     pub fn on_query_generation_end(&mut self) {
@@ -182,7 +184,19 @@ impl FromContents {
         self.relations.iter().any(|x| x.1.is_type_available(graph_type))
     }
 
-    pub fn get_random_column_with_type(&self, rng: &mut ChaCha8Rng, graph_type: &SubgraphType) -> Vec<Ident> {
+    pub fn get_random_column_with_type_of(&self, rng: &mut ChaCha8Rng, graph_type_list: &Vec<SubgraphType>) -> (SubgraphType, Vec<Ident>) {
+        let available_graph_types = graph_type_list
+            .into_iter()
+            .filter(|x| self.is_type_available(x))
+            .collect::<Vec<_>>();
+        let selected_graph_type = available_graph_types
+            .iter()
+            .skip(rng.gen_range(0..available_graph_types.len()))
+            .next().unwrap();
+        self.get_random_column_with_type(rng, selected_graph_type)
+    }
+
+    pub fn get_random_column_with_type(&self, rng: &mut ChaCha8Rng, graph_type: &SubgraphType) -> (SubgraphType, Vec<Ident>) {
         let relations_with_type: Vec<&Relation> = self.relations
             .iter()
             .filter(|x| x.1.is_type_available(graph_type))
@@ -283,7 +297,7 @@ impl Relation {
     }
 
     pub fn is_type_available(&self, graph_type: &SubgraphType) -> bool {
-        self.columns.contains_key(graph_type)
+        self.columns.keys().any(|x| x.is_same_or_more_determined(graph_type))
     }
 
     /// get all columns with their types, including the unnamed ones
@@ -300,13 +314,25 @@ impl Relation {
     }
 
     /// Retrieve an identifier vector of a random column of the specified type.
-    pub fn get_random_column_with_type(&self, rng: &mut ChaCha8Rng, graph_type: &SubgraphType) -> Vec<Ident> {
-        let type_columns = self.columns.get(graph_type).unwrap();
+    pub fn get_random_column_with_type(&self, rng: &mut ChaCha8Rng, graph_type: &SubgraphType) -> (SubgraphType, Vec<Ident>) {
+        let type_columns = self.columns
+            .keys()
+            .filter(|x| x.is_same_or_more_determined(graph_type))
+            .map(|x| self.columns
+                .get(x)
+                .unwrap()
+                .iter()
+                .map(|y| (x.to_owned(), y))
+                .collect::<Vec<_>>()
+            )
+            .collect::<Vec<_>>()
+            .concat();
         let num_skip = rng.gen_range(0..type_columns.len());
-        vec![
+        let (column_type, column) = type_columns.into_iter().skip(num_skip).next().unwrap();
+        (column_type, vec![
             self.alias.0.clone(),
-            type_columns.iter().skip(num_skip).next().unwrap().0.clone()
-        ].concat()
+            column.0.clone()
+        ].concat())
     }
 }
 
@@ -314,7 +340,12 @@ impl SubgraphType {
     /// get a list of compatible types
     pub fn get_compat_types(&self) -> Vec<SubgraphType> {
         match self {
-            Self::Null => SubgraphType::get_all(),
+            SubgraphType::Array(inner) => {
+                inner.get_compat_types()
+                    .into_iter()
+                    .map(|x| SubgraphType::Array(Box::new(x)))
+                    .collect()
+            }
             any => vec![any.clone()],
         }
     }
@@ -323,7 +354,22 @@ impl SubgraphType {
     pub fn is_compat_with(&self, other: &SubgraphType) -> bool {
         *other == Self::Null ||
         *self == Self::Null ||
-        *other == *self ||
+        self.is_same_or_more_determined(other) ||
         self.get_compat_types().contains(other)
+    }
+
+    /// returns
+    pub fn is_same_or_more_determined(&self, as_what: &SubgraphType) -> bool {
+        match self {
+            SubgraphType::Array(inner) => {
+                if matches!(as_what, SubgraphType::Array(..)) {
+                    let by_inner = unwrap_variant!(as_what, SubgraphType::Array);
+                    **by_inner == SubgraphType::Undetermined || inner.is_same_or_more_determined(&by_inner)
+                } else {
+                    false
+                }
+            },
+            any => any == as_what,
+        }
     }
 }

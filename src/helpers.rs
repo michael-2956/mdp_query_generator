@@ -10,7 +10,7 @@ macro_rules! unwrap_variant {
 }
 
 #[macro_export]
-macro_rules! unwrap_variant_and_else {
+macro_rules! unwrap_variant_or_else {
     ($target: expr, $pat: path, $l: expr) => { {
         if let $pat(a) = $target {
             a

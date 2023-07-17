@@ -89,30 +89,18 @@ fn block_comment(lex: &mut Lexer<'_, DotToken>) -> Filter<()> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SubgraphType {
+    /// This type is used as an array inner type
+    /// if the inner type is yet to be determined
+    Undetermined,
     Numeric,
     Val3,
-    Array,
+    Array(Box<SubgraphType>),
     ListExpr,
     String,
     Null,
 }
 
 impl SubgraphType {
-    pub fn get_all() -> Vec<SubgraphType> {
-        vec![ Self::Numeric, Self::Val3, Self::Array, Self::ListExpr, Self::String, Self::Null ]
-    }
-
-    fn as_str(&self) -> &str {
-        match self {
-            SubgraphType::Numeric => "numeric",
-            SubgraphType::Val3 => "3VL Value",
-            SubgraphType::Array => "array",
-            SubgraphType::ListExpr => "list expr",
-            SubgraphType::String => "string",
-            SubgraphType::Null => "null",
-        }
-    }
-
     fn from_smolstr(smol_str: SmolStr) -> Result<Self, SyntaxError> {
         SubgraphType::from_str(smol_str.as_str())
     }
@@ -122,26 +110,33 @@ impl SubgraphType {
             DataType::Integer(_) => Self::Numeric,  /// TODO
             DataType::Varchar(_) => Self::String,
             DataType::CharVarying(_) => Self::String,
-            DataType::Char(_) => Self::String,  /// TODO
+            DataType::Char(_) => Self::String,
             DataType::Numeric(_) => Self::Numeric,
             DataType::Date => Self::Numeric,  /// TODO
             DataType::Boolean => Self::Val3,
-            DataType::Array(_) => Self::Array,
+            DataType::Array(inner) => Self::Array(Box::new((*inner.to_owned().unwrap()).into())),
             any => panic!("DataType not implemented: {any}"),
         }
     }
 
     pub fn to_data_type(&self) -> DataType {
         // TODO: this is a temporary solution
-        // Select among type variants.
+        // Should randomly select among type variants.
         match self {
             SubgraphType::Numeric => DataType::Numeric(ExactNumberInfo::None),
             SubgraphType::Val3 => DataType::Boolean,
-            SubgraphType::Array => DataType::Array(Some(Box::new(DataType::Numeric(ExactNumberInfo::None)))),
+            SubgraphType::Array(inner) => DataType::Array(Some(Box::new(inner.to_data_type()))),
             SubgraphType::ListExpr => DataType::Custom(ObjectName(vec![Ident::new("row_expression")]), vec![]),
             SubgraphType::String => DataType::String,
             SubgraphType::Null => panic!("Can't convert SubgraphType::Null to DataType"),
+            SubgraphType::Undetermined => panic!("Can't convert SubgraphType::Undetermined to DataType"),
         }
+    }
+}
+
+impl From<DataType> for SubgraphType {
+    fn from(value: DataType) -> Self {
+        SubgraphType::from_data_type(&value)
     }
 }
 
@@ -152,7 +147,7 @@ impl FromStr for SubgraphType {
         match s {
             "numeric" => Ok(SubgraphType::Numeric),
             "3VL Value" => Ok(SubgraphType::Val3),
-            "array" => Ok(SubgraphType::Array),
+            "array" => Ok(SubgraphType::Array(Box::new(SubgraphType::Undetermined))),
             "list expr" => Ok(SubgraphType::ListExpr),
             "string" => Ok(SubgraphType::String),
             any => Err(SyntaxError::new(format!("Type {any} does not exist!")))
@@ -162,7 +157,16 @@ impl FromStr for SubgraphType {
 
 impl Display for SubgraphType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_str())
+        let str = match self {
+            SubgraphType::Numeric => "numeric".to_string(),
+            SubgraphType::Val3 => "3VL Value".to_string(),
+            SubgraphType::Array(inner) => format!("array[{}]", inner),
+            SubgraphType::ListExpr => "list expr".to_string(),
+            SubgraphType::String => "string".to_string(),
+            SubgraphType::Null => "null".to_string(),
+            SubgraphType::Undetermined => "undetermined".to_string(),
+        };
+        write!(f, "{}", str)
     }
 }
 

@@ -133,7 +133,7 @@ pub struct Function {
     pub accepted_types: FunctionTypes,
     /// a vector of special function modifiers. Affects
     /// the function behaviour, but not the nodes
-    pub modifiers: Option<Vec<SmolStr>>,
+    pub accepted_modifiers: Option<Vec<SmolStr>>,
     /// the chain of the function, contains all of the
     /// function nodes and connectiona between them.
     /// We suppose that it's cheaper by time to clone
@@ -150,7 +150,7 @@ impl Function {
             source_node_name: definition.source_node_name.clone(),
             exit_node_name: definition.exit_node_name,
             accepted_types: FunctionTypes::from_function_inputs_type(definition.source_node_name, definition.input_type),
-            modifiers: definition.modifiers,
+            accepted_modifiers: definition.modifiers,
             chain: HashMap::<_, _>::new(),
         }
     }
@@ -350,7 +350,7 @@ impl MarkovChain {
                     }
 
                     if call_params.modifiers != CallModifiers::None {
-                        if let Some(ref func_modifiers) = function.modifiers {
+                        if let Some(ref func_modifiers) = function.accepted_modifiers {
                             match call_params.modifiers {
                                 CallModifiers::None => {},
                                 CallModifiers::PassThrough => {},
@@ -501,7 +501,7 @@ fn check_type(current_function: &Function, node_name: &SmolStr, type_name_opt: &
 /// Perform syntax checks for trigger nodes
 fn check_trigger(current_function: &Function, node_name: &SmolStr, trigger: &Option<(SmolStr, bool)>) -> Result<(), SyntaxError> {
     if let Some((trigger_name, _)) = trigger {
-        if !(match &current_function.modifiers {
+        if !(match &current_function.accepted_modifiers {
             Some(list) => list,
             None => return Err(SyntaxError::new(format!(
                 "Unexpected trigger node: {node_name}. Function does not acccept modifiers"
@@ -509,7 +509,7 @@ fn check_trigger(current_function: &Function, node_name: &SmolStr, trigger: &Opt
         }.contains(trigger_name)) {
             return Err(SyntaxError::new(format!(
                 "Unexpected trigger: {trigger_name} Expected one of: {:?}",
-                current_function.modifiers
+                current_function.accepted_modifiers
             )))
         }
     }

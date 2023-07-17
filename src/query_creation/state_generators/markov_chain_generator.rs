@@ -1,6 +1,6 @@
 pub mod state_choosers;
 pub mod dynamic_models;
-mod markov_chain;
+pub mod markov_chain;
 mod dot_parser;
 mod error;
 
@@ -130,6 +130,14 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         self.call_stack.last().unwrap().function_params.modifiers.clone()
     }
 
+    pub fn get_pending_call_accepted_types(&self) -> FunctionTypes {
+        self.markov_chain.functions.get(&self.pending_call.as_ref().unwrap().func_name).unwrap().accepted_types.clone()
+    }
+
+    pub fn get_pending_call_accepted_modifiers(&self) -> Option<Vec<SmolStr>> {
+        self.markov_chain.functions.get(&self.pending_call.as_ref().unwrap().func_name).unwrap().accepted_modifiers.clone()
+    }
+
     /// push the known type for the next node that will use the type=known
     pub fn push_known(&mut self, type_name: SubgraphType) {
         self.known_type_name_stack.push(type_name);
@@ -218,7 +226,13 @@ fn check_node_off(
         off = match function_call_params.selected_types {
             CallTypes::None => true,
             CallTypes::Type(ref t_name) => if t_name != option_name { true } else { false },
-            CallTypes::TypeList(ref t_name_list) => if !t_name_list.contains(&option_name) { true } else { false },
+            CallTypes::TypeList(ref t_name_list) => if !t_name_list
+                .iter()
+                .any(|x| x.is_same_or_more_determined(option_name)) {
+                    true
+                } else {
+                    false
+                },
             _ => panic!("Expected None, TypeName or a TypeNameList for function selected types")
         };
     }

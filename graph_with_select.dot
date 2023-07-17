@@ -521,7 +521,7 @@ digraph G {
         types -> types_select_type_string
         types_select_type_string -> types_select_type_noexpr
 
-        call0_column_spec [TYPE="known", call_trigger="is_column_type_available", trigger="no column spec", trigger_mode="off", label="column specifier\nTYPE: type\nmod.: 'no column spec'", shape=rectangle, style=filled, color=gold]
+        call0_column_spec [TYPES="[known]", call_trigger="is_column_type_available", trigger="no column spec", trigger_mode="off", label="column specifier\nTYPE: type\nmod.: 'no column spec'", shape=rectangle, style=filled, color=gold]
         types_select_type_noexpr -> call0_column_spec
         call0_column_spec -> EXIT_types
 
@@ -549,7 +549,7 @@ digraph G {
         types_select_type_list_expr -> call0_list_expr
         call0_list_expr -> EXIT_types
 
-        call0_array [TYPES="[any]", MODS="[...]", label="array\nTYPES: [any]\nMODS: [...mods]", shape=rectangle, style=filled, color=yellow]
+        call0_array [TYPES="[known]", MODS="[...]", label="array\nTYPES: [known]\nMODS: [...mods]", shape=rectangle, style=filled, color=yellow]
         types_select_type_array -> call0_array
         call0_array -> EXIT_types
     }
@@ -564,15 +564,8 @@ digraph G {
     }
 
     subgraph def_column_spec {
-        column_spec [TYPE="numeric, 3VL Value, string, array", label="column specifier\ntype=numeric | 3VL Value | string | array", shape=octagon, style=filled, color=gold]
+        column_spec [TYPES="[numeric, 3VL Value, string, array, list expr]", label="column specifier\ntypes=[numeric, 3VL Value, string, array, list expr]", shape=octagon, style=filled, color=gold]
         EXIT_column_spec [label="EXIT column specifier", shape=rectangle]
-
-        // qualified_name [label="Qualified column name of type: type"]
-        // column_spec -> qualified_name
-        // qualified_name -> EXIT_column_spec
-        // unqualified_name [label="Unqualified column name of type: type"]
-        // column_spec -> unqualified_name
-        // unqualified_name -> EXIT_column_spec
 
         typed_column_name [label="Unqualified/Qualified column name of type: type"]
         column_spec -> typed_column_name
@@ -598,11 +591,12 @@ digraph G {
         array -> call31_types
         call31_types -> call50_types
 
+        //////////////////////!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! TYPES="[list expr]" WITH TYPES="[known]" HERE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         call51_types [TYPE_NAME="list expr", TYPES="[list expr]", label="TYPE: list expr?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         array -> call51_types
         call51_types -> call50_types
 
-        call14_types [TYPE_NAME="array", TYPES="[array]", label="TYPE: array?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call14_types [TYPE_NAME="array", TYPES="[known]", label="TYPE: array?\nMODS: [...mods]\nTYPES: [known]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         array -> call14_types
         call14_types -> call50_types
 
