@@ -525,9 +525,9 @@ digraph G {
         types_select_type_noexpr -> call0_column_spec
         call0_column_spec -> EXIT_types
 
-        // call1_Query [TYPES="[known]", MODS="[single value]", label="Query\nMODS: single value\nTYPE: type", shape=rectangle, style=filled, color=green]
-        // types_select_type_noexpr -> call1_Query
-        // call1_Query -> EXIT_types
+        call1_Query [TYPES="[known]", MODS="[single value]", label="Query\nMODS: single value\nTYPE: type", shape=rectangle, style=filled, color=green]
+        types_select_type_noexpr -> call1_Query
+        call1_Query -> EXIT_types
 
         // types_null [label="null"]
         // types -> types_null

@@ -976,7 +976,6 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             SubgraphType::Array(inner) if matches!(inner_type, SubgraphType::Array(..)) => {
                 inner_type = SubgraphType::Array(inner);
             },
-            any if any != inner_type => panic!("Types didn't output correct type for the first element of an array!"),
             _ => {}
         }
         let mut array = vec![types_value];
