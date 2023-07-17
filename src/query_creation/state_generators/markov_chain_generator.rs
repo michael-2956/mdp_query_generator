@@ -57,7 +57,6 @@ pub struct MarkovChainGenerator<StC: StateChooser> {
 #[derive(Clone, Debug)]
 struct StackItem {
     function_params: CallParams,
-    previous_node_name: SmolStr,
     last_node: NodeParams,
 }
 
@@ -66,7 +65,6 @@ impl StackItem {
         let func_name = call_params.func_name.clone();
         Self {
             function_params: call_params,
-            previous_node_name: SmolStr::new("-"),
             last_node: NodeParams {
                 node_common: NodeCommon::with_name(func_name),
                 call_params: None,
@@ -102,7 +100,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     pub fn print_stack(&self) {
         println!("Call stack:");
         for stack_item in &self.call_stack {
-            println!("{} ({:?}) [{}]:", stack_item.function_params.func_name, stack_item.function_params.selected_types, stack_item.previous_node_name)
+            println!("{} ({:?}) [{}]:", stack_item.function_params.func_name, stack_item.function_params.selected_types, stack_item.last_node.node_common.name)
         }
     }
 
@@ -301,7 +299,6 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             if check_node_off_dfs(function, &stack_item.function_params, &self.call_triggers, query_context_manager, &destination.node_common) {
                 panic!("Chosen node is off: {} (after {})", destination.node_common.name, last_node.node_common.name);
             }
-            stack_item.previous_node_name = last_node.node_common.name.clone();
             stack_item.last_node = destination.clone();
         } else {
             self.print_stack();
