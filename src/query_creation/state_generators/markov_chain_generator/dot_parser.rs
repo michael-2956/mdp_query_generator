@@ -95,7 +95,7 @@ pub enum SubgraphType {
     Numeric,
     Val3,
     Array(Box<SubgraphType>),
-    ListExpr,
+    ListExpr(Box<SubgraphType>),
     String,
     Null,
 }
@@ -119,6 +119,7 @@ impl SubgraphType {
         }
     }
 
+    /// CURRENTLY NOT USED
     pub fn to_data_type(&self) -> DataType {
         // TODO: this is a temporary solution
         // Should randomly select among type variants.
@@ -126,7 +127,7 @@ impl SubgraphType {
             SubgraphType::Numeric => DataType::Numeric(ExactNumberInfo::None),
             SubgraphType::Val3 => DataType::Boolean,
             SubgraphType::Array(inner) => DataType::Array(Some(Box::new(inner.to_data_type()))),
-            SubgraphType::ListExpr => DataType::Custom(ObjectName(vec![Ident::new("row_expression")]), vec![]),
+            SubgraphType::ListExpr(_) => DataType::Custom(ObjectName(vec![Ident::new("row_expression")]), vec![]),
             SubgraphType::String => DataType::String,
             SubgraphType::Null => panic!("Can't convert SubgraphType::Null to DataType"),
             SubgraphType::Undetermined => panic!("Can't convert SubgraphType::Undetermined to DataType"),
@@ -148,7 +149,7 @@ impl FromStr for SubgraphType {
             "numeric" => Ok(SubgraphType::Numeric),
             "3VL Value" => Ok(SubgraphType::Val3),
             "array" => Ok(SubgraphType::Array(Box::new(SubgraphType::Undetermined))),
-            "list expr" => Ok(SubgraphType::ListExpr),
+            "list expr" => Ok(SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined))),
             "string" => Ok(SubgraphType::String),
             any => Err(SyntaxError::new(format!("Type {any} does not exist!")))
         }
@@ -161,7 +162,7 @@ impl Display for SubgraphType {
             SubgraphType::Numeric => "numeric".to_string(),
             SubgraphType::Val3 => "3VL Value".to_string(),
             SubgraphType::Array(inner) => format!("array[{}]", inner),
-            SubgraphType::ListExpr => "list expr".to_string(),
+            SubgraphType::ListExpr(inner) => format!("list expr[{}]", inner),
             SubgraphType::String => "string".to_string(),
             SubgraphType::Null => "null".to_string(),
             SubgraphType::Undetermined => "undetermined".to_string(),

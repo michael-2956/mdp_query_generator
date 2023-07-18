@@ -545,7 +545,7 @@ digraph G {
         types_select_type_string -> call0_string
         call0_string -> EXIT_types
 
-        call0_list_expr [TYPES="[any]", MODS="[...]", label="list expr\nTYPES: [any]\nMODS: [...mods]", shape=rectangle, style=filled, color=blue]
+        call0_list_expr [TYPES="[known]", MODS="[...]", label="list expr\nTYPES: [known]\nMODS: [...mods]", shape=rectangle, style=filled, color=blue]
         types_select_type_list_expr -> call0_list_expr
         call0_list_expr -> EXIT_types
 
@@ -591,8 +591,7 @@ digraph G {
         array -> call31_types
         call31_types -> call50_types
 
-        //////////////////////!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! TYPES="[list expr]" WITH TYPES="[known]" HERE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        call51_types [TYPE_NAME="list expr", TYPES="[list expr]", label="TYPE: list expr?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call51_types [TYPE_NAME="list expr", TYPES="[known]", label="TYPE: list expr?\nMODS: [...mods]\nTYPES: [known]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         array -> call51_types
         call51_types -> call50_types
 
@@ -604,7 +603,7 @@ digraph G {
     }
 
     subgraph def_list_expr {
-        list_expr[TYPES="[numeric, 3VL Value, string, list expr, array]", MODS="[no column spec]", label="list expr\ntypes=[numeric?, 3VL Value?, string?, list expr?, array?]\nmods: [no column spec]", shape=octagon, style=filled, color=blue]
+        list_expr [TYPES="[numeric, 3VL Value, string, list expr, array]", MODS="[no column spec]", label="list expr\ntypes=[numeric?, 3VL Value?, string?, list expr?, array?]\nmods: [no column spec]", shape=octagon, style=filled, color=blue]
         EXIT_list_expr[label="EXIT list expr"]
 
         call49_types [TYPES="[compatible]", label="TYPES: [compatible]\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
@@ -621,11 +620,11 @@ digraph G {
         list_expr -> call18_types
         call18_types -> call49_types
 
-        call19_types [TYPE_NAME="list expr", TYPES="[list expr]", label="TYPE: list expr?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call19_types [TYPE_NAME="list expr", TYPES="[known]", label="TYPE: list expr?\nMODS: [...mods]\nTYPES=[known]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         list_expr -> call19_types
         call19_types -> call49_types
 
-        call20_types [TYPE_NAME="array", TYPES="[array]", label="TYPE: array?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call20_types [TYPE_NAME="array", TYPES="[known]", label="TYPE: array?\nMODS: [...mods]\nTYPES=[known]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         list_expr -> call20_types
         call20_types -> call49_types
 

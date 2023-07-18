@@ -339,15 +339,15 @@ impl Relation {
 impl SubgraphType {
     /// get a list of compatible types
     pub fn get_compat_types(&self) -> Vec<SubgraphType> {
-        match self {
-            SubgraphType::Array(inner) => {
-                inner.get_compat_types()
-                    .into_iter()
-                    .map(|x| SubgraphType::Array(Box::new(x)))
-                    .collect()
-            }
-            any => vec![any.clone()],
-        }
+        let (inner_type, wrapper): (&Box<SubgraphType>, Box<dyn Fn(SubgraphType) -> SubgraphType>) = match self {
+            SubgraphType::Array(inner) => (inner, Box::new(|x| SubgraphType::Array(Box::new(x)))),
+            SubgraphType::ListExpr(inner) => (inner, Box::new(|x| SubgraphType::ListExpr(Box::new(x)))),
+            any => return vec![any.clone()],
+        };
+        inner_type.get_compat_types()
+            .into_iter()
+            .map(wrapper)
+            .collect()
     }
 
     /// checks is self is contertable to other
@@ -364,6 +364,14 @@ impl SubgraphType {
             SubgraphType::Array(inner) => {
                 if matches!(as_what, SubgraphType::Array(..)) {
                     let by_inner = unwrap_variant!(as_what, SubgraphType::Array);
+                    **by_inner == SubgraphType::Undetermined || inner.is_same_or_more_determined(&by_inner)
+                } else {
+                    false
+                }
+            },
+            SubgraphType::ListExpr(inner) => {
+                if matches!(as_what, SubgraphType::ListExpr(..)) {
+                    let by_inner = unwrap_variant!(as_what, SubgraphType::ListExpr);
                     **by_inner == SubgraphType::Undetermined || inner.is_same_or_more_determined(&by_inner)
                 } else {
                     false

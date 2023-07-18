@@ -563,7 +563,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                 self.expect_state("call1_list_expr");
                 Expr::InList {
                     expr: Box::new(types_value),
-                    list: unwrap_variant!(self.handle_list_expr(), Expr::Tuple),
+                    list: unwrap_variant!(self.handle_list_expr().1, Expr::Tuple),
                     negated: in_list_not_flag
                 }
             },
@@ -843,13 +843,10 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         &mut self, check_generated_by: Option<SubgraphType>, check_compatible_with: Option<SubgraphType>
     ) -> (SubgraphType, Expr) {
         self.expect_state("types");
-        let argument_selected_types = unwrap_variant_or_else!(
-            self.state_generator.get_fn_selected_types(), CallTypes::TypeList, || self.state_generator.print_stack()
-        );
         let mut selected_type = match self.next_state().as_str() {
             "types_select_type_3vl" => SubgraphType::Val3,
             "types_select_type_array" => SubgraphType::Array(Box::new(SubgraphType::Undetermined)),
-            "types_select_type_list_expr" => SubgraphType::ListExpr,
+            "types_select_type_list_expr" => SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined)),
             "types_select_type_numeric" => SubgraphType::Numeric,
             "types_select_type_string" => SubgraphType::String,
             "types_null" => {
@@ -859,11 +856,8 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             any => self.panic_unexpected(any),
         };
         let allowed_type_list = match selected_type.clone() {
-            SubgraphType::Array(..) => argument_selected_types
-                .iter()
-                .filter(|x| matches!(x, SubgraphType::Array(..)))
-                .map(|x| x.to_owned())
-                .collect::<Vec<_>>(),
+            SubgraphType::Array(..) => self.get_selected_types_with_filter(|x| matches!(x, SubgraphType::Array(..))),
+            SubgraphType::ListExpr(..) => self.get_selected_types_with_filter(|x| matches!(x, SubgraphType::ListExpr(..))),
             any => vec![any]
         };
         self.query_context_manager.update_selected_types(allowed_type_list.clone());
@@ -891,18 +885,18 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "call0_numeric" if selected_type == SubgraphType::Numeric => self.handle_numeric(),
             "call1_VAL_3" if selected_type == SubgraphType::Val3 => self.handle_val_3(),
             "call0_string" if selected_type == SubgraphType::String => self.handle_string(),
-            "call0_list_expr" if selected_type == SubgraphType::ListExpr => self.handle_list_expr(),
+            "call0_list_expr" if matches!(selected_type, SubgraphType::ListExpr(..)) => {
+                self.state_generator.push_known_list(self.get_inner_type_list_with_map(
+                    allowed_type_list, |x| *unwrap_variant!(x, SubgraphType::ListExpr)
+                ));
+                let (real_array_type, expr) = self.handle_list_expr();
+                selected_type = real_array_type;
+                expr
+            },
             "call0_array" if matches!(selected_type, SubgraphType::Array(..)) => {
-                let mut array_inner_type_list = match allowed_type_list.len() {
-                    0 => panic!("allowed_type_list is empty"),
-                    _ => allowed_type_list.into_iter().map(|x| *unwrap_variant!(x, SubgraphType::Array)).collect::<Vec<_>>()
-                };
-                if array_inner_type_list == vec![SubgraphType::Undetermined] {
-                    array_inner_type_list = unwrap_variant!(
-                        self.state_generator.get_pending_call_accepted_types(), FunctionTypes::TypeList
-                    );
-                }
-                self.state_generator.push_known_list(array_inner_type_list);
+                self.state_generator.push_known_list(self.get_inner_type_list_with_map(
+                    allowed_type_list, |x| *unwrap_variant!(x, SubgraphType::Array)
+                ));
                 let (real_array_type, expr) = self.handle_array();
                 selected_type = real_array_type;
                 expr
@@ -945,39 +939,52 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         (selected_type, Expr::CompoundIdentifier(ident_components))
     }
 
+    fn get_inner_type_list_with_map(&self, allowed_type_list: Vec<SubgraphType>, map: fn(SubgraphType) -> SubgraphType) -> Vec<SubgraphType> {
+        let mut inner_type_list = allowed_type_list.clone()
+            .into_iter()
+            .map(map)
+            .collect::<Vec<_>>();
+        if inner_type_list == vec![SubgraphType::Undetermined] {
+            inner_type_list = unwrap_variant!(
+                self.state_generator.get_pending_call_accepted_types(), FunctionTypes::TypeList
+            );
+        }
+        inner_type_list
+    }
+
+    fn get_selected_types_with_filter(&self, filter: fn(&SubgraphType) -> bool) -> Vec<SubgraphType> {
+        let argument_selected_types = unwrap_variant_or_else!(
+            self.state_generator.get_fn_selected_types(), CallTypes::TypeList, || self.state_generator.print_stack()
+        );
+        argument_selected_types
+            .iter()
+            .map(|x| x.to_owned())
+            .filter(filter)
+            .collect::<Vec<_>>()
+    }
+
+    fn pass_arguments_through_with_filter(&mut self, filter: fn(&SubgraphType) -> bool) {
+        self.state_generator.push_known_list(self.get_selected_types_with_filter(filter));
+    } 
+
     /// subgraph def_array
     fn handle_array(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("array");
-        let selected_inner_types = unwrap_variant_or_else!(
-            self.state_generator.get_fn_selected_types(), CallTypes::TypeList, || self.state_generator.print_stack()
-        );
-        let mut inner_type = match self.next_state().as_str() {
+        let inner_type = match self.next_state().as_str() {
             "call12_types" => SubgraphType::Numeric,
             "call13_types" => SubgraphType::Val3,
             "call31_types" => SubgraphType::String,
-            "call51_types" => SubgraphType::ListExpr,
+            "call51_types" => {
+                self.pass_arguments_through_with_filter(|x| matches!(x, SubgraphType::ListExpr(..)));
+                SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined))
+            },
             "call14_types" => {
-                self.state_generator.push_known_list(
-                    selected_inner_types
-                        .iter()
-                        .filter(|x| matches!(x, SubgraphType::Array(..)))
-                        .map(|x| x.to_owned())
-                        .collect::<Vec<_>>()
-                );
+                self.pass_arguments_through_with_filter(|x| matches!(x, SubgraphType::Array(..)));
                 SubgraphType::Array(Box::new(SubgraphType::Undetermined))
             },
             any => self.panic_unexpected(any)
         };
-        let (types_selected_type, types_value) = self.handle_types(Some(inner_type.clone()), None);
-        match types_selected_type {
-            SubgraphType::Array(inner) if *inner == SubgraphType::Undetermined => {self.state_generator.print_stack(); panic!(
-                "Types didn't determine inner array type for array!"
-            )},
-            SubgraphType::Array(inner) if matches!(inner_type, SubgraphType::Array(..)) => {
-                inner_type = SubgraphType::Array(inner);
-            },
-            _ => {}
-        }
+        let (inner_type, types_value) = self.handle_types(Some(inner_type.clone()), None);
         let mut array = vec![types_value];
         loop {
             match self.next_state().as_str() {
@@ -997,30 +1004,39 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     }
 
     /// subgraph def_list_expr
-    fn handle_list_expr(&mut self) -> Expr {
+    fn handle_list_expr(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("list_expr");
-        let list_compat_type = match self.next_state().as_str() {
+        let argument_selected_types = unwrap_variant_or_else!(
+            self.state_generator.get_fn_selected_types(), CallTypes::TypeList, || self.state_generator.print_stack()
+        );
+        let inner_type = match self.next_state().as_str() {
             "call16_types" => SubgraphType::Numeric,
             "call17_types" => SubgraphType::Val3,
             "call18_types" => SubgraphType::String,
-            "call19_types" => SubgraphType::ListExpr,
-            "call20_types" => SubgraphType::Array(Box::new(SubgraphType::Undetermined)),
+            "call19_types" => {
+                self.pass_arguments_through_with_filter(|x| matches!(x, SubgraphType::ListExpr(..)));
+                SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined))
+            },
+            "call20_types" => {
+                self.pass_arguments_through_with_filter(|x| matches!(x, SubgraphType::Array(..)));
+                SubgraphType::Array(Box::new(SubgraphType::Undetermined))
+            },
             any => self.panic_unexpected(any)
         };
-        let types_value = self.handle_types(Some(list_compat_type.clone()), None).1;
+        let (inner_type, types_value) = self.handle_types(Some(inner_type.clone()), None);
         let mut list_expr: Vec<Expr> = vec![types_value];
         loop {
             match self.next_state().as_str() {
                 "call49_types" => {
-                    self.state_generator.push_compatible_list(list_compat_type.get_compat_types());
-                    let types_value = self.handle_types(None, Some(list_compat_type.clone())).1;
+                    self.state_generator.push_compatible_list(inner_type.get_compat_types());
+                    let types_value = self.handle_types(None, Some(inner_type.clone())).1;
                     list_expr.push(types_value);
                 },
                 "EXIT_list_expr" => break,
                 any => self.panic_unexpected(any)
             }
         }
-        Expr::Tuple(list_expr)
+        (SubgraphType::ListExpr(Box::new(inner_type)), Expr::Tuple(list_expr))
     }
 
     /// starting point; calls handle_query for the first time
