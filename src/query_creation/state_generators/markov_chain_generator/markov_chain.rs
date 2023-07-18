@@ -53,8 +53,6 @@ pub enum CallTypes {
     Compatible,
     /// Used when we want to pass the function's type constraints further
     PassThrough,
-    /// Select a type among type variants.
-    Type(SubgraphType),
     /// Select multiple types among possible type variants.
     TypeList(Vec<SubgraphType>),
 }
@@ -66,7 +64,6 @@ impl CallTypes {
                 match accepted_types {
                     FunctionTypes::None => panic!("Incorrect input type for node {node_name}: Any. Function does not accept arguments."),
                     FunctionTypes::TypeList(list) => CallTypes::TypeList(list.clone()),
-                    FunctionTypes::TypeVariants(_) => panic!("Incorrect input type for node {node_name}: Any. Function only accepts type variants."),
                 }
             },
             FunctionInputsType::None => CallTypes::None,
@@ -74,7 +71,6 @@ impl CallTypes {
             FunctionInputsType::KnownList => CallTypes::KnownList,
             FunctionInputsType::Compatible => CallTypes::Compatible,
             FunctionInputsType::PassThrough => CallTypes::PassThrough,
-            FunctionInputsType::TypeName(tp) => CallTypes::Type(tp),
             FunctionInputsType::TypeNameList(tp_list) => CallTypes::TypeList(tp_list),
             any => panic!("Incorrect input type for node {node_name}: {:?}", any),
         }
@@ -102,8 +98,6 @@ pub enum FunctionTypes {
     None,
     /// Specify the allowed type list, of which multiple can be selected.
     TypeList(Vec<SubgraphType>),
-    /// Specify possible type variants, of which only one can be selected.
-    TypeVariants(Vec<SubgraphType>),
 }
 
 impl FunctionTypes {
@@ -111,7 +105,6 @@ impl FunctionTypes {
         match input {
             FunctionInputsType::None => FunctionTypes::None,
             FunctionInputsType::TypeNameList(list) => FunctionTypes::TypeList(list),
-            FunctionInputsType::TypeNameVariants(variants) => FunctionTypes::TypeVariants(variants),
             any => panic!("Incorrect input type for function {}: {:?}", source_node_name, any),
         }
     }
@@ -330,19 +323,14 @@ impl MarkovChain {
 
                     match (&call_params.selected_types, &function.accepted_types) {
                         (
-                            CallTypes::Type(name),
-                            FunctionTypes::TypeVariants(variants)
-                        ) if variants.contains(name) => {},
-                        (
                             CallTypes::TypeList(types_list),
                             FunctionTypes::TypeList(func_types_list)
                         ) if types_list.iter().all(|t| func_types_list.contains(t)) => {},
                         (CallTypes::None, FunctionTypes::TypeList(..) | FunctionTypes::None) => {},
                         (
-                            CallTypes::PassThrough, FunctionTypes::TypeList(..) | FunctionTypes::TypeVariants(..)
+                            CallTypes::PassThrough, FunctionTypes::TypeList(..)
                         ) => {},
                         (CallTypes::Compatible, FunctionTypes::TypeList(..)) => {},
-                        (CallTypes::Known, FunctionTypes::TypeVariants(..)) => {},
                         (CallTypes::KnownList, FunctionTypes::TypeList(..)) => {},
                         _ => return Err(SyntaxError::new(gen_type_error(format!(
                             "Got {:?}, but the function type is {:?}", call_params.selected_types, function.accepted_types,
@@ -484,7 +472,6 @@ fn check_type(current_function: &Function, node_name: &SmolStr, type_name_opt: &
     if let Some(type_name) = type_name_opt {
         if !(match &current_function.accepted_types {
             FunctionTypes::TypeList(list) => list,
-            FunctionTypes::TypeVariants(list) => list,
             _ => return Err(SyntaxError::new(format!(
                 "Unexpected typed node: {node_name}. Function does not acccept arguments"
             )))

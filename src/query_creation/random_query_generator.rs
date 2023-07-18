@@ -851,7 +851,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "types_select_type_string" => SubgraphType::String,
             "types_null" => {
                 self.expect_state("EXIT_types");
-                return (SubgraphType::Null, Expr::Value(Value::Null))
+                return (SubgraphType::Undetermined, Expr::Value(Value::Null))
             },
             any => self.panic_unexpected(any),
         };
@@ -905,9 +905,9 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         };
         self.expect_state("EXIT_types");
 
-        if let Some(to) = check_generated_by {
-            if !selected_type.is_same_or_more_determined(&to) {
-                panic!("Unexpected type: expected {:?}, got {:?}", to, selected_type);
+        if let Some(as_what) = check_generated_by {
+            if !selected_type.is_same_or_more_determined_or_undetermined(&as_what) {
+                panic!("Unexpected type: expected {:?}, got {:?}", as_what, selected_type);
             }
         }
         if let Some(with) = check_compatible_with {
@@ -1006,9 +1006,6 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     /// subgraph def_list_expr
     fn handle_list_expr(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("list_expr");
-        let argument_selected_types = unwrap_variant_or_else!(
-            self.state_generator.get_fn_selected_types(), CallTypes::TypeList, || self.state_generator.print_stack()
-        );
         let inner_type = match self.next_state().as_str() {
             "call16_types" => SubgraphType::Numeric,
             "call17_types" => SubgraphType::Val3,

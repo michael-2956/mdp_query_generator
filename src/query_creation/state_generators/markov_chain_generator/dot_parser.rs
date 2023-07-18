@@ -97,7 +97,6 @@ pub enum SubgraphType {
     Array(Box<SubgraphType>),
     ListExpr(Box<SubgraphType>),
     String,
-    Null,
 }
 
 impl SubgraphType {
@@ -129,7 +128,6 @@ impl SubgraphType {
             SubgraphType::Array(inner) => DataType::Array(Some(Box::new(inner.to_data_type()))),
             SubgraphType::ListExpr(_) => DataType::Custom(ObjectName(vec![Ident::new("row_expression")]), vec![]),
             SubgraphType::String => DataType::String,
-            SubgraphType::Null => panic!("Can't convert SubgraphType::Null to DataType"),
             SubgraphType::Undetermined => panic!("Can't convert SubgraphType::Undetermined to DataType"),
         }
     }
@@ -164,7 +162,6 @@ impl Display for SubgraphType {
             SubgraphType::Array(inner) => format!("array[{}]", inner),
             SubgraphType::ListExpr(inner) => format!("list expr[{}]", inner),
             SubgraphType::String => "string".to_string(),
-            SubgraphType::Null => "null".to_string(),
             SubgraphType::Undetermined => "undetermined".to_string(),
         };
         write!(f, "{}", str)

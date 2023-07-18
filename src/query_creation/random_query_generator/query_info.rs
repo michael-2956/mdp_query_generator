@@ -297,7 +297,7 @@ impl Relation {
     }
 
     pub fn is_type_available(&self, graph_type: &SubgraphType) -> bool {
-        self.columns.keys().any(|x| x.is_same_or_more_determined(graph_type))
+        self.columns.keys().any(|x| x.is_same_or_more_determined_or_undetermined(graph_type))
     }
 
     /// get all columns with their types, including the unnamed ones
@@ -317,7 +317,7 @@ impl Relation {
     pub fn get_random_column_with_type(&self, rng: &mut ChaCha8Rng, graph_type: &SubgraphType) -> (SubgraphType, Vec<Ident>) {
         let type_columns = self.columns
             .keys()
-            .filter(|x| x.is_same_or_more_determined(graph_type))
+            .filter(|x| x.is_same_or_more_determined_or_undetermined(graph_type))
             .map(|x| self.columns
                 .get(x)
                 .unwrap()
@@ -350,21 +350,27 @@ impl SubgraphType {
             .collect()
     }
 
-    /// checks is self is contertable to other
+    /// checks is self is convertable to other
     pub fn is_compat_with(&self, other: &SubgraphType) -> bool {
-        *other == Self::Null ||
-        *self == Self::Null ||
-        self.is_same_or_more_determined(other) ||
-        self.get_compat_types().contains(other)
+        other.is_same_or_more_determined_or_undetermined(self) ||
+        self.is_same_or_more_determined_or_undetermined(other) ||
+        self.get_compat_types().iter().any(|x| other.is_same_or_more_determined_or_undetermined(x)) ||
+        other.get_compat_types().iter().any(|x| self.is_same_or_more_determined_or_undetermined(x))
     }
 
-    /// returns
-    pub fn is_same_or_more_determined(&self, as_what: &SubgraphType) -> bool {
+    /// returns whether type is same, more determined or undetermined at all (NULL)
+    pub fn is_same_or_more_determined_or_undetermined(&self, as_what: &SubgraphType) -> bool {
+        if *self == SubgraphType::Undetermined {
+            return true;
+        }
+        if *as_what == SubgraphType::Undetermined {
+            return true;
+        }
         match self {
             SubgraphType::Array(inner) => {
                 if matches!(as_what, SubgraphType::Array(..)) {
                     let by_inner = unwrap_variant!(as_what, SubgraphType::Array);
-                    **by_inner == SubgraphType::Undetermined || inner.is_same_or_more_determined(&by_inner)
+                    **by_inner == SubgraphType::Undetermined || inner.is_same_or_more_determined_or_undetermined(&by_inner)
                 } else {
                     false
                 }
@@ -372,7 +378,7 @@ impl SubgraphType {
             SubgraphType::ListExpr(inner) => {
                 if matches!(as_what, SubgraphType::ListExpr(..)) {
                     let by_inner = unwrap_variant!(as_what, SubgraphType::ListExpr);
-                    **by_inner == SubgraphType::Undetermined || inner.is_same_or_more_determined(&by_inner)
+                    **by_inner == SubgraphType::Undetermined || inner.is_same_or_more_determined_or_undetermined(&by_inner)
                 } else {
                     false
                 }

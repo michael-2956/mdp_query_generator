@@ -41,12 +41,9 @@ pub struct MarkovChainGenerator<StC: StateChooser> {
     /// this stack contains information about the known type name lists
     /// inferred when [known] is used in TYPES
     known_type_list_stack: Vec<Vec<SubgraphType>>,
-    /// this stack contains information about the known type names
-    /// inferred when known is used in TYPE
-    known_type_name_stack: Vec<SubgraphType>,
     /// this stack contains information about the compatible type names
     /// inferred when [compatible] is used in [TYPES]
-    compatible_type_name_stack: Vec<Vec<SubgraphType>>,
+    compatible_type_list_stack: Vec<Vec<SubgraphType>>,
     markov_chain: MarkovChain,
     call_stack: Vec<StackItem>,
     pending_call: Option<CallParams>,
@@ -83,8 +80,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             call_stack: vec![],
             pending_call: None,
             known_type_list_stack: vec![],
-            known_type_name_stack: vec![],
-            compatible_type_name_stack: vec![],
+            compatible_type_list_stack: vec![],
             state_chooser: Box::new(StC::new()),
             call_triggers: HashMap::new(),
         };
@@ -117,7 +113,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         });
 
         self.known_type_list_stack = vec![];
-        self.compatible_type_name_stack = vec![];
+        self.compatible_type_list_stack = vec![];
     }
 
     /// get current function inputs list
@@ -138,11 +134,6 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         self.markov_chain.functions.get(&self.pending_call.as_ref().unwrap().func_name).unwrap().accepted_modifiers.clone()
     }
 
-    /// push the known type for the next node that will use the type=known
-    pub fn push_known(&mut self, type_name: SubgraphType) {
-        self.known_type_name_stack.push(type_name);
-    }
-
     /// push the known type list for the next node that will use the types=[known]
     pub fn push_known_list(&mut self, type_list: Vec<SubgraphType>) {
         self.known_type_list_stack.push(type_list);
@@ -150,15 +141,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
     /// push the compatible type list for the next node that will use the type=[compatible]
     pub fn push_compatible_list(&mut self, type_list: Vec<SubgraphType>) {
-        self.compatible_type_name_stack.push(type_list);
-    }
-
-    /// pop the known type for the current node which will uses type=[known]
-    fn pop_known(&mut self) -> SubgraphType {
-        self.known_type_name_stack.pop().unwrap_or_else(|| {
-            self.print_stack();
-            panic!("No known type name found!")
-        })
+        self.compatible_type_list_stack.push(type_list);
     }
 
     /// pop the known type for the current node which will uses type=[known]
@@ -171,7 +154,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
     /// pop the compatible type for the current node which will uses type=[compatible]
     fn pop_compatible_list(&mut self) -> Vec<SubgraphType> {
-        match self.compatible_type_name_stack.pop() {
+        match self.compatible_type_list_stack.pop() {
             Some(item) => item,
             None => {
                 self.print_stack();
@@ -225,10 +208,9 @@ fn check_node_off(
     if let Some(ref option_name) = node_common.type_name {
         off = match function_call_params.selected_types {
             CallTypes::None => true,
-            CallTypes::Type(ref t_name) => if t_name != option_name { true } else { false },
             CallTypes::TypeList(ref t_name_list) => if !t_name_list
                 .iter()
-                .any(|x| x.is_same_or_more_determined(option_name)) {
+                .any(|x| option_name.is_same_or_more_determined_or_undetermined(x)) {
                     true
                 } else {
                     false
@@ -258,13 +240,22 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     pub fn next(&mut self, query_context_manager: &QueryContextManager, dynamic_model: &mut (impl DynamicModel + ?Sized)) -> Option<<Self as Iterator>::Item> {
         if let Some(call_params) = self.pending_call.take() {
             // if the last node requested a call, update stack and return function's first state
-            let inputs = match call_params.selected_types {
-                CallTypes::Known => CallTypes::Type(self.pop_known()),
+            let mut inputs = match call_params.selected_types {
                 CallTypes::KnownList => CallTypes::TypeList(self.pop_known_list()),
                 CallTypes::Compatible => CallTypes::TypeList(self.pop_compatible_list()),
                 CallTypes::PassThrough => self.call_stack.last().unwrap().function_params.selected_types.clone(),
                 any => any,
             };
+            // if Undetermined is in the parameter list, replace the list with all acceptable arguments.
+            if match &inputs {
+                CallTypes::TypeList(type_list) => type_list.contains(&SubgraphType::Undetermined),
+                _ => false,
+            } {
+                inputs = match self.markov_chain.functions.get(&call_params.func_name).unwrap().accepted_types.clone() {
+                    FunctionTypes::TypeList(type_list) => CallTypes::TypeList(type_list),
+                    _ => panic!("Rust stopped working"),
+                };
+            }
             self.call_stack.push(StackItem::from_call_params(CallParams {
                 func_name: call_params.func_name.clone(),
                 selected_types: inputs,

@@ -7,7 +7,6 @@
 # subgraph def_{node_name} {
 #     {node_name} [
 #         TYPES="[{type_name}, ...]" (multiple type variants can be choosen, none can be choosen)
-#         TYPE="{type_name}, ..." (only one type variant can be choosen, none can't be choosen)
 #         MODS="[{mod_name}, ...]"
 #         ...
 #     ]
@@ -17,7 +16,6 @@
 # 2) Calls (execution will move to a root of a different subgraph):
 #     call{caller_num}_{node_name} [
 #         TYPES="[{type_name}, ...]" OR "[any]" OR "[known]" OR "[compatible]" OR "[...]" (passes all argument types further),
-#         TYPE="{type_name}" OR "known" OR "..." (passes all argument types further),
 #         MODS="[{mod_name}, ...]" OR "[...]" (passes all argument triggers further),
 #         ...
 #     ]
@@ -529,9 +527,9 @@ digraph G {
         types_select_type_noexpr -> call1_Query
         call1_Query -> EXIT_types
 
-        // types_null [label="null"]
-        // types -> types_null
-        // types_null -> EXIT_types
+        types_null [label="null"]
+        types -> types_null
+        types_null -> EXIT_types
 
         call0_numeric [label="numeric\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=chocolate]
         types_select_type_numeric -> call0_numeric
@@ -675,20 +673,20 @@ digraph G {
         EXIT_fun_choice -> EXIT_aggregate_function
         EXIT_fun_choice -> aggr_distinct
 
-        AVG[label="AVG\nTYPE: [numeric]", TYPE="[numeric]"]
+        AVG[label="AVG\nTYPE: [numeric]", TYPES="[numeric]"]
         call32_types [TYPES="[compatible]", label="TYPES: [compatible]", shape=rectangle, style=filled, color=lightblue]
         aggregate_function -> AVG
         AVG -> call32_types
         call32_types -> EXIT_fun_choice
         AVG -> EXIT_fun_choice
 
-        CHECKSUM_AGG[label="CHECKSUM_AGG\nTYPE: [numeric]", TYPE="[numeric]"]
+        CHECKSUM_AGG[label="CHECKSUM_AGG\nTYPE: [numeric]", TYPES="[numeric]"]
         call33_types [TYPES="[compatible]", label="TYPES: [compatible]", shape=rectangle, style=filled, color=lightblue]
         aggregate_function -> CHECKSUM_AGG
         CHECKSUM_AGG -> call33_types
         call33_types -> EXIT_fun_choice
 
-        COUNT[label="COUNT\nTYPE: [numeric]", TYPE="[numeric]"]
+        COUNT[label="COUNT\nTYPE: [numeric]", TYPES="[numeric]"]
         call34_types [TYPES="[any]", label="TYPES: ANY", shape=rectangle, style=filled, color=lightblue]
         COUNT_wildcard [label="wildcard"]
         aggregate_function -> COUNT
@@ -697,7 +695,7 @@ digraph G {
         COUNT_wildcard -> EXIT_fun_choice
         call34_types -> EXIT_fun_choice
 
-        COUNT_BIG[label="COUNT_BIG\nTYPE: [numeric]", TYPE="[numeric]"]
+        COUNT_BIG[label="COUNT_BIG\nTYPE: [numeric]", TYPES="[numeric]"]
         call35_types [TYPES="[any]", label="TYPES: ANY", shape=rectangle, style=filled, color=lightblue]
         COUNT_BIG_wildcard [label="wildcard"]
         aggregate_function -> COUNT_BIG
@@ -712,25 +710,25 @@ digraph G {
         MAX -> call36_types
         call36_types -> EXIT_fun_choice
 
-        MIN[label="MIN\nTYPE: SAME", TYPE="SAME"]
+        MIN[label="MIN\nTYPE: SAME", TYPES="SAME"]
         call37_types [TYPES="[any]", label="TYPES: ANY", shape=rectangle, style=filled, color=lightblue]
         aggregate_function -> MIN
         MIN -> call37_types
         call37_types -> EXIT_fun_choice
 
-        STDDEV[label="STDDEV\nTYPE: [float]", TYPE="[float]"]
+        STDDEV[label="STDDEV\nTYPE: [float]", TYPES="[float]"]
         call38_types [TYPES="[numeric]", label="TYPES: numeric", shape=rectangle, style=filled, color=lightblue]
         aggregate_function -> STDDEV
         STDDEV -> call38_types
         call38_types -> EXIT_fun_choice
 
-        STDEVP[label="STDEVP\nTYPE: [float]", TYPE="[float]"]
+        STDEVP[label="STDEVP\nTYPE: [float]", TYPES="[float]"]
         call39_types [TYPES="[compatible]", label="TYPES: [compatible]", shape=rectangle, style=filled, color=lightblue]
         aggregate_function -> STDEVP
         STDEVP -> call39_types
         call39_types -> EXIT_fun_choice
 
-        STRING_AGG[label="STRING_AGG\nTYPE: [string]", TYPE="[string]"]
+        STRING_AGG[label="STRING_AGG\nTYPE: [string]", TYPES="[string]"]
         call40_types [TYPES="[any]", label="TYPES: ANY", shape=rectangle, style=filled, color=lightblue]
         STRING_AGG_arg [label="argument"]
         separator [label="separator\nTYPES: [string]",TYPES="[string]"]
@@ -740,20 +738,20 @@ digraph G {
         STRING_AGG_arg -> call40_types
         call40_types -> EXIT_fun_choice
 
-        SUM[label="SUM\nTYPE: [numeric]", TYPE="[numeric]"]
+        SUM[label="SUM\nTYPE: [numeric]", TYPES="[numeric]"]
         call41_types [TYPES="[compatible]", label="TYPES: [compatible]", shape=rectangle, style=filled, color=lightblue]
         aggregate_function -> SUM
         SUM -> call41_types
         call41_types -> EXIT_fun_choice
 
-        VAR[label="VAR\nTYPE: [float]", TYPE="[float]"]
+        VAR[label="VAR\nTYPE: [float]", TYPES="[float]"]
         call42_types [TYPES="[compatible]", label="TYPES: [compatible]", shape=rectangle, style=filled, color=lightblue]
         aggregate_function -> VAR
         VAR -> call42_types
         call42_types -> EXIT_fun_choice
 
 
-        VARP[label="VARP\nTYPE: [float]", TYPE="[float]"]
+        VARP[label="VARP\nTYPE: [float]", TYPES="[float]"]
         call44_types [TYPES="[compatible]", label="TYPES: [compatible]", shape=rectangle, style=filled, color=lightblue]
         aggregate_function -> VARP
         VARP -> call44_types
