@@ -104,6 +104,25 @@ impl SubgraphType {
         SubgraphType::from_str(smol_str.as_str())
     }
 
+    pub fn get_subgraph_func_name(&self) -> &str {
+        match *self {
+            SubgraphType::Numeric => "numeric",
+            SubgraphType::Val3 => "VAL_3",
+            SubgraphType::Array(..) => "array",
+            SubgraphType::ListExpr(..) => "list_expr",
+            SubgraphType::String => "string",
+            SubgraphType::Undetermined => panic!("SubgraphType::Undetermined does not have an associated subgraph"),
+        }
+    }
+
+    pub fn inner(&self) -> SubgraphType {
+        match self {
+            SubgraphType::Array(inner) => *inner.clone(),
+            SubgraphType::ListExpr(inner) => *inner.clone(),
+            any => panic!("{any} has no inner type"),
+        }
+    }
+
     pub fn from_data_type(data_type: &DataType) -> Self {
         match data_type {
             DataType::Integer(_) => Self::Numeric,  /// TODO
@@ -180,22 +199,30 @@ pub enum FunctionInputsType {
     /// Used in function calls to choose none of the types out of the allowed type list
     /// Used in function declarations to indicate that no types are accepted.
     None,
-    /// Used in function calls to be able to set the type variant later
-    Known,
-    /// Used in function calls to be able to set the type list later
+    /// Used in function calls to be able to set the type list in handlers
     KnownList,
     /// Used in function calls to be able to set the type later. Similar to known, but indicates type compatibility.
     /// Will be extended in the future to link to the types call node which would supply the type
     Compatible,
     /// Used in function calls to pass the function's type constraints further
     PassThrough,
-    /// Used in function calls to select a type among type variants.
-    TypeName(SubgraphType),
+    /// Used in function calls to pass the function's type constraints further, but only those
+    /// that are related to the called function's name.
+    /// Example:
+    /// - Args: [Numeric, Array[Val3]]
+    /// - Func.: Array.
+    /// => Passed arguments: Array[Val3]
+    PassThroughRelated,
+    /// Used in function calls to pass the function's type constraints further, but only those
+    /// that are related to the called function's name, and also taking the inner type
+    /// Example:
+    /// - Args: [Numeric, Array[Val3]]
+    /// - Func.: Array.
+    /// => Passed arguments: Val3
+    PassThroughRelatedInner,
     /// Used in function calls to select multiple types among the allowed type list.
     /// Used in function declarations to specify the allowed type list, of which multiple can be selected.
     TypeNameList(Vec<SubgraphType>),
-    /// Used in function declarations to specify possible type variants, of which only one can be selected.
-    TypeNameVariants(Vec<SubgraphType>),
 }
 
 /// splits a string with commas into a list of trimmed identifiers
@@ -208,12 +235,14 @@ fn get_identifier_names(name_list_str: SmolStr) -> Vec<SmolStr> {
 
 impl FunctionInputsType {
     /// tries to match a special type (any, known, compatible)
-    fn try_extract_special_type(idents: &SmolStr, multiple: bool) -> Option<FunctionInputsType> {
+    fn try_extract_special_type(idents: &SmolStr) -> Option<FunctionInputsType> {
         match idents.as_str() {
             "any" => Some(FunctionInputsType::Any),
+            "R..." => Some(FunctionInputsType::PassThroughRelated),
+            "RI..." => Some(FunctionInputsType::PassThroughRelatedInner),
             "..." => Some(FunctionInputsType::PassThrough),
             "compatible" => Some(FunctionInputsType::Compatible),
-            "known" => Some(if multiple {FunctionInputsType::KnownList} else {FunctionInputsType::Known}),
+            "known" => Some(FunctionInputsType::KnownList),
             _ => None,
         }
     }
@@ -409,7 +438,7 @@ impl<'a> Iterator for DotTokenizer<'a> {
 
                             if self.call_ident_regex.is_match(&node_name) {
                                 let (input_type, modifiers) = return_some_err!(
-                                    parse_function_options(&node_name, node_spec, true)
+                                    parse_function_options(&node_name, node_spec)
                                 );
                                 if literal {
                                     break Some(Err(SyntaxError::new(format!(
@@ -508,7 +537,6 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<CodeUn
                             let (input_type, modifiers) = parse_function_options(
                                 &node_name,
                                 read_node_specification(lex, &node_name)?,
-                                false,
                             )?;
                             let exit_node_name = parse_function_exit_node_name(lex, &node_name)?;
                             Ok(Some(CodeUnit::Function(Function {
@@ -535,38 +563,12 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<CodeUn
 fn parse_function_options(
     node_name: &SmolStr,
     mut node_spec: HashMap<SmolStr, DotToken>,
-    call: bool,
 ) -> Result<(FunctionInputsType, Option<Vec<SmolStr>>), SyntaxError> {
     let mut input_type = FunctionInputsType::None;
     let mut modifiers = Option::<Vec<SmolStr>>::None;
-    if let Some(token) = node_spec.remove("TYPE") {
-        if let DotToken::QuotedIdentifiers(idents) = token {
-            if let Some(special_type) = FunctionInputsType::try_extract_special_type(&idents, false) {
-                input_type = special_type;
-            } else {
-                let idents = FunctionInputsType::parse_types(idents)?;
-                if call {
-                    match idents.len() {
-                        1 => input_type = FunctionInputsType::TypeName(idents[0].clone()),
-                        _ => {
-                            return Err(SyntaxError::new(format!(
-                                "call..._{node_name}[TYPE=... takes only 1 parameter"
-                            )))
-                        }
-                    }
-                } else {
-                    input_type = FunctionInputsType::TypeNameVariants(idents);
-                }
-            }
-        } else {
-            return Err(SyntaxError::new(format!(
-                "{node_name}[TYPE=... should take unbracketed form: TYPE=\".., \""
-            )));
-        }
-    }
     if let Some(token) = node_spec.remove("TYPES") {
         if let DotToken::QuotedIdentifiersWithBrackets(idents) = token {
-            if let Some(special_type) = FunctionInputsType::try_extract_special_type(&idents, true) {
+            if let Some(special_type) = FunctionInputsType::try_extract_special_type(&idents) {
                 input_type = special_type;
             } else {
                 input_type = FunctionInputsType::TypeNameList(

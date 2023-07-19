@@ -41,9 +41,6 @@ pub enum CallModifiers {
 pub enum CallTypes {
     /// Сhoose none of the types out of the allowed type list
     None,
-    /// Used to be able to set the type later in the handler code.
-    /// Is transformed into a Type(..).
-    Known,
     /// Used to be able to set the type later in the handler code..
     /// Is transformed into a TypeList(..).
     KnownList,
@@ -53,6 +50,20 @@ pub enum CallTypes {
     Compatible,
     /// Used when we want to pass the function's type constraints further
     PassThrough,
+    /// Used in function calls to pass the function's type constraints further, but only those
+    /// that are related to the called function's name.
+    /// Example:
+    /// - Args: [Numeric, Array[Val3]]
+    /// - Func.: Array.
+    /// => Passed arguments: Array[Val3]
+    PassThroughRelated,
+    /// Used in function calls to pass the function's type constraints further, but only those
+    /// that are related to the called function's name, and also taking the inner type
+    /// Example:
+    /// - Args: [Numeric, Array[Val3]]
+    /// - Func.: Array.
+    /// => Passed arguments: Val3
+    PassThroughRelatedInner,
     /// Select multiple types among possible type variants.
     TypeList(Vec<SubgraphType>),
 }
@@ -67,12 +78,12 @@ impl CallTypes {
                 }
             },
             FunctionInputsType::None => CallTypes::None,
-            FunctionInputsType::Known => CallTypes::Known,
             FunctionInputsType::KnownList => CallTypes::KnownList,
             FunctionInputsType::Compatible => CallTypes::Compatible,
             FunctionInputsType::PassThrough => CallTypes::PassThrough,
+            FunctionInputsType::PassThroughRelated => CallTypes::PassThroughRelated,
+            FunctionInputsType::PassThroughRelatedInner => CallTypes::PassThroughRelatedInner,
             FunctionInputsType::TypeNameList(tp_list) => CallTypes::TypeList(tp_list),
-            any => panic!("Incorrect input type for node {node_name}: {:?}", any),
         }
     }
 }
@@ -328,7 +339,8 @@ impl MarkovChain {
                         ) if types_list.iter().all(|t| func_types_list.contains(t)) => {},
                         (CallTypes::None, FunctionTypes::TypeList(..) | FunctionTypes::None) => {},
                         (
-                            CallTypes::PassThrough, FunctionTypes::TypeList(..)
+                            CallTypes::PassThrough | CallTypes::PassThroughRelated | CallTypes::PassThroughRelatedInner,
+                            FunctionTypes::TypeList(..)
                         ) => {},
                         (CallTypes::Compatible, FunctionTypes::TypeList(..)) => {},
                         (CallTypes::KnownList, FunctionTypes::TypeList(..)) => {},

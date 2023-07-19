@@ -117,13 +117,13 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 
     /// get current function inputs list
-    pub fn get_fn_selected_types(&self) -> CallTypes {
-        self.call_stack.last().unwrap().function_params.selected_types.clone()
+    pub fn get_fn_selected_types(&self) -> &CallTypes {
+        &self.call_stack.last().unwrap().function_params.selected_types
     }
 
     /// get crrent function modifiers list
-    pub fn get_fn_modifiers(&self) -> CallModifiers {
-        self.call_stack.last().unwrap().function_params.modifiers.clone()
+    pub fn get_fn_modifiers(&self) -> &CallModifiers {
+       &self.call_stack.last().unwrap().function_params.modifiers
     }
 
     pub fn get_pending_call_accepted_types(&self) -> FunctionTypes {
@@ -215,7 +215,7 @@ fn check_node_off(
                 } else {
                     false
                 },
-            _ => panic!("Expected None, TypeName or a TypeNameList for function selected types")
+            _ => panic!("Expected None or TypeNameList for function selected types")
         };
     }
     if let Some((ref trigger_name, ref trigger_on)) = node_common.trigger {
@@ -243,7 +243,24 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             let mut inputs = match call_params.selected_types {
                 CallTypes::KnownList => CallTypes::TypeList(self.pop_known_list()),
                 CallTypes::Compatible => CallTypes::TypeList(self.pop_compatible_list()),
-                CallTypes::PassThrough => self.call_stack.last().unwrap().function_params.selected_types.clone(),
+                CallTypes::PassThrough => self.get_fn_selected_types().clone(),
+                CallTypes::PassThroughRelated => {
+                    let parent_fn_args = unwrap_variant!(self.get_fn_selected_types(), CallTypes::TypeList);
+                    CallTypes::TypeList(parent_fn_args
+                        .iter()
+                        .map(|x| x.to_owned())
+                        .filter(|x| x.get_subgraph_func_name() == call_params.func_name)
+                        .collect::<Vec<_>>())
+                },
+                CallTypes::PassThroughRelatedInner => {
+                    let parent_fn_args = unwrap_variant!(self.get_fn_selected_types(), CallTypes::TypeList);
+                    CallTypes::TypeList(parent_fn_args
+                        .iter()
+                        .map(|x| x.to_owned())
+                        .filter(|x| x.get_subgraph_func_name() == call_params.func_name)
+                        .map(|x| x.inner())
+                        .collect::<Vec<_>>())
+                },
                 any => any,
             };
             // if Undetermined is in the parameter list, replace the list with all acceptable arguments.
