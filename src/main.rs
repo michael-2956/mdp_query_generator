@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::{io::Write, time::Instant};
 
 use equivalence_testing::{query_creation::{
     random_query_generator::{QueryGenerator, QueryGeneratorConfig},
@@ -16,9 +16,12 @@ use structopt::StructOpt;
 fn run_generation<DynMod: DynamicModel, StC: StateChooser>(markov_generator: MarkovChainGenerator<StC>, generator_config: QueryGeneratorConfig, main_config: MainConfig) {
     let mut generator = QueryGenerator::<DynMod, StC>::from_state_generator_and_schema(markov_generator, generator_config);
 
+    let mut accumulated_time_ns = 0;
     let mut num_equivalent = 0;
     for i in 0..main_config.num_generate {
+        let start_time = Instant::now();
         let query_ast = Box::new(generator.next().unwrap());
+        accumulated_time_ns += (Instant::now() - start_time).as_nanos();
         if main_config.assert_parcing_equivalence {
             let query_string = query_ast.to_string();
             let parsed_ast = string_to_query(&query_string);
@@ -37,6 +40,9 @@ fn run_generation<DynMod: DynamicModel, StC: StateChooser>(markov_generator: Mar
             print!("{}/{}      \r", i, main_config.num_generate);
             std::io::stdout().flush().unwrap();
         }
+    }
+    if main_config.measure_generation_time {
+        println!("Average generation time: {} secs", accumulated_time_ns as f64 / 1_000_000_000f64 / main_config.num_generate as f64);
     }
     if main_config.count_equivalence {
         println!("Equivalence: {} / {}", num_equivalent, main_config.num_generate);

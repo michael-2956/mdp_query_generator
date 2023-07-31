@@ -27,7 +27,7 @@ pub struct NodeParams {
 /// represents modifiers passed in call parameters.
 /// Can be either None, list of static modifiers, or a
 /// pass-through (pass current funciton's arguments)
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CallModifiers {
     /// none of the modifiers are activated
     None,
@@ -37,7 +37,7 @@ pub enum CallModifiers {
     StaticList(Vec<SmolStr>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CallTypes {
     /// Сhoose none of the types out of the allowed type list
     None,
@@ -90,7 +90,7 @@ impl CallTypes {
 
 /// represents the call parameters passed to a function
 /// called with a call node
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CallParams {
     /// which function this call node calls
     pub func_name: SmolStr,
@@ -145,6 +145,12 @@ pub struct Function {
     /// hashmap, which is why this map stores the
     /// NodeParams directly.
     pub chain: HashMap<SmolStr, Vec<(f64, NodeParams)>>,
+    /// this property is for optimization of the graph
+    /// DFS search when checking if any nodes became
+    /// dead-ends to turn them off. If there are no call
+    /// triggers, we can only search once, since all other
+    /// triggers affect the function only at the entry point
+    pub has_call_triggers: bool,
 }
 
 impl Function {
@@ -156,6 +162,7 @@ impl Function {
             accepted_types: FunctionTypes::from_function_inputs_type(definition.source_node_name, definition.input_type),
             accepted_modifiers: definition.modifiers,
             chain: HashMap::<_, _>::new(),
+            has_call_triggers: false,
         }
     }
 }
@@ -230,7 +237,17 @@ impl MarkovChain {
                     current_function = Some(functions.remove(&definition.source_node_name).unwrap());
                 }
                 dot_parser::CodeUnit::CloseDeclaration => {
-                    if let Some(function) = current_function.take() {
+                    if let Some(mut function) = current_function.take() {
+                        function.has_call_triggers = function
+                            .chain
+                            .keys()
+                            .any(|x| node_params
+                                .get(x)
+                                .unwrap()
+                                .node_common
+                                .call_trigger_name
+                                .is_some()
+                            );
                         functions.insert(function.source_node_name.clone(), function);
                     } else {
                         return Err(SyntaxError::new(format!("Unexpected CloseDeclaration")));

@@ -23,6 +23,7 @@ pub trait TomlReadable {
 pub struct MainConfig {
     pub num_generate: usize,
     pub count_equivalence: bool,
+    pub measure_generation_time: bool,
     pub assert_parcing_equivalence: bool,
     pub assert_runs_on_schema: bool,
 }
@@ -33,6 +34,7 @@ impl TomlReadable for MainConfig {
         Self {
             num_generate: section["num_generate"].as_integer().unwrap() as usize,
             count_equivalence: section["count_equivalence"].as_bool().unwrap(),
+            measure_generation_time: section["measure_generation_time"].as_bool().unwrap(),
             assert_parcing_equivalence: section["assert_parcing_equivalence"].as_bool().unwrap(),
             assert_runs_on_schema: section["assert_runs_on_schema"].as_bool().unwrap(),
         }

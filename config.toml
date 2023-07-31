@@ -3,6 +3,8 @@
 num_generate=20
 # count the 2vl-3vl equivalent queries
 count_equivalence=true
+# measure average query generation time
+measure_generation_time=true
 # assert parcing the printed AST gives the
 # same result (checks validity of AST usage)
 assert_parcing_equivalence=true
@@ -12,9 +14,9 @@ assert_runs_on_schema=false
 
 [generator]
 # print the queries on generation
-print_queries=true
+print_queries=false
 # print the table schema after parcing
-print_schema=true
+print_schema=false
 # Path to the file with the database schema
 table_schema_path="schema/tpc-h_tables.sql"
 # Which dynamic model to use as a state selector

@@ -4,7 +4,7 @@ pub mod markov_chain;
 mod dot_parser;
 mod error;
 
-use std::{path::PathBuf, collections::{HashMap, HashSet, VecDeque}};
+use std::{path::PathBuf, collections::{HashMap, HashSet, VecDeque}, sync::{Arc, Mutex}};
 
 use core::fmt::Debug;
 use smol_str::SmolStr;
@@ -49,16 +49,21 @@ pub struct MarkovChainGenerator<StC: StateChooser> {
     pending_call: Option<CallParams>,
     state_chooser: Box<StC>,
     call_triggers: HashMap<SmolStr, CallTrigger>,
+    /// if a dead_end_info was collected for the specific function once,
+    /// with set arguments (types & modifiers), we can re-use that
+    /// information, given the function has no call modifiers
+    dead_end_infos: HashMap<CallParams, Arc<Mutex<HashMap<SmolStr, bool>>>>,
 }
 
 #[derive(Clone, Debug)]
 struct StackItem {
     function_params: CallParams,
     last_node: NodeParams,
+    dead_end_info: Arc<Mutex<HashMap<SmolStr, bool>>>,
 }
 
 impl StackItem {
-    fn from_call_params(call_params: CallParams) -> Self {
+    fn from_call_params_and_dead_end_info(call_params: CallParams, dead_end_info: Arc<Mutex<HashMap<SmolStr, bool>>>) -> Self {
         let func_name = call_params.func_name.clone();
         Self {
             function_params: call_params,
@@ -67,7 +72,8 @@ impl StackItem {
                 call_params: None,
                 literal: false,
                 min_calls_until_function_exit: 0,
-            }
+            },
+            dead_end_info: dead_end_info,
         }
     }
 }
@@ -97,6 +103,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             compatible_type_list_stack: vec![],
             state_chooser: Box::new(StC::new()),
             call_triggers: HashMap::new(),
+            dead_end_infos: HashMap::new(),
         };
         _self.reset();
         Ok(_self)
@@ -179,36 +186,45 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 }
 
 fn check_node_off_dfs(
-    funciton: &Function,
+    function: &Function,
     function_call_params: &CallParams,
     call_triggers: &HashMap<SmolStr, CallTrigger>,
+    dead_end_info: &mut HashMap<SmolStr, bool>,
     query_context_manager: &QueryContextManager,
     node_common: &NodeCommon
 ) -> bool {
     if check_node_off(function_call_params, call_triggers, query_context_manager, node_common) {
         return true
     }
+    if !function.has_call_triggers {
+        if let Some(is_dead_end) = dead_end_info.get(&node_common.name) {
+            return *is_dead_end;
+        }
+    }
 
     let mut visited = HashSet::new();
     let mut stack = VecDeque::new();
-    stack.push_back(node_common.name.clone());
+    stack.push_back(vec![node_common.name.clone()]);
 
-    while let Some(current_node) = stack.pop_back() {
-        if current_node == funciton.exit_node_name {
+    while let Some(path) = stack.pop_back() {
+        let current_node = path.last().unwrap().clone();
+        if current_node == function.exit_node_name {
+            dead_end_info.extend(path.iter().map(|x| (x.clone(), false)));
             return false;
         }
         if visited.insert(current_node.clone()) {
-            if let Some(node_outgoing) = funciton.chain.get(&current_node) {
+            if let Some(node_outgoing) = function.chain.get(&current_node) {
                 stack.extend(node_outgoing
                     .iter()
                     .filter(|x| !visited.contains(&x.1.node_common.name) && !check_node_off(
                         function_call_params, call_triggers, query_context_manager, &x.1.node_common
                     ))
-                    .map(|x| x.1.node_common.name.clone())
+                    .map(|x| [&path[..], &[x.1.node_common.name.clone()]].concat())
                 );
             }
         }
     }
+    dead_end_info.insert(node_common.name.clone(), true);
     true
 }
 
@@ -287,11 +303,16 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
                     _ => panic!("Rust stopped working"),
                 };
             }
-            self.call_stack.push(StackItem::from_call_params(CallParams {
+            let new_call_params = CallParams {
                 func_name: call_params.func_name.clone(),
                 selected_types: inputs,
                 modifiers: call_params.modifiers,
-            }));
+            };
+            let dead_end_info = self.dead_end_infos
+                .entry(new_call_params.clone())
+                .or_insert(Arc::new(Mutex::new(HashMap::new())))
+                .clone();
+            self.call_stack.push(StackItem::from_call_params_and_dead_end_info(new_call_params, dead_end_info));
             return Some(call_params.func_name);
         }
 
@@ -324,7 +345,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         let last_node_outgoing = function.chain.get(&last_node.node_common.name).unwrap();
 
         let last_node_outgoing = last_node_outgoing.iter().map(|el| {
-            (check_node_off_dfs(function, &stack_item.function_params, &self.call_triggers, query_context_manager, &el.1.node_common), el.0, el.1.clone())
+            (check_node_off_dfs(function, &stack_item.function_params, &self.call_triggers, &mut stack_item.dead_end_info.lock().unwrap(), query_context_manager, &el.1.node_common), el.0, el.1.clone())
         }).collect::<Vec<_>>();
 
         let last_node_outgoing = dynamic_model.assign_probabilities(last_node_outgoing);
@@ -332,7 +353,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         let destination = self.state_chooser.choose_destination(last_node_outgoing);
 
         if let Some(destination) = destination {
-            if check_node_off_dfs(function, &stack_item.function_params, &self.call_triggers, query_context_manager, &destination.node_common) {
+            if check_node_off_dfs(function, &stack_item.function_params, &self.call_triggers, &mut stack_item.dead_end_info.lock().unwrap(), query_context_manager, &destination.node_common) {
                 panic!("Chosen node is off: {} (after {})", destination.node_common.name, last_node.node_common.name);
             }
             stack_item.last_node = destination.clone();
