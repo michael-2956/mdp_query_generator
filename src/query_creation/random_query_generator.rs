@@ -1,6 +1,8 @@
 #[macro_use]
 pub mod query_info;
 
+use std::path::PathBuf;
+
 use rand::{SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
@@ -9,12 +11,34 @@ use sqlparser::ast::{
     TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, Array, SelectItem, WildcardAdditionalOptions, ObjectName,
 };
 
+use crate::config::TomlReadable;
+
 use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generators::{SubgraphType, CallTypes}};
 use self::query_info::{DatabaseSchema, QueryContextManager};
 
 use super::state_generators::{MarkovChainGenerator, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
+pub struct QueryGeneratorConfig {
+    pub print_queries: bool,
+    pub print_schema: bool,
+    pub table_schema_path: PathBuf,
+    pub dynamic_model_name: String,
+}
+
+impl TomlReadable for QueryGeneratorConfig {
+    fn from_toml(toml_config: &toml::Value) -> Self {
+        let section = &toml_config["generator"];
+        Self {
+            print_queries: section["print_queries"].as_bool().unwrap(),
+            print_schema: section["print_schema"].as_bool().unwrap(),
+            table_schema_path: PathBuf::from(section["table_schema_path"].as_str().unwrap()),
+            dynamic_model_name: section["dynamic_model"].as_str().unwrap().to_string(),
+        }
+    }
+}
+
 pub struct QueryGenerator<DynMod: DynamicModel, StC: StateChooser> {
+    config: QueryGeneratorConfig,
     state_generator: MarkovChainGenerator<StC>,
     dynamic_model: Box<DynMod>,
     database_schema: DatabaseSchema,
@@ -263,17 +287,20 @@ impl ExpressionPriority for Expr {
 }
 
 impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
-    pub fn from_state_generator_and_schema(state_generator: MarkovChainGenerator<StC>, schema_source: &str) -> Self {
+    pub fn from_state_generator_and_schema(state_generator: MarkovChainGenerator<StC>, config: QueryGeneratorConfig) -> Self {
         let mut _self = QueryGenerator::<DynMod, StC> {
             state_generator,
             dynamic_model: Box::new(DynMod::new()),
-            database_schema: DatabaseSchema::parse_schema(schema_source),
+            database_schema: DatabaseSchema::parse_schema(&config.table_schema_path),
+            config,
             query_context_manager: QueryContextManager::new(),
             free_projection_alias_index: 1,
             rng: ChaCha8Rng::seed_from_u64(1),
         };
 
-        println!("Relations:\n{}", _self.database_schema);
+        if _self.config.print_schema {
+            println!("Relations:\n{}", _self.database_schema);
+        }
 
         _self.state_generator.register_call_trigger(
             SmolStr::new("is_column_type_available"),
@@ -992,7 +1019,9 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     /// starting point; calls handle_query for the first time
     fn generate(&mut self) -> Query {
         let query = self.handle_query().0;
-        // println!("Query:\n{}\n", query);
+        if self.config.print_queries {
+            println!("Query:\n{}\n", query);
+        }
         // reset the generator
         if let Some(state) = self.next_state_opt() {
             panic!("Couldn't reset state_generator: Received {state}");

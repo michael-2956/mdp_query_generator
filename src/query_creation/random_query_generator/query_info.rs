@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
@@ -99,9 +99,10 @@ impl std::fmt::Display for DatabaseSchema {
 }
 
 impl DatabaseSchema {
-    pub fn parse_schema(source: &str) -> Self {
+    pub fn parse_schema<P: AsRef<Path>>(source_path: P) -> Self {
+        let source = std::fs::read_to_string(source_path).unwrap();
         let dialect = PostgreSqlDialect {};
-        let ast = match Parser::parse_sql(&dialect, source) {
+        let ast = match Parser::parse_sql(&dialect, source.as_str()) {
             Ok(ast) => ast,
             Err(err) => {
                 println!("Schema file parsing error! {}", err);

@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, BinaryHeap}, fs::File, io::Read, path::Path, cmp::Ordering};
+use std::{collections::{HashMap, BinaryHeap}, path::Path, cmp::Ordering};
 
 use regex::Regex;
 use core::fmt::Debug;
@@ -184,9 +184,7 @@ impl PartialOrd for BinaryHeapNode {
 impl MarkovChain {
     /// parse the chain from a dot file; Initialise all the weights uniformly
     pub fn parse_dot<P: AsRef<Path>>(source_path: P) -> Result<Self, SyntaxError> {
-        let mut file = File::open(source_path).unwrap();
-        let mut source = String::new();
-        file.read_to_string(&mut source).unwrap();
+        let source = std::fs::read_to_string(source_path).unwrap();
         let source = MarkovChain::remove_fake_edges(source);
         let (
             mut functions,

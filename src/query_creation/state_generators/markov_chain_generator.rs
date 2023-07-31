@@ -4,12 +4,12 @@ pub mod markov_chain;
 mod dot_parser;
 mod error;
 
-use std::{path::Path, collections::{HashMap, HashSet, VecDeque}};
+use std::{path::PathBuf, collections::{HashMap, HashSet, VecDeque}};
 
 use core::fmt::Debug;
 use smol_str::SmolStr;
 
-use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_generator::markov_chain::FunctionTypes, random_query_generator::query_info::QueryContextManager}};
+use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_generator::markov_chain::FunctionTypes, random_query_generator::query_info::QueryContextManager}, config::TomlReadable};
 
 use self::{
     markov_chain::{
@@ -72,9 +72,23 @@ impl StackItem {
     }
 }
 
+#[derive(Clone)]
+pub struct ChainConfig {
+    pub graph_file_path: PathBuf,
+}
+
+impl TomlReadable for ChainConfig {
+    fn from_toml(toml_config: &toml::Value) -> Self {
+        let section = &toml_config["chain"];
+        Self {
+            graph_file_path: PathBuf::from(section["graph_file_path"].as_str().unwrap()),
+        }
+    }
+}
+
 impl<StC: StateChooser> MarkovChainGenerator<StC> {
-    pub fn parse_graph_from_file<P: AsRef<Path>>(source_path: P) -> Result<Self, SyntaxError> {
-        let chain = MarkovChain::parse_dot(source_path)?;
+    pub fn with_config(config: ChainConfig) -> Result<Self, SyntaxError> {
+        let chain = MarkovChain::parse_dot(config.graph_file_path)?;
         let mut _self = MarkovChainGenerator::<StC> {
             markov_chain: chain,
             call_stack: vec![],

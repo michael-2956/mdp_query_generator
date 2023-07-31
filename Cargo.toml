@@ -12,4 +12,5 @@ structopt = "0.3"
 smol_str = "0.1.23"
 logos = "0.12.1"
 rand = "0.8.5"
+toml = "0.7.6"  # Replace with the latest version available
 regex = "1"
