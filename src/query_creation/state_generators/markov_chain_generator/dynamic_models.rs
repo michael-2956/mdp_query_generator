@@ -8,7 +8,7 @@ pub trait DynamicModel {
     fn new() -> Self;
     /// assigns the (unnormalized) probabilities to the outgoing nodes.
     /// Receives probabilities recorded in graph
-    fn assign_probabilities(&mut self, node_outgoing: Vec<(bool, f64, NodeParams)>) -> Vec::<(bool, f64, NodeParams)>;
+    fn assign_log_probabilities(&mut self, node_outgoing: Vec<(bool, f64, NodeParams)>) -> Vec::<(bool, f64, NodeParams)>;
     /// is called at the beginning of each subquery creation
     fn notify_subquery_creation_begin(&mut self) {}
     /// is called at the end of each subquery creation
@@ -25,7 +25,7 @@ impl DynamicModel for MarkovModel {
     fn new() -> Self {
         Self {}
     }
-    fn assign_probabilities(&mut self, node_outgoing: Vec<(bool, f64, NodeParams)>) -> Vec::<(bool, f64, NodeParams)> {
+    fn assign_log_probabilities(&mut self, node_outgoing: Vec<(bool, f64, NodeParams)>) -> Vec::<(bool, f64, NodeParams)> {
         node_outgoing
     }
 }
@@ -64,17 +64,13 @@ impl DynamicModel for AntiCallModel {
         Self { stats: QueryStats::new() }
     }
 
-    fn assign_probabilities(&mut self, node_outgoing: Vec<(bool, f64, NodeParams)>) -> Vec::<(bool, f64, NodeParams)> {
+    fn assign_log_probabilities(&mut self, node_outgoing: Vec<(bool, f64, NodeParams)>) -> Vec::<(bool, f64, NodeParams)> {
         let prob_multiplier = if self.stats.current_stack_length > 3 {
-            self.stats.current_state_num as f64
+            f64::ln(self.stats.current_state_num as f64)
         } else { 1f64 };
         node_outgoing.into_iter().map(|el| {(
             el.0,
-            if ![  // TODO: the following is for DEBUG purposes
-                "SELECT_wildcard", "SELECT_qualified_wildcard", "types_null",
-            ].contains(&el.2.node_common.name.as_str()) || self.stats.current_stack_length > 3 {
-                el.1 / f64::powf(prob_multiplier, el.2.min_calls_until_function_exit as f64)
-            } else { 0f64 },
+            f64::ln(el.1) - el.2.min_calls_until_function_exit as f64 * f64::ln(prob_multiplier),
             el.2
         )}).collect()
     }

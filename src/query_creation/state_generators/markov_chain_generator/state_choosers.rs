@@ -1,9 +1,10 @@
 use core::fmt::Debug;
+use logaddexp::LogSumExp;
 use rand::{Rng, SeedableRng};
 
 use smol_str::SmolStr;
 use rand_chacha::ChaCha8Rng;
-use sqlparser::ast::{Query}; // , Expr, Value, SetExpr, TableFactor, SelectItem, BinaryOperator, Array, UnaryOperator, TrimWhereField};
+use sqlparser::ast::Query; // , Expr, Value, SetExpr, TableFactor, SelectItem, BinaryOperator, Array, UnaryOperator, TrimWhereField};
 
 // use super::super::super::random_query_generator::TypesSelectedType;
 use super::markov_chain::NodeParams;
@@ -26,11 +27,11 @@ impl StateChooser for ProbabilisticStateChooser {
     fn choose_destination(&mut self, outgoing_states: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams> {
         let cur_node_outgoing: Vec<(f64, NodeParams)> = {
             let cur_node_outgoing = outgoing_states.iter().map(|el| {
-                (if el.0 { 0f64 } else { el.1 }, el.2.clone())
+                (if el.0 { f64::NEG_INFINITY } else { el.1 }, el.2.clone())
             }).collect::<Vec<_>>();
             // Rebalancing on the current level only as a temporary work-around
-            let max_level: f64 = cur_node_outgoing.iter().map(|el| { el.0 }).sum();
-            cur_node_outgoing.into_iter().map(|el| { (el.0 / max_level, el.1) }).collect()
+            let max_level: f64 = cur_node_outgoing.iter().map(|el| { el.0 }).ln_sum_exp();
+            cur_node_outgoing.into_iter().map(|el| { (f64::exp(el.0 - max_level), el.1) }).collect()
         };
         let level: f64 = self.rng.gen::<f64>();
         let mut cumulative_prob = 0f64;

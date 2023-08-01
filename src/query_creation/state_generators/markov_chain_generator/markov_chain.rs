@@ -147,10 +147,11 @@ pub struct Function {
     pub chain: HashMap<SmolStr, Vec<(f64, NodeParams)>>,
     /// this property is for optimization of the graph
     /// DFS search when checking if any nodes became
-    /// dead-ends to turn them off. If there are no call
-    /// triggers, we can only search once, since all other
-    /// triggers affect the function only at the entry point
-    pub has_call_triggers: bool,
+    /// dead-ends to turn them off. If there is a match
+    /// in call parameters and all call trigger states,
+    /// we can only search once for each set of call
+    /// parameters and call trigger states
+    pub call_trigger_names: Vec<SmolStr>,
 }
 
 impl Function {
@@ -162,7 +163,7 @@ impl Function {
             accepted_types: FunctionTypes::from_function_inputs_type(definition.source_node_name, definition.input_type),
             accepted_modifiers: definition.modifiers,
             chain: HashMap::<_, _>::new(),
-            has_call_triggers: false,
+            call_trigger_names: Vec::new(),
         }
     }
 }
@@ -238,16 +239,17 @@ impl MarkovChain {
                 }
                 dot_parser::CodeUnit::CloseDeclaration => {
                     if let Some(mut function) = current_function.take() {
-                        function.has_call_triggers = function
+                        function.call_trigger_names = function
                             .chain
                             .keys()
-                            .any(|x| node_params
+                            .filter_map(|x| node_params
                                 .get(x)
                                 .unwrap()
                                 .node_common
                                 .call_trigger_name
-                                .is_some()
-                            );
+                                .clone()
+                            )
+                            .collect();
                         functions.insert(function.source_node_name.clone(), function);
                     } else {
                         return Err(SyntaxError::new(format!("Unexpected CloseDeclaration")));

@@ -3,7 +3,7 @@ use std::{collections::HashMap, path::Path};
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
-use crate::unwrap_variant;
+use crate::{unwrap_variant, query_creation::state_generators::markov_chain_generator::markov_chain::CallParams};
 
 use super::super::state_generators::SubgraphType;
 use sqlparser::{ast::{Ident, ObjectName, Statement, ColumnDef, HiveDistributionStyle, TableConstraint, HiveFormat, SqlOption, FileFormat, Query, OnCommit, TableAlias}, dialect::PostgreSqlDialect, parser::Parser};
@@ -121,19 +121,47 @@ impl DatabaseSchema {
 
 #[derive(Debug, Clone)]
 pub struct QueryContextManager {
+    current_node_name: Option<SmolStr>,
+    call_params_stack: Vec<CallParams>,
     from_contents_stack: Vec<FromContents>,
-    selected_types: Option<Vec<SubgraphType>>,
+    selected_types_stack: Vec<Option<Vec<SubgraphType>>>,
 }
 
 impl QueryContextManager {
-    pub fn new() -> Self {
-        Self { 
+    pub fn new() -> Self{
+        Self {
+            current_node_name: None,
+            call_params_stack: vec![],
             from_contents_stack: vec![],
-            selected_types: None,
+            selected_types_stack: vec![],
         }
     }
 
-    pub fn on_query_generation_start(&mut self) {
+    pub fn set_current_node(&mut self, node_name: SmolStr) {
+        self.current_node_name = Some(node_name);
+    }
+
+    pub fn get_current_node(&mut self) -> SmolStr {
+        self.current_node_name.clone().unwrap()
+    }
+
+    // ============================ ANY FUNCTION
+
+    pub fn on_function_begin(&mut self, call_params: CallParams) {
+        self.call_params_stack.push(call_params);
+    }
+
+    pub fn get_current_fn_call_params(&mut self) -> CallParams {
+        self.call_params_stack.last().unwrap().clone()
+    }
+
+    pub fn on_function_end(&mut self) {
+        self.call_params_stack.pop();
+    }
+
+    // ============================ QUERY
+
+    pub fn on_query_begin(&mut self) {
         self.from_contents_stack.push(FromContents::new());
     }
 
@@ -145,17 +173,26 @@ impl QueryContextManager {
         self.from_contents_stack.last_mut().unwrap()
     }
 
-    /// Update the current selected types 
-    pub fn update_selected_types(&mut self, subgraph_type: Vec<SubgraphType>) {
-        self.selected_types = Some(subgraph_type);
-    }
-
-    pub fn get_selected_types(&self) -> &Vec<SubgraphType> {
-        self.selected_types.as_ref().unwrap()
-    }
-
-    pub fn on_query_generation_end(&mut self) {
+    pub fn on_query_end(&mut self) {
         self.from_contents_stack.pop();
+    }
+
+    // ============================ TYPES
+
+    pub fn on_types_begin(&mut self) {
+        self.selected_types_stack.push(None);
+    }
+
+    pub fn update_selected_types(&mut self, subgraph_type: Vec<SubgraphType>) {
+        *self.selected_types_stack.last_mut().unwrap() = Some(subgraph_type);
+    }
+
+    pub fn get_selected_types(&self) -> Option<&Vec<SubgraphType>> {
+        self.selected_types_stack.last().unwrap().as_ref()
+    }
+
+    pub fn on_types_end(&mut self) -> Option<Vec<SubgraphType>> {
+        self.selected_types_stack.pop().unwrap()
     }
 }
 

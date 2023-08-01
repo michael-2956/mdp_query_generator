@@ -264,15 +264,17 @@ pub struct NodeCommon {
     pub name: SmolStr,
     /// Type name if specified (basically an on trigger)
     pub type_name: Option<SubgraphType>,
-    /// Graph trigger with mode is specified
+    /// Graph trigger with mode if specified
     pub trigger: Option<(SmolStr, bool)>,
-    /// Name of the call trigger is specified
+    /// Name of the call trigger if specified
     pub call_trigger_name: Option<SmolStr>,
+    /// Name of the call trigger that this node affects, if specified
+    pub affects_call_trigger_name: Option<SmolStr>,
 }
 
 impl NodeCommon {
     pub fn with_name(name: SmolStr) -> Self {
-        Self { name: name, type_name: None, trigger: None, call_trigger_name: None }
+        Self { name: name, type_name: None, trigger: None, call_trigger_name: None, affects_call_trigger_name: None }
     }
 }
 
@@ -424,6 +426,13 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                 _ => None,
                             };
 
+                            let affects_call_trigger_name = match node_spec.remove("AFFECTS_CALL_TRIGGER") {
+                                Some(DotToken::QuotedIdentifiers(idents)) => {
+                                    Some(idents)
+                                },
+                                _ => None,
+                            };
+
                             let literal = match node_spec.remove("LITERAL") {
                                 Some(DotToken::QuotedIdentifiers(idents)) => idents == SmolStr::new("t"),
                                 _ => false
@@ -434,6 +443,7 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                 type_name,
                                 trigger,
                                 call_trigger_name,
+                                affects_call_trigger_name
                             };
 
                             if self.call_ident_regex.is_match(&node_name) {
