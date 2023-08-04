@@ -119,12 +119,11 @@ impl DatabaseSchema {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct QueryContextManager {
     current_node_name: Option<SmolStr>,
     call_params_stack: Vec<CallParams>,
     from_contents_stack: Vec<FromContents>,
-    call_trigger_states_stack: Vec<HashMap<SmolStr, Box<dyn std::any::Any>>>
 }
 
 impl QueryContextManager {
@@ -133,7 +132,6 @@ impl QueryContextManager {
             current_node_name: None,
             call_params_stack: vec![],
             from_contents_stack: vec![],
-            call_trigger_states_stack: vec![],
         }
     }
 
@@ -149,24 +147,14 @@ impl QueryContextManager {
 
     pub fn on_function_begin(&mut self, call_params: CallParams) {
         self.call_params_stack.push(call_params);
-        self.call_trigger_states_stack.push(HashMap::new());
     }
 
     pub fn get_current_fn_call_params(&self) -> CallParams {
         self.call_params_stack.last().unwrap().clone()
     }
 
-    pub fn assign_call_trigger_state(&mut self, trigger_name: SmolStr, state: Box<dyn std::any::Any>) {
-        self.call_trigger_states_stack.last_mut().unwrap().insert(trigger_name, state);
-    }
-
-    pub fn get_call_trigger_state(&self, trigger_name: &SmolStr) -> Option<&Box<dyn std::any::Any>> {
-        self.call_trigger_states_stack.last().unwrap().get(trigger_name)
-    }
-
     pub fn on_function_end(&mut self) {
         self.call_params_stack.pop();
-        self.call_trigger_states_stack.pop();
     }
 
     // ============================ QUERY

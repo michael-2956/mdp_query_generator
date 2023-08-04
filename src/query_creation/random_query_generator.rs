@@ -632,7 +632,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             any => self.panic_unexpected(any),
         };
 
-        let allowed_type_list = self.query_context_manager
+        let allowed_type_list = self.state_generator
             .get_call_trigger_state(&IsColumnTypeAvailableTrigger{}.get_trigger_name())
             .unwrap()
             .downcast_ref::<IsColumnTypeAvailableTriggerState>()
