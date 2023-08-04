@@ -1,5 +1,7 @@
 #[macro_use]
 pub mod query_info;
+pub mod call_triggers;
+pub mod expr_precedence;
 
 use std::path::PathBuf;
 
@@ -14,7 +16,7 @@ use sqlparser::ast::{
 use crate::config::TomlReadable;
 
 use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generators::{SubgraphType, CallTypes}};
-use self::query_info::{DatabaseSchema, QueryContextManager};
+use self::{query_info::{DatabaseSchema, QueryContextManager}, expr_precedence::ExpressionPriority, call_triggers::{IsColumnTypeAvailableTrigger, CallTriggerTrait, IsColumnTypeAvailableTriggerState}};
 
 use super::state_generators::{MarkovChainGenerator, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
@@ -47,245 +49,6 @@ pub struct QueryGenerator<DynMod: DynamicModel, StC: StateChooser> {
     rng: ChaCha8Rng,
 }
 
-trait ExpressionNesting {
-    /// nest l-value if needed
-    fn p_nest_l(self, parent_priority: i32) -> Self;
-    /// nest r-value if needed
-    fn p_nest_r(self, parent_priority: i32) -> Self;
-}
-
-trait ExpressionPriority: ExpressionNesting {
-    fn get_priority(&self) -> i32;
-    fn nest_children_if_needed(self) -> Expr;
-}
-
-impl ExpressionNesting for Vec<Expr> {
-    fn p_nest_l(self, parent_priority: i32) -> Vec<Expr> {
-        self.into_iter().map(|expr| expr.p_nest_l(parent_priority)).collect()
-    }
-
-    fn p_nest_r(self, parent_priority: i32) -> Vec<Expr> {
-        self.into_iter().map(|expr| expr.p_nest_r(parent_priority)).collect()
-    }
-}
-
-impl ExpressionNesting for Vec<Vec<Expr>> {
-    fn p_nest_l(self, parent_priority: i32) -> Vec<Vec<Expr>> {
-        self.into_iter().map(|expr| expr.p_nest_l(parent_priority)).collect()
-    }
-
-    fn p_nest_r(self, parent_priority: i32) -> Vec<Vec<Expr>> {
-        self.into_iter().map(|expr| expr.p_nest_r(parent_priority)).collect()
-    }
-}
-
-impl ExpressionNesting for Box<Expr> {
-    fn p_nest_l(self, parent_priority: i32) -> Box<Expr> {
-        Box::new((*self).p_nest_l(parent_priority))
-    }
-
-    fn p_nest_r(self, parent_priority: i32) -> Box<Expr> {
-        Box::new((*self).p_nest_r(parent_priority))
-    }
-}
-
-impl ExpressionNesting for Option<Box<Expr>> {
-    fn p_nest_l(self, parent_priority: i32) -> Option<Box<Expr>> {
-        self.map(|expr| expr.p_nest_l(parent_priority))
-    }
-
-    fn p_nest_r(self, parent_priority: i32) -> Option<Box<Expr>> {
-        self.map(|expr| expr.p_nest_r(parent_priority))
-    }
-}
-
-impl ExpressionNesting for Expr {
-    fn p_nest_l(self, parent_priority: i32) -> Expr {
-        if self.get_priority() > parent_priority {
-            Expr::Nested(Box::new(self))
-        } else {
-            self
-        }
-    }
-
-    fn p_nest_r(self, parent_priority: i32) -> Expr {
-        if self.get_priority() >= parent_priority {
-            Expr::Nested(Box::new(self))
-        } else {
-            self
-        }
-    }
-}
-
-impl ExpressionPriority for Expr {
-    fn get_priority(&self) -> i32 {
-        match self {
-            // no nesting, not of children nor of ourselves is needed
-            Expr::Function(..) => -1,
-            Expr::Nested(..) => -1,
-            Expr::Value(..) => -1,
-            Expr::Identifier(..) => -1,
-            Expr::AnyOp(..) => -1,
-            Expr::AllOp(..) => -1,
-            Expr::Extract { .. } => -1,
-            Expr::Position { .. } => -1,
-            Expr::Substring { .. } => -1,
-            Expr::Trim { .. } => -1,
-            Expr::TryCast { .. } => -1,
-            Expr::SafeCast { .. } => -1,
-            Expr::Subquery(..) => -1,
-            Expr::ListAgg(..) => -1,
-            Expr::Tuple(..) => -1,
-            Expr::Array(..) => -1,
-            Expr::Ceil { .. } => -1,
-            Expr::Floor { .. } => -1,
-            Expr::Overlay { .. } => -1,
-            Expr::ArrayAgg(..) => -1,
-            Expr::ArraySubquery(..) => -1,
-            Expr::MatchAgainst { .. } => -1,
-            Expr::Case { .. } => -1,
-            Expr::GroupingSets(..) => -1,
-            Expr::Cube(..) => -1,
-            Expr::Rollup(..) => -1,
-            Expr::AggregateExpressionWithFilter { .. } => -1,
-
-            // normal operations
-            Expr::CompoundIdentifier(..) => 0,
-            Expr::CompositeAccess { .. } => 0,
-            Expr::Cast { .. } => 1,  // can be a ::
-            Expr::ArrayIndex { .. } => 2,
-            Expr::MapAccess { .. } => 2,
-            Expr::UnaryOp { op, .. } => {
-                match op {
-                    UnaryOperator::Plus => 3,
-                    UnaryOperator::Minus => 3,
-                    UnaryOperator::PGBitwiseNot => 7,
-                    UnaryOperator::PGSquareRoot => 7,
-                    UnaryOperator::PGCubeRoot => 7,
-                    UnaryOperator::PGPostfixFactorial => 7,
-                    UnaryOperator::PGPrefixFactorial => 7,
-                    UnaryOperator::PGAbs => 7,
-                    UnaryOperator::Not => 11,
-                }
-            },
-            Expr::BinaryOp { op, .. } => {
-                match op {
-                    BinaryOperator::PGExp => 4,
-                    BinaryOperator::Multiply => 5,
-                    BinaryOperator::Divide => 5,
-                    BinaryOperator::Modulo => 5,
-                    BinaryOperator::Plus => 6,
-                    BinaryOperator::Minus => 6,
-                    BinaryOperator::StringConcat => 7,
-                    BinaryOperator::Spaceship => 7,
-                    BinaryOperator::Xor => 7,
-                    BinaryOperator::BitwiseOr => 7,
-                    BinaryOperator::BitwiseAnd => 7,
-                    BinaryOperator::BitwiseXor => 7,
-                    BinaryOperator::PGBitwiseXor => 7,
-                    BinaryOperator::PGBitwiseShiftLeft => 7,
-                    BinaryOperator::PGBitwiseShiftRight => 7,
-                    BinaryOperator::PGRegexMatch => 7,
-                    BinaryOperator::PGRegexIMatch => 7,
-                    BinaryOperator::PGRegexNotMatch => 7,
-                    BinaryOperator::PGRegexNotIMatch => 7,
-                    BinaryOperator::PGCustomBinaryOperator(..) => 7,
-                    BinaryOperator::Gt => 9,
-                    BinaryOperator::Lt => 9,
-                    BinaryOperator::GtEq => 9,
-                    BinaryOperator::LtEq => 9,
-                    BinaryOperator::Eq => 9,
-                    BinaryOperator::NotEq => 9,
-                    BinaryOperator::And => 12,
-                    BinaryOperator::Or => 13,
-                }
-            },
-            Expr::Like { .. } => 8,
-            Expr::ILike { .. } => 8,
-            Expr::Between { .. } => 8,
-            Expr::InList { .. } => 8,
-            Expr::InSubquery { .. } => 8,
-            Expr::InUnnest { .. } => 8,
-            Expr::SimilarTo { .. } => 8,
-            Expr::IsFalse(..) => 10,
-            Expr::IsTrue(..) => 10,
-            Expr::IsNull(..) => 10,
-            Expr::IsNotNull(..) => 10,
-            Expr::IsDistinctFrom(_, _) => 10,
-            Expr::IsNotDistinctFrom(_, _) => 10,
-            Expr::IsNotFalse(..) => 10,
-            Expr::IsNotTrue(..) => 10,
-            Expr::IsUnknown(..) => 10,
-            Expr::IsNotUnknown(..) => 10,
-            // EXISTS needs nesting possibly because of NOT, thus inherits its priority
-            Expr::Exists { negated, .. } => if *negated {11} else {-1},
-            Expr::JsonAccess { .. } => 7,
-            Expr::Collate { .. } => 7,
-            Expr::TypedString { .. } => 7,
-            Expr::AtTimeZone { .. } => 7,
-            Expr::IntroducedString { .. } => 7,
-            Expr::Interval { .. } => 7,
-        }
-    }
-
-    /// adds nesting to child if needed
-    fn nest_children_if_needed(self) -> Expr {
-        let parent_priority = self.get_priority();
-        if parent_priority == -1 {
-            return self
-        }
-        match self {
-            Expr::CompoundIdentifier(ident_vec) => Expr::CompoundIdentifier(ident_vec),
-            Expr::CompositeAccess { expr, key } => Expr::CompositeAccess { expr: expr.p_nest_l(parent_priority), key },
-            Expr::Cast { expr, data_type} => Expr::Cast { expr: expr.p_nest_l(parent_priority), data_type},
-            Expr::ArrayIndex { obj, indexes } => Expr::ArrayIndex { obj: obj.p_nest_l(parent_priority), indexes },
-            Expr::MapAccess { column, keys } => Expr::MapAccess { column: column.p_nest_l(parent_priority), keys },
-            Expr::UnaryOp { op, expr } => {
-                if op == UnaryOperator::Not {
-                    if let Expr::Exists { subquery: _, negated: _ } = *expr {
-                        // exists will just be negated by the parser otherwise
-                        return Expr::UnaryOp { op, expr: Box::new(Expr::Nested(expr)) }
-                    }
-                }
-                if op == UnaryOperator::Minus {
-                    if let Expr::UnaryOp { op: op2, expr: _ } = *expr {
-                        if op2 == UnaryOperator::Minus {
-                            // -- is a comment in SQL.
-                            return Expr::UnaryOp { op, expr: Box::new(Expr::Nested(expr)) }
-                        }
-                    }
-                }
-                Expr::UnaryOp { op, expr: expr.p_nest_r(parent_priority) }  // p_nest_r is because unary operations are prefix ones.
-            },
-            Expr::BinaryOp { left, op, right } => Expr::BinaryOp { left: left.p_nest_l(parent_priority), op, right: right.p_nest_r(parent_priority) },
-            Expr::Like { negated, expr, pattern, escape_char } => Expr::Like { negated, expr: expr.p_nest_l(parent_priority), pattern: pattern.p_nest_r(parent_priority), escape_char },
-            Expr::ILike { negated, expr, pattern, escape_char } => Expr::ILike { negated, expr: expr.p_nest_l(parent_priority), pattern: pattern.p_nest_r(parent_priority), escape_char },
-            Expr::Between { expr, negated, low, high } => Expr::Between { expr: expr.p_nest_l(parent_priority), negated, low: low.p_nest_r(parent_priority), high: high.p_nest_r(parent_priority) },
-            Expr::InList { expr, list, negated } => Expr::InList { expr: expr.p_nest_l(parent_priority), list, negated },
-            Expr::InSubquery { expr, subquery, negated } => Expr::InSubquery { expr: expr.p_nest_l(parent_priority), subquery, negated },
-            Expr::InUnnest { expr, array_expr, negated } => Expr::InUnnest { expr: expr.p_nest_l(parent_priority), array_expr: array_expr, negated },
-            Expr::SimilarTo { negated, expr, pattern, escape_char } => Expr::SimilarTo { negated, expr: expr.p_nest_l(parent_priority), pattern: pattern.p_nest_r(parent_priority), escape_char },
-            Expr::IsFalse(expr) => Expr::IsFalse(expr.p_nest_l(parent_priority)),
-            Expr::IsTrue(expr) => Expr::IsTrue(expr.p_nest_l(parent_priority)),
-            Expr::IsNull(expr) => Expr::IsNull(expr.p_nest_l(parent_priority)),
-            Expr::IsNotNull(expr) => Expr::IsNotNull(expr.p_nest_l(parent_priority)),
-            Expr::IsDistinctFrom(expr1, expr2) => Expr::IsDistinctFrom(expr1.p_nest_l(parent_priority), expr2.p_nest_r(parent_priority)),
-            Expr::IsNotDistinctFrom(expr1, expr2) => Expr::IsNotDistinctFrom(expr1.p_nest_l(parent_priority), expr2.p_nest_r(parent_priority)),
-            Expr::IsNotFalse(expr) => Expr::IsNotFalse(expr.p_nest_l(parent_priority)),
-            Expr::IsNotTrue(expr) => Expr::IsNotTrue(expr.p_nest_l(parent_priority)),
-            Expr::IsUnknown(expr) => Expr::IsUnknown(expr.p_nest_l(parent_priority)),
-            Expr::IsNotUnknown(expr) => Expr::IsNotUnknown(expr.p_nest_l(parent_priority)),
-            Expr::JsonAccess { left, operator, right } => Expr::JsonAccess { left: left.p_nest_l(parent_priority), operator, right: right.p_nest_r(parent_priority) },
-            Expr::Collate { expr, collation } => Expr::Collate { expr: expr.p_nest_l(parent_priority), collation },
-            Expr::TypedString { data_type, value } => Expr::TypedString { data_type, value },
-            Expr::AtTimeZone { timestamp, time_zone } => Expr::AtTimeZone { timestamp: timestamp.p_nest_l(parent_priority), time_zone },
-            Expr::IntroducedString { introducer, value } => Expr::IntroducedString { introducer, value },
-            Expr::Interval { value, leading_field, leading_precision, last_field, fractional_seconds_precision } => Expr::Interval { value: value.p_nest_l(parent_priority), leading_field, leading_precision, last_field, fractional_seconds_precision },
-            any => any
-        }
-    }
-}
-
 impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     pub fn from_state_generator_and_schema(state_generator: MarkovChainGenerator<StC>, config: QueryGeneratorConfig) -> Self {
         let mut _self = QueryGenerator::<DynMod, StC> {
@@ -302,51 +65,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             println!("Relations:\n{}", _self.database_schema);
         }
 
-        _self.state_generator.register_call_trigger_affector(
-            SmolStr::new("is_column_type_available"),
-            |query_context_manager| {
-                let selected_type = match query_context_manager.get_current_node().as_str() {
-                    "types_select_type_3vl" => SubgraphType::Val3,
-                    "types_select_type_array" => SubgraphType::Array(Box::new(SubgraphType::Undetermined)),
-                    "types_select_type_list_expr" => SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined)),
-                    "types_select_type_numeric" => SubgraphType::Numeric,
-                    "types_select_type_string" => SubgraphType::String,
-                    any => panic!("{any} unexpectedly triggered the is_column_type_available call trigger affector"),
-                };
-                let allowed_type_list = match selected_type {
-                    with_inner @ (SubgraphType::Array(..) | SubgraphType::ListExpr(..)) => {
-                        let argument_selected_types = unwrap_variant!(
-                            query_context_manager.get_current_fn_call_params().selected_types, CallTypes::TypeList
-                        );
-                        argument_selected_types
-                            .iter()
-                            .map(|x| x.to_owned())
-                            .filter(|x| std::mem::discriminant(x) == std::mem::discriminant(&with_inner))
-                            .collect::<Vec<_>>()
-                    }
-                    any => vec![any]
-                };
-                query_context_manager.update_selected_types(allowed_type_list);
-            }
-        );
-
-        _self.state_generator.register_call_trigger(
-            SmolStr::new("is_column_type_available"),
-            |query_context_manager| {
-                query_context_manager
-                    .get_selected_types()
-                    .map_or_else(
-                        || true,  // if selected_types wasn't populated, node is ON.
-                        |v| v
-                            .into_iter()
-                            .any(|x|
-                                query_context_manager
-                                    .from()
-                                    .is_type_available(x)
-                            )  // if selected_types was populated, check type availability.
-                    )
-            }
-        );
+        _self.state_generator.register_call_trigger(IsColumnTypeAvailableTrigger {});
 
         _self
     }
@@ -899,7 +618,6 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     fn handle_types(
         &mut self, check_generated_by: Option<SubgraphType>, check_compatible_with: Option<SubgraphType>
     ) -> (SubgraphType, Expr) {
-        self.query_context_manager.on_types_begin();
         self.expect_state("types");
         match self.next_state().as_str() {
             "types_select_type_3vl" |
@@ -913,7 +631,15 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             },
             any => self.panic_unexpected(any),
         };
-        let allowed_type_list = self.query_context_manager.get_selected_types().unwrap().clone();
+
+        let allowed_type_list = self.query_context_manager
+            .get_call_trigger_state(&IsColumnTypeAvailableTrigger{}.get_trigger_name())
+            .unwrap()
+            .downcast_ref::<IsColumnTypeAvailableTriggerState>()
+            .unwrap()
+            .selected_types
+            .clone();
+
         let (selected_type, types_value) = match self.next_state().as_str() {
             "types_select_type_noexpr" => {
                 match self.next_state().as_str() {
@@ -941,7 +667,6 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             any => self.panic_unexpected(any)
         };
         self.expect_state("EXIT_types");
-        self.query_context_manager.on_types_end();
 
         if let Some(as_what) = check_generated_by {
             if !selected_type.is_same_or_more_determined_or_undetermined(&as_what) {

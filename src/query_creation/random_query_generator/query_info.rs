@@ -119,12 +119,12 @@ impl DatabaseSchema {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct QueryContextManager {
     current_node_name: Option<SmolStr>,
     call_params_stack: Vec<CallParams>,
     from_contents_stack: Vec<FromContents>,
-    selected_types_stack: Vec<Option<Vec<SubgraphType>>>,
+    call_trigger_states_stack: Vec<HashMap<SmolStr, Box<dyn std::any::Any>>>
 }
 
 impl QueryContextManager {
@@ -133,7 +133,7 @@ impl QueryContextManager {
             current_node_name: None,
             call_params_stack: vec![],
             from_contents_stack: vec![],
-            selected_types_stack: vec![],
+            call_trigger_states_stack: vec![],
         }
     }
 
@@ -141,7 +141,7 @@ impl QueryContextManager {
         self.current_node_name = Some(node_name);
     }
 
-    pub fn get_current_node(&mut self) -> SmolStr {
+    pub fn get_current_node(&self) -> SmolStr {
         self.current_node_name.clone().unwrap()
     }
 
@@ -149,14 +149,24 @@ impl QueryContextManager {
 
     pub fn on_function_begin(&mut self, call_params: CallParams) {
         self.call_params_stack.push(call_params);
+        self.call_trigger_states_stack.push(HashMap::new());
     }
 
-    pub fn get_current_fn_call_params(&mut self) -> CallParams {
+    pub fn get_current_fn_call_params(&self) -> CallParams {
         self.call_params_stack.last().unwrap().clone()
+    }
+
+    pub fn assign_call_trigger_state(&mut self, trigger_name: SmolStr, state: Box<dyn std::any::Any>) {
+        self.call_trigger_states_stack.last_mut().unwrap().insert(trigger_name, state);
+    }
+
+    pub fn get_call_trigger_state(&self, trigger_name: &SmolStr) -> Option<&Box<dyn std::any::Any>> {
+        self.call_trigger_states_stack.last().unwrap().get(trigger_name)
     }
 
     pub fn on_function_end(&mut self) {
         self.call_params_stack.pop();
+        self.call_trigger_states_stack.pop();
     }
 
     // ============================ QUERY
@@ -175,24 +185,6 @@ impl QueryContextManager {
 
     pub fn on_query_end(&mut self) {
         self.from_contents_stack.pop();
-    }
-
-    // ============================ TYPES
-
-    pub fn on_types_begin(&mut self) {
-        self.selected_types_stack.push(None);
-    }
-
-    pub fn update_selected_types(&mut self, subgraph_type: Vec<SubgraphType>) {
-        *self.selected_types_stack.last_mut().unwrap() = Some(subgraph_type);
-    }
-
-    pub fn get_selected_types(&self) -> Option<&Vec<SubgraphType>> {
-        self.selected_types_stack.last().unwrap().as_ref()
-    }
-
-    pub fn on_types_end(&mut self) -> Option<Vec<SubgraphType>> {
-        self.selected_types_stack.pop().unwrap()
     }
 }
 

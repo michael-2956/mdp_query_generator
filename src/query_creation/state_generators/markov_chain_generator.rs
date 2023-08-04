@@ -9,7 +9,7 @@ use std::{path::PathBuf, collections::{HashMap, HashSet, VecDeque}};
 use core::fmt::Debug;
 use smol_str::SmolStr;
 
-use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_generator::markov_chain::FunctionTypes, random_query_generator::query_info::QueryContextManager}, config::TomlReadable};
+use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_generator::markov_chain::FunctionTypes, random_query_generator::{query_info::QueryContextManager, call_triggers::CallTriggerTrait}}, config::TomlReadable};
 
 use self::{
     markov_chain::{
@@ -45,7 +45,7 @@ impl Debug for CallTriggerAffector {
 /// subgraphs parsed from the .dot file. Manages the
 /// probabilities, outputs states, disables nodes if
 /// needed.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct MarkovChainGenerator<StC: StateChooser> {
     /// this stack contains information about the known type name lists
     /// inferred when [known] is used in TYPES
@@ -57,8 +57,7 @@ pub struct MarkovChainGenerator<StC: StateChooser> {
     call_stack: Vec<StackItem>,
     pending_call: Option<CallParams>,
     state_chooser: Box<StC>,
-    call_triggers: HashMap<SmolStr, CallTrigger>,
-    call_trigger_affectors: HashMap<SmolStr, CallTriggerAffector>,
+    call_triggers: HashMap<SmolStr, Box<dyn CallTriggerTrait>>,
     /// if a dead_end_info was collected for the specific function once,
     /// with set arguments (types & modifiers), and all call modifier
     /// states, we can re-use that information.
@@ -111,19 +110,14 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             compatible_type_list_stack: vec![],
             state_chooser: Box::new(StC::new()),
             call_triggers: HashMap::new(),
-            call_trigger_affectors: HashMap::new(),
             dead_end_infos: HashMap::new(),
         };
         _self.reset();
         Ok(_self)
     }
 
-    pub fn register_call_trigger_affector(&mut self, trigger_name: SmolStr, call_trigger_affector: fn(&mut QueryContextManager) -> ()) {
-        self.call_trigger_affectors.insert(trigger_name, CallTriggerAffector(call_trigger_affector));
-    }
-
-    pub fn register_call_trigger(&mut self, trigger_name: SmolStr, call_trigger: fn(&QueryContextManager) -> bool) {
-        self.call_triggers.insert(trigger_name, CallTrigger(call_trigger));
+    pub fn register_call_trigger<T: CallTriggerTrait + 'static>(&mut self, trigger: T) {
+        self.call_triggers.insert(trigger.get_trigger_name(), Box::new(trigger));
     }
 
     /// used to print the call stack of the markov chain functions
@@ -303,7 +297,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         query_context_manager.set_current_node(stack_item.last_node.node_common.name.clone());
 
         if let Some(ref call_trigger_affector_name) = stack_item.last_node.node_common.affects_call_trigger_name {
-            run_call_trigger_affector(&self.call_trigger_affectors, call_trigger_affector_name, query_context_manager);
+            run_call_trigger_affector(&self.call_triggers, call_trigger_affector_name, query_context_manager);
         }
 
         if let Some(call_params) = &stack_item.last_node.call_params {
@@ -320,24 +314,30 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 }
 
-fn run_call_trigger_affector(call_trigger_affectors: &HashMap<SmolStr, CallTriggerAffector>, trigger_name: &SmolStr, query_context_manager: &mut QueryContextManager) {
-    match call_trigger_affectors.get(trigger_name) {
-        Some(call_trigger_affector) => (call_trigger_affector.0)(query_context_manager),
-        None => panic!("Call trigger affector wasn't registered: {}", trigger_name),
-    }
+fn run_call_trigger_affector(call_triggers: &HashMap<SmolStr, Box<dyn CallTriggerTrait>>, trigger_name: &SmolStr, query_context_manager: &mut QueryContextManager) {
+    let new_state = call_triggers
+        .get(trigger_name)
+        .unwrap()
+        .get_trigger_state(query_context_manager)
+    ;
+    query_context_manager.assign_call_trigger_state(trigger_name.clone(), new_state);
 }
 
-fn run_call_trigger(call_triggers: &HashMap<SmolStr, CallTrigger>, trigger_name: &SmolStr, query_context_manager: &QueryContextManager) -> bool {
-    match call_triggers.get(trigger_name) {
-        Some(call_trigger) => (call_trigger.0)(query_context_manager),
-        None => panic!("Call trigger wasn't registered: {}", trigger_name),
+fn run_call_trigger(call_triggers: &HashMap<SmolStr, Box<dyn CallTriggerTrait>>, trigger_name: &SmolStr, query_context_manager: &QueryContextManager) -> bool {
+    let trigger = call_triggers
+        .get(trigger_name)
+        .unwrap();
+    if let Some(trigger_state) = query_context_manager.get_call_trigger_state(trigger_name) {
+        trigger.run(query_context_manager, trigger_state)
+    } else {
+        trigger.get_default_trigger_value()
     }
 }
 
 fn check_node_off_dfs(
     function: &Function,
     function_call_params: &CallParams,
-    call_triggers: &HashMap<SmolStr, CallTrigger>,
+    call_triggers: &HashMap<SmolStr, Box<dyn CallTriggerTrait>>,
     dead_end_info: &mut HashMap<SmolStr, bool>,
     query_context_manager: &mut QueryContextManager,
     node_common: &NodeCommon
@@ -349,22 +349,24 @@ fn check_node_off_dfs(
         return *is_dead_end;
     }
 
-    if function_call_params.func_name == "types" {
-        println!("check_node_off_dfs {:?} {} {}", function_call_params, dead_end_info.len(), node_common.name);
-    }
-
     let mut visited = HashSet::new();
     let mut stack = VecDeque::new();
     stack.push_back(vec![node_common.name.clone()]);
 
     while let Some(path) = stack.pop_back() {
-        let current_node = path.last().unwrap().clone();
-        if current_node == function.exit_node_name {
+        let current_node_name = path.last().unwrap().clone();
+        if let Some(is_dead_end) = dead_end_info.get(&current_node_name) {
+            if !*is_dead_end {
+                dead_end_info.extend(path.iter().map(|x| (x.clone(), false)));
+                return false;
+            }
+        }
+        if current_node_name == function.exit_node_name {
             dead_end_info.extend(path.iter().map(|x| (x.clone(), false)));
             return false;
         }
-        if visited.insert(current_node.clone()) {
-            if let Some(node_outgoing) = function.chain.get(&current_node) {
+        if visited.insert(current_node_name.clone()) {
+            if let Some(node_outgoing) = function.chain.get(&current_node_name) {
                 stack.extend(node_outgoing
                     .iter()
                     .filter(|x| !visited.contains(&x.1.node_common.name) && !check_node_off(
@@ -381,7 +383,7 @@ fn check_node_off_dfs(
 
 fn check_node_off(
         function_call_params: &CallParams,
-        call_triggers: &HashMap<SmolStr, CallTrigger>,
+        call_triggers: &HashMap<SmolStr, Box<dyn CallTriggerTrait>>,
         query_context_manager: &mut QueryContextManager,
         node_common: &NodeCommon
     ) -> bool {
