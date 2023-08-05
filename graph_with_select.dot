@@ -20,8 +20,8 @@
 #         ...
 #     ]
 #
-# For types, can also use [R...], or [RI...] for passing further only the types that correcpond to the called function's name ([R...]),
-# optionally also passing the inner types of those instead of passing them raw ([RI...]).
+# For types, can also use [TR...], or [RI...] for passing further only the types that correcpond to TYPE_NAME ([R...]),
+# or corresponding to function name, passing the inner types ([RI...]).
 #
 # TYPE, TYPES and MOD in definitions are only for type-checking.
 # All specified types of modifiers (TYPE, TYPES, MOD) are required to be passed by caller.
@@ -527,33 +527,33 @@ digraph G {
         types_select_type_noexpr -> call0_column_spec
         call0_column_spec -> EXIT_types
 
-        // call1_Query [TYPES="[known]", MODS="[single value]", label="Query\nMODS: single value\nTYPE: type", shape=rectangle, style=filled, color=green]
-        // types_select_type_noexpr -> call1_Query
-        // call1_Query -> EXIT_types
+        call1_Query [TYPES="[known]", MODS="[single value]", label="Query\nMODS: single value\nTYPE: type", shape=rectangle, style=filled, color=green]
+        types_select_type_noexpr -> call1_Query
+        call1_Query -> EXIT_types
 
         types_null [label="null"]
         types -> types_null
         types_null -> EXIT_types
 
-        // call0_numeric [label="numeric\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=chocolate]
-        // types_select_type_numeric -> call0_numeric
-        // call0_numeric -> EXIT_types
+        call0_numeric [label="numeric\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=chocolate]
+        types_select_type_numeric -> call0_numeric
+        call0_numeric -> EXIT_types
 
-        // call1_VAL_3 [label="3VL Value\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=red]
-        // types_select_type_3vl -> call1_VAL_3
-        // call1_VAL_3 -> EXIT_types
+        call1_VAL_3 [label="3VL Value\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=red]
+        types_select_type_3vl -> call1_VAL_3
+        call1_VAL_3 -> EXIT_types
 
-        // call0_string [label="string\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=pink]
-        // types_select_type_string -> call0_string
-        // call0_string -> EXIT_types
+        call0_string [label="string\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=pink]
+        types_select_type_string -> call0_string
+        call0_string -> EXIT_types
 
-        // call0_list_expr [TYPES="[RI...]", MODS="[...]", label="list expr\nTYPES: [(rel, inner)...]\nMODS: [...mods]", shape=rectangle, style=filled, color=blue]
-        // types_select_type_list_expr -> call0_list_expr
-        // call0_list_expr -> EXIT_types
+        call0_list_expr [TYPES="[RI...]", MODS="[...]", label="list expr\nTYPES: [(rel, inner)...]\nMODS: [...mods]", shape=rectangle, style=filled, color=blue]
+        types_select_type_list_expr -> call0_list_expr
+        call0_list_expr -> EXIT_types
 
-        // call0_array [TYPES="[RI...]", MODS="[...]", label="array\nTYPES: [(rel, inner)...]\nMODS: [...mods]", shape=rectangle, style=filled, color=yellow]
-        // types_select_type_array -> call0_array
-        // call0_array -> EXIT_types
+        call0_array [TYPES="[RI...]", MODS="[...]", label="array\nTYPES: [(rel, inner)...]\nMODS: [...mods]", shape=rectangle, style=filled, color=yellow]
+        types_select_type_array -> call0_array
+        call0_array -> EXIT_types
     }
 
     subgraph def_types_all {
@@ -593,11 +593,11 @@ digraph G {
         array -> call31_types
         call31_types -> call50_types
 
-        call51_types [TYPE_NAME="list expr", TYPES="[R...]", label="TYPE: list expr?\nMODS: [...mods]\nTYPES: [(rel)...]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call51_types [TYPE_NAME="list expr", TYPES="[TR...]", label="TYPE: list expr?\nMODS: [...mods]\nTYPES: [(rel)...]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         array -> call51_types
         call51_types -> call50_types
 
-        call14_types [TYPE_NAME="array", TYPES="[R...]", label="TYPE: array?\nMODS: [...mods]\nTYPES: [(rel)...]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call14_types [TYPE_NAME="array", TYPES="[TR...]", label="TYPE: array?\nMODS: [...mods]\nTYPES: [(rel)...]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         array -> call14_types
         call14_types -> call50_types
 
@@ -622,11 +622,11 @@ digraph G {
         list_expr -> call18_types
         call18_types -> call49_types
 
-        call19_types [TYPE_NAME="list expr", TYPES="[R...]", label="TYPE: list expr?\nMODS: [...mods]\nTYPES=[(rel)...]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call19_types [TYPE_NAME="list expr", TYPES="[TR...]", label="TYPE: list expr?\nMODS: [...mods]\nTYPES=[(rel)...]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         list_expr -> call19_types
         call19_types -> call49_types
 
-        call20_types [TYPE_NAME="array", TYPES="[R...]", label="TYPE: array?\nMODS: [...mods]\nTYPES=[(rel)...]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call20_types [TYPE_NAME="array", TYPES="[TR...]", label="TYPE: array?\nMODS: [...mods]\nTYPES=[(rel)...]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         list_expr -> call20_types
         call20_types -> call49_types
 

@@ -4,10 +4,11 @@ pub mod markov_chain;
 mod dot_parser;
 mod error;
 
-use std::{path::PathBuf, collections::{HashMap, HashSet, VecDeque}, sync::{Arc, Mutex}};
+use std::{path::PathBuf, collections::{HashMap, HashSet, VecDeque, BTreeMap}, sync::{Arc, Mutex}};
 
 use core::fmt::Debug;
 use smol_str::SmolStr;
+use take_until::TakeUntilExt;
 
 use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_generator::markov_chain::FunctionTypes, random_query_generator::{query_info::ClauseContext, call_triggers::CallTriggerTrait}}, config::TomlReadable};
 
@@ -60,9 +61,9 @@ pub struct MarkovChainGenerator<StC: StateChooser> {
     call_triggers: HashMap<SmolStr, Box<dyn CallTriggerTrait>>,
     /// if a dead_end_info was collected for the specific function once,
     /// with set arguments (types & modifiers), and all call modifier
-    /// states, depending on all of their affectors,
+    /// states, depending on which affectors affected what and how,
     /// we can re-use that information.
-    dead_end_infos: HashMap<(CallParams, Vec<Vec<bool>>), Arc<Mutex<HashMap<SmolStr, bool>>>>,
+    dead_end_infos: HashMap<(CallParams, BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>), Arc<Mutex<HashMap<SmolStr, bool>>>>,
 }
 
 /// function context, like the current node, and the
@@ -98,28 +99,40 @@ impl FunctionContext {
     }
 }
 
-/// the call trigger states memory
+/// This structure stores all the info about
+/// call triggers in the current funciton
 #[derive(Debug)]
-struct CallTriggerMemory {
-    trigger_states: HashMap<SmolStr, Box<dyn std::any::Any>>,
+struct CallTriggerInfo {
+    /// the call trigger inner state memory
+    inner_states: HashMap<SmolStr, Box<dyn std::any::Any>>,
+    /// call trigger configuration: How each call trigger affector
+    /// node affects every node with a call trigger
+    node_relations: BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>,
+    /// stores current call trigger node states
+    node_states: BTreeMap<SmolStr, Option<bool>>,
+    /// stores a hashset of all node trigger affectors
+    affector_nodes: HashSet<SmolStr>,
 }
 
-impl CallTriggerMemory {
-    fn new() -> Self {
-        Self { trigger_states: HashMap::new() }
+impl CallTriggerInfo {
+    fn new(node_relations: BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>) -> Self {
+        Self {
+            inner_states: HashMap::new(),
+            node_states: node_relations.iter().map(|x| (x.0.clone(), None)).collect(),
+            affector_nodes: node_relations.iter().map(|x| x.1.iter()).flatten().map(|x| x.0.clone()).collect(),
+            node_relations,
+        }
     }
 
-    fn update_trigger_state(&mut self, call_trigger: &mut Box<dyn CallTriggerTrait>, clause_context: &mut ClauseContext, function_context: &FunctionContext) {
+    fn update_inner_state(&mut self, call_trigger: &mut Box<dyn CallTriggerTrait>, clause_context: &ClauseContext, function_context: &FunctionContext) {
         let new_state = call_trigger.get_new_trigger_state(clause_context, function_context);
-        self.trigger_states.insert(call_trigger.get_trigger_name(), new_state);
-    }
-    
-    fn run_trigger(&self, call_trigger: &Box<dyn CallTriggerTrait>, clause_context: &ClauseContext, function_context: &FunctionContext) -> bool {
-        if let Some(trigger_state) = self.trigger_states.get(&call_trigger.get_trigger_name()) {
-            call_trigger.run(clause_context, function_context, trigger_state)
-        } else {
-            call_trigger.get_default_trigger_value()
-        }
+        self.inner_states.insert(call_trigger.get_trigger_name(), new_state);
+        self.node_states.extend(
+            self.node_relations.iter()
+                .filter_map(|(affected_node_name, node_config)| {
+                    node_config.get(&function_context.current_node.node_common.name).map(|&val| (affected_node_name.clone(), Some(val)))
+                })
+        );
     }
 }
 
@@ -128,8 +141,8 @@ pub struct StackFrame {
     /// function context, like the current node, and the
     /// current function arguments (call params)
     pub function_context: FunctionContext,
-    /// the call trigger state memory
-    trigger_memory: CallTriggerMemory,
+    /// various call trigger info
+    call_trigger_info: CallTriggerInfo,
     /// Cached version of all the dead ends
     /// in the current function
     dead_end_info: Arc<Mutex<HashMap<SmolStr, bool>>>,
@@ -171,7 +184,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 
     pub fn get_call_trigger_state(&self, trigger_name: &SmolStr) -> Option<&Box<dyn std::any::Any>> {
-        self.call_stack.last().unwrap().trigger_memory.trigger_states.get(trigger_name)
+        self.call_stack.last().unwrap().call_trigger_info.inner_states.get(trigger_name)
     }
 
     /// used to print the call stack of the markov chain functions
@@ -196,6 +209,74 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
         self.known_type_list_stack = vec![];
         self.compatible_type_list_stack = vec![];
+    }
+
+    fn start_function(&mut self, mut call_params: CallParams, clause_context: &ClauseContext) -> SmolStr {
+        // if the last node requested a call, update stack and return function's first state
+        call_params.selected_types = match call_params.selected_types {
+            CallTypes::KnownList => CallTypes::TypeList(self.pop_known_list()),
+            CallTypes::Compatible => CallTypes::TypeList(self.pop_compatible_list()),
+            CallTypes::PassThrough => self.get_fn_selected_types().clone(),
+            CallTypes::PassThroughTypeNameRelated => {
+                let parent_fn_args = unwrap_variant!(self.get_fn_selected_types(), CallTypes::TypeList);
+                let call_node_type_name = self.call_stack.last().unwrap().function_context.current_node.node_common.type_name.as_ref().unwrap();
+                CallTypes::TypeList(parent_fn_args
+                    .iter()
+                    .map(|x| x.to_owned())
+                    .filter(|x| x.is_same_or_more_determined_or_undetermined(call_node_type_name))
+                    .collect::<Vec<_>>())
+            },
+            CallTypes::PassThroughRelatedInner => {
+                let parent_fn_args = unwrap_variant!(self.get_fn_selected_types(), CallTypes::TypeList);
+                CallTypes::TypeList(parent_fn_args
+                    .iter()
+                    .map(|x| x.to_owned())
+                    .filter(|x| x.get_subgraph_func_name() == call_params.func_name)
+                    .map(|x| x.inner())
+                    .collect::<Vec<_>>())
+            },
+            any => any,
+        };
+
+        let new_function = self.markov_chain.functions.get(&call_params.func_name).unwrap();
+
+        // if Undetermined is in the parameter list, replace the list with all acceptable arguments.
+        match &call_params.selected_types {
+            CallTypes::TypeList(type_list) if type_list.contains(&SubgraphType::Undetermined) => {
+                call_params.selected_types = CallTypes::TypeList(unwrap_variant!(new_function.accepted_types.clone(), FunctionTypes::TypeList));
+            },
+            _ => {},
+        };
+
+        let function_context = FunctionContext::new(call_params);
+
+        let node_relations: BTreeMap<SmolStr, BTreeMap<SmolStr, bool>> = new_function.call_trigger_nodes_and_affectors.iter().map(|x|
+            (x.0.node_common.name.clone(), x.1.iter().map(|affector_node| {
+                let trigger_name = x.0.node_common.call_trigger_name.as_ref().unwrap();
+                let new_state = self.call_triggers.get(trigger_name).unwrap().get_new_trigger_state(
+                    clause_context, &function_context.with_current_node(affector_node.clone())
+                );
+                (affector_node.node_common.name.clone(), self.call_triggers.get(trigger_name).unwrap().run(
+                    clause_context,
+                    &function_context.with_current_node(x.0.clone()),
+                    &new_state,
+                ))
+            }).collect())
+        ).collect();
+
+        let dead_end_info = self.dead_end_infos.entry(
+            (function_context.call_params.to_owned(), node_relations.clone())
+        ).or_insert(Arc::new(Mutex::new(HashMap::new()))).to_owned();
+
+        let func_name = function_context.call_params.func_name.clone();
+
+        self.call_stack.push(StackFrame {
+            function_context,
+            call_trigger_info: CallTriggerInfo::new(node_relations),
+            dead_end_info,
+        });
+
+        func_name
     }
 
     /// get current function inputs list
@@ -247,73 +328,9 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 }
 
 impl<StC: StateChooser> MarkovChainGenerator<StC> {
-    pub fn next(&mut self, clause_context: &mut ClauseContext, dynamic_model: &mut (impl DynamicModel + ?Sized)) -> Option<<Self as Iterator>::Item> {
+    pub fn next(&mut self, clause_context: &ClauseContext, dynamic_model: &mut (impl DynamicModel + ?Sized)) -> Option<<Self as Iterator>::Item> {
         if let Some(call_params) = self.pending_call.take() {
-            // if the last node requested a call, update stack and return function's first state
-            let mut inputs = match call_params.selected_types {
-                CallTypes::KnownList => CallTypes::TypeList(self.pop_known_list()),
-                CallTypes::Compatible => CallTypes::TypeList(self.pop_compatible_list()),
-                CallTypes::PassThrough => self.get_fn_selected_types().clone(),
-                CallTypes::PassThroughRelated => {
-                    let parent_fn_args = unwrap_variant!(self.get_fn_selected_types(), CallTypes::TypeList);
-                    CallTypes::TypeList(parent_fn_args
-                        .iter()
-                        .map(|x| x.to_owned())
-                        .filter(|x| x.get_subgraph_func_name() == call_params.func_name)
-                        .collect::<Vec<_>>())
-                },
-                CallTypes::PassThroughRelatedInner => {
-                    let parent_fn_args = unwrap_variant!(self.get_fn_selected_types(), CallTypes::TypeList);
-                    CallTypes::TypeList(parent_fn_args
-                        .iter()
-                        .map(|x| x.to_owned())
-                        .filter(|x| x.get_subgraph_func_name() == call_params.func_name)
-                        .map(|x| x.inner())
-                        .collect::<Vec<_>>())
-                },
-                any => any,
-            };
-
-            let new_function = self.markov_chain.functions.get(&call_params.func_name).unwrap();
-
-            // if Undetermined is in the parameter list, replace the list with all acceptable arguments.
-            match &inputs {
-                CallTypes::TypeList(type_list) if type_list.contains(&SubgraphType::Undetermined) => {
-                    inputs = CallTypes::TypeList(unwrap_variant!(new_function.accepted_types.clone(), FunctionTypes::TypeList));
-                },
-                _ => {},
-            };
-
-            let new_function_context = FunctionContext::new(CallParams {
-                func_name: call_params.func_name.clone(),
-                selected_types: inputs,
-                modifiers: call_params.modifiers,
-            });
-
-            let call_trigger_states: Vec<Vec<bool>> = new_function.call_trigger_nodes_and_affectors.iter().map(|x|
-                x.1.iter().map(|node| {
-                    let trigger_name = x.0.node_common.call_trigger_name.as_ref().unwrap();
-                    let new_state = self.call_triggers.get(trigger_name).unwrap().get_new_trigger_state(
-                        clause_context, &new_function_context.with_current_node(node.clone())
-                    );
-                    self.call_triggers.get(trigger_name).unwrap().run(
-                        clause_context,
-                        &new_function_context.with_current_node(x.0.clone()),
-                        &new_state,
-                    )
-                }).collect()
-            ).collect();
-
-            let dead_end_info = self.dead_end_infos.entry(
-                (new_function_context.call_params.to_owned(), call_trigger_states)
-            ).or_insert(Arc::new(Mutex::new(HashMap::new()))).to_owned();
-
-            self.call_stack.push(StackFrame {
-                function_context: new_function_context,
-                trigger_memory: CallTriggerMemory::new(),
-                dead_end_info,
-            });
-            return Some(call_params.func_name);
+            return Some(self.start_function(call_params, clause_context));
         }
 
         // search for the last node which isn't an exit node
@@ -345,13 +362,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         let last_node_outgoing = function.chain.get(&last_node.node_common.name).unwrap();
 
         let last_node_outgoing = last_node_outgoing.iter().map(|el| {
-            (check_node_off_dfs(
-                function,
-                stack_frame,
-                &self.call_triggers,
-                clause_context,
-                &el.1.node_common
-            ), el.0, el.1.clone())
+            (check_node_off_dfs(function, stack_frame, &el.1.node_common), el.0, el.1.clone())
         }).collect::<Vec<_>>();
 
         let last_node_outgoing = dynamic_model.assign_log_probabilities(last_node_outgoing);
@@ -359,13 +370,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         let destination = self.state_chooser.choose_destination(last_node_outgoing);
 
         if let Some(destination) = destination {
-            if check_node_off_dfs(
-                function,
-                stack_frame,
-                &self.call_triggers,
-                clause_context,
-                &destination.node_common
-            ) {
+            if check_node_off_dfs(function, stack_frame, &destination.node_common) {
                 panic!("Chosen node is off: {} (after {})", destination.node_common.name, last_node.node_common.name);
             }
             stack_frame.function_context.current_node = destination.clone();
@@ -374,10 +379,10 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             panic!("No destination found for {}.", last_node.node_common.name);
         }
 
-        // stack_item.function_context.last_node is now the current node
+        // stack_item.function_context.current_node is now the current node
 
         if let Some(ref trigger_name) = stack_frame.function_context.current_node.node_common.affects_call_trigger_name {
-            stack_frame.trigger_memory.update_trigger_state(self.call_triggers.get_mut(trigger_name).unwrap(), clause_context, &stack_frame.function_context);
+            stack_frame.call_trigger_info.update_inner_state(self.call_triggers.get_mut(trigger_name).unwrap(), clause_context, &stack_frame.function_context);
         }
 
         if let Some(call_params) = &stack_frame.function_context.current_node.call_params {
@@ -394,14 +399,8 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 }
 
-fn check_node_off_dfs(
-    function: &Function,
-    stack_frame: &StackFrame,
-    call_triggers: &HashMap<SmolStr, Box<dyn CallTriggerTrait>>,
-    clause_context: &mut ClauseContext,
-    node_common: &NodeCommon
-) -> bool {
-    if check_node_off(stack_frame, call_triggers, clause_context, node_common) {
+fn check_node_off_dfs(function: &Function, stack_frame: &StackFrame, node_common: &NodeCommon) -> bool {
+    if check_node_off(&stack_frame.function_context.call_params, &stack_frame.call_trigger_info.node_states, node_common) {
         return true
     }
 
@@ -410,47 +409,91 @@ fn check_node_off_dfs(
         return *is_dead_end;
     }
 
-    let mut visited = HashSet::new();
-    let mut stack = VecDeque::new();
-    stack.push_back(vec![node_common.name.clone()]);
+    // only update dead_end_info for paths that were not affected yet
+    let path_is_not_affected = stack_frame.call_trigger_info.inner_states.is_empty();
 
-    while let Some(path) = stack.pop_back() {
+    let mut visited = HashSet::new();
+    let mut to_mark_as_dead_ends = HashSet::new();
+    let mut stack = VecDeque::new();
+    stack.push_back((
+        vec![node_common.name.clone()], stack_frame.call_trigger_info.node_states.clone()
+    ));
+
+    while let Some((path, mut call_trigger_states)) = stack.pop_back() {
         let current_node_name = path.last().unwrap().clone();
+        let path_until_affector: Option<Vec<SmolStr>> = if path_is_not_affected { Some(path.iter().take_until(
+            |&x| stack_frame.call_trigger_info.affector_nodes.contains(x)
+        ).map(|x| x.clone()).collect()) } else { None };
         if let Some(is_dead_end) = dead_end_info.get(&current_node_name) {
             if !*is_dead_end {
-                dead_end_info.extend(path.iter().map(|x| (x.clone(), false)));
+                if path_is_not_affected {
+                    if node_common.name == "types_select_type_noexpr" {
+                        println!("\nNew dead_end_info 1: {:#?}", dead_end_info);
+                    }
+                    dead_end_info.extend(path_until_affector.unwrap().iter().map(|x| (x.clone(), false)));
+                    if node_common.name == "types_select_type_noexpr" {
+                        println!("New dead_end_info 1: {:#?}", dead_end_info);
+                    }
+                }
                 return false;
             }
         }
         if current_node_name == function.exit_node_name {
-            dead_end_info.extend(path.iter().map(|x| (x.clone(), false)));
+            if path_is_not_affected {
+                if node_common.name == "types_select_type_noexpr" {
+                    println!("\nOld dead_end_info 2: {:#?}", dead_end_info);
+                }
+                dead_end_info.extend(path_until_affector.unwrap().iter().map(|x| (x.clone(), false)));
+                if node_common.name == "types_select_type_noexpr" {
+                    println!("New dead_end_info 2: {:#?}", dead_end_info);
+                }
+            }
             return false;
+        }
+        call_trigger_states.extend(
+            stack_frame.call_trigger_info.node_relations.iter()
+                .filter_map(|(affected_node_name, node_config)| {
+                    node_config.get(&current_node_name).map(|&val| (affected_node_name.clone(), Some(val)))
+                })
+        );
+        if path_is_not_affected {
+            to_mark_as_dead_ends.extend(path_until_affector.unwrap().into_iter());
         }
         if visited.insert(current_node_name.clone()) {
             if let Some(node_outgoing) = function.chain.get(&current_node_name) {
                 stack.extend(node_outgoing
                     .iter()
                     .filter(|x| !visited.contains(&x.1.node_common.name) && !check_node_off(
-                        stack_frame, call_triggers, clause_context, &x.1.node_common
+                        &stack_frame.function_context.call_params, &call_trigger_states, &x.1.node_common
                     ))
-                    .map(|x| [&path[..], &[x.1.node_common.name.clone()]].concat())
+                    .map(|x| (
+                        [&path[..], &[x.1.node_common.name.clone()]].concat(),
+                        call_trigger_states.clone()
+                    ))
                 );
             }
         }
     }
-    dead_end_info.insert(node_common.name.clone(), true);
+    if path_is_not_affected {
+        if node_common.name == "types_select_type_noexpr" {
+            println!("\nOld dead_end_info 3: {:#?}\nto_mark_as_dead_ends: {:#?}", dead_end_info, to_mark_as_dead_ends);
+        }
+        dead_end_info.extend(to_mark_as_dead_ends.into_iter().map(|x| (x, true)));
+        if node_common.name == "types_select_type_noexpr" {
+            println!("New dead_end_info 3: {:#?}", dead_end_info);
+        }
+    }
     true
 }
 
 fn check_node_off(
-        stack_frame: &StackFrame,
-        call_triggers: &HashMap<SmolStr, Box<dyn CallTriggerTrait>>,
-        clause_context: &mut ClauseContext,
+        call_params: &CallParams,
+        call_trigger_states: &BTreeMap<SmolStr, Option<bool>>,
         node_common: &NodeCommon
     ) -> bool {
     let mut off = false;
     if let Some(ref option_name) = node_common.type_name {
-        off = match stack_frame.function_context.call_params.selected_types {
+        off = match call_params.selected_types {
             CallTypes::None => true,
             CallTypes::TypeList(ref t_name_list) => if !t_name_list
                 .iter()
@@ -463,7 +506,7 @@ fn check_node_off(
         };
     }
     if let Some((ref trigger_name, ref trigger_on)) = node_common.trigger {
-        off = off || match stack_frame.function_context.call_params.modifiers {
+        off = off || match call_params.modifiers {
             CallModifiers::None => *trigger_on,
             CallModifiers::PassThrough => panic!("CallModifiers::PassThrough was not substituted for CallModifiers::StaticList!"),
             CallModifiers::StaticList(ref modifiers) => {
@@ -472,7 +515,9 @@ fn check_node_off(
         };
     }
     if let Some(ref trigger_name) = node_common.call_trigger_name {
-        off = off || !stack_frame.trigger_memory.run_trigger(call_triggers.get(trigger_name).unwrap(), &clause_context, &stack_frame.function_context);
+        off = off || !call_trigger_states.get(&node_common.name).unwrap().unwrap_or_else(
+            || panic!("State of call trigger {trigger_name} was not set (node {})", node_common.name)
+        )
     }
     return off;
 }

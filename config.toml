@@ -14,7 +14,7 @@ assert_runs_on_schema=false
 
 [generator]
 # print the queries on generation
-print_queries=true
+print_queries=false
 # print the table schema after parcing
 print_schema=false
 # Path to the file with the database schema

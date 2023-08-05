@@ -212,7 +212,7 @@ pub enum FunctionInputsType {
     /// - Args: [Numeric, Array[Val3]]
     /// - Func.: Array.
     /// => Passed arguments: Array[Val3]
-    PassThroughRelated,
+    PassThroughTypeNameRelated,
     /// Used in function calls to pass the function's type constraints further, but only those
     /// that are related to the called function's name, and also taking the inner type
     /// Example:
@@ -238,7 +238,7 @@ impl FunctionInputsType {
     fn try_extract_special_type(idents: &SmolStr) -> Option<FunctionInputsType> {
         match idents.as_str() {
             "any" => Some(FunctionInputsType::Any),
-            "R..." => Some(FunctionInputsType::PassThroughRelated),
+            "TR..." => Some(FunctionInputsType::PassThroughTypeNameRelated),
             "RI..." => Some(FunctionInputsType::PassThroughRelatedInner),
             "..." => Some(FunctionInputsType::PassThrough),
             "compatible" => Some(FunctionInputsType::Compatible),

@@ -51,12 +51,12 @@ pub enum CallTypes {
     /// Used when we want to pass the function's type constraints further
     PassThrough,
     /// Used in function calls to pass the function's type constraints further, but only those
-    /// that are related to the called function's name.
+    /// that are related to the type name.
     /// Example:
     /// - Args: [Numeric, Array[Val3]]
-    /// - Func.: Array.
+    /// - Func.: Types (Args: Array[...]).
     /// => Passed arguments: Array[Val3]
-    PassThroughRelated,
+    PassThroughTypeNameRelated,
     /// Used in function calls to pass the function's type constraints further, but only those
     /// that are related to the called function's name, and also taking the inner type
     /// Example:
@@ -81,7 +81,7 @@ impl CallTypes {
             FunctionInputsType::KnownList => CallTypes::KnownList,
             FunctionInputsType::Compatible => CallTypes::Compatible,
             FunctionInputsType::PassThrough => CallTypes::PassThrough,
-            FunctionInputsType::PassThroughRelated => CallTypes::PassThroughRelated,
+            FunctionInputsType::PassThroughTypeNameRelated => CallTypes::PassThroughTypeNameRelated,
             FunctionInputsType::PassThroughRelatedInner => CallTypes::PassThroughRelatedInner,
             FunctionInputsType::TypeNameList(tp_list) => CallTypes::TypeList(tp_list),
         }
@@ -239,7 +239,7 @@ impl MarkovChain {
                 }
                 dot_parser::CodeUnit::CloseDeclaration => {
                     if let Some(mut function) = current_function.take() {
-                        let call_trigger_affectors: Vec<_> = node_params.keys()
+                        let call_trigger_affectors: Vec<_> = function.chain.keys()
                             .filter_map(|x| {
                                 let node = node_params.get(x).unwrap();
                                 node.node_common.affects_call_trigger_name.clone().map(|trigger_name| (
@@ -248,7 +248,7 @@ impl MarkovChain {
                             })
                             .collect();
 
-                        function.call_trigger_nodes_and_affectors = node_params.keys()
+                        function.call_trigger_nodes_and_affectors = function.chain.keys()
                             .filter_map(|x| {
                                 let node = node_params.get(x).unwrap();
                                 node.node_common.call_trigger_name.clone().map(|trigger_name| (trigger_name, node))
@@ -367,7 +367,7 @@ impl MarkovChain {
                         ) if types_list.iter().all(|t| func_types_list.contains(t)) => {},
                         (CallTypes::None, FunctionTypes::TypeList(..) | FunctionTypes::None) => {},
                         (
-                            CallTypes::PassThrough | CallTypes::PassThroughRelated | CallTypes::PassThroughRelatedInner,
+                            CallTypes::PassThrough | CallTypes::PassThroughTypeNameRelated | CallTypes::PassThroughRelatedInner,
                             FunctionTypes::TypeList(..)
                         ) => {},
                         (CallTypes::Compatible, FunctionTypes::TypeList(..)) => {},

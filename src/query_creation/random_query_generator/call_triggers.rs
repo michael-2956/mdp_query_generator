@@ -11,8 +11,6 @@ pub trait CallTriggerTrait: Debug {
 
     fn get_new_trigger_state(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> Box<dyn std::any::Any>;
 
-    fn get_default_trigger_value(&self) -> bool;
-
     fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, trigger_state: &Box<dyn std::any::Any>) -> bool;
 }
 
@@ -40,9 +38,7 @@ impl CallTriggerTrait for IsColumnTypeAvailableTrigger {
         };
         let allowed_type_list = match selected_type {
             with_inner @ (SubgraphType::Array(..) | SubgraphType::ListExpr(..)) => {
-                let argument_selected_types = unwrap_variant!(
-                    function_context.call_params.selected_types.clone(), CallTypes::TypeList
-                );
+                let argument_selected_types = unwrap_variant!(function_context.call_params.selected_types.clone(), CallTypes::TypeList);
                 argument_selected_types
                     .iter()
                     .map(|x| x.to_owned())
@@ -55,10 +51,6 @@ impl CallTriggerTrait for IsColumnTypeAvailableTrigger {
         Box::new(IsColumnTypeAvailableTriggerState {
             selected_types: allowed_type_list
         })
-    }
-
-    fn get_default_trigger_value(&self) -> bool {
-        true
     }
 
     fn run(&self, clause_context: &ClauseContext, _function_context: &FunctionContext, trigger_state: &Box<dyn std::any::Any>) -> bool {
