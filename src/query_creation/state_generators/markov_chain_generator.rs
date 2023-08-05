@@ -4,7 +4,7 @@ pub mod markov_chain;
 mod dot_parser;
 mod error;
 
-use std::{path::PathBuf, collections::{HashMap, HashSet, VecDeque}};
+use std::{path::PathBuf, collections::{HashMap, HashSet, VecDeque}, sync::{Arc, Mutex}};
 
 use core::fmt::Debug;
 use smol_str::SmolStr;
@@ -60,8 +60,9 @@ pub struct MarkovChainGenerator<StC: StateChooser> {
     call_triggers: HashMap<SmolStr, Box<dyn CallTriggerTrait>>,
     /// if a dead_end_info was collected for the specific function once,
     /// with set arguments (types & modifiers), and all call modifier
-    /// states, we can re-use that information.
-    dead_end_infos: HashMap<(CallParams, Vec<bool>), HashMap<SmolStr, bool>>,
+    /// states, depending on all of their affectors,
+    /// we can re-use that information.
+    dead_end_infos: HashMap<(CallParams, Vec<Vec<bool>>), Arc<Mutex<HashMap<SmolStr, bool>>>>,
 }
 
 /// function context, like the current node, and the
@@ -74,6 +75,29 @@ pub struct FunctionContext {
     pub current_node: NodeParams,
 }
 
+impl FunctionContext {
+    fn new(call_params: CallParams) -> Self {
+        let func_name = call_params.func_name.clone();
+        Self {
+            call_params,
+            current_node: NodeParams {
+                node_common: NodeCommon::with_name(func_name),
+                call_params: None,
+                literal: false,
+                min_calls_until_function_exit: 0,
+            },
+        }
+    }
+
+    /// create a new FunctionContext with the provided node_params as the current_node
+    fn with_current_node(&self, node_params: NodeParams) -> Self {
+        Self {
+            call_params: self.call_params.clone(),
+            current_node: node_params,
+        }
+    }
+}
+
 /// the call trigger states memory
 #[derive(Debug)]
 struct CallTriggerMemory {
@@ -81,8 +105,12 @@ struct CallTriggerMemory {
 }
 
 impl CallTriggerMemory {
+    fn new() -> Self {
+        Self { trigger_states: HashMap::new() }
+    }
+
     fn update_trigger_state(&mut self, call_trigger: &mut Box<dyn CallTriggerTrait>, clause_context: &mut ClauseContext, function_context: &FunctionContext) {
-        let new_state = call_trigger.update_trigger_state(clause_context, function_context);
+        let new_state = call_trigger.get_new_trigger_state(clause_context, function_context);
         self.trigger_states.insert(call_trigger.get_trigger_name(), new_state);
     }
     
@@ -102,26 +130,9 @@ pub struct StackFrame {
     pub function_context: FunctionContext,
     /// the call trigger state memory
     trigger_memory: CallTriggerMemory,
-}
-
-impl StackFrame {
-    fn from_call_params(call_params: CallParams) -> Self {
-        let func_name = call_params.func_name.clone();
-        Self {
-            function_context: FunctionContext {
-                call_params,
-                current_node: NodeParams {
-                    node_common: NodeCommon::with_name(func_name),
-                    call_params: None,
-                    literal: false,
-                    min_calls_until_function_exit: 0,
-                },
-            },
-            trigger_memory: CallTriggerMemory {
-                trigger_states: HashMap::new(),
-            },
-        }
-    }
+    /// Cached version of all the dead ends
+    /// in the current function
+    dead_end_info: Arc<Mutex<HashMap<SmolStr, bool>>>,
 }
 
 #[derive(Clone)]
@@ -262,22 +273,46 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
                 },
                 any => any,
             };
+
+            let new_function = self.markov_chain.functions.get(&call_params.func_name).unwrap();
+
             // if Undetermined is in the parameter list, replace the list with all acceptable arguments.
-            if match &inputs {
-                CallTypes::TypeList(type_list) => type_list.contains(&SubgraphType::Undetermined),
-                _ => false,
-            } {
-                inputs = match self.markov_chain.functions.get(&call_params.func_name).unwrap().accepted_types.clone() {
-                    FunctionTypes::TypeList(type_list) => CallTypes::TypeList(type_list),
-                    _ => panic!("Rust stopped working"),
-                };
-            }
-            let new_call_params = CallParams {
+            match &inputs {
+                CallTypes::TypeList(type_list) if type_list.contains(&SubgraphType::Undetermined) => {
+                    inputs = CallTypes::TypeList(unwrap_variant!(new_function.accepted_types.clone(), FunctionTypes::TypeList));
+                },
+                _ => {},
+            };
+
+            let new_function_context = FunctionContext::new(CallParams {
                 func_name: call_params.func_name.clone(),
                 selected_types: inputs,
                 modifiers: call_params.modifiers,
-            };
-            self.call_stack.push(StackFrame::from_call_params(new_call_params));
+            });
+
+            let call_trigger_states: Vec<Vec<bool>> = new_function.call_trigger_nodes_and_affectors.iter().map(|x|
+                x.1.iter().map(|node| {
+                    let trigger_name = x.0.node_common.call_trigger_name.as_ref().unwrap();
+                    let new_state = self.call_triggers.get(trigger_name).unwrap().get_new_trigger_state(
+                        clause_context, &new_function_context.with_current_node(node.clone())
+                    );
+                    self.call_triggers.get(trigger_name).unwrap().run(
+                        clause_context,
+                        &new_function_context.with_current_node(x.0.clone()),
+                        &new_state,
+                    )
+                }).collect()
+            ).collect();
+
+            let dead_end_info = self.dead_end_infos.entry(
+                (new_function_context.call_params.to_owned(), call_trigger_states)
+            ).or_insert(Arc::new(Mutex::new(HashMap::new()))).to_owned();
+
+            self.call_stack.push(StackFrame {
+                function_context: new_function_context,
+                trigger_memory: CallTriggerMemory::new(),
+                dead_end_info,
+            });
             return Some(call_params.func_name);
         }
 
@@ -307,13 +342,6 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
         let stack_frame = self.call_stack.last_mut().unwrap();
 
-        let call_trigger_states: Vec<bool> = function.call_trigger_names.iter().map(|trigger_name|
-            stack_frame.trigger_memory.run_trigger(self.call_triggers.get(trigger_name).unwrap(), &clause_context, &stack_frame.function_context)
-        ).collect();
-        let dead_end_info = self.dead_end_infos.entry(
-            (stack_frame.function_context.call_params.to_owned(), call_trigger_states.clone())
-        ).or_insert(HashMap::new());
-
         let last_node_outgoing = function.chain.get(&last_node.node_common.name).unwrap();
 
         let last_node_outgoing = last_node_outgoing.iter().map(|el| {
@@ -321,7 +349,6 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
                 function,
                 stack_frame,
                 &self.call_triggers,
-                dead_end_info,
                 clause_context,
                 &el.1.node_common
             ), el.0, el.1.clone())
@@ -336,7 +363,6 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
                 function,
                 stack_frame,
                 &self.call_triggers,
-                dead_end_info,
                 clause_context,
                 &destination.node_common
             ) {
@@ -372,13 +398,14 @@ fn check_node_off_dfs(
     function: &Function,
     stack_frame: &StackFrame,
     call_triggers: &HashMap<SmolStr, Box<dyn CallTriggerTrait>>,
-    dead_end_info: &mut HashMap<SmolStr, bool>,
     clause_context: &mut ClauseContext,
     node_common: &NodeCommon
 ) -> bool {
     if check_node_off(stack_frame, call_triggers, clause_context, node_common) {
         return true
     }
+
+    let mut dead_end_info = stack_frame.dead_end_info.lock().unwrap();
     if let Some(is_dead_end) = dead_end_info.get(&node_common.name) {
         return *is_dead_end;
     }

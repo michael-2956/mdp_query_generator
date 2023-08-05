@@ -9,7 +9,7 @@ use super::query_info::ClauseContext;
 pub trait CallTriggerTrait: Debug {
     fn get_trigger_name(&self) -> SmolStr;
 
-    fn update_trigger_state(&mut self, clause_context: &ClauseContext, function_context: &FunctionContext) -> Box<dyn std::any::Any>;
+    fn get_new_trigger_state(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> Box<dyn std::any::Any>;
 
     fn get_default_trigger_value(&self) -> bool;
 
@@ -29,7 +29,7 @@ impl CallTriggerTrait for IsColumnTypeAvailableTrigger {
         SmolStr::new("is_column_type_available")
     }
 
-    fn update_trigger_state(&mut self, _clause_context: &ClauseContext, function_context: &FunctionContext) -> Box<dyn std::any::Any> {
+    fn get_new_trigger_state(&self, _clause_context: &ClauseContext, function_context: &FunctionContext) -> Box<dyn std::any::Any> {
         let selected_type = match function_context.current_node.node_common.name.as_str() {
             "types_select_type_3vl" => SubgraphType::Val3,
             "types_select_type_array" => SubgraphType::Array(Box::new(SubgraphType::Undetermined)),

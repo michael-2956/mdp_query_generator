@@ -151,7 +151,7 @@ pub struct Function {
     /// in call parameters and all call trigger states,
     /// we can only search once for each set of call
     /// parameters and call trigger states
-    pub call_trigger_names: Vec<SmolStr>,
+    pub call_trigger_nodes_and_affectors: Vec<(NodeParams, Vec<NodeParams>)>,
 }
 
 impl Function {
@@ -163,7 +163,7 @@ impl Function {
             accepted_types: FunctionTypes::from_function_inputs_type(definition.source_node_name, definition.input_type),
             accepted_modifiers: definition.modifiers,
             chain: HashMap::<_, _>::new(),
-            call_trigger_names: Vec::new(),
+            call_trigger_nodes_and_affectors: Vec::new(),
         }
     }
 }
@@ -239,16 +239,27 @@ impl MarkovChain {
                 }
                 dot_parser::CodeUnit::CloseDeclaration => {
                     if let Some(mut function) = current_function.take() {
-                        function.call_trigger_names = function
-                            .chain
-                            .keys()
-                            .filter_map(|x| node_params
-                                .get(x)
-                                .unwrap()
-                                .node_common
-                                .call_trigger_name
-                                .clone()
-                            )
+                        let call_trigger_affectors: Vec<_> = node_params.keys()
+                            .filter_map(|x| {
+                                let node = node_params.get(x).unwrap();
+                                node.node_common.affects_call_trigger_name.clone().map(|trigger_name| (
+                                    trigger_name, node.clone()
+                                ))
+                            })
+                            .collect();
+
+                        function.call_trigger_nodes_and_affectors = node_params.keys()
+                            .filter_map(|x| {
+                                let node = node_params.get(x).unwrap();
+                                node.node_common.call_trigger_name.clone().map(|trigger_name| (trigger_name, node))
+                            })
+                            .map(|trigger_node| {
+                                let affectors: Vec<NodeParams> = call_trigger_affectors.iter()
+                                    .filter(|x| x.0 == trigger_node.0)
+                                    .map(|x| x.1.clone())
+                                    .collect();
+                                (trigger_node.1.clone(), affectors)
+                            })
                             .collect();
                         functions.insert(function.source_node_name.clone(), function);
                     } else {
