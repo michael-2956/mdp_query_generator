@@ -16,7 +16,7 @@ use sqlparser::ast::{
 use crate::config::TomlReadable;
 
 use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generators::{SubgraphType, CallTypes}};
-use self::{query_info::{DatabaseSchema, ClauseContext}, expr_precedence::ExpressionPriority, call_triggers::{IsColumnTypeAvailableTrigger, CallTriggerTrait, IsColumnTypeAvailableTriggerState}};
+use self::{query_info::{DatabaseSchema, ClauseContext}, expr_precedence::ExpressionPriority, call_triggers::{IsColumnTypeAvailableTrigger, CallTriggerTrait, IsColumnTypeAvailableTriggerState, CanExtendArrayTrigger}};
 
 use super::state_generators::{MarkovChainGenerator, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
@@ -66,6 +66,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         }
 
         _self.state_generator.register_call_trigger(IsColumnTypeAvailableTrigger {});
+        _self.state_generator.register_call_trigger(CanExtendArrayTrigger {});
 
         _self
     }
@@ -710,23 +711,31 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "call13_types" => SubgraphType::Val3,
             "call31_types" => SubgraphType::String,
             "call51_types" => SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined)),
-            "call14_types" => SubgraphType::Array(Box::new(SubgraphType::Undetermined)),
+            "call14_types" => SubgraphType::Array((Box::new(SubgraphType::Undetermined), None)),
             any => self.panic_unexpected(any)
         };
         let (inner_type, types_value) = self.handle_types(Some(inner_type.clone()), None);
         let mut array = vec![types_value];
+        self.expect_state("array_multiple_values");
         loop {
             match self.next_state().as_str() {
-                "call50_types" => {
+                "array_one_more_value_is_allowed" => {
+                    self.expect_state("call50_types");
                     self.state_generator.push_compatible_list(inner_type.get_compat_types());
                     let types_value = self.handle_types(None, Some(inner_type.clone())).1;
                     array.push(types_value);
                 },
-                "EXIT_array" => break,
+                "array_exit_allowed" => {
+                    self.expect_state("EXIT_array");
+                    break
+                },
                 any => self.panic_unexpected(any)
             }
         }
-        (SubgraphType::Array(Box::new(inner_type)), Expr::Array(Array {
+        if array.len() > 1 {
+            println!("Ooooooooppppssss");
+        }
+        (SubgraphType::Array((Box::new(inner_type), Some(array.len()))), Expr::Array(Array {
             elem: array,
             named: true
         }))
@@ -740,11 +749,12 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "call17_types" => SubgraphType::Val3,
             "call18_types" => SubgraphType::String,
             "call19_types" => SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined)),
-            "call20_types" => SubgraphType::Array(Box::new(SubgraphType::Undetermined)),
+            "call20_types" => SubgraphType::Array((Box::new(SubgraphType::Undetermined), None)),
             any => self.panic_unexpected(any)
         };
         let (inner_type, types_value) = self.handle_types(Some(inner_type.clone()), None);
         let mut list_expr: Vec<Expr> = vec![types_value];
+        self.expect_state("list_expr_multiple_values");
         loop {
             match self.next_state().as_str() {
                 "call49_types" => {

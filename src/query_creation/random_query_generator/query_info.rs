@@ -330,9 +330,8 @@ impl SubgraphType {
     /// get a list of compatible types
     pub fn get_compat_types(&self) -> Vec<SubgraphType> {
         let (inner_type, wrapper): (&Box<SubgraphType>, Box<dyn Fn(SubgraphType) -> SubgraphType>) = match self {
-            SubgraphType::Array(inner) => (inner, Box::new(|x| SubgraphType::Array(Box::new(x)))),
             SubgraphType::ListExpr(inner) => (inner, Box::new(|x| SubgraphType::ListExpr(Box::new(x)))),
-            any => return vec![any.clone()],
+            any => return vec![any.clone()],   // as of postgresql 14.3, arrays do not get automatically converted
         };
         inner_type.get_compat_types()
             .into_iter()
@@ -357,18 +356,22 @@ impl SubgraphType {
             return true;
         }
         match self {
-            SubgraphType::Array(inner) => {
+            SubgraphType::Array((inner, length)) => {
                 if matches!(as_what, SubgraphType::Array(..)) {
-                    let by_inner = unwrap_variant!(as_what, SubgraphType::Array);
-                    **by_inner == SubgraphType::Undetermined || inner.is_same_or_more_determined_or_undetermined(&by_inner)
+                    let (other_inner, other_length) = unwrap_variant!(as_what, SubgraphType::Array);
+                    (
+                        **other_inner == SubgraphType::Undetermined || inner.is_same_or_more_determined_or_undetermined(&other_inner)
+                    ) && (
+                        *other_length == None || other_length == length
+                    )
                 } else {
                     false
                 }
             },
             SubgraphType::ListExpr(inner) => {
                 if matches!(as_what, SubgraphType::ListExpr(..)) {
-                    let by_inner = unwrap_variant!(as_what, SubgraphType::ListExpr);
-                    **by_inner == SubgraphType::Undetermined || inner.is_same_or_more_determined_or_undetermined(&by_inner)
+                    let other_inner = unwrap_variant!(as_what, SubgraphType::ListExpr);
+                    **other_inner == SubgraphType::Undetermined || inner.is_same_or_more_determined_or_undetermined(&other_inner)
                 } else {
                     false
                 }

@@ -94,7 +94,7 @@ pub enum SubgraphType {
     Undetermined,
     Numeric,
     Val3,
-    Array(Box<SubgraphType>),
+    Array((Box<SubgraphType>, Option<usize>)),
     ListExpr(Box<SubgraphType>),
     String,
 }
@@ -117,7 +117,7 @@ impl SubgraphType {
 
     pub fn inner(&self) -> SubgraphType {
         match self {
-            SubgraphType::Array(inner) => *inner.clone(),
+            SubgraphType::Array((inner, _)) => *inner.clone(),
             SubgraphType::ListExpr(inner) => *inner.clone(),
             any => panic!("{any} has no inner type"),
         }
@@ -132,7 +132,7 @@ impl SubgraphType {
             DataType::Numeric(_) => Self::Numeric,
             DataType::Date => Self::Numeric,  /// TODO
             DataType::Boolean => Self::Val3,
-            DataType::Array(inner) => Self::Array(Box::new((*inner.to_owned().unwrap()).into())),
+            DataType::Array(inner) => Self::Array((Box::new((*inner.to_owned().unwrap()).into()), None)),
             any => panic!("DataType not implemented: {any}"),
         }
     }
@@ -144,7 +144,7 @@ impl SubgraphType {
         match self {
             SubgraphType::Numeric => DataType::Numeric(ExactNumberInfo::None),
             SubgraphType::Val3 => DataType::Boolean,
-            SubgraphType::Array(inner) => DataType::Array(Some(Box::new(inner.to_data_type()))),
+            SubgraphType::Array((inner, _)) => DataType::Array(Some(Box::new(inner.to_data_type()))),
             SubgraphType::ListExpr(_) => DataType::Custom(ObjectName(vec![Ident::new("row_expression")]), vec![]),
             SubgraphType::String => DataType::String,
             SubgraphType::Undetermined => panic!("Can't convert SubgraphType::Undetermined to DataType"),
@@ -165,7 +165,7 @@ impl FromStr for SubgraphType {
         match s {
             "numeric" => Ok(SubgraphType::Numeric),
             "3VL Value" => Ok(SubgraphType::Val3),
-            "array" => Ok(SubgraphType::Array(Box::new(SubgraphType::Undetermined))),
+            "array" => Ok(SubgraphType::Array((Box::new(SubgraphType::Undetermined), None))),
             "list expr" => Ok(SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined))),
             "string" => Ok(SubgraphType::String),
             any => Err(SyntaxError::new(format!("Type {any} does not exist!")))
@@ -178,7 +178,7 @@ impl Display for SubgraphType {
         let str = match self {
             SubgraphType::Numeric => "numeric".to_string(),
             SubgraphType::Val3 => "3VL Value".to_string(),
-            SubgraphType::Array(inner) => format!("array[{}]", inner),
+            SubgraphType::Array((inner, length)) => format!("array[{}]({:?})", inner, length),
             SubgraphType::ListExpr(inner) => format!("list expr[{}]", inner),
             SubgraphType::String => "string".to_string(),
             SubgraphType::Undetermined => "undetermined".to_string(),

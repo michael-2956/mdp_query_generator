@@ -24,13 +24,14 @@ fn run_generation<DynMod: DynamicModel, StC: StateChooser>(markov_generator: Mar
         accumulated_time_ns += (Instant::now() - start_time).as_nanos();
         if main_config.assert_parcing_equivalence {
             let query_string = query_ast.to_string();
-            let parsed_ast = string_to_query(&query_string);
-            if parsed_ast != query_ast {
-                println!("AST mismatch! For query: {query_string}");
-                let mut f_g = std::fs::File::create(format!("{i}-g")).unwrap();
-                write!(f_g, "{:#?}", query_ast).unwrap();
-                let mut f_p = std::fs::File::create(format!("{i}-p")).unwrap();
-                write!(f_p, "{:#?}", parsed_ast).unwrap();
+            if let Some(parsed_ast) = string_to_query(&query_string) {
+                if parsed_ast != query_ast {
+                    println!("AST mismatch! For query: {query_string}");
+                    let mut f_g = std::fs::File::create(format!("{i}-g")).unwrap();
+                    write!(f_g, "{:#?}", query_ast).unwrap();
+                    let mut f_p = std::fs::File::create(format!("{i}-p")).unwrap();
+                    write!(f_p, "{:#?}", parsed_ast).unwrap();
+                }
             }
         }
         if main_config.count_equivalence {

@@ -1,23 +1,24 @@
-use sqlparser::parser::Parser;
+use sqlparser::parser::{Parser, ParserError};
 
 use sqlparser::ast::{
     Expr, Query, SetExpr,
 };
 use sqlparser::dialect::PostgreSqlDialect;
 
-pub fn string_to_query(input: &str) -> Box<Query> {
+pub fn string_to_query(input: &str) -> Option<Box<Query>> {
     let dialect = PostgreSqlDialect {};
-    let ast = match Parser::parse_sql(&dialect, input) {
-        Ok(ast) => ast,
-        Err(err) => {
-            println!("Query: {}", input);
-            println!("Parsing error! {}", err);
-            panic!();
+    match Parser::parse_sql(&dialect, input) {
+        Ok(ast) => match ast.into_iter().next().expect("No single query in sql file") {
+            sqlparser::ast::Statement::Query(query) => Some(query),
+            _ => panic!("Query present in file is not a SELECT query.")
         },
-    };
-    match ast.into_iter().next().expect("No single query in sql file") {
-        sqlparser::ast::Statement::Query(query) => query,
-        _ => panic!("Query present in file is not a SELECT query.")
+        Err(err) => {
+            if err != ParserError::RecursionLimitExceeded {
+                println!("Query: {}", input);
+                println!("Parsing error! {}", err);
+            }
+            None
+        },
     }
 }
 

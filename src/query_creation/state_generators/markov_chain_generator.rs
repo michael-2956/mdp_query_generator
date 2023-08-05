@@ -497,7 +497,7 @@ fn check_node_off(
             CallTypes::None => true,
             CallTypes::TypeList(ref t_name_list) => if !t_name_list
                 .iter()
-                .any(|x| option_name.is_same_or_more_determined_or_undetermined(x)) {
+                .any(|x| x.is_same_or_more_determined_or_undetermined(option_name)) {
                     true
                 } else {
                     false
