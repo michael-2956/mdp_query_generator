@@ -83,8 +83,17 @@ impl CallTriggerTrait for CanExtendArrayTrigger {
     fn get_new_trigger_state(&self, _clause_context: &ClauseContext, function_context: &FunctionContext) -> Box<dyn std::any::Any> {
         Box::new(CanExtendArrayTriggerState {
             array_length: match function_context.current_node.node_common.name.as_str() {
+                /// TODO: stateful triggers.
+                // NOTES:
+                // - Only states that can reach end without any stateful trigger affectors can be
+                // cached, stateful triggers do not partake as dead_end_infos keys.
+                // - For other states DFS will have to be repeatedly ran every time we need to check
+                // for dead ends.
+                // - However, once we have checked, but only for this stack frame, we can indeed
+                // save this information, but only for this stackframe, into local_dead_end_infos.
+                // - In stack_frame it will be nice to have a method that will check and update both
+                // of those so that the code is more concise.
                 "array_multiple_values" => 1,
-                /// TODO: stateful triggers (only states before any stateful triggers and trigger affectors can be cached)
                 "call50_types" => 2,
                 any => panic!("{any} unexpectedly triggered the can_extend_array call trigger affector"),
             }
@@ -96,11 +105,14 @@ impl CallTriggerTrait for CanExtendArrayTrigger {
             .downcast_ref::<CanExtendArrayTriggerState>()
             .unwrap()
             .array_length;
-        /// TODO: Array can accept its length as an argument, but when passing the inner
-        /// type value length is ignored, so is not accessible through function_context.call_params
-        /// The solution to this would be to pass the arguments wrapped in outer type, so [RI...] would
-        /// become just [R...]. Whether the arguments should be wrapped or not can be specified in
-        /// function declaration.
+
+        /// TODO: Wrapping as an option in function declaration (wrap_types="true")
+        // NOTES: Array can accept its length as an argument, but when passing the inner
+        // type value length is ignored, so is not accessible through function_context.call_params
+        // The solution to this would be to pass the arguments wrapped in outer type, so [RI...] would
+        // become just [R...]. Whether the arguments should be wrapped or not can be specified in
+        // function declaration.
+
         // let argument_selected_types = unwrap_variant!(function_context.call_params.selected_types.clone(), CallTypes::TypeList);
         match function_context.current_node.node_common.name.as_str() {
             "array_one_more_value_is_allowed" => array_length < 1,
