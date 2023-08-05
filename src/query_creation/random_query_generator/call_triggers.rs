@@ -2,18 +2,18 @@ use smol_str::SmolStr;
 
 use core::fmt::Debug;
 
-use crate::{query_creation::state_generators::{SubgraphType, CallTypes}, unwrap_variant};
+use crate::{query_creation::state_generators::{SubgraphType, CallTypes, markov_chain_generator::FunctionContext}, unwrap_variant};
 
-use super::query_info::QueryContextManager;
+use super::query_info::ClauseContext;
 
 pub trait CallTriggerTrait: Debug {
     fn get_trigger_name(&self) -> SmolStr;
 
-    fn get_trigger_state(&self, query_context_manager: &QueryContextManager) -> Box<dyn std::any::Any>;
+    fn update_trigger_state(&mut self, clause_context: &ClauseContext, function_context: &FunctionContext) -> Box<dyn std::any::Any>;
 
     fn get_default_trigger_value(&self) -> bool;
 
-    fn run(&self, query_context_manager: &QueryContextManager, trigger_state: &Box<dyn std::any::Any>) -> bool;
+    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, trigger_state: &Box<dyn std::any::Any>) -> bool;
 }
 
 #[derive(Debug)]
@@ -29,8 +29,8 @@ impl CallTriggerTrait for IsColumnTypeAvailableTrigger {
         SmolStr::new("is_column_type_available")
     }
 
-    fn get_trigger_state(&self, query_context_manager: &QueryContextManager) -> Box<dyn std::any::Any> {
-        let selected_type = match query_context_manager.get_current_node().as_str() {
+    fn update_trigger_state(&mut self, _clause_context: &ClauseContext, function_context: &FunctionContext) -> Box<dyn std::any::Any> {
+        let selected_type = match function_context.current_node.node_common.name.as_str() {
             "types_select_type_3vl" => SubgraphType::Val3,
             "types_select_type_array" => SubgraphType::Array(Box::new(SubgraphType::Undetermined)),
             "types_select_type_list_expr" => SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined)),
@@ -41,7 +41,7 @@ impl CallTriggerTrait for IsColumnTypeAvailableTrigger {
         let allowed_type_list = match selected_type {
             with_inner @ (SubgraphType::Array(..) | SubgraphType::ListExpr(..)) => {
                 let argument_selected_types = unwrap_variant!(
-                    query_context_manager.get_current_fn_call_params().selected_types, CallTypes::TypeList
+                    function_context.call_params.selected_types.clone(), CallTypes::TypeList
                 );
                 argument_selected_types
                     .iter()
@@ -61,14 +61,14 @@ impl CallTriggerTrait for IsColumnTypeAvailableTrigger {
         true
     }
 
-    fn run(&self, query_context_manager: &QueryContextManager, trigger_state: &Box<dyn std::any::Any>) -> bool {
+    fn run(&self, clause_context: &ClauseContext, _function_context: &FunctionContext, trigger_state: &Box<dyn std::any::Any>) -> bool {
         trigger_state
             .downcast_ref::<IsColumnTypeAvailableTriggerState>()
             .unwrap()
             .selected_types
             .iter()
             .any(|x|
-                query_context_manager
+                clause_context
                     .from()
                     .is_type_available(&x)
             )

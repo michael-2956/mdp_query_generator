@@ -3,7 +3,7 @@ use std::{collections::HashMap, path::Path};
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
-use crate::{unwrap_variant, query_creation::state_generators::markov_chain_generator::markov_chain::CallParams};
+use crate::unwrap_variant;
 
 use super::super::state_generators::SubgraphType;
 use sqlparser::{ast::{Ident, ObjectName, Statement, ColumnDef, HiveDistributionStyle, TableConstraint, HiveFormat, SqlOption, FileFormat, Query, OnCommit, TableAlias}, dialect::PostgreSqlDialect, parser::Parser};
@@ -120,44 +120,16 @@ impl DatabaseSchema {
 }
 
 #[derive(Debug, Clone)]
-pub struct QueryContextManager {
-    current_node_name: Option<SmolStr>,
-    call_params_stack: Vec<CallParams>,
+pub struct ClauseContext {
     from_contents_stack: Vec<FromContents>,
 }
 
-impl QueryContextManager {
+impl ClauseContext {
     pub fn new() -> Self{
         Self {
-            current_node_name: None,
-            call_params_stack: vec![],
             from_contents_stack: vec![],
         }
     }
-
-    pub fn set_current_node(&mut self, node_name: SmolStr) {
-        self.current_node_name = Some(node_name);
-    }
-
-    pub fn get_current_node(&self) -> SmolStr {
-        self.current_node_name.clone().unwrap()
-    }
-
-    // ============================ ANY FUNCTION
-
-    pub fn on_function_begin(&mut self, call_params: CallParams) {
-        self.call_params_stack.push(call_params);
-    }
-
-    pub fn get_current_fn_call_params(&self) -> CallParams {
-        self.call_params_stack.last().unwrap().clone()
-    }
-
-    pub fn on_function_end(&mut self) {
-        self.call_params_stack.pop();
-    }
-
-    // ============================ QUERY
 
     pub fn on_query_begin(&mut self) {
         self.from_contents_stack.push(FromContents::new());

@@ -9,7 +9,7 @@ use std::{path::PathBuf, collections::{HashMap, HashSet, VecDeque}};
 use core::fmt::Debug;
 use smol_str::SmolStr;
 
-use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_generator::markov_chain::FunctionTypes, random_query_generator::{query_info::QueryContextManager, call_triggers::CallTriggerTrait}}, config::TomlReadable};
+use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_generator::markov_chain::FunctionTypes, random_query_generator::{query_info::ClauseContext, call_triggers::CallTriggerTrait}}, config::TomlReadable};
 
 use self::{
     markov_chain::{
@@ -24,7 +24,7 @@ pub use self::markov_chain::CallTypes;
 pub use dot_parser::SubgraphType;
 
 #[derive(Clone)]
-struct CallTrigger(fn(&QueryContextManager) -> bool);
+struct CallTrigger(fn(&ClauseContext) -> bool);
 
 impl Debug for CallTrigger {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -33,7 +33,7 @@ impl Debug for CallTrigger {
 }
 
 #[derive(Clone)]
-struct CallTriggerAffector(fn(&mut QueryContextManager) -> ());
+struct CallTriggerAffector(fn(&mut ClauseContext) -> ());
 
 impl Debug for CallTriggerAffector {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -54,7 +54,7 @@ pub struct MarkovChainGenerator<StC: StateChooser> {
     /// inferred when [compatible] is used in [TYPES]
     compatible_type_list_stack: Vec<Vec<SubgraphType>>,
     markov_chain: MarkovChain,
-    call_stack: Vec<StackItem>,
+    call_stack: Vec<StackFrame>,
     pending_call: Option<CallParams>,
     state_chooser: Box<StC>,
     call_triggers: HashMap<SmolStr, Box<dyn CallTriggerTrait>>,
@@ -64,27 +64,61 @@ pub struct MarkovChainGenerator<StC: StateChooser> {
     dead_end_infos: HashMap<(CallParams, Vec<bool>), HashMap<SmolStr, bool>>,
 }
 
-#[derive(Debug)]
-struct StackItem {
+/// function context, like the current node, and the
+/// current function arguments (call params)
+#[derive(Debug, Clone)]
+pub struct FunctionContext {
     /// the call params (arguments) of the current function
-    function_call_params: CallParams,
-    /// the call trigger states memory
-    call_trigger_states: HashMap<SmolStr, Box<dyn std::any::Any>>,
+    pub call_params: CallParams,
     /// the last node that was outputted by the state generator
-    last_node: NodeParams,
+    pub current_node: NodeParams,
 }
 
-impl StackItem {
+/// the call trigger states memory
+#[derive(Debug)]
+struct CallTriggerMemory {
+    trigger_states: HashMap<SmolStr, Box<dyn std::any::Any>>,
+}
+
+impl CallTriggerMemory {
+    fn update_trigger_state(&mut self, call_trigger: &mut Box<dyn CallTriggerTrait>, clause_context: &mut ClauseContext, function_context: &FunctionContext) {
+        let new_state = call_trigger.update_trigger_state(clause_context, function_context);
+        self.trigger_states.insert(call_trigger.get_trigger_name(), new_state);
+    }
+    
+    fn run_trigger(&self, call_trigger: &Box<dyn CallTriggerTrait>, clause_context: &ClauseContext, function_context: &FunctionContext) -> bool {
+        if let Some(trigger_state) = self.trigger_states.get(&call_trigger.get_trigger_name()) {
+            call_trigger.run(clause_context, function_context, trigger_state)
+        } else {
+            call_trigger.get_default_trigger_value()
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct StackFrame {
+    /// function context, like the current node, and the
+    /// current function arguments (call params)
+    pub function_context: FunctionContext,
+    /// the call trigger state memory
+    trigger_memory: CallTriggerMemory,
+}
+
+impl StackFrame {
     fn from_call_params(call_params: CallParams) -> Self {
         let func_name = call_params.func_name.clone();
         Self {
-            function_call_params: call_params,
-            call_trigger_states: HashMap::new(),
-            last_node: NodeParams {
-                node_common: NodeCommon::with_name(func_name),
-                call_params: None,
-                literal: false,
-                min_calls_until_function_exit: 0,
+            function_context: FunctionContext {
+                call_params,
+                current_node: NodeParams {
+                    node_common: NodeCommon::with_name(func_name),
+                    call_params: None,
+                    literal: false,
+                    min_calls_until_function_exit: 0,
+                },
+            },
+            trigger_memory: CallTriggerMemory {
+                trigger_states: HashMap::new(),
             },
         }
     }
@@ -126,14 +160,14 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 
     pub fn get_call_trigger_state(&self, trigger_name: &SmolStr) -> Option<&Box<dyn std::any::Any>> {
-        self.call_stack.last().unwrap().call_trigger_states.get(trigger_name)
+        self.call_stack.last().unwrap().trigger_memory.trigger_states.get(trigger_name)
     }
 
     /// used to print the call stack of the markov chain functions
     pub fn print_stack(&self) {
         println!("Call stack:");
         for stack_item in &self.call_stack {
-            println!("{} ({:?} | {:?}) [{}]:", stack_item.function_call_params.func_name, stack_item.function_call_params.selected_types, stack_item.function_call_params.modifiers, stack_item.last_node.node_common.name)
+            println!("{} ({:?} | {:?}) [{}]:", stack_item.function_context.call_params.func_name, stack_item.function_context.call_params.selected_types, stack_item.function_context.call_params.modifiers, stack_item.function_context.current_node.node_common.name)
         }
     }
 
@@ -155,12 +189,12 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
     /// get current function inputs list
     pub fn get_fn_selected_types(&self) -> &CallTypes {
-        &self.call_stack.last().unwrap().function_call_params.selected_types
+        &self.call_stack.last().unwrap().function_context.call_params.selected_types
     }
 
     /// get crrent function modifiers list
     pub fn get_fn_modifiers(&self) -> &CallModifiers {
-       &self.call_stack.last().unwrap().function_call_params.modifiers
+       &self.call_stack.last().unwrap().function_context.call_params.modifiers
     }
 
     pub fn get_pending_call_accepted_types(&self) -> FunctionTypes {
@@ -202,7 +236,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 }
 
 impl<StC: StateChooser> MarkovChainGenerator<StC> {
-    pub fn next(&mut self, query_context_manager: &mut QueryContextManager, dynamic_model: &mut (impl DynamicModel + ?Sized)) -> Option<<Self as Iterator>::Item> {
+    pub fn next(&mut self, clause_context: &mut ClauseContext, dynamic_model: &mut (impl DynamicModel + ?Sized)) -> Option<<Self as Iterator>::Item> {
         if let Some(call_params) = self.pending_call.take() {
             // if the last node requested a call, update stack and return function's first state
             let mut inputs = match call_params.selected_types {
@@ -243,8 +277,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
                 selected_types: inputs,
                 modifiers: call_params.modifiers,
             };
-            query_context_manager.on_function_begin(new_call_params.clone());
-            self.call_stack.push(StackItem::from_call_params(new_call_params));
+            self.call_stack.push(StackFrame::from_call_params(new_call_params));
             return Some(call_params.func_name);
         }
 
@@ -259,27 +292,26 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
                     },
                 };
 
-                let last_node = stack_item.last_node.clone();
-                let function = self.markov_chain.functions.get(&stack_item.function_call_params.func_name).unwrap();
+                let last_node = stack_item.function_context.current_node.clone();
+                let function = self.markov_chain.functions.get(&stack_item.function_context.call_params.func_name).unwrap();
 
                 if last_node.node_common.name != function.exit_node_name {
                     break (function, last_node);
                 }
             }
-            query_context_manager.on_function_end();
             self.call_stack.pop();
         };
 
         dynamic_model.notify_call_stack_length(self.call_stack.len());
         dynamic_model.update_current_state(&last_node.node_common.name);
 
-        let stack_item = self.call_stack.last_mut().unwrap();
+        let stack_frame = self.call_stack.last_mut().unwrap();
 
         let call_trigger_states: Vec<bool> = function.call_trigger_names.iter().map(|trigger_name|
-            run_call_trigger(&mut stack_item.call_trigger_states, &self.call_triggers, trigger_name, &query_context_manager)
+            stack_frame.trigger_memory.run_trigger(self.call_triggers.get(trigger_name).unwrap(), &clause_context, &stack_frame.function_context)
         ).collect();
         let dead_end_info = self.dead_end_infos.entry(
-            (stack_item.function_call_params.to_owned(), call_trigger_states.clone())
+            (stack_frame.function_context.call_params.to_owned(), call_trigger_states.clone())
         ).or_insert(HashMap::new());
 
         let last_node_outgoing = function.chain.get(&last_node.node_common.name).unwrap();
@@ -287,11 +319,10 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         let last_node_outgoing = last_node_outgoing.iter().map(|el| {
             (check_node_off_dfs(
                 function,
-                &stack_item.function_call_params,
+                stack_frame,
                 &self.call_triggers,
-                &stack_item.call_trigger_states,
                 dead_end_info,
-                query_context_manager,
+                clause_context,
                 &el.1.node_common
             ), el.0, el.1.clone())
         }).collect::<Vec<_>>();
@@ -303,71 +334,49 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         if let Some(destination) = destination {
             if check_node_off_dfs(
                 function,
-                &stack_item.function_call_params,
+                stack_frame,
                 &self.call_triggers,
-                &stack_item.call_trigger_states,
                 dead_end_info,
-                query_context_manager,
+                clause_context,
                 &destination.node_common
             ) {
                 panic!("Chosen node is off: {} (after {})", destination.node_common.name, last_node.node_common.name);
             }
-            stack_item.last_node = destination.clone();
+            stack_frame.function_context.current_node = destination.clone();
         } else {
             self.print_stack();
             panic!("No destination found for {}.", last_node.node_common.name);
         }
 
-        // stack_item.last_node is now the current node
-        query_context_manager.set_current_node(stack_item.last_node.node_common.name.clone());
+        // stack_item.function_context.last_node is now the current node
 
-        if let Some(ref trigger_name) = stack_item.last_node.node_common.affects_call_trigger_name {
-            run_call_trigger_affector(&mut stack_item.call_trigger_states, &self.call_triggers, trigger_name, query_context_manager);
+        if let Some(ref trigger_name) = stack_frame.function_context.current_node.node_common.affects_call_trigger_name {
+            stack_frame.trigger_memory.update_trigger_state(self.call_triggers.get_mut(trigger_name).unwrap(), clause_context, &stack_frame.function_context);
         }
 
-        if let Some(call_params) = &stack_item.last_node.call_params {
+        if let Some(call_params) = &stack_frame.function_context.current_node.call_params {
             // if it is a call node, we have a new pending call
             let mut prepared_call_params = call_params.clone();
             prepared_call_params.modifiers = match prepared_call_params.modifiers {
-                CallModifiers::PassThrough => stack_item.function_call_params.modifiers.clone(),
+                CallModifiers::PassThrough => stack_frame.function_context.call_params.modifiers.clone(),
                 any => any,
             };
             self.pending_call = Some(prepared_call_params);
         }
 
-        Some(stack_item.last_node.node_common.name.clone())
-    }
-}
-
-fn run_call_trigger_affector(call_trigger_states: &mut HashMap<SmolStr, Box<dyn std::any::Any>>, call_triggers: &HashMap<SmolStr, Box<dyn CallTriggerTrait>>, trigger_name: &SmolStr, query_context_manager: &mut QueryContextManager) {
-    let new_state = call_triggers
-        .get(trigger_name)
-        .unwrap()
-        .get_trigger_state(query_context_manager);
-    call_trigger_states.insert(trigger_name.clone(), new_state);
-}
-
-fn run_call_trigger(call_trigger_states: &HashMap<SmolStr, Box<dyn std::any::Any>>, call_triggers: &HashMap<SmolStr, Box<dyn CallTriggerTrait>>, trigger_name: &SmolStr, query_context_manager: &QueryContextManager) -> bool {
-    let trigger = call_triggers
-        .get(trigger_name)
-        .unwrap();
-    if let Some(trigger_state) = call_trigger_states.get(trigger_name) {
-        trigger.run(query_context_manager, trigger_state)
-    } else {
-        trigger.get_default_trigger_value()
+        Some(stack_frame.function_context.current_node.node_common.name.clone())
     }
 }
 
 fn check_node_off_dfs(
     function: &Function,
-    function_call_params: &CallParams,
+    stack_frame: &StackFrame,
     call_triggers: &HashMap<SmolStr, Box<dyn CallTriggerTrait>>,
-    call_trigger_states: &HashMap<SmolStr, Box<dyn std::any::Any>>,
     dead_end_info: &mut HashMap<SmolStr, bool>,
-    query_context_manager: &mut QueryContextManager,
+    clause_context: &mut ClauseContext,
     node_common: &NodeCommon
 ) -> bool {
-    if check_node_off(function_call_params, call_triggers, call_trigger_states, query_context_manager, node_common) {
+    if check_node_off(stack_frame, call_triggers, clause_context, node_common) {
         return true
     }
     if let Some(is_dead_end) = dead_end_info.get(&node_common.name) {
@@ -395,7 +404,7 @@ fn check_node_off_dfs(
                 stack.extend(node_outgoing
                     .iter()
                     .filter(|x| !visited.contains(&x.1.node_common.name) && !check_node_off(
-                        function_call_params, call_triggers, call_trigger_states, query_context_manager, &x.1.node_common
+                        stack_frame, call_triggers, clause_context, &x.1.node_common
                     ))
                     .map(|x| [&path[..], &[x.1.node_common.name.clone()]].concat())
                 );
@@ -407,15 +416,14 @@ fn check_node_off_dfs(
 }
 
 fn check_node_off(
-        function_call_params: &CallParams,
+        stack_frame: &StackFrame,
         call_triggers: &HashMap<SmolStr, Box<dyn CallTriggerTrait>>,
-        call_trigger_states: &HashMap<SmolStr, Box<dyn std::any::Any>>,
-        query_context_manager: &mut QueryContextManager,
+        clause_context: &mut ClauseContext,
         node_common: &NodeCommon
     ) -> bool {
     let mut off = false;
     if let Some(ref option_name) = node_common.type_name {
-        off = match function_call_params.selected_types {
+        off = match stack_frame.function_context.call_params.selected_types {
             CallTypes::None => true,
             CallTypes::TypeList(ref t_name_list) => if !t_name_list
                 .iter()
@@ -428,7 +436,7 @@ fn check_node_off(
         };
     }
     if let Some((ref trigger_name, ref trigger_on)) = node_common.trigger {
-        off = off || match function_call_params.modifiers {
+        off = off || match stack_frame.function_context.call_params.modifiers {
             CallModifiers::None => *trigger_on,
             CallModifiers::PassThrough => panic!("CallModifiers::PassThrough was not substituted for CallModifiers::StaticList!"),
             CallModifiers::StaticList(ref modifiers) => {
@@ -437,7 +445,7 @@ fn check_node_off(
         };
     }
     if let Some(ref trigger_name) = node_common.call_trigger_name {
-        off = off || !run_call_trigger(call_trigger_states, call_triggers, trigger_name, &query_context_manager);
+        off = off || !stack_frame.trigger_memory.run_trigger(call_triggers.get(trigger_name).unwrap(), &clause_context, &stack_frame.function_context);
     }
     return off;
 }
@@ -446,6 +454,6 @@ impl<StC: StateChooser> Iterator for MarkovChainGenerator<StC> {
     type Item = SmolStr;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.next(&mut QueryContextManager::new(), &mut MarkovModel::new())
+        self.next(&mut ClauseContext::new(), &mut MarkovModel::new())
     }
 }
