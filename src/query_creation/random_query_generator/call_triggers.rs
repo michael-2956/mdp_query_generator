@@ -2,7 +2,7 @@ use smol_str::SmolStr;
 
 use core::fmt::Debug;
 
-use crate::{query_creation::state_generators::{SubgraphType, CallTypes, markov_chain_generator::FunctionContext}, unwrap_variant};
+use crate::{query_creation::state_generators::{SubgraphType, CallTypes, markov_chain_generator::FunctionContext}, unwrap_variant, unwrap_variant_ref};
 
 use super::query_info::ClauseContext;
 
@@ -106,18 +106,24 @@ impl CallTriggerTrait for CanExtendArrayTrigger {
             .unwrap()
             .array_length;
 
-        /// TODO: Wrapping as an option in function declaration (wrap_types="true")
-        // NOTES: Array can accept its length as an argument, but when passing the inner
-        // type value length is ignored, so is not accessible through function_context.call_params
-        // The solution to this would be to pass the arguments wrapped in outer type, so [RI...] would
-        // become just [R...]. Whether the arguments should be wrapped or not can be specified in
-        // function declaration.
+        /// TODO: this part should be in update_trigger_state() which should be affected by state selection
+        let desired_element_num = unwrap_variant_ref!(unwrap_variant_ref!(
+            function_context.call_params.selected_types, CallTypes::TypeList
+        ).iter().next().unwrap(), SubgraphType::Array).1;
 
-        // let argument_selected_types = unwrap_variant!(function_context.call_params.selected_types.clone(), CallTypes::TypeList);
-        match function_context.current_node.node_common.name.as_str() {
-            "array_one_more_value_is_allowed" => array_length < 1,
-            "array_exit_allowed" => array_length == 1,
-            any => panic!("{any} unexpectedly triggered the can_extend_array call trigger"),
+        if let Some(desired_element_num) = desired_element_num {
+            match function_context.current_node.node_common.name.as_str() {
+                "array_one_more_value_is_allowed" => array_length < desired_element_num,
+                "array_exit_allowed" => array_length == desired_element_num,
+                any => panic!("{any} unexpectedly triggered the can_extend_array call trigger"),
+            }
+        } else {
+            /// TODO: should be just true, but here limits array length to 1.
+            match function_context.current_node.node_common.name.as_str() {
+                "array_one_more_value_is_allowed" => array_length < 1,
+                "array_exit_allowed" => array_length == 1,
+                any => panic!("{any} unexpectedly triggered the can_extend_array call trigger"),
+            }
         }
     }
 }

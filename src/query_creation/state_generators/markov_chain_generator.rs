@@ -213,23 +213,31 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
     fn start_function(&mut self, mut call_params: CallParams, clause_context: &ClauseContext) -> SmolStr {
         // if the last node requested a call, update stack and return function's first state
+        let mut are_wrapped = false;
         call_params.selected_types = match call_params.selected_types {
             CallTypes::KnownList => CallTypes::TypeList(self.pop_known_list()),
             CallTypes::Compatible => CallTypes::TypeList(self.pop_compatible_list()),
-            CallTypes::PassThrough => self.get_fn_selected_types().clone(),
+            CallTypes::PassThrough => self.get_fn_selected_types_unwrapped().clone(),
             CallTypes::PassThroughTypeNameRelated => {
-                let parent_fn_args = unwrap_variant!(self.get_fn_selected_types(), CallTypes::TypeList);
-                let call_node_type_name = self.call_stack.last().unwrap().function_context.current_node.node_common.type_name.as_ref().unwrap();
-                CallTypes::TypeList(parent_fn_args
-                    .iter()
+                let parent_fn_args = unwrap_variant!(self.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
+                let call_node_type_name = &self.get_current_state_type_name_unwrapped();
+                CallTypes::TypeList(parent_fn_args.iter()
                     .map(|x| x.to_owned())
                     .filter(|x| x.is_same_or_more_determined_or_undetermined(call_node_type_name))
+                    .map(|x| if x == SubgraphType::Undetermined { call_node_type_name.clone() } else { x })
+                    .collect::<Vec<_>>())
+            },
+            CallTypes::PassThroughRelated => {
+                let parent_fn_args = unwrap_variant!(self.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
+                are_wrapped = true;  // Function name related types don't need to be unwrapped
+                CallTypes::TypeList(parent_fn_args.iter()
+                    .map(|x| x.to_owned())
+                    .filter(|x| x.get_subgraph_func_name() == call_params.func_name)
                     .collect::<Vec<_>>())
             },
             CallTypes::PassThroughRelatedInner => {
-                let parent_fn_args = unwrap_variant!(self.get_fn_selected_types(), CallTypes::TypeList);
-                CallTypes::TypeList(parent_fn_args
-                    .iter()
+                let parent_fn_args = unwrap_variant!(self.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
+                CallTypes::TypeList(parent_fn_args.iter()
                     .map(|x| x.to_owned())
                     .filter(|x| x.get_subgraph_func_name() == call_params.func_name)
                     .map(|x| x.inner())
@@ -243,10 +251,21 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         // if Undetermined is in the parameter list, replace the list with all acceptable arguments.
         match &call_params.selected_types {
             CallTypes::TypeList(type_list) if type_list.contains(&SubgraphType::Undetermined) => {
+                are_wrapped = true;  // the accepted function types are already wrapped
                 call_params.selected_types = CallTypes::TypeList(unwrap_variant!(new_function.accepted_types.clone(), FunctionTypes::TypeList));
             },
             _ => {},
         };
+
+        if new_function.uses_wrapped_types && !are_wrapped {
+            call_params.selected_types = match call_params.selected_types {
+                CallTypes::TypeList(type_list) => CallTypes::TypeList(
+                    type_list.into_iter().map(|x| x.wrap_in_func(&call_params.func_name)).collect()
+                ),
+                CallTypes::None => CallTypes::None,
+                any => panic!("Unexpected call_params.selected_types: {:?}", any),
+            }
+        }
 
         let function_context = FunctionContext::new(call_params);
 
@@ -280,8 +299,26 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 
     /// get current function inputs list
-    pub fn get_fn_selected_types(&self) -> &CallTypes {
-        &self.call_stack.last().unwrap().function_context.call_params.selected_types
+    pub fn get_fn_selected_types_unwrapped(&self) -> CallTypes {
+        let function_context = &self.call_stack.last().unwrap().function_context;
+        let mut selected_types = function_context.call_params.selected_types.clone();
+        let function = self.markov_chain.functions.get(&function_context.call_params.func_name).unwrap();
+        if function.uses_wrapped_types {
+            if let CallTypes::TypeList(type_list) = selected_types {
+                selected_types = CallTypes::TypeList(type_list.into_iter().map(|x| x.inner()).collect());
+            }
+        }
+        selected_types
+    }
+
+    pub fn get_current_state_type_name_unwrapped(&self) -> SubgraphType {
+        let function_context = &self.call_stack.last().unwrap().function_context;
+        let mut call_node_type_name = function_context.current_node.node_common.type_name.as_ref().unwrap().clone();
+        let function = self.markov_chain.functions.get(&function_context.call_params.func_name).unwrap();
+        if function.uses_wrapped_types {
+            call_node_type_name = call_node_type_name.inner();
+        }
+        call_node_type_name
     }
 
     /// get crrent function modifiers list
@@ -298,11 +335,13 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 
     /// push the known type list for the next node that will use the types=[known]
+    /// these will be wrapped automatically if uses_wrapped_types=true
     pub fn push_known_list(&mut self, type_list: Vec<SubgraphType>) {
         self.known_type_list_stack.push(type_list);
     }
 
     /// push the compatible type list for the next node that will use the type=[compatible]
+    /// /// these will be wrapped automatically if uses_wrapped_types=true
     pub fn push_compatible_list(&mut self, type_list: Vec<SubgraphType>) {
         self.compatible_type_list_stack.push(type_list);
     }
@@ -492,16 +531,11 @@ fn check_node_off(
         node_common: &NodeCommon
     ) -> bool {
     let mut off = false;
-    if let Some(ref option_name) = node_common.type_name {
+    if let Some(ref type_name) = node_common.type_name {
         off = match call_params.selected_types {
             CallTypes::None => true,
-            CallTypes::TypeList(ref t_name_list) => if !t_name_list
-                .iter()
-                .any(|x| x.is_same_or_more_determined_or_undetermined(option_name)) {
-                    true
-                } else {
-                    false
-                },
+            CallTypes::TypeList(ref t_name_list) => !t_name_list.iter()
+                .any(|x| x.is_same_or_more_determined_or_undetermined(type_name)),
             _ => panic!("Expected None or TypeNameList for function selected types")
         };
     }

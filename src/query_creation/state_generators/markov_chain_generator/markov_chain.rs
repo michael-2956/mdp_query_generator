@@ -5,7 +5,7 @@ use core::fmt::Debug;
 use smol_str::SmolStr;
 
 use super::{
-    dot_parser, dot_parser::{DotTokenizer, FunctionInputsType, SubgraphType, CodeUnit, NodeCommon}, error::SyntaxError,
+    dot_parser, dot_parser::{DotTokenizer, FunctionInputsType, SubgraphType, CodeUnit, NodeCommon, FunctionDeclaration}, error::SyntaxError,
 };
 
 /// this structure contains all the parsed graph functions
@@ -58,6 +58,14 @@ pub enum CallTypes {
     /// => Passed arguments: Array[Val3]
     PassThroughTypeNameRelated,
     /// Used in function calls to pass the function's type constraints further, but only those
+    /// that are related to the called function's name
+    /// Example:
+    /// - Args: [Numeric, Array[Val3]]
+    /// - Func.: Array.
+    /// => Passed arguments: Array[Val3]
+    /// NOTE: if uses_wrapped_types is ON, the arguments are not wrapped again.
+    PassThroughRelated,
+    /// Used in function calls to pass the function's type constraints further, but only those
     /// that are related to the called function's name, and also taking the inner type
     /// Example:
     /// - Args: [Numeric, Array[Val3]]
@@ -83,6 +91,7 @@ impl CallTypes {
             FunctionInputsType::PassThrough => CallTypes::PassThrough,
             FunctionInputsType::PassThroughTypeNameRelated => CallTypes::PassThroughTypeNameRelated,
             FunctionInputsType::PassThroughRelatedInner => CallTypes::PassThroughRelatedInner,
+            FunctionInputsType::PassThroughRelated => CallTypes::PassThroughRelated,
             FunctionInputsType::TypeNameList(tp_list) => CallTypes::TypeList(tp_list),
         }
     }
@@ -152,18 +161,23 @@ pub struct Function {
     /// we can only search once for each set of call
     /// parameters and call trigger states
     pub call_trigger_nodes_and_affectors: Vec<(NodeParams, Vec<NodeParams>)>,
+    /// Whether to wrap argument types in this function's
+    /// outer type. [Val3, String] would become
+    /// [Array<Val3>, Array<String>] for the array subgraph
+    pub uses_wrapped_types: bool,
 }
 
 impl Function {
     /// create Function struct from its parsed parameters
-    fn new(definition: dot_parser::Function) -> Self {
+    fn new(declaration: FunctionDeclaration) -> Self {
         Function {
-            source_node_name: definition.source_node_name.clone(),
-            exit_node_name: definition.exit_node_name,
-            accepted_types: FunctionTypes::from_function_inputs_type(definition.source_node_name, definition.input_type),
-            accepted_modifiers: definition.modifiers,
+            source_node_name: declaration.source_node_name.clone(),
+            exit_node_name: declaration.exit_node_name,
+            accepted_types: FunctionTypes::from_function_inputs_type(declaration.source_node_name, declaration.input_type),
+            accepted_modifiers: declaration.modifiers,
             chain: HashMap::<_, _>::new(),
             call_trigger_nodes_and_affectors: Vec::new(),
+            uses_wrapped_types: declaration.uses_wrapped_types
         }
     }
 }
@@ -221,10 +235,10 @@ impl MarkovChain {
         // Run through all function definitions
         for token in &tokens {
             match token {
-                dot_parser::CodeUnit::Function(definition) => {
-                    let mut function = Some(Function::new(definition.clone()));
-                    define_node(&mut function, &mut node_params, NodeCommon::with_name(definition.source_node_name.clone()), None, false)?;
-                    define_node(&mut function, &mut node_params, NodeCommon::with_name(definition.exit_node_name.clone()), None, false)?;
+                dot_parser::CodeUnit::FunctionDeclaration(declaration) => {
+                    let mut function = Some(Function::new(declaration.clone()));
+                    define_node(&mut function, &mut node_params, NodeCommon::with_name(declaration.source_node_name.clone()), None, false)?;
+                    define_node(&mut function, &mut node_params, NodeCommon::with_name(declaration.exit_node_name.clone()), None, false)?;
                     let function = function.unwrap();
                     functions.insert(function.source_node_name.clone(), function);
                 },
@@ -234,8 +248,8 @@ impl MarkovChain {
         // Fill in function bodies
         for token in tokens {
             match token {
-                dot_parser::CodeUnit::Function(definition) => {
-                    current_function = Some(functions.remove(&definition.source_node_name).unwrap());
+                dot_parser::CodeUnit::FunctionDeclaration(declaration) => {
+                    current_function = Some(functions.remove(&declaration.source_node_name).unwrap());
                 }
                 dot_parser::CodeUnit::CloseDeclaration => {
                     if let Some(mut function) = current_function.take() {
@@ -367,7 +381,8 @@ impl MarkovChain {
                         ) if types_list.iter().all(|t| func_types_list.contains(t)) => {},
                         (CallTypes::None, FunctionTypes::TypeList(..) | FunctionTypes::None) => {},
                         (
-                            CallTypes::PassThrough | CallTypes::PassThroughTypeNameRelated | CallTypes::PassThroughRelatedInner,
+                            CallTypes::PassThrough | CallTypes::PassThroughTypeNameRelated |
+                            CallTypes::PassThroughRelated | CallTypes::PassThroughRelatedInner,
                             FunctionTypes::TypeList(..)
                         ) => {},
                         (CallTypes::Compatible, FunctionTypes::TypeList(..)) => {},

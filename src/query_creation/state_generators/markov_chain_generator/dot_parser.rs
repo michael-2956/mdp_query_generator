@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr, fmt::Display};
+use std::{collections::HashMap, fmt::Display};
 
 use regex::Regex;
 use smol_str::SmolStr;
@@ -100,8 +100,35 @@ pub enum SubgraphType {
 }
 
 impl SubgraphType {
-    fn from_smolstr(smol_str: SmolStr) -> Result<Self, SyntaxError> {
-        SubgraphType::from_str(smol_str.as_str())
+    pub fn wrap_in_func(&self, func_name: &str) -> SubgraphType {
+        let outer = SubgraphType::from_func_name(func_name);
+        match outer {
+            SubgraphType::Array(..) => SubgraphType::Array((Box::new(self.clone()), None)),
+            SubgraphType::ListExpr(..) => SubgraphType::ListExpr(Box::new(self.clone())),
+            any => panic!("Cannot wrap into {any}")
+        }
+    }
+
+    pub fn from_func_name(func_name: &str) -> Self {
+        match func_name {
+            "numeric" => SubgraphType::Numeric,
+            "VAL_3" => SubgraphType::Val3,
+            "array" => SubgraphType::Array((Box::new(SubgraphType::Undetermined), None)),
+            "list_expr" => SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined)),
+            "string" => SubgraphType::String,
+            any => panic!("Unexpected function name, can't convert to a SubgraphType: {any}")
+        }
+    }
+
+    fn from_type_name(s: &str) -> Result<Self, SyntaxError> {
+        match s {
+            "numeric" => Ok(SubgraphType::Numeric),
+            "3VL Value" => Ok(SubgraphType::Val3),
+            "array" => Ok(SubgraphType::Array((Box::new(SubgraphType::Undetermined), None))),
+            "list expr" => Ok(SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined))),
+            "string" => Ok(SubgraphType::String),
+            any => Err(SyntaxError::new(format!("Type {any} does not exist!")))
+        }
     }
 
     pub fn get_subgraph_func_name(&self) -> &str {
@@ -158,21 +185,6 @@ impl From<DataType> for SubgraphType {
     }
 }
 
-impl FromStr for SubgraphType {
-    type Err = SyntaxError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "numeric" => Ok(SubgraphType::Numeric),
-            "3VL Value" => Ok(SubgraphType::Val3),
-            "array" => Ok(SubgraphType::Array((Box::new(SubgraphType::Undetermined), None))),
-            "list expr" => Ok(SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined))),
-            "string" => Ok(SubgraphType::String),
-            any => Err(SyntaxError::new(format!("Type {any} does not exist!")))
-        }
-    }
-}
-
 impl Display for SubgraphType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str = match self {
@@ -214,6 +226,14 @@ pub enum FunctionInputsType {
     /// => Passed arguments: Array[Val3]
     PassThroughTypeNameRelated,
     /// Used in function calls to pass the function's type constraints further, but only those
+    /// that are related to the called function's name
+    /// Example:
+    /// - Args: [Numeric, Array[Val3]]
+    /// - Func.: Array.
+    /// => Passed arguments: Array[Val3]
+    /// NOTE: if uses_wrapped_types is ON, the arguments are not wrapped again.
+    PassThroughRelated,
+    /// Used in function calls to pass the function's type constraints further, but only those
     /// that are related to the called function's name, and also taking the inner type
     /// Example:
     /// - Args: [Numeric, Array[Val3]]
@@ -239,6 +259,7 @@ impl FunctionInputsType {
         match idents.as_str() {
             "any" => Some(FunctionInputsType::Any),
             "TR..." => Some(FunctionInputsType::PassThroughTypeNameRelated),
+            "R..." => Some(FunctionInputsType::PassThroughRelated),
             "RI..." => Some(FunctionInputsType::PassThroughRelatedInner),
             "..." => Some(FunctionInputsType::PassThrough),
             "compatible" => Some(FunctionInputsType::Compatible),
@@ -252,7 +273,7 @@ impl FunctionInputsType {
         name_list_str
             .split(',')
             .map(|x| x.trim())
-            .map(SubgraphType::from_str)
+            .map(SubgraphType::from_type_name)
             .collect::<Result<Vec<_>, _>>()
     }
 }
@@ -262,7 +283,7 @@ impl FunctionInputsType {
 pub struct NodeCommon {
     /// Node identifier
     pub name: SmolStr,
-    /// Type name if specified (basically an on trigger)
+    /// Type name if specified (basically an "on" trigger)
     pub type_name: Option<SubgraphType>,
     /// Graph trigger with mode if specified
     pub trigger: Option<(SmolStr, bool)>,
@@ -279,9 +300,9 @@ impl NodeCommon {
 }
 
 /// a code unit represents a distinct command in code.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CodeUnit {
-    Function(Function),
+    FunctionDeclaration(FunctionDeclaration),
     RegularNode {
         node_common: NodeCommon,
         literal: bool,
@@ -302,11 +323,12 @@ pub enum CodeUnit {
 /// this structure contains function details extracted
 /// from function declaration
 #[derive(Clone, Debug)]
-pub struct Function {
+pub struct FunctionDeclaration {
     pub source_node_name: SmolStr,
     pub exit_node_name: SmolStr,
     pub input_type: FunctionInputsType,
     pub modifiers: Option<Vec<SmolStr>>,
+    pub uses_wrapped_types: bool,
 }
 
 /// this structure stores the interral parser values needed
@@ -314,7 +336,7 @@ pub struct Function {
 pub struct DotTokenizer<'a> {
     lexer: Lexer<'a, DotToken>,
     digraph_defined: bool,
-    in_function_definition: bool,
+    current_function_definition: Option<FunctionDeclaration>,
     call_ident_regex: Regex,
 }
 
@@ -324,7 +346,7 @@ impl<'a> DotTokenizer<'a> {
         DotTokenizer {
             lexer: DotToken::lexer(source),
             digraph_defined: false,
-            in_function_definition: false,
+            current_function_definition: None,
             call_ident_regex: Regex::new(r"^call[0-9]+_[A-Za-z_][A-Za-z0-9_]*$").unwrap(),
         }
     }
@@ -370,14 +392,21 @@ impl<'a> Iterator for DotTokenizer<'a> {
                 },
                 DotToken::Subgraph => {
                     match return_some_err!(try_parse_function_def(&mut self.lexer)) {
-                        Some(func @ CodeUnit::Function {..}) => {
-                            if self.in_function_definition {
+                        Some(mut func) => {
+                            if self.current_function_definition.is_some() {
                                 break Some(Err(SyntaxError::new(
                                     format!("nested functional node definitions are not supported")
                                 )))
                             } else {
-                                self.in_function_definition = true;
-                                break Some(Ok(func))
+                                if func.uses_wrapped_types {
+                                    if let FunctionInputsType::TypeNameList(type_list) = func.input_type {
+                                        func.input_type = FunctionInputsType::TypeNameList(
+                                            type_list.into_iter().map(|x| x.wrap_in_func(&func.source_node_name)).collect()
+                                        );
+                                    }
+                                }
+                                self.current_function_definition = Some(func.clone());
+                                break Some(Ok(CodeUnit::FunctionDeclaration(func)))
                             }
                         },
                         _ => match self.lexer.next()? {
@@ -394,12 +423,23 @@ impl<'a> Iterator for DotTokenizer<'a> {
                             let mut node_spec = return_some_err!(
                                 read_opened_node_specification(&mut self.lexer, &node_name)
                             );
-                            let type_name = match node_spec.remove("TYPE_NAME") {
+
+                            let mut type_name = match node_spec.remove("TYPE_NAME") {
                                 Some(DotToken::QuotedIdentifiers(idents)) => Some(
-                                    return_some_err!(SubgraphType::from_smolstr(idents))
+                                    return_some_err!(SubgraphType::from_type_name(&idents))
                                 ),
                                 _ => None
                             };
+
+                            if let Some(ref definition) = self.current_function_definition {
+                                if definition.uses_wrapped_types {
+                                    type_name = type_name.map(|x| x.wrap_in_func(&definition.source_node_name));
+                                }
+                            } else {
+                                return Some(Err(SyntaxError::new(format!(
+                                    "Node definitions outside of subgraphs are not allowed"
+                                ))))
+                            }
 
                             let trigger = match node_spec.remove("TRIGGER") {
                                 Some(DotToken::QuotedIdentifiers(idents)) => {
@@ -447,17 +487,23 @@ impl<'a> Iterator for DotTokenizer<'a> {
                             };
 
                             if self.call_ident_regex.is_match(&node_name) {
-                                let (input_type, modifiers) = return_some_err!(
+                                let (input_type, modifiers, uses_wrapped_types) = return_some_err!(
                                     parse_function_options(&node_name, node_spec)
                                 );
-                                if literal {
+                                if uses_wrapped_types.is_some() {
                                     break Some(Err(SyntaxError::new(format!(
-                                        "call nodes can't be declaread as literal (node {node_name})"
+                                        "call nodes can't have a uses_wrapped_types option, which is reserved for function definitions (node {node_name})"
                                     ))));
                                 }
+                                if literal {
+                                    break Some(Err(SyntaxError::new(format!(
+                                        "call nodes can't be declaread as literals (node {node_name})"
+                                    ))));
+                                }
+                                let func_name = SmolStr::new(node_name.split_once('_').unwrap().1);
                                 break Some(Ok(CodeUnit::CallNode {
                                     node_common,
-                                    func_name: SmolStr::new(node_name.split_once('_').unwrap().1),
+                                    func_name,
                                     inputs: input_type,
                                     modifiers,
                                 }));
@@ -492,8 +538,8 @@ impl<'a> Iterator for DotTokenizer<'a> {
                     format!("Quoted identifiers are not supported: \"{name}\"")
                 ))),
                 DotToken::CloseDeclaration => {
-                    if self.in_function_definition {
-                        self.in_function_definition = false;
+                    if self.current_function_definition.is_some() {
+                        self.current_function_definition = None;
                         break Some(Ok(CodeUnit::CloseDeclaration))
                     }
                 },
@@ -523,7 +569,7 @@ fn handle_digraph(lex: &mut Lexer<'_, DotToken>) -> Result<(), SyntaxError> {
 }
 
 /// returns None if subgraph is not a function
-fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<CodeUnit>, SyntaxError> {
+fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<FunctionDeclaration>, SyntaxError> {
     match lex.next() {
         Some(DotToken::Identifier(function_name)) => {
             if !function_name.starts_with("def_") {
@@ -544,17 +590,18 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<CodeUn
                                     )
                                 ))
                         } else {
-                            let (input_type, modifiers) = parse_function_options(
+                            let (input_type, modifiers, uses_wrapped_types) = parse_function_options(
                                 &node_name,
                                 read_node_specification(lex, &node_name)?,
                             )?;
                             let exit_node_name = parse_function_exit_node_name(lex, &node_name)?;
-                            Ok(Some(CodeUnit::Function(Function {
+                            Ok(Some(FunctionDeclaration {
                                 source_node_name: node_name,
                                 exit_node_name,
                                 input_type,
                                 modifiers,
-                            })))
+                                uses_wrapped_types: uses_wrapped_types.unwrap_or(false),
+                            }))
                         }
                     }
                     _ => Err(SyntaxError::new(format!("expected source node definition"))),
@@ -573,9 +620,10 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<CodeUn
 fn parse_function_options(
     node_name: &SmolStr,
     mut node_spec: HashMap<SmolStr, DotToken>,
-) -> Result<(FunctionInputsType, Option<Vec<SmolStr>>), SyntaxError> {
+) -> Result<(FunctionInputsType, Option<Vec<SmolStr>>, Option<bool>), SyntaxError> {
     let mut input_type = FunctionInputsType::None;
     let mut modifiers = Option::<Vec<SmolStr>>::None;
+    let mut uses_wrapped_types = None;
     if let Some(token) = node_spec.remove("TYPES") {
         if let DotToken::QuotedIdentifiersWithBrackets(idents) = token {
             if let Some(special_type) = FunctionInputsType::try_extract_special_type(&idents) {
@@ -608,7 +656,19 @@ fn parse_function_options(
             )));
         }
     }
-    Ok((input_type, modifiers))
+    if let Some(token) = node_spec.remove("USES_WRAPPED_TYPES") {
+        match token {
+            DotToken::QuotedIdentifiers(value) if ["true", "false"].contains(&value.as_str()) => {
+                uses_wrapped_types = Some(value == "true");
+            },
+            _ => {
+                return Err(SyntaxError::new(format!(
+                    "{node_name}[uses_wrapped_types=... can only be either \"true\" or \"false\" (default)"
+                )));
+            }
+        }
+    }
+    Ok((input_type, modifiers, uses_wrapped_types))
 }
 
 /// expects and parses an exit node name after function declaration

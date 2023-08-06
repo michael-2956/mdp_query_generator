@@ -671,6 +671,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
 
         if let Some(as_what) = check_generated_by {
             if !selected_type.is_same_or_more_determined_or_undetermined(&as_what) {
+                self.state_generator.print_stack();
                 panic!("Unexpected type: expected {:?}, got {:?}", as_what, selected_type);
             }
         }
@@ -695,7 +696,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         self.expect_state("typed_column_name");
         let (selected_type, ident_components) = {
             let column_types = unwrap_variant_or_else!(
-                self.state_generator.get_fn_selected_types(), CallTypes::TypeList, || self.state_generator.print_stack()
+                self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList, || self.state_generator.print_stack()
             );
             self.clause_context.from().get_random_column_with_type_of(&mut self.rng, &column_types)
         };
@@ -731,9 +732,6 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                 },
                 any => self.panic_unexpected(any)
             }
-        }
-        if array.len() > 1 {
-            println!("Ooooooooppppssss");
         }
         (SubgraphType::Array((Box::new(inner_type), Some(array.len()))), Expr::Array(Array {
             elem: array,
