@@ -53,12 +53,6 @@ struct StatefulCallTriggerCreator(fn() -> Box<dyn StatefulCallTriggerTrait>);
 /// needed.
 #[derive(Debug)]
 pub struct MarkovChainGenerator<StC: StateChooser> {
-    /// this stack contains information about the known type name lists
-    /// inferred when [known] is used in TYPES
-    known_type_list_stack: Vec<Vec<SubgraphType>>,
-    /// this stack contains information about the compatible type names
-    /// inferred when [compatible] is used in [TYPES]
-    compatible_type_list_stack: Vec<Vec<SubgraphType>>,
     markov_chain: MarkovChain,
     call_stack: Vec<StackFrame>,
     pending_call: Option<CallParams>,
@@ -97,7 +91,7 @@ impl FunctionContext {
     }
 
     /// create a new FunctionContext with the provided node_params as the current_node
-    fn with_current_node(&self, node_params: NodeParams) -> Self {
+    fn with_node(&self, node_params: NodeParams) -> Self {
         Self {
             call_params: self.call_params.clone(),
             current_node: node_params,
@@ -168,7 +162,7 @@ impl CallTriggerInfo {
             trigger.update_trigger_state(clause_context, &function_context);
             self.node_states.extend(affected_nodes.into_iter().map(|affected_node| {
                 (affected_node.node_common.name.clone(), Some(trigger.run(
-                    clause_context, &function_context.with_current_node(affected_node.clone())
+                    clause_context, &function_context.with_node(affected_node.clone())
                 )))
             }));
         }
@@ -185,6 +179,24 @@ pub struct StackFrame {
     /// Cached version of all the dead ends
     /// in the current function
     dead_end_info: Arc<Mutex<HashMap<SmolStr, bool>>>,
+    /// this contains information about the known type name list
+    /// inferred when [known] is used in TYPES
+    known_type_list: Option<Vec<SubgraphType>>,
+    /// this contains information about the compatible type name list
+    /// inferred when [compatible] is used in [TYPES]
+    compatible_type_list: Option<Vec<SubgraphType>>,
+}
+
+impl StackFrame {
+    fn new(function_context: FunctionContext, call_trigger_info: CallTriggerInfo, dead_end_info: Arc<Mutex<HashMap<SmolStr, bool>>>) -> Self {
+        Self {
+            function_context,
+            call_trigger_info,
+            dead_end_info,
+            known_type_list: None,
+            compatible_type_list: None,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -208,8 +220,6 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             markov_chain: chain,
             call_stack: vec![],
             pending_call: None,
-            known_type_list_stack: vec![],
-            compatible_type_list_stack: vec![],
             state_chooser: Box::new(StC::new()),
             stateless_call_triggers: HashMap::new(),
             stateful_call_trigger_creators: HashMap::new(),
@@ -252,9 +262,6 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             selected_types: CallTypes::TypeList(accepted_types),  // CallTypes::TypeList(vec![SubgraphType::Numeric]),  // 
             modifiers: CallModifiers::None  // CallModifiers::StaticList(vec![SmolStr::new("single value")])  //
         });
-
-        self.known_type_list_stack = vec![];
-        self.compatible_type_list_stack = vec![];
     }
 
     fn start_function(&mut self, mut call_params: CallParams, clause_context: &ClauseContext) -> SmolStr {
@@ -334,11 +341,11 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
                 (affector_node.node_common.name.clone(), affected.into_iter().flat_map(|(trigger_name, affected_nodes)| {
                     let stateless_trigger = self.stateless_call_triggers.get(&trigger_name).unwrap();
                     let new_state = stateless_trigger.get_new_trigger_state(
-                        clause_context, &function_context.with_current_node(affector_node.clone())
+                        clause_context, &function_context.with_node(affector_node.clone())
                     );
                     affected_nodes.into_iter().map(|affected_node| (affected_node.node_common.name.clone(), stateless_trigger.run(
                         clause_context,
-                        &function_context.with_current_node(affected_node.clone()),
+                        &function_context.with_node(affected_node.clone()),
                         &new_state,
                     ))).collect::<Vec<_>>().into_iter()
                 }).collect())
@@ -350,16 +357,16 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
         let func_name = function_context.call_params.func_name.clone();
 
-        self.call_stack.push(StackFrame {
+        self.call_stack.push(StackFrame::new(
             function_context,
-            call_trigger_info: CallTriggerInfo::new(
+            CallTriggerInfo::new(
                 new_function.call_trigger_nodes_map.keys().cloned().collect(),
                 stateful_triggers,
                 stateful_affectors_and_triggered_nodes,
                 stateless_node_relations
             ),
             dead_end_info,
-        });
+        ));
 
         func_name
     }
@@ -403,32 +410,29 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     /// push the known type list for the next node that will use the types=[known]
     /// these will be wrapped automatically if uses_wrapped_types=true
     pub fn push_known_list(&mut self, type_list: Vec<SubgraphType>) {
-        self.known_type_list_stack.push(type_list);
+        self.call_stack.last_mut().unwrap().known_type_list = Some(type_list);
     }
 
     /// push the compatible type list for the next node that will use the type=[compatible]
     /// /// these will be wrapped automatically if uses_wrapped_types=true
     pub fn push_compatible_list(&mut self, type_list: Vec<SubgraphType>) {
-        self.compatible_type_list_stack.push(type_list);
+        self.call_stack.last_mut().unwrap().compatible_type_list = Some(type_list);
     }
 
-    /// pop the known type for the current node which will uses type=[known]
+    /// pop the known types for the current node which will uses type=[known]
     fn pop_known_list(&mut self) -> Vec<SubgraphType> {
-        self.known_type_list_stack.pop().unwrap_or_else(|| {
+        self.call_stack.last().unwrap().known_type_list.clone().unwrap_or_else(|| {
             self.print_stack();
             panic!("No known type list found!")
         })
     }
 
-    /// pop the compatible type for the current node which will uses type=[compatible]
+    /// pop the compatible types for the current node which will uses type=[compatible]
     fn pop_compatible_list(&mut self) -> Vec<SubgraphType> {
-        match self.compatible_type_list_stack.pop() {
-            Some(item) => item,
-            None => {
-                self.print_stack();
-                panic!("No known type name found!")
-            },
-        }
+        self.call_stack.last().unwrap().compatible_type_list.clone().unwrap_or_else(|| {
+            self.print_stack();
+            panic!("No compatible type list found!")
+        })
     }
 }
 
@@ -575,10 +579,10 @@ fn check_node_off_dfs(rng: &mut ChaCha8Rng, function: &Function, clause_context:
             if let Some(affected) = stack_frame.call_trigger_info.stateful_affectors_and_triggered_nodes.get(&current_node) {
                 for (trigger_name, affected_nodes) in affected.clone().into_iter() {
                     let trigger = stateful_triggers.get_mut(&trigger_name).unwrap();
-                    trigger.update_trigger_state(clause_context, &stack_frame.function_context.with_current_node(current_node.clone()));
+                    trigger.update_trigger_state(clause_context, &stack_frame.function_context.with_node(current_node.clone()));
                     affected_node_states.extend(affected_nodes.into_iter().map(|affected_node| {
                         (affected_node.node_common.name.clone(), Some(trigger.run(
-                            clause_context, &stack_frame.function_context.with_current_node(affected_node.clone())
+                            clause_context, &stack_frame.function_context.with_node(affected_node.clone())
                         )))
                     }));
                 }
