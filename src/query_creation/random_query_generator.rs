@@ -771,7 +771,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     fn generate(&mut self) -> Query {
         let query = self.handle_query().0;
         if self.config.print_queries {
-            println!("Query:\n{}\n", query);
+            println!("\n{};\n", query);
         }
         // reset the generator
         if let Some(state) = self.next_state_opt() {

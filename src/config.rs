@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use structopt::StructOpt;
 use toml::Value;
 
-use crate::{query_creation::{random_query_generator::QueryGeneratorConfig, state_generators::markov_chain_generator::ChainConfig}};
+use crate::query_creation::{random_query_generator::QueryGeneratorConfig, state_generators::markov_chain_generator::ChainConfig};
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "basic")]
@@ -26,6 +26,7 @@ pub struct MainConfig {
     pub measure_generation_time: bool,
     pub assert_parcing_equivalence: bool,
     pub assert_runs_on_schema: bool,
+    pub print_progress: bool,
 }
 
 impl TomlReadable for MainConfig {
@@ -37,6 +38,7 @@ impl TomlReadable for MainConfig {
             measure_generation_time: section["measure_generation_time"].as_bool().unwrap(),
             assert_parcing_equivalence: section["assert_parcing_equivalence"].as_bool().unwrap(),
             assert_runs_on_schema: section["assert_runs_on_schema"].as_bool().unwrap(),
+            print_progress: section["print_progress"].as_bool().unwrap(),
         }
     }
 }

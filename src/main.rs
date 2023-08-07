@@ -38,7 +38,9 @@ fn run_generation<DynMod: DynamicModel, StC: StateChooser>(markov_generator: Mar
             num_equivalent += check_query(query_ast) as usize;
         }
         if i % 100 == 0 {
-            print!("{}/{}      \r", i, main_config.num_generate);
+            if main_config.print_progress {
+                print!("{}/{}      \r", i, main_config.num_generate);
+            }
             std::io::stdout().flush().unwrap();
         }
     }

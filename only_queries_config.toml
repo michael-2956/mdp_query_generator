@@ -2,21 +2,21 @@
 # number of queries to generate
 num_generate=20
 # count the 2vl-3vl equivalent queries
-count_equivalence=true
+count_equivalence=false
 # measure average query generation time
-measure_generation_time=true
+measure_generation_time=false
 # assert parcing the printed AST gives the
 # same result (checks validity of AST usage)
-assert_parcing_equivalence=true
+assert_parcing_equivalence=false
 # check the queries run without errors on the
 # schema (TODO)
 assert_runs_on_schema=false
 # Pring how many queries were already generated
-print_progress=true
+print_progress=false
 
 [generator]
 # print the queries on generation
-print_queries=false
+print_queries=true
 # print the table schema after parcing
 print_schema=false
 # Path to the file with the database schema
