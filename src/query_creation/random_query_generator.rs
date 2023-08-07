@@ -66,7 +66,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         }
 
         _self.state_generator.register_call_trigger(IsColumnTypeAvailableTrigger {});
-        _self.state_generator.register_call_trigger(CanExtendArrayTrigger {});
+        _self.state_generator.register_stateful_call_trigger::<CanExtendArrayTrigger>();
 
         _self
     }

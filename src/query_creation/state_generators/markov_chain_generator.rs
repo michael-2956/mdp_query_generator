@@ -10,7 +10,7 @@ use core::fmt::Debug;
 use smol_str::SmolStr;
 use take_until::TakeUntilExt;
 
-use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_generator::markov_chain::FunctionTypes, random_query_generator::{query_info::ClauseContext, call_triggers::CallTriggerTrait}}, config::TomlReadable};
+use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_generator::markov_chain::FunctionTypes, random_query_generator::{query_info::ClauseContext, call_triggers::{CallTriggerTrait, StatefulCallTriggerTrait}}}, config::TomlReadable};
 
 use self::{
     markov_chain::{
@@ -42,6 +42,9 @@ impl Debug for CallTriggerAffector {
     }
 }
 
+#[derive(Debug)]
+struct StatefulCallTriggerCreator(fn() -> Box<dyn StatefulCallTriggerTrait>);
+
 /// The markov chain generator. Runs the functional
 /// subgraphs parsed from the .dot file. Manages the
 /// probabilities, outputs states, disables nodes if
@@ -58,7 +61,8 @@ pub struct MarkovChainGenerator<StC: StateChooser> {
     call_stack: Vec<StackFrame>,
     pending_call: Option<CallParams>,
     state_chooser: Box<StC>,
-    call_triggers: HashMap<SmolStr, Box<dyn CallTriggerTrait>>,
+    stateless_call_triggers: HashMap<SmolStr, Box<dyn CallTriggerTrait>>,
+    stateful_call_trigger_creators: HashMap<SmolStr, StatefulCallTriggerCreator>,
     /// if a dead_end_info was collected for the specific function once,
     /// with set arguments (types & modifiers), and all call modifier
     /// states, depending on which affectors affected what and how,
@@ -103,36 +107,69 @@ impl FunctionContext {
 /// call triggers in the current funciton
 #[derive(Debug)]
 struct CallTriggerInfo {
-    /// the call trigger inner state memory
-    inner_states: HashMap<SmolStr, Box<dyn std::any::Any>>,
-    /// call trigger configuration: How each call trigger affector
-    /// node affects every node with a call trigger
-    node_relations: BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>,
-    /// stores current call trigger node states
+    /// stores current call trigger'ed node states
     node_states: BTreeMap<SmolStr, Option<bool>>,
-    /// stores a hashset of all node trigger affectors
-    affector_nodes: HashSet<SmolStr>,
+    /// the call trigger inner state memory
+    stateless_inner_states: HashMap<SmolStr, Box<dyn std::any::Any>>,
+    /// call trigger configuration: How each call trigger affector
+    /// node affects every node with a call trigger (STATELESS)
+    stateless_node_relations: BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>,
+    /// stores all the stateful triggers of the current function in
+    /// their current state
+    stateful_triggers: HashMap<SmolStr, Box<dyn StatefulCallTriggerTrait>>,
+    /// call trigger configuration: Which nodes affect which triggers
+    /// with which nodes.
+    stateful_affectors_and_triggered_nodes: HashMap<NodeParams, HashMap<SmolStr, Vec<NodeParams>>>
+}
+
+trait DynClone {
+    fn dyn_clone(&self) -> Self;
+}
+
+impl DynClone for HashMap<SmolStr, Box<dyn StatefulCallTriggerTrait>> {
+    fn dyn_clone(&self) -> Self {
+        self.iter().map(|x| (x.0.clone(), x.1.dyn_box_clone())).collect()
+    }
 }
 
 impl CallTriggerInfo {
-    fn new(node_relations: BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>) -> Self {
+    fn new(
+        trigger_names: Vec<SmolStr>,
+        stateful_triggers: HashMap<SmolStr, Box<dyn StatefulCallTriggerTrait>>,
+        stateful_affectors_and_triggered_nodes: HashMap<NodeParams, HashMap<SmolStr, Vec<NodeParams>>>,
+        stateless_node_relations: BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>
+    ) -> Self {
         Self {
-            inner_states: HashMap::new(),
-            node_states: node_relations.iter().map(|x| (x.0.clone(), None)).collect(),
-            affector_nodes: node_relations.iter().map(|x| x.1.iter()).flatten().map(|x| x.0.clone()).collect(),
-            node_relations,
+            node_states: trigger_names.into_iter().map(|x| (x, None)).collect(),
+            stateless_inner_states: HashMap::new(),
+            stateless_node_relations,
+            stateful_triggers,
+            stateful_affectors_and_triggered_nodes,
         }
     }
 
-    fn update_inner_state(&mut self, call_trigger: &mut Box<dyn CallTriggerTrait>, clause_context: &ClauseContext, function_context: &FunctionContext) {
-        let new_state = call_trigger.get_new_trigger_state(clause_context, function_context);
-        self.inner_states.insert(call_trigger.get_trigger_name(), new_state);
+    fn update_stateless_trigger_state(&mut self, stateless_trigger: &mut Box<dyn CallTriggerTrait>, clause_context: &ClauseContext, function_context: &FunctionContext) {
         self.node_states.extend(
-            self.node_relations.iter()
-                .filter_map(|(affected_node_name, node_config)| {
-                    node_config.get(&function_context.current_node.node_common.name).map(|&val| (affected_node_name.clone(), Some(val)))
-                })
+            self.stateless_node_relations.get(&function_context.current_node.node_common.name).unwrap().clone().into_iter()
+            .map(|(affected_node_name, how)| (affected_node_name, Some(how)))
         );
+        self.stateless_inner_states.insert(
+            stateless_trigger.get_trigger_name(),
+            stateless_trigger.get_new_trigger_state(clause_context, function_context)
+        );
+    }
+
+    fn update_stateful_trigger_state(&mut self, clause_context: &ClauseContext, function_context: &FunctionContext) {
+        let affector_node = &function_context.current_node;
+        for (trigger_name, affected_nodes) in self.stateful_affectors_and_triggered_nodes.get(affector_node).unwrap().clone().into_iter() {
+            let trigger = self.stateful_triggers.get_mut(&trigger_name).unwrap();
+            trigger.update_trigger_state(clause_context, &function_context);
+            self.node_states.extend(affected_nodes.into_iter().map(|affected_node| {
+                (affected_node.node_common.name.clone(), Some(trigger.run(
+                    clause_context, &function_context.with_current_node(affected_node.clone())
+                )))
+            }));
+        }
     }
 }
 
@@ -172,7 +209,8 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             known_type_list_stack: vec![],
             compatible_type_list_stack: vec![],
             state_chooser: Box::new(StC::new()),
-            call_triggers: HashMap::new(),
+            stateless_call_triggers: HashMap::new(),
+            stateful_call_trigger_creators: HashMap::new(),
             dead_end_infos: HashMap::new(),
         };
         _self.reset();
@@ -180,11 +218,17 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 
     pub fn register_call_trigger<T: CallTriggerTrait + 'static>(&mut self, trigger: T) {
-        self.call_triggers.insert(trigger.get_trigger_name(), Box::new(trigger));
+        self.stateless_call_triggers.insert(trigger.get_trigger_name(), Box::new(trigger));
+    }
+
+    pub fn register_stateful_call_trigger<T: StatefulCallTriggerTrait + 'static>(&mut self) {
+        self.stateful_call_trigger_creators.insert(T::new().get_trigger_name(), StatefulCallTriggerCreator(
+            T::new
+        ));
     }
 
     pub fn get_call_trigger_state(&self, trigger_name: &SmolStr) -> Option<&Box<dyn std::any::Any>> {
-        self.call_stack.last().unwrap().call_trigger_info.inner_states.get(trigger_name)
+        self.call_stack.last().unwrap().call_trigger_info.stateless_inner_states.get(trigger_name)
     }
 
     /// used to print the call stack of the markov chain functions
@@ -269,29 +313,49 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
         let function_context = FunctionContext::new(call_params);
 
-        let node_relations: BTreeMap<SmolStr, BTreeMap<SmolStr, bool>> = new_function.call_trigger_nodes_and_affectors.iter().map(|x|
-            (x.0.node_common.name.clone(), x.1.iter().map(|affector_node| {
-                let trigger_name = x.0.node_common.call_trigger_name.as_ref().unwrap();
-                let new_state = self.call_triggers.get(trigger_name).unwrap().get_new_trigger_state(
-                    clause_context, &function_context.with_current_node(affector_node.clone())
-                );
-                (affector_node.node_common.name.clone(), self.call_triggers.get(trigger_name).unwrap().run(
-                    clause_context,
-                    &function_context.with_current_node(x.0.clone()),
-                    &new_state,
-                ))
-            }).collect())
-        ).collect();
+        let (
+            stateful_affectors_and_triggered_nodes, stateless_affectors
+        ): (_, HashMap<_, _>) = new_function.call_trigger_affector_nodes_and_triggered_nodes.iter().cloned().partition(
+            |(affector, _)| {
+                let trigger_name = affector.node_common.affects_call_trigger_name.as_ref().unwrap();
+                self.stateful_call_trigger_creators.contains_key(trigger_name)
+            }
+        );
+
+        let stateful_triggers = new_function.call_trigger_nodes_map.iter()
+            .filter_map(|(trigger_name, _)| self.stateful_call_trigger_creators.get(trigger_name).map(
+                |x| (trigger_name.clone(), x.0())
+            )).collect();
+
+        let stateless_node_relations: BTreeMap<SmolStr, BTreeMap<SmolStr, bool>> = stateless_affectors.into_iter()
+            .map(|(affector_node, affected)|
+                (affector_node.node_common.name.clone(), affected.into_iter().flat_map(|(trigger_name, affected_nodes)| {
+                    let stateless_trigger = self.stateless_call_triggers.get(&trigger_name).unwrap();
+                    let new_state = stateless_trigger.get_new_trigger_state(
+                        clause_context, &function_context.with_current_node(affector_node.clone())
+                    );
+                    affected_nodes.into_iter().map(|affected_node| (affected_node.node_common.name.clone(), stateless_trigger.run(
+                        clause_context,
+                        &function_context.with_current_node(affected_node.clone()),
+                        &new_state,
+                    ))).collect::<Vec<_>>().into_iter()
+                }).collect())
+            ).collect();
 
         let dead_end_info = self.dead_end_infos.entry(
-            (function_context.call_params.to_owned(), node_relations.clone())
+            (function_context.call_params.to_owned(), stateless_node_relations.clone())
         ).or_insert(Arc::new(Mutex::new(HashMap::new()))).to_owned();
 
         let func_name = function_context.call_params.func_name.clone();
 
         self.call_stack.push(StackFrame {
             function_context,
-            call_trigger_info: CallTriggerInfo::new(node_relations),
+            call_trigger_info: CallTriggerInfo::new(
+                new_function.call_trigger_nodes_map.keys().cloned().collect(),
+                stateful_triggers,
+                stateful_affectors_and_triggered_nodes,
+                stateless_node_relations
+            ),
             dead_end_info,
         });
 
@@ -401,7 +465,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         let last_node_outgoing = function.chain.get(&last_node.node_common.name).unwrap();
 
         let last_node_outgoing = last_node_outgoing.iter().map(|el| {
-            (check_node_off_dfs(function, stack_frame, &el.1.node_common), el.0, el.1.clone())
+            (check_node_off_dfs(function, clause_context, stack_frame, &el.1), el.0, el.1.clone())
         }).collect::<Vec<_>>();
 
         let last_node_outgoing = dynamic_model.assign_log_probabilities(last_node_outgoing);
@@ -409,7 +473,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         let destination = self.state_chooser.choose_destination(last_node_outgoing);
 
         if let Some(destination) = destination {
-            if check_node_off_dfs(function, stack_frame, &destination.node_common) {
+            if check_node_off_dfs(function, clause_context, stack_frame, &destination) {
                 panic!("Chosen node is off: {} (after {})", destination.node_common.name, last_node.node_common.name);
             }
             stack_frame.function_context.current_node = destination.clone();
@@ -421,7 +485,13 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         // stack_item.function_context.current_node is now the current node
 
         if let Some(ref trigger_name) = stack_frame.function_context.current_node.node_common.affects_call_trigger_name {
-            stack_frame.call_trigger_info.update_inner_state(self.call_triggers.get_mut(trigger_name).unwrap(), clause_context, &stack_frame.function_context);
+            if let Some(stateless_trigger) = self.stateless_call_triggers.get_mut(trigger_name) {
+                stack_frame.call_trigger_info.update_stateless_trigger_state(stateless_trigger, clause_context, &stack_frame.function_context);
+            } else if stack_frame.call_trigger_info.stateful_triggers.contains_key(trigger_name) {
+                stack_frame.call_trigger_info.update_stateful_trigger_state(clause_context, &stack_frame.function_context);
+            } else {
+                panic!("No such trigger: {trigger_name}")
+            }
         }
 
         if let Some(call_params) = &stack_frame.function_context.current_node.call_params {
@@ -438,89 +508,101 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 }
 
-fn check_node_off_dfs(function: &Function, stack_frame: &StackFrame, node_common: &NodeCommon) -> bool {
-    if check_node_off(&stack_frame.function_context.call_params, &stack_frame.call_trigger_info.node_states, node_common) {
+fn check_node_off_dfs(function: &Function, clause_context: &ClauseContext, stack_frame: &StackFrame, node_params: &NodeParams) -> bool {
+    if check_node_off(&stack_frame.function_context.call_params, &stack_frame.call_trigger_info.node_states, &node_params.node_common) {
         return true
     }
 
     let mut dead_end_info = stack_frame.dead_end_info.lock().unwrap();
-    if let Some(is_dead_end) = dead_end_info.get(&node_common.name) {
+    if let Some(is_dead_end) = dead_end_info.get(&node_params.node_common.name) {
         return *is_dead_end;
     }
 
     // only update dead_end_info for paths that were not affected yet
-    let path_is_not_affected = stack_frame.call_trigger_info.inner_states.is_empty();
+    let path_is_not_affected = stack_frame.call_trigger_info.stateless_inner_states.is_empty();
+    let cycles_can_unlock_paths = !stack_frame.call_trigger_info.stateful_affectors_and_triggered_nodes.is_empty();
 
     let mut visited = HashSet::new();
     let mut to_mark_as_dead_ends = HashSet::new();
     let mut stack = VecDeque::new();
     stack.push_back((
-        vec![node_common.name.clone()], stack_frame.call_trigger_info.node_states.clone()
+        vec![node_params.clone()],
+        stack_frame.call_trigger_info.stateful_triggers.dyn_clone(),
+        stack_frame.call_trigger_info.node_states.clone()
     ));
 
-    while let Some((path, mut call_trigger_states)) = stack.pop_back() {
-        let current_node_name = path.last().unwrap().clone();
-        let path_until_affector: Option<Vec<SmolStr>> = if path_is_not_affected { Some(path.iter().take_until(
-            |&x| stack_frame.call_trigger_info.affector_nodes.contains(x)
-        ).map(|x| x.clone()).collect()) } else { None };
-        if let Some(is_dead_end) = dead_end_info.get(&current_node_name) {
-            if !*is_dead_end {
-                if path_is_not_affected {
-                    if node_common.name == "types_select_type_noexpr" {
-                        println!("\nNew dead_end_info 1: {:#?}", dead_end_info);
+    while let Some((path, mut stateful_triggers, mut affected_node_states)) = stack.pop_back() {
+        let current_node = path.last().unwrap().clone();
+        let current_node_name = current_node.node_common.name.clone();
+
+        if cycles_can_unlock_paths && check_node_off(
+            &stack_frame.function_context.call_params, &affected_node_states, &current_node.node_common
+        ) {  // if we are ok with cycling, the node state wasn't checked while inserting
+            continue;
+        }
+
+        if cycles_can_unlock_paths || visited.insert(current_node_name.clone()) {
+            let mut path_until_affector: Option<Vec<SmolStr>> = if path_is_not_affected { Some(path.iter().take_until(
+                |&x| stack_frame.call_trigger_info.stateless_node_relations.contains_key(&x.node_common.name)
+            ).map(|x| x.node_common.name.clone()).collect()) } else { None };
+            if path.iter().any(|x| stack_frame.call_trigger_info.stateful_affectors_and_triggered_nodes.contains_key(x)) {
+                path_until_affector = None;
+            }
+    
+            if let Some(is_dead_end) = dead_end_info.get(&current_node_name) {
+                if !*is_dead_end {
+                    if let Some(path_until_affector) = path_until_affector {
+                        dead_end_info.extend(path_until_affector.iter().map(|x| (x.clone(), false)));
                     }
-                    dead_end_info.extend(path_until_affector.unwrap().iter().map(|x| (x.clone(), false)));
-                    if node_common.name == "types_select_type_noexpr" {
-                        println!("New dead_end_info 1: {:#?}", dead_end_info);
-                    }
+                    return false;
+                }
+            }
+
+            if current_node_name == function.exit_node_name {
+                if let Some(path_until_affector) = path_until_affector {
+                    dead_end_info.extend(path_until_affector.iter().map(|x| (x.clone(), false)));
                 }
                 return false;
             }
-        }
-        if current_node_name == function.exit_node_name {
-            if path_is_not_affected {
-                if node_common.name == "types_select_type_noexpr" {
-                    println!("\nOld dead_end_info 2: {:#?}", dead_end_info);
-                }
-                dead_end_info.extend(path_until_affector.unwrap().iter().map(|x| (x.clone(), false)));
-                if node_common.name == "types_select_type_noexpr" {
-                    println!("New dead_end_info 2: {:#?}", dead_end_info);
+
+            if let Some(affected) = stack_frame.call_trigger_info.stateless_node_relations.get(&current_node_name) {
+                affected_node_states.extend(
+                    affected.clone().into_iter().map(|(affected_node_name, how)| (affected_node_name, Some(how)))
+                );
+            }
+            if let Some(affected) = stack_frame.call_trigger_info.stateful_affectors_and_triggered_nodes.get(&current_node) {
+                for (trigger_name, affected_nodes) in affected.clone().into_iter() {
+                    let trigger = stateful_triggers.get_mut(&trigger_name).unwrap();
+                    trigger.update_trigger_state(clause_context, &stack_frame.function_context.with_current_node(current_node.clone()));
+                    affected_node_states.extend(affected_nodes.into_iter().map(|affected_node| {
+                        (affected_node.node_common.name.clone(), Some(trigger.run(
+                            clause_context, &stack_frame.function_context.with_current_node(affected_node.clone())
+                        )))
+                    }));
                 }
             }
-            return false;
-        }
-        call_trigger_states.extend(
-            stack_frame.call_trigger_info.node_relations.iter()
-                .filter_map(|(affected_node_name, node_config)| {
-                    node_config.get(&current_node_name).map(|&val| (affected_node_name.clone(), Some(val)))
-                })
-        );
-        if path_is_not_affected {
-            to_mark_as_dead_ends.extend(path_until_affector.unwrap().into_iter());
-        }
-        if visited.insert(current_node_name.clone()) {
+    
+            if let Some(path_until_affector) = path_until_affector {
+                to_mark_as_dead_ends.extend(path_until_affector.into_iter());
+            }
+
             if let Some(node_outgoing) = function.chain.get(&current_node_name) {
                 stack.extend(node_outgoing
                     .iter()
-                    .filter(|x| !visited.contains(&x.1.node_common.name) && !check_node_off(
-                        &stack_frame.function_context.call_params, &call_trigger_states, &x.1.node_common
+                    .filter(|x| cycles_can_unlock_paths || !check_node_off(
+                        &stack_frame.function_context.call_params, &affected_node_states, &x.1.node_common
                     ))
                     .map(|x| (
-                        [&path[..], &[x.1.node_common.name.clone()]].concat(),
-                        call_trigger_states.clone()
+                        [&path[..], &[x.1.clone()]].concat(),
+                        stateful_triggers.dyn_clone(),
+                        affected_node_states.clone()
                     ))
                 );
             }
         }
     }
     if path_is_not_affected {
-        if node_common.name == "types_select_type_noexpr" {
-            println!("\nOld dead_end_info 3: {:#?}\nto_mark_as_dead_ends: {:#?}", dead_end_info, to_mark_as_dead_ends);
-        }
         dead_end_info.extend(to_mark_as_dead_ends.into_iter().map(|x| (x, true)));
-        if node_common.name == "types_select_type_noexpr" {
-            println!("New dead_end_info 3: {:#?}", dead_end_info);
-        }
     }
     true
 }

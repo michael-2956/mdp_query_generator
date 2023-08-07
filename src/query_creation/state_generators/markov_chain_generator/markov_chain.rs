@@ -16,7 +16,7 @@ pub struct MarkovChain {
 
 /// this structure represents a single node with all of
 /// its possible properties and modifiers
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct NodeParams {
     pub node_common: NodeCommon,
     pub call_params: Option<CallParams>,
@@ -154,13 +154,17 @@ pub struct Function {
     /// hashmap, which is why this map stores the
     /// NodeParams directly.
     pub chain: HashMap<SmolStr, Vec<(f64, NodeParams)>>,
-    /// this property is for optimization of the graph
+    /// This node affects these triggers with these nodes.
+    ///
+    /// NOTES: this property is for optimization of the graph
     /// DFS search when checking if any nodes became
     /// dead-ends to turn them off. If there is a match
     /// in call parameters and all call trigger states,
     /// we can only search once for each set of call
     /// parameters and call trigger states
-    pub call_trigger_nodes_and_affectors: Vec<(NodeParams, Vec<NodeParams>)>,
+    pub call_trigger_affector_nodes_and_triggered_nodes: Vec<(NodeParams, HashMap<SmolStr, Vec<NodeParams>>)>,
+    /// call trigger names and their nodes
+    pub call_trigger_nodes_map: HashMap<SmolStr, Vec<NodeParams>>,
     /// Whether to wrap argument types in this function's
     /// outer type. [Val3, String] would become
     /// [Array<Val3>, Array<String>] for the array subgraph
@@ -176,7 +180,8 @@ impl Function {
             accepted_types: FunctionTypes::from_function_inputs_type(declaration.source_node_name, declaration.input_type),
             accepted_modifiers: declaration.modifiers,
             chain: HashMap::<_, _>::new(),
-            call_trigger_nodes_and_affectors: Vec::new(),
+            call_trigger_affector_nodes_and_triggered_nodes: Vec::new(),
+            call_trigger_nodes_map: HashMap::new(),
             uses_wrapped_types: declaration.uses_wrapped_types
         }
     }
@@ -253,26 +258,29 @@ impl MarkovChain {
                 }
                 dot_parser::CodeUnit::CloseDeclaration => {
                     if let Some(mut function) = current_function.take() {
-                        let call_trigger_affectors: Vec<_> = function.chain.keys()
+                        function.call_trigger_nodes_map = function.chain.keys()
                             .filter_map(|x| {
                                 let node = node_params.get(x).unwrap();
-                                node.node_common.affects_call_trigger_name.clone().map(|trigger_name| (
+                                node.node_common.call_trigger_name.clone().map(|trigger_name| (
                                     trigger_name, node.clone()
                                 ))
                             })
-                            .collect();
+                            .fold(HashMap::new(), |mut acc, (key, value)| {
+                                acc.entry(key).or_insert_with(Vec::new).push(value);
+                                acc
+                            });
 
-                        function.call_trigger_nodes_and_affectors = function.chain.keys()
+                        function.call_trigger_affector_nodes_and_triggered_nodes = function.chain.keys()
                             .filter_map(|x| {
                                 let node = node_params.get(x).unwrap();
-                                node.node_common.call_trigger_name.clone().map(|trigger_name| (trigger_name, node))
+                                node.node_common.affects_call_trigger_name.clone().map(|trigger_name| (trigger_name, node))
                             })
-                            .map(|trigger_node| {
-                                let affectors: Vec<NodeParams> = call_trigger_affectors.iter()
-                                    .filter(|x| x.0 == trigger_node.0)
-                                    .map(|x| x.1.clone())
+                            .map(|(trigger_name, affector_node)| {
+                                let affected = function.call_trigger_nodes_map.iter()
+                                    .filter(|(affected_trigger_name, _)| **affected_trigger_name == trigger_name)
+                                    .map(|x| (x.0.clone(), x.1.clone()))
                                     .collect();
-                                (trigger_node.1.clone(), affectors)
+                                (affector_node.clone(), affected)
                             })
                             .collect();
                         functions.insert(function.source_node_name.clone(), function);
@@ -486,14 +494,31 @@ impl MarkovChain {
         }
         for (_, function) in functions {
             for (_, out_nodes) in function.chain.iter_mut() {
-                for out_node in out_nodes {
-                    if let Some(min_calls) = min_calls_till_exit.get_key_value(&out_node.1.node_common.name) {
-                        if *min_calls.1 == usize::MAX {
-                            panic!("Node {} does not reach function exit", out_node.1.node_common.name);
+                for (_, out_node) in out_nodes {
+                    if let Some(min_calls) = min_calls_till_exit.get(&out_node.node_common.name) {
+                        if *min_calls == usize::MAX {
+                            panic!("Node {} does not reach function exit", out_node.node_common.name);
                         }
-                        out_node.1.min_calls_until_function_exit = *min_calls.1;
+                        out_node.min_calls_until_function_exit = *min_calls;
                     } else {
-                        panic!("Node {} was not marked with minimum distance.", out_node.1.node_common.name);
+                        panic!("Node {} was not marked with minimum distance.", out_node.node_common.name);
+                    }
+                }
+            }
+            for (_, affected_nodes) in function.call_trigger_nodes_map.iter_mut() {
+                for affected_node in affected_nodes.iter_mut() {
+                    if let Some(min_calls) = min_calls_till_exit.get(&affected_node.node_common.name) {
+                        affected_node.min_calls_until_function_exit = *min_calls;
+                    }
+                }
+            }
+            for (affector_node, affected_node_map) in function.call_trigger_affector_nodes_and_triggered_nodes.iter_mut() {
+                affector_node.min_calls_until_function_exit = *min_calls_till_exit.get(&affector_node.node_common.name).unwrap();
+                for (_, affected_nodes) in affected_node_map.iter_mut() {
+                    for affected_node in affected_nodes.iter_mut() {
+                        if let Some(min_calls) = min_calls_till_exit.get(&affected_node.node_common.name) {
+                            affected_node.min_calls_until_function_exit = *min_calls;
+                        }
                     }
                 }
             }

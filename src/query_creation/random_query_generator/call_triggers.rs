@@ -14,7 +14,19 @@ pub trait CallTriggerTrait: Debug {
     fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, trigger_state: &Box<dyn std::any::Any>) -> bool;
 }
 
-#[derive(Debug)]
+pub trait StatefulCallTriggerTrait: Debug {
+    fn new() -> Box<dyn StatefulCallTriggerTrait> where Self : Sized;
+
+    fn dyn_box_clone(&self) -> Box<dyn StatefulCallTriggerTrait>;
+
+    fn get_trigger_name(&self) -> SmolStr;
+
+    fn update_trigger_state(&mut self, clause_context: &ClauseContext, function_context: &FunctionContext);
+
+    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> bool;
+}
+
+#[derive(Debug, Clone)]
 pub struct IsColumnTypeAvailableTrigger {}
 
 #[derive(Debug)]
@@ -67,45 +79,35 @@ impl CallTriggerTrait for IsColumnTypeAvailableTrigger {
     }
 }
 
-#[derive(Debug)]
-pub struct CanExtendArrayTrigger {}
-
-#[derive(Debug)]
-struct CanExtendArrayTriggerState {
+#[derive(Debug, Clone)]
+pub struct CanExtendArrayTrigger {
     array_length: usize,
 }
 
-impl CallTriggerTrait for CanExtendArrayTrigger {
+impl StatefulCallTriggerTrait for CanExtendArrayTrigger {
+    fn new() -> Box<dyn StatefulCallTriggerTrait> where Self : Sized {
+        Box::new(CanExtendArrayTrigger {
+            array_length: 0,
+        })
+    }
+
+    fn dyn_box_clone(&self) -> Box<dyn StatefulCallTriggerTrait> {
+        Box::new(self.clone())
+    }
+
     fn get_trigger_name(&self) -> SmolStr {
         SmolStr::new("can_extend_array")
     }
 
-    fn get_new_trigger_state(&self, _clause_context: &ClauseContext, function_context: &FunctionContext) -> Box<dyn std::any::Any> {
-        Box::new(CanExtendArrayTriggerState {
-            array_length: match function_context.current_node.node_common.name.as_str() {
-                /// TODO: stateful triggers.
-                // NOTES:
-                // - Only states that can reach end without any stateful trigger affectors can be
-                // cached, stateful triggers do not partake as dead_end_infos keys.
-                // - For other states DFS will have to be repeatedly ran every time we need to check
-                // for dead ends.
-                // - However, once we have checked, but only for this stack frame, we can indeed
-                // save this information, but only for this stackframe, into local_dead_end_infos.
-                // - In stack_frame it will be nice to have a method that will check and update both
-                // of those so that the code is more concise.
-                "array_multiple_values" => 1,
-                "call50_types" => 2,
-                any => panic!("{any} unexpectedly triggered the can_extend_array call trigger affector"),
-            }
-        })
+    fn update_trigger_state(&mut self, _clause_context: &ClauseContext, function_context: &FunctionContext) {
+        self.array_length = match function_context.current_node.node_common.name.as_str() {
+            "array_multiple_values" => 1,
+            "call50_types" => self.array_length + 1,
+            any => panic!("{any} unexpectedly triggered the can_extend_array call trigger affector"),
+        };
     }
 
-    fn run(&self, _clause_context: &ClauseContext, function_context: &FunctionContext, trigger_state: &Box<dyn std::any::Any>) -> bool {
-        let array_length = trigger_state
-            .downcast_ref::<CanExtendArrayTriggerState>()
-            .unwrap()
-            .array_length;
-
+    fn run(&self, _clause_context: &ClauseContext, function_context: &FunctionContext) -> bool {
         /// TODO: this part should be in update_trigger_state() which should be affected by state selection
         let desired_element_num = unwrap_variant_ref!(unwrap_variant_ref!(
             function_context.call_params.selected_types, CallTypes::TypeList
@@ -113,17 +115,17 @@ impl CallTriggerTrait for CanExtendArrayTrigger {
 
         if let Some(desired_element_num) = desired_element_num {
             match function_context.current_node.node_common.name.as_str() {
-                "array_one_more_value_is_allowed" => array_length < desired_element_num,
-                "array_exit_allowed" => array_length == desired_element_num,
+                "array_one_more_value_is_allowed" => self.array_length < desired_element_num,
+                "array_exit_allowed" => self.array_length == desired_element_num,
                 any => panic!("{any} unexpectedly triggered the can_extend_array call trigger"),
             }
         } else {
-            /// TODO: should be just true, but here limits array length to 1.
-            match function_context.current_node.node_common.name.as_str() {
-                "array_one_more_value_is_allowed" => array_length < 1,
-                "array_exit_allowed" => array_length == 1,
-                any => panic!("{any} unexpectedly triggered the can_extend_array call trigger"),
-            }
+            true
+            // match function_context.current_node.node_common.name.as_str() {
+            //     "array_one_more_value_is_allowed" => self.array_length < 1,
+            //     "array_exit_allowed" => self.array_length == 1,
+            //     any => panic!("{any} unexpectedly triggered the can_extend_array call trigger"),
+            // }
         }
     }
 }

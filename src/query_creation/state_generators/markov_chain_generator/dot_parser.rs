@@ -279,7 +279,7 @@ impl FunctionInputsType {
 }
 
 /// This structure contains common fields for a node definition.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct NodeCommon {
     /// Node identifier
     pub name: SmolStr,
