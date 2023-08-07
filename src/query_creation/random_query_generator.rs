@@ -72,7 +72,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     }
 
     fn next_state_opt(&mut self) -> Option<SmolStr> {
-        self.state_generator.next(&mut self.clause_context, &mut *self.dynamic_model)
+        self.state_generator.next(&mut self.rng, &mut self.clause_context, &mut *self.dynamic_model)
     }
 
     fn next_state(&mut self) -> SmolStr {

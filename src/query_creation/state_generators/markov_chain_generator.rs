@@ -7,6 +7,8 @@ mod error;
 use std::{path::PathBuf, collections::{HashMap, HashSet, VecDeque, BTreeMap}, sync::{Arc, Mutex}};
 
 use core::fmt::Debug;
+use rand::{seq::SliceRandom, SeedableRng};
+use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use take_until::TakeUntilExt;
 
@@ -431,7 +433,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 }
 
 impl<StC: StateChooser> MarkovChainGenerator<StC> {
-    pub fn next(&mut self, clause_context: &ClauseContext, dynamic_model: &mut (impl DynamicModel + ?Sized)) -> Option<<Self as Iterator>::Item> {
+    pub fn next(&mut self, rng: &mut ChaCha8Rng, clause_context: &ClauseContext, dynamic_model: &mut (impl DynamicModel + ?Sized)) -> Option<<Self as Iterator>::Item> {
         if let Some(call_params) = self.pending_call.take() {
             return Some(self.start_function(call_params, clause_context));
         }
@@ -465,7 +467,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         let last_node_outgoing = function.chain.get(&last_node.node_common.name).unwrap();
 
         let last_node_outgoing = last_node_outgoing.iter().map(|el| {
-            (check_node_off_dfs(function, clause_context, stack_frame, &el.1), el.0, el.1.clone())
+            (check_node_off_dfs(rng, function, clause_context, stack_frame, &el.1), el.0, el.1.clone())
         }).collect::<Vec<_>>();
 
         let last_node_outgoing = dynamic_model.assign_log_probabilities(last_node_outgoing);
@@ -473,7 +475,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         let destination = self.state_chooser.choose_destination(last_node_outgoing);
 
         if let Some(destination) = destination {
-            if check_node_off_dfs(function, clause_context, stack_frame, &destination) {
+            if check_node_off_dfs(rng, function, clause_context, stack_frame, &destination) {
                 panic!("Chosen node is off: {} (after {})", destination.node_common.name, last_node.node_common.name);
             }
             stack_frame.function_context.current_node = destination.clone();
@@ -508,7 +510,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 }
 
-fn check_node_off_dfs(function: &Function, clause_context: &ClauseContext, stack_frame: &StackFrame, node_params: &NodeParams) -> bool {
+fn check_node_off_dfs(rng: &mut ChaCha8Rng, function: &Function, clause_context: &ClauseContext, stack_frame: &StackFrame, node_params: &NodeParams) -> bool {
     if check_node_off(&stack_frame.function_context.call_params, &stack_frame.call_trigger_info.node_states, &node_params.node_common) {
         return true
     }
@@ -587,13 +589,17 @@ fn check_node_off_dfs(function: &Function, clause_context: &ClauseContext, stack
             }
 
             if let Some(node_outgoing) = function.chain.get(&current_node_name) {
-                stack.extend(node_outgoing
-                    .iter()
+                let mut outgoing: Vec<_> = node_outgoing.iter()
+                    .map(|(_, node)| node.clone())
                     .filter(|x| cycles_can_unlock_paths || !check_node_off(
-                        &stack_frame.function_context.call_params, &affected_node_states, &x.1.node_common
-                    ))
+                        &stack_frame.function_context.call_params, &affected_node_states, &x.node_common
+                    )).collect();
+                if cycles_can_unlock_paths {
+                    outgoing.shuffle(rng);
+                } // prevent DFS looping
+                stack.extend(outgoing.into_iter()
                     .map(|x| (
-                        [&path[..], &[x.1.clone()]].concat(),
+                        [&path[..], &[x]].concat(),
                         stateful_triggers.dyn_clone(),
                         affected_node_states.clone()
                     ))
@@ -642,6 +648,6 @@ impl<StC: StateChooser> Iterator for MarkovChainGenerator<StC> {
     type Item = SmolStr;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.next(&mut ClauseContext::new(), &mut MarkovModel::new())
+        self.next(&mut ChaCha8Rng::seed_from_u64(1), &mut ClauseContext::new(), &mut MarkovModel::new())
     }
 }
