@@ -104,11 +104,11 @@ digraph G {
         Table []
         FROM -> Table
         Table -> FROM_multiple_relations
-        FROM_multiple_relations -> Table
+        // FROM_multiple_relations -> Table
 
-        // call0_Query [label="Query", shape=rectangle, TYPES="[any]", MODS="[]", style=filled, color=green]
-        // FROM -> call0_Query
-        // call0_Query -> FROM_multiple_relations
+        call0_Query [label="Query", shape=rectangle, TYPES="[any]", MODS="[]", style=filled, color=green]
+        FROM -> call0_Query
+        call0_Query -> FROM_multiple_relations
         // FROM_multiple_relations -> call0_Query
 
         EXIT_FROM [label="EXIT FROM"]

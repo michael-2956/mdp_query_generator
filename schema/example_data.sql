@@ -62,3 +62,9 @@ INSERT INTO REGION (R_REGIONKEY, R_NAME, R_COMMENT) VALUES
 (4, 'Africa', 'Region 4 Comment'),
 (5, 'South America', 'Region 5 Comment');
 
+-- ADDITIONAL TABLE WITH ARRAYS
+INSERT INTO books (title, authors, genres)
+VALUES
+    ('Book 1', ARRAY['Author 1', 'Author 2'], ARRAY['Fiction', 'Mystery']),
+    ('Book 2', ARRAY['Author 3'], ARRAY['Fantasy']),
+    ('Book 3', ARRAY['Author 4', 'Author 5', 'Author 6'], NULL);
