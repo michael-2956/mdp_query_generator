@@ -333,7 +333,7 @@ digraph G {
         BinaryBooleanOpV3[label="bool op."]
         BinaryBooleanOpV3AND [label="AND"]
         BinaryBooleanOpV3OR [label="OR"]
-        BinaryBooleanOpV3XOR [label="XOR"]
+        // BinaryBooleanOpV3XOR [label="XOR"] // THERE IS NO XOR IN POSTGRESQL
         VAL_3 -> BinaryBooleanOpV3
         call27_types [MODS="[...]", TYPES="[3VL Value]", label="TYPES: 3VL Value\nmodif.: [...mods]", shape=rectangle, style=filled, color=lightblue]
         BinaryBooleanOpV3 -> call27_types
@@ -342,8 +342,8 @@ digraph G {
         BinaryBooleanOpV3AND -> call28_types
         call27_types -> BinaryBooleanOpV3OR
         BinaryBooleanOpV3OR -> call28_types
-        call27_types -> BinaryBooleanOpV3XOR
-        BinaryBooleanOpV3XOR -> call28_types
+        // call27_types -> BinaryBooleanOpV3XOR
+        // BinaryBooleanOpV3XOR -> call28_types
         call28_types -> EXIT_VAL_3
 
         true [literal="t"]
@@ -533,9 +533,9 @@ digraph G {
         types_select_type_noexpr -> call1_Query
         call1_Query -> EXIT_types
 
-        types_null [label="null"]
-        types -> types_null
-        types_null -> EXIT_types
+        // types_null [label="null"]
+        // types -> types_null
+        // types_null -> EXIT_types
 
         call0_numeric [label="numeric\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=chocolate]
         types_select_type_numeric -> call0_numeric
