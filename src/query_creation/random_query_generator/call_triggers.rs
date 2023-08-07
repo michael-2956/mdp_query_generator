@@ -82,12 +82,14 @@ impl CallTriggerTrait for IsColumnTypeAvailableTrigger {
 #[derive(Debug, Clone)]
 pub struct CanExtendArrayTrigger {
     array_length: usize,
+    desired_element_num: Option<usize>,
 }
 
 impl StatefulCallTriggerTrait for CanExtendArrayTrigger {
     fn new() -> Box<dyn StatefulCallTriggerTrait> where Self : Sized {
         Box::new(CanExtendArrayTrigger {
             array_length: 0,
+            desired_element_num: None,
         })
     }
 
@@ -101,19 +103,35 @@ impl StatefulCallTriggerTrait for CanExtendArrayTrigger {
 
     fn update_trigger_state(&mut self, _clause_context: &ClauseContext, function_context: &FunctionContext) {
         self.array_length = match function_context.current_node.node_common.name.as_str() {
-            "array_multiple_values" => 1,
+            node_name @ (
+                "call12_types" |
+                "call13_types" |
+                "call31_types" |
+                "call51_types" |
+                "call14_types"
+            ) => {
+                let tp = match node_name {
+                    "call12_types" => SubgraphType::Numeric,
+                    "call13_types" => SubgraphType::Val3,
+                    "call31_types" => SubgraphType::String,
+                    "call51_types" => SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined)),
+                    "call14_types" => SubgraphType::Array((Box::new(SubgraphType::Undetermined), None)),
+                    _ => panic!(),
+                };
+                self.desired_element_num = unwrap_variant_ref!(unwrap_variant_ref!(
+                    function_context.call_params.selected_types, CallTypes::TypeList
+                ).iter().find(
+                    |x| x.inner().is_same_or_more_determined_or_undetermined(&tp)
+                ).unwrap(), SubgraphType::Array).1;
+                1
+            },
             "call50_types" => self.array_length + 1,
             any => panic!("{any} unexpectedly triggered the can_extend_array call trigger affector"),
         };
     }
 
     fn run(&self, _clause_context: &ClauseContext, function_context: &FunctionContext) -> bool {
-        /// TODO: this part should be in update_trigger_state() which should be affected by state selection
-        let desired_element_num = unwrap_variant_ref!(unwrap_variant_ref!(
-            function_context.call_params.selected_types, CallTypes::TypeList
-        ).iter().next().unwrap(), SubgraphType::Array).1;
-
-        if let Some(desired_element_num) = desired_element_num {
+        if let Some(desired_element_num) = self.desired_element_num {
             match function_context.current_node.node_common.name.as_str() {
                 "array_one_more_value_is_allowed" => self.array_length < desired_element_num,
                 "array_exit_allowed" => self.array_length == desired_element_num,
@@ -121,11 +139,6 @@ impl StatefulCallTriggerTrait for CanExtendArrayTrigger {
             }
         } else {
             true
-            // match function_context.current_node.node_common.name.as_str() {
-            //     "array_one_more_value_is_allowed" => self.array_length < 1,
-            //     "array_exit_allowed" => self.array_length == 1,
-            //     any => panic!("{any} unexpectedly triggered the can_extend_array call trigger"),
-            // }
         }
     }
 }

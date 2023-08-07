@@ -582,7 +582,7 @@ digraph G {
 
         array_one_more_value_is_allowed [label="One more value (if allowed)\ncall. trig.: 'can_extend_array'", call_trigger="can_extend_array"]
         array_exit_allowed [label="Exit is allowed\ncall. trig.: 'can_extend_array'", call_trigger="can_extend_array"]
-        array_multiple_values [label="Multiple values\naffects: 'can_extend_array'", affects_call_trigger="can_extend_array"]
+        array_multiple_values [label="Multiple values"]
         array_multiple_values -> array_one_more_value_is_allowed
         array_multiple_values -> array_exit_allowed
 
@@ -590,23 +590,23 @@ digraph G {
         call50_types -> array_one_more_value_is_allowed
         array_one_more_value_is_allowed -> call50_types
 
-        call12_types [TYPE_NAME="numeric", TYPES="[numeric]", label="TYPE: numeric?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call12_types [TYPE_NAME="numeric", TYPES="[numeric]", label="TYPE: numeric?\nMODS: [...mods]\naffects: 'can_extend_array'", affects_call_trigger="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         array -> call12_types
         call12_types -> array_multiple_values
 
-        call13_types [TYPE_NAME="3VL Value", TYPES="[3VL Value]", label="TYPE: 3VL Value?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call13_types [TYPE_NAME="3VL Value", TYPES="[3VL Value]", label="TYPE: 3VL Value?\nMODS: [...mods]\naffects: 'can_extend_array'", affects_call_trigger="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         array -> call13_types
         call13_types -> array_multiple_values
 
-        call31_types [TYPE_NAME="string", TYPES="[string]", label="TYPE: string?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call31_types [TYPE_NAME="string", TYPES="[string]", label="TYPE: string?\nMODS: [...mods]\naffects: 'can_extend_array'", affects_call_trigger="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         array -> call31_types
         call31_types -> array_multiple_values
 
-        call51_types [TYPE_NAME="list expr", TYPES="[TR...]", label="TYPE: list expr?\nMODS: [...mods]\nTYPES: [(rel)...]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call51_types [TYPE_NAME="list expr", TYPES="[TR...]", label="TYPE: list expr?\nMODS: [...mods]\nTYPES: [(tn.rel.)...]\naffects: 'can_extend_array'", affects_call_trigger="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         array -> call51_types
         call51_types -> array_multiple_values
 
-        call14_types [TYPE_NAME="array", TYPES="[TR...]", label="TYPE: array?\nMODS: [...mods]\nTYPES: [(rel)...]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call14_types [TYPE_NAME="array", TYPES="[TR...]", label="TYPE: array?\nMODS: [...mods]\nTYPES: [(tn.rel.)...]\naffects: 'can_extend_array'", affects_call_trigger="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         array -> call14_types
         call14_types -> array_multiple_values
 
