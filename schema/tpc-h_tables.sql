@@ -84,9 +84,9 @@ CREATE TABLE REGION (
 );
 
 -- ADDITIONAL TABLE WITH ARRAYS
-CREATE TABLE books (
-    id SERIAL PRIMARY KEY,
-    title VARCHAR(100) NOT NULL,
-    authors TEXT[] NOT NULL,
-    genres TEXT[]
-);
+-- CREATE TABLE books (
+--     id SERIAL PRIMARY KEY,
+--     title VARCHAR(100) NOT NULL,
+--     authors TEXT[] NOT NULL,
+--     genres TEXT[]
+-- );
