@@ -5,6 +5,8 @@ use smol_str::SmolStr;
 use logos::{Filter, Lexer, Logos};
 use sqlparser::ast::{DataType, ExactNumberInfo, ObjectName, Ident};
 
+use crate::unwrap_variant;
+
 use super::error::SyntaxError;
 
 #[derive(Logos, Debug, PartialEq)]
@@ -87,6 +89,45 @@ fn block_comment(lex: &mut Lexer<'_, DotToken>) -> Filter<()> {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum TypeWithFields {
+    Type(SubgraphType),
+    CompatibleInner(SubgraphType),
+}
+
+impl TypeWithFields {
+    pub fn inner_ref(&self) -> &SubgraphType {
+        match self {
+            TypeWithFields::Type(tp) => tp,
+            TypeWithFields::CompatibleInner(tp) => tp,
+        }
+    }
+
+    fn from_type_name(s: &str) -> Result<Self, SyntaxError> {
+        match s {
+            "numeric" |
+            "3VL Value" |
+            "array" |
+            "list expr" |
+            "string" => Ok(Self::Type(SubgraphType::from_type_name(s)?)),
+            type_name @ (
+                "array<compatible>" |
+                "list expr<compatible>"
+            ) => Ok(Self::CompatibleInner(SubgraphType::from_type_name(
+                &type_name[..type_name.len() - 12]
+            )?)),
+            any => Err(SyntaxError::new(format!("Type {any} does not exist!")))
+        }
+    }
+
+    pub fn wrap_in_func(&self, func_name: &str) -> TypeWithFields {
+        match self.clone() {
+            Self::Type(tp) => Self::Type(tp.wrap_in_func(func_name)),
+            Self::CompatibleInner(..) => panic!("CompatibleInner can't be wrapped as a subtype")
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SubgraphType {
     /// This type is used as an array inner type
@@ -102,6 +143,10 @@ pub enum SubgraphType {
 impl SubgraphType {
     pub fn wrap_in_func(&self, func_name: &str) -> SubgraphType {
         let outer = SubgraphType::from_func_name(func_name);
+        self.wrap_in_type(&outer)
+    }
+
+    pub fn wrap_in_type(&self, outer: &SubgraphType) -> SubgraphType {
         match outer {
             SubgraphType::Array(..) => SubgraphType::Array((Box::new(self.clone()), None)),
             SubgraphType::ListExpr(..) => SubgraphType::ListExpr(Box::new(self.clone())),
@@ -242,7 +287,7 @@ pub enum FunctionInputsType {
     PassThroughRelatedInner,
     /// Used in function calls to select multiple types among the allowed type list.
     /// Used in function declarations to specify the allowed type list, of which multiple can be selected.
-    TypeNameList(Vec<SubgraphType>),
+    TypeListWithFields(Vec<TypeWithFields>),
 }
 
 /// splits a string with commas into a list of trimmed identifiers
@@ -269,11 +314,11 @@ impl FunctionInputsType {
     }
 
     /// splits a string with commas into a list of trimmed identifiers
-    fn parse_types(name_list_str: SmolStr) -> Result<Vec<SubgraphType>, SyntaxError> {
+    fn parse_types(name_list_str: SmolStr) -> Result<Vec<TypeWithFields>, SyntaxError> {
         name_list_str
             .split(',')
             .map(|x| x.trim())
-            .map(SubgraphType::from_type_name)
+            .map(TypeWithFields::from_type_name)
             .collect::<Result<Vec<_>, _>>()
     }
 }
@@ -286,7 +331,7 @@ pub struct NodeCommon {
     /// Type name if specified (basically an "on" trigger)
     pub type_name: Option<SubgraphType>,
     /// Graph trigger with mode if specified
-    pub trigger: Option<(SmolStr, bool)>,
+    pub modifier: Option<(SmolStr, bool)>,
     /// Name of the call trigger if specified
     pub call_trigger_name: Option<SmolStr>,
     /// Name of the call trigger that this node affects, if specified
@@ -295,7 +340,7 @@ pub struct NodeCommon {
 
 impl NodeCommon {
     pub fn with_name(name: SmolStr) -> Self {
-        Self { name: name, type_name: None, trigger: None, call_trigger_name: None, affects_call_trigger_name: None }
+        Self { name: name, type_name: None, modifier: None, call_trigger_name: None, affects_call_trigger_name: None }
     }
 }
 
@@ -399,8 +444,8 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                 )))
                             } else {
                                 if func.uses_wrapped_types {
-                                    if let FunctionInputsType::TypeNameList(type_list) = func.input_type {
-                                        func.input_type = FunctionInputsType::TypeNameList(
+                                    if let FunctionInputsType::TypeListWithFields(type_list) = func.input_type {
+                                        func.input_type = FunctionInputsType::TypeListWithFields(
                                             type_list.into_iter().map(|x| x.wrap_in_func(&func.source_node_name)).collect()
                                         );
                                     }
@@ -425,9 +470,13 @@ impl<'a> Iterator for DotTokenizer<'a> {
                             );
 
                             let mut type_name = match node_spec.remove("TYPE_NAME") {
-                                Some(DotToken::QuotedIdentifiers(idents)) => Some(
-                                    return_some_err!(SubgraphType::from_type_name(&idents))
-                                ),
+                                Some(DotToken::QuotedIdentifiers(idents)) => Some({
+                                    let tp = return_some_err!(TypeWithFields::from_type_name(&idents));
+                                    if matches!(tp, TypeWithFields::CompatibleInner(..)) {
+                                        panic!("Can't have a compatible inner type in a type name for a node.")
+                                    }
+                                    unwrap_variant!(tp, TypeWithFields::Type)
+                                }),
                                 _ => None
                             };
 
@@ -441,20 +490,20 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                 ))))
                             }
 
-                            let trigger = match node_spec.remove("TRIGGER") {
+                            let modifier = match node_spec.remove("MODIFIER") {
                                 Some(DotToken::QuotedIdentifiers(idents)) => {
-                                    let trigger_on = match node_spec.remove("TRIGGER_MODE") {
+                                    let modifier_on = match node_spec.remove("MODIFIER_MODE") {
                                         Some(DotToken::QuotedIdentifiers(mode_name)) => match mode_name.as_str() {
                                             mode_name @ ("on" | "off") => Some(mode_name == "on"), _ => None
                                         }, _ => None,
                                     };
-                                    let trigger_on = match trigger_on {
+                                    let modifier_on = match modifier_on {
                                         Some(v) => v,
                                         None => break Some(Err(SyntaxError::new(format!(
                                             "Expected trigger_mode=\"on\" or trigger_mode=\"off\" after trigger=\"{idents}\" for node {node_name}"
                                         )))),
                                     };
-                                    Some((idents, trigger_on))
+                                    Some((idents, modifier_on))
                                 },
                                 _ => None
                             };
@@ -481,7 +530,7 @@ impl<'a> Iterator for DotTokenizer<'a> {
                             let node_common = NodeCommon {
                                 name: node_name.clone(),
                                 type_name,
-                                trigger,
+                                modifier,
                                 call_trigger_name,
                                 affects_call_trigger_name
                             };
@@ -629,7 +678,7 @@ fn parse_function_options(
             if let Some(special_type) = FunctionInputsType::try_extract_special_type(&idents) {
                 input_type = special_type;
             } else {
-                input_type = FunctionInputsType::TypeNameList(
+                input_type = FunctionInputsType::TypeListWithFields(
                     FunctionInputsType::parse_types(idents)?,
                 );
             }

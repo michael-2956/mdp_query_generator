@@ -36,9 +36,9 @@
 # TYPE_NAME is the name of a type listed in function declaration.
 # The node will be turned off or on respective to the types passed to function call.
 
-# 4.1 A node with a trigger
-# {node_name} [trigger="[trig_name]", trigger_mode="on"/"off"]
-# if `trigger` is present in the modifiers, turn the node on or off according to the trigger_mode.
+# 4.1 A node with a modifier
+# {node_name} [modifier="[trig_name]", modifier_mode="on"/"off"]
+# if `modifier` is present in the modifiers, turn the node on or off according to the modifier_mode.
 
 # 4.2 A node with a call trigger
 # {node_name} [call_trigger="[call_trig_name]"]
@@ -76,7 +76,7 @@
 # 13 [temporary]. Mark nodes that will generate a literal value with 100%
 # probability as node[literal="t"]
 
-# 14. To use modifiers provided in arguments, mark a node with trigger="MOD. NAME", trigger_mode="off" / trigger_mode="on"
+# 14. To use modifiers provided in arguments, mark a node with modifier="MOD. NAME", modifier_mode="off" / modifier_mode="on"
 
 digraph G {
     subgraph def_Query {
@@ -85,11 +85,11 @@ digraph G {
 
         FROM []
 
-        single_value_true [label="limit 1 (mod.: 'single value')", trigger="single value", trigger_mode="on"]
+        single_value_true [label="limit 1 (mod.: 'single value')", modifier="single value", modifier_mode="on"]
         Query -> single_value_true
         single_value_true -> FROM
 
-        single_value_false [label="mod.: '!single value'", trigger="single value", trigger_mode="off"]
+        single_value_false [label="mod.: '!single value'", modifier="single value", modifier_mode="off"]
         Query -> single_value_false
         single_value_false -> FROM
 
@@ -179,7 +179,7 @@ digraph G {
         // call0_aggregate_function -> SELECT_list_multiple_values
         call54_types -> SELECT_list_multiple_values // call0_aggregate_function
         SELECT_list_multiple_values -> EXIT_SELECT
-        SELECT_list_multiple_values_single_value_false [label="mod. single value = false", trigger="single value", trigger_mode="off"]
+        SELECT_list_multiple_values_single_value_false [label="mod. single value = false", modifier="single value", modifier_mode="off"]
         SELECT_list_multiple_values -> SELECT_list_multiple_values_single_value_false
         SELECT_list_multiple_values_single_value_false -> SELECT_list
 
@@ -195,7 +195,7 @@ digraph G {
         EXIT_VAL_3 [shape=rectangle, label="EXIT 3VL Value"]
 
         IsNull [label="IS NULL"]
-        call55_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle]
+        call55_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
         VAL_3 -> IsNull
         IsNull -> call55_types
         IsNull_not [label="NOT"]
@@ -204,7 +204,7 @@ digraph G {
         call55_types -> EXIT_VAL_3
 
         IsDistinctFrom [label="IS DISTINCT FROM"]
-        call56_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle]
+        call56_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
         IsDistinctNOT [label="NOT"]
         DISTINCT []
         call21_types [MODS="[...]", TYPES="[compatible]", label="TYPES: [compatible]\nmodif.: [...mods]", shape=rectangle, style=filled, color=lightblue]
@@ -229,7 +229,7 @@ digraph G {
         InListNot [label="NOT"]
         InListIn [label="IN"]
         VAL_3 -> InList
-        call57_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle]
+        call57_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
         InList -> call57_types
         call57_types -> InListNot
         InListNot -> InListIn
@@ -241,7 +241,7 @@ digraph G {
         InSubquery[label="IN [subquery]"]
         InSubqueryNot [label="NOT"]
         InSubqueryIn [label="IN"]
-        call58_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle]
+        call58_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
         VAL_3 -> InSubquery
         InSubquery -> call58_types
         call58_types -> InSubqueryNot
@@ -255,7 +255,7 @@ digraph G {
         BetweenBetween [label="BETWEEN"]
         BetweenBetweenAnd [label="AND"]
         VAL_3 -> Between
-        call59_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle]
+        call59_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
         Between -> call59_types
         call59_types -> BetweenBetween
         call22_types [MODS="[...]", TYPES="[compatible]", label="TYPES: [compatible]\nmodif.: [...mods]", shape=rectangle, style=filled, color=lightblue]
@@ -271,7 +271,7 @@ digraph G {
         BinaryCompLessEqual [label="<="]
         BinaryCompUnEqual [label="<>"]
         VAL_3 -> BinaryComp
-        call60_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle]
+        call60_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
         BinaryComp -> call60_types
         call24_types [MODS="[...]", TYPES="[compatible]", label="TYPES: [compatible]\nmodif.: [...mods]", shape=rectangle, style=filled, color=lightblue]
         call60_types -> BinaryCompLess
@@ -295,7 +295,7 @@ digraph G {
         AnyAllAnyAllAny[label="ANY"]
         AnyAllAnyAllAll[label="ALL"]
         VAL_3 -> AnyAll
-        call61_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle]
+        call61_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
         AnyAll -> call61_types
         call61_types -> AnyAllSelectOp
         AnyAllSelectOp -> AnyAllLess
@@ -309,6 +309,7 @@ digraph G {
         call4_Query [TYPES="[compatible]", label="Query\nTYPE: [compatible]", shape=rectangle, style=filled, color=green]
         AnyAllSelectIter -> call4_Query
         call4_Query -> AnyAllAnyAll
+        // call62_types [TYPES="[array<compatible>]", MODS="[..., no subquery]", label="TYPES: array<compatible>\nmodif.: [...mods, no subquery]", shape=rectangle, style=filled, color=lightblue]
         call1_array [TYPES="[compatible]", MODS="[...]", label="array\nTYPE: [compatible]\nmodif.: [...mods]", shape=rectangle, style=filled, color=yellow]
         AnyAllSelectIter -> call1_array
         call1_array -> AnyAllAnyAll
@@ -505,7 +506,7 @@ digraph G {
     }
     
     subgraph def_types {
-        types [TYPES="[numeric, 3VL Value, array, list expr, string]", MODS="[no column spec]", label="TYPE(S) (generic):\ntypes=[numeric?, 3VL Value?, array?, list expr?, string?]\nmods=[no column spec]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, 3VL Value, array, list expr, string]", MODS="[no column spec, no subquery]", label="TYPE(S) (generic):\ntypes=[numeric?, 3VL Value?, array?, list expr?, string?]\nmods=[no column spec, no subquery]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
         types_select_type_noexpr[label="Non-expression"]
@@ -525,11 +526,11 @@ digraph G {
         types -> types_select_type_string
         types_select_type_string -> types_select_type_noexpr
 
-        call0_column_spec [TYPES="[known]", call_trigger="is_column_type_available", trigger="no column spec", trigger_mode="off", label="column specifier\nTYPE: known\nmod.: 'no column spec'\ncall.trig.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
+        call0_column_spec [TYPES="[known]", call_trigger="is_column_type_available", modifier="no column spec", modifier_mode="off", label="column specifier\nTYPE: known\nmod.: 'no column spec'\ncall.trig.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
         types_select_type_noexpr -> call0_column_spec
         call0_column_spec -> EXIT_types
 
-        call1_Query [TYPES="[known]", MODS="[single value]", label="Query\nMODS: single value\nTYPE: known", shape=rectangle, style=filled, color=green]
+        call1_Query [TYPES="[known]", MODS="[single value]", label="Query\nMODS: single value\nTYPE: known", modifier="no subquery", modifier_mode="off", shape=rectangle, style=filled, color=green]
         types_select_type_noexpr -> call1_Query
         call1_Query -> EXIT_types
 

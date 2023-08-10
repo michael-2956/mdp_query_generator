@@ -17,7 +17,7 @@ use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_gene
 use self::{
     markov_chain::{
         MarkovChain, NodeParams, CallParams, CallModifiers, Function
-    }, error::SyntaxError, dot_parser::NodeCommon
+    }, error::SyntaxError, dot_parser::{NodeCommon, TypeWithFields}
 };
 
 use state_choosers::StateChooser;
@@ -267,7 +267,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
     /// push all the known data to fields of call params that
     /// were previously left unfilled
-    fn fill_out_call_params(&self, mut call_params: CallParams) -> CallParams {
+    fn fill_call_params_fields(&self, mut call_params: CallParams) -> CallParams {
         let called_function = self.markov_chain.functions.get(&call_params.func_name).unwrap();
 
         let mut are_wrapped = false;
@@ -300,6 +300,14 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
                     .map(|x| x.inner())
                     .collect::<Vec<_>>())
             },
+            CallTypes::TypeListWithFields(type_list) => CallTypes::TypeList({
+                type_list.into_iter().map(|x| match x {
+                    TypeWithFields::Type(tp) => vec![tp],
+                    TypeWithFields::CompatibleInner(outer_tp) => self.get_compatible_list().into_iter().map(
+                        |x| x.wrap_in_type(&outer_tp)
+                    ).collect(),
+                }).collect::<Vec<_>>().concat()
+            }),
             any => any,
         };
 
@@ -325,7 +333,18 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
         // finally, deal with modifiers
         call_params.modifiers = match call_params.modifiers {
-            CallModifiers::PassThrough => self.get_fn_modifiers().clone(),
+            CallModifiers::StaticListWithParentMods(modifiers) => {
+                CallModifiers::StaticList([
+                    &{ match self.get_fn_modifiers().clone() {
+                        CallModifiers::None => vec![],
+                        CallModifiers::StaticListWithParentMods(_) => panic!(
+                            "CallModifiers::StaticListWithParentMods was not substituted with StaticList for parent function"
+                        ),
+                        CallModifiers::StaticList(list) => list,
+                    }}[..],
+                    &modifiers[..]
+                ].concat())
+            },
             any => any,
         };
 
@@ -385,7 +404,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
     /// update stack and return function's first state
     fn start_function(&mut self, call_params: CallParams, clause_context: &ClauseContext) -> SmolStr {
-        let call_params = self.fill_out_call_params(call_params);
+        let call_params = self.fill_call_params_fields(call_params);
 
         self.update_stack(call_params, clause_context);
 
@@ -651,10 +670,10 @@ fn check_node_off(
             _ => panic!("Expected None or TypeNameList for function selected types")
         };
     }
-    if let Some((ref trigger_name, ref trigger_on)) = node_common.trigger {
+    if let Some((ref trigger_name, ref trigger_on)) = node_common.modifier {
         off = off || match call_params.modifiers {
             CallModifiers::None => *trigger_on,
-            CallModifiers::PassThrough => panic!("CallModifiers::PassThrough was not substituted for CallModifiers::StaticList!"),
+            CallModifiers::StaticListWithParentMods(..) => panic!("CallModifiers::StaticListWithParentArgs was not substituted for CallModifiers::StaticList!"),
             CallModifiers::StaticList(ref modifiers) => {
                 if modifiers.contains(&trigger_name) { !trigger_on } else { *trigger_on }
             },

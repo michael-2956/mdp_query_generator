@@ -4,8 +4,10 @@ use regex::Regex;
 use core::fmt::Debug;
 use smol_str::SmolStr;
 
+use crate::unwrap_variant;
+
 use super::{
-    dot_parser, dot_parser::{DotTokenizer, FunctionInputsType, SubgraphType, CodeUnit, NodeCommon, FunctionDeclaration}, error::SyntaxError,
+    dot_parser, dot_parser::{DotTokenizer, FunctionInputsType, SubgraphType, CodeUnit, NodeCommon, FunctionDeclaration, TypeWithFields}, error::SyntaxError,
 };
 
 /// this structure contains all the parsed graph functions
@@ -32,7 +34,8 @@ pub enum CallModifiers {
     /// none of the modifiers are activated
     None,
     /// Used when we want to pass the function's modifiers further
-    PassThrough,
+    /// Optionally, adds new modifiers
+    StaticListWithParentMods(Vec<SmolStr>),
     /// USed to specify a static list of modifiers
     StaticList(Vec<SmolStr>),
 }
@@ -74,6 +77,8 @@ pub enum CallTypes {
     PassThroughRelatedInner,
     /// Select multiple types among possible type variants.
     TypeList(Vec<SubgraphType>),
+    /// Select multiple types among possible type variants.
+    TypeListWithFields(Vec<TypeWithFields>),
 }
 
 impl CallTypes {
@@ -92,7 +97,7 @@ impl CallTypes {
             FunctionInputsType::PassThroughTypeNameRelated => CallTypes::PassThroughTypeNameRelated,
             FunctionInputsType::PassThroughRelatedInner => CallTypes::PassThroughRelatedInner,
             FunctionInputsType::PassThroughRelated => CallTypes::PassThroughRelated,
-            FunctionInputsType::TypeNameList(tp_list) => CallTypes::TypeList(tp_list),
+            FunctionInputsType::TypeListWithFields(tp_list) => CallTypes::TypeListWithFields(tp_list),
         }
     }
 }
@@ -124,7 +129,12 @@ impl FunctionTypes {
     fn from_function_inputs_type(source_node_name: SmolStr, input: FunctionInputsType) -> FunctionTypes {
         match input {
             FunctionInputsType::None => FunctionTypes::None,
-            FunctionInputsType::TypeNameList(list) => FunctionTypes::TypeList(list),
+            FunctionInputsType::TypeListWithFields(list) => {
+                if list.iter().find(|x| matches!(x, TypeWithFields::CompatibleInner(..))).is_some() {
+                    panic!("Can't have types with inner compatibles (...<compatible>) in function declaration (function {})", source_node_name)
+                }
+                FunctionTypes::TypeList(list.into_iter().map(|x| unwrap_variant!(x, TypeWithFields::Type)).collect())
+            },
             any => panic!("Incorrect input type for function {}: {:?}", source_node_name, any),
         }
     }
@@ -298,14 +308,10 @@ impl MarkovChain {
                     modifiers,
                 } => {
                     let modifiers = match modifiers {
-                        Some(modifiers) => {
+                        Some(mut modifiers) => {
                             if modifiers.contains(&SmolStr::new("...")) {
-                                if modifiers.len() != 1 {
-                                    return Err(SyntaxError::new(format!(
-                                        "{}: when modifier '...' is present, it should be the only modifier, but got {:?}", node_common.name, modifiers
-                                    )));
-                                }
-                                CallModifiers::PassThrough
+                                modifiers.retain(|x| x != "...");
+                                CallModifiers::StaticListWithParentMods(modifiers)
                             } else {
                                 CallModifiers::StaticList(modifiers)
                             }
@@ -387,6 +393,10 @@ impl MarkovChain {
                             CallTypes::TypeList(types_list),
                             FunctionTypes::TypeList(func_types_list)
                         ) if types_list.iter().all(|t| func_types_list.contains(t)) => {},
+                        (
+                            CallTypes::TypeListWithFields(types_list),
+                            FunctionTypes::TypeList(func_types_list)
+                        ) if types_list.iter().all(|t| func_types_list.contains(t.inner_ref())) => {},
                         (CallTypes::None, FunctionTypes::TypeList(..) | FunctionTypes::None) => {},
                         (
                             CallTypes::PassThrough | CallTypes::PassThroughTypeNameRelated |
@@ -404,8 +414,8 @@ impl MarkovChain {
                         if let Some(ref func_modifiers) = function.accepted_modifiers {
                             match call_params.modifiers {
                                 CallModifiers::None => {},
-                                CallModifiers::PassThrough => {},
-                                CallModifiers::StaticList(ref modifiers) => {
+                                CallModifiers::StaticListWithParentMods(ref modifiers)
+                                | CallModifiers::StaticList(ref modifiers) => {
                                     for c_mod in modifiers {
                                         if !func_modifiers.contains(&c_mod) {
                                             return Err(SyntaxError::new(gen_type_error(format!(
@@ -533,7 +543,7 @@ fn define_node(
     ) -> Result<(), SyntaxError> {
     if let Some(function) = current_function {
         check_type(&function, &node_common.name, &node_common.type_name)?;
-        check_trigger(&function, &node_common.name, &node_common.trigger)?;
+        check_trigger(&function, &node_common.name, &node_common.modifier)?;
         function.chain.insert(node_common.name.clone(), Vec::<_>::new());
         node_params.insert(node_common.name.clone(), NodeParams {
             node_common: node_common, call_params,
