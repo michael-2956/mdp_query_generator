@@ -422,7 +422,10 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                 self.expect_state("AnyAllSelectIter");
                 let iterable = Box::new(match self.next_state().as_str() {
                     "call4_Query" => Expr::Subquery(Box::new(self.handle_query().0)),
-                    "call1_array" => self.handle_array().1,
+                    "call62_types" => self.handle_types(
+                        Some(SubgraphType::Array((Box::new(SubgraphType::Undetermined), None))),
+                        Some(SubgraphType::Array((Box::new(types_selected_type), None)))
+                    ).1,
                     any => self.panic_unexpected(any)
                 });
                 self.expect_state("AnyAllAnyAll");
