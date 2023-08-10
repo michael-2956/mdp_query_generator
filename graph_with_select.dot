@@ -195,24 +195,24 @@ digraph G {
         EXIT_VAL_3 [shape=rectangle, label="EXIT 3VL Value"]
 
         IsNull [label="IS NULL"]
-        call0_types_all [label="TYPES: ALL\nmodif.: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=orange]
+        call55_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle]
         VAL_3 -> IsNull
-        IsNull -> call0_types_all
+        IsNull -> call55_types
         IsNull_not [label="NOT"]
         IsNull -> IsNull_not
-        IsNull_not -> call0_types_all
-        call0_types_all -> EXIT_VAL_3
+        IsNull_not -> call55_types
+        call55_types -> EXIT_VAL_3
 
         IsDistinctFrom [label="IS DISTINCT FROM"]
-        call1_types_all [label="TYPES: ALL\nmodif.: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=orange]
+        call56_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle]
         IsDistinctNOT [label="NOT"]
         DISTINCT []
         call21_types [MODS="[...]", TYPES="[compatible]", label="TYPES: [compatible]\nmodif.: [...mods]", shape=rectangle, style=filled, color=lightblue]
         VAL_3 -> IsDistinctFrom
-        IsDistinctFrom -> call1_types_all
-        call1_types_all -> IsDistinctNOT
+        IsDistinctFrom -> call56_types
+        call56_types -> IsDistinctNOT
         IsDistinctNOT -> DISTINCT
-        call1_types_all -> DISTINCT
+        call56_types -> DISTINCT
         DISTINCT -> call21_types
         call21_types -> EXIT_VAL_3
 
@@ -229,11 +229,11 @@ digraph G {
         InListNot [label="NOT"]
         InListIn [label="IN"]
         VAL_3 -> InList
-        call2_types_all [label="TYPES: ALL\nmodif.: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=orange]
-        InList -> call2_types_all
-        call2_types_all -> InListNot
+        call57_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle]
+        InList -> call57_types
+        call57_types -> InListNot
         InListNot -> InListIn
-        call2_types_all -> InListIn
+        call57_types -> InListIn
         call1_list_expr [TYPES="[compatible]", MODS="[...]", label="list expr\nTYPES: [compatible]\nmodif.: [...mods]", shape=rectangle, style=filled, color=blue]
         InListIn -> call1_list_expr
         call1_list_expr -> EXIT_VAL_3
@@ -241,12 +241,12 @@ digraph G {
         InSubquery[label="IN [subquery]"]
         InSubqueryNot [label="NOT"]
         InSubqueryIn [label="IN"]
-        call3_types_all [label="TYPES: ALL\nmodif.: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=orange]
+        call58_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle]
         VAL_3 -> InSubquery
-        InSubquery -> call3_types_all
-        call3_types_all -> InSubqueryNot
+        InSubquery -> call58_types
+        call58_types -> InSubqueryNot
         InSubqueryNot -> InSubqueryIn
-        call3_types_all -> InSubqueryIn
+        call58_types -> InSubqueryIn
         call3_Query [TYPES="[compatible]", MODS="[]", label="Query\nTYPE: [compatible]", shape=rectangle, style=filled, color=green]
         InSubqueryIn -> call3_Query
         call3_Query -> EXIT_VAL_3
@@ -255,9 +255,9 @@ digraph G {
         BetweenBetween [label="BETWEEN"]
         BetweenBetweenAnd [label="AND"]
         VAL_3 -> Between
-        call4_types_all [label="TYPES: ALL\nmodif.: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=orange]
-        Between -> call4_types_all
-        call4_types_all -> BetweenBetween
+        call59_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle]
+        Between -> call59_types
+        call59_types -> BetweenBetween
         call22_types [MODS="[...]", TYPES="[compatible]", label="TYPES: [compatible]\nmodif.: [...mods]", shape=rectangle, style=filled, color=lightblue]
         BetweenBetween -> call22_types
         call22_types -> BetweenBetweenAnd
@@ -271,16 +271,16 @@ digraph G {
         BinaryCompLessEqual [label="<="]
         BinaryCompUnEqual [label="<>"]
         VAL_3 -> BinaryComp
-        call5_types_all [label="TYPES: ALL\nmodif.: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=orange]
-        BinaryComp -> call5_types_all
+        call60_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle]
+        BinaryComp -> call60_types
         call24_types [MODS="[...]", TYPES="[compatible]", label="TYPES: [compatible]\nmodif.: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        call5_types_all -> BinaryCompLess
+        call60_types -> BinaryCompLess
         BinaryCompLess -> call24_types
-        call5_types_all -> BinaryCompEqual
+        call60_types -> BinaryCompEqual
         BinaryCompEqual -> call24_types
-        call5_types_all -> BinaryCompLessEqual
+        call60_types -> BinaryCompLessEqual
         BinaryCompLessEqual -> call24_types
-        call5_types_all -> BinaryCompUnEqual
+        call60_types -> BinaryCompUnEqual
         BinaryCompUnEqual -> call24_types
         call24_types -> EXIT_VAL_3
 
@@ -295,9 +295,9 @@ digraph G {
         AnyAllAnyAllAny[label="ANY"]
         AnyAllAnyAllAll[label="ALL"]
         VAL_3 -> AnyAll
-        call6_types_all [label="TYPES: ALL\nmodif.: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=orange]
-        AnyAll -> call6_types_all
-        call6_types_all -> AnyAllSelectOp
+        call61_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle]
+        AnyAll -> call61_types
+        call61_types -> AnyAllSelectOp
         AnyAllSelectOp -> AnyAllLess
         AnyAllLess -> AnyAllSelectIter
         AnyAllSelectOp -> AnyAllEqual
@@ -558,15 +558,6 @@ digraph G {
         call0_array -> EXIT_types
     }
 
-    subgraph def_types_all {
-        types_all [label="TYPES: ALL\nmods: [no column spec]", MODS="[no column spec]", shape=rectangle, style=filled, color=orange]
-        EXIT_types_all [label="EXIT TYPES: ALL", shape=rectangle]
-
-        call0_types [TYPES="[numeric, 3VL Value, array, list expr, string]", MODS="[...]", label="TYPES: numeric, 3VL Value, array, list expr, string\nMODS: [...mods]", shape=rectangle]
-        types_all -> call0_types
-        call0_types -> EXIT_types_all
-    }
-
     subgraph def_column_spec {
         column_spec [TYPES="[numeric, 3VL Value, string, array, list expr]", label="column specifier\ntypes=[numeric, 3VL Value, string, array, list expr]", shape=octagon, style=filled, color=gold]
         EXIT_column_spec [label="EXIT column specifier", shape=rectangle]
@@ -802,11 +793,11 @@ digraph G {
         call46_types -> EXIT_having
     }
 
+    # cosmetic
     subgraph ignore {
         EXIT_VAL_3 -> numeric [color=none]
         EXIT_numeric -> string [color=none]
-        EXIT_types -> types_all [color=none]
-        EXIT_types_all -> column_spec [color=none]
+        EXIT_types -> column_spec [color=none]
         EXIT_column_spec -> array [color=none]
         EXIT_array -> list_expr[color=none]
         EXIT_Query -> group_by [color=none]
