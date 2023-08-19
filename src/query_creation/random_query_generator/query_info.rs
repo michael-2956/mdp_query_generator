@@ -119,20 +119,26 @@ impl DatabaseSchema {
     }
 }
 
+/// Contains all the structures responsible for the generation context while query is being generated.
+/// For example, which fields were mentioned in FROM or in GROUP BY clauses. This structure is used in
+/// call modifiers to disable nodes.
 #[derive(Debug, Clone)]
 pub struct ClauseContext {
     from_contents_stack: Vec<FromContents>,
+    group_by_contents_stack: Vec<GroupByContents>
 }
 
 impl ClauseContext {
     pub fn new() -> Self{
         Self {
             from_contents_stack: vec![],
+            group_by_contents_stack: vec![],
         }
     }
 
     pub fn on_query_begin(&mut self) {
         self.from_contents_stack.push(FromContents::new());
+        self.group_by_contents_stack.push(GroupByContents::new());
     }
 
     pub fn from(&self) -> &FromContents {
@@ -143,8 +149,28 @@ impl ClauseContext {
         self.from_contents_stack.last_mut().unwrap()
     }
 
+    pub fn group_by(&self) -> &GroupByContents {
+        self.group_by_contents_stack.last().unwrap()
+    }
+
+    pub fn group_by_mut(&mut self) -> &mut GroupByContents {
+        self.group_by_contents_stack.last_mut().unwrap()
+    }
+
     pub fn on_query_end(&mut self) {
         self.from_contents_stack.pop();
+        self.group_by_contents_stack.pop();
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct GroupByContents {
+
+}
+
+impl GroupByContents {
+    fn new() -> GroupByContents {
+        todo!()
     }
 }
 

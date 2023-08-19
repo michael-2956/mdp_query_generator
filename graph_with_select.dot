@@ -525,7 +525,7 @@ digraph G {
         types -> types_select_type_string
         types_select_type_string -> types_select_type_noexpr
 
-        call0_column_spec [TYPES="[known]", call_modifier="is_column_type_available", modifier="no column spec", modifier_mode="off", label="column specifier\nTYPE: known\nmod.: 'no column spec'\ncall.trig.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
+        call0_column_spec [TYPES="[known]", call_modifier="is_column_type_available", modifier="no column spec", modifier_mode="off", label="column specifier\nTYPE: known\nmod.: 'no column spec'\ncall.mod.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
         types_select_type_noexpr -> call0_column_spec
         call0_column_spec -> EXIT_types
 
@@ -571,8 +571,8 @@ digraph G {
         array [TYPES="[numeric, 3VL Value, string, list expr, array]", uses_wrapped_types="true", MODS="[no column spec]", label="array\ntypes=[numeric?, 3VL Value?, string?, array?]\nmods: [no column spec]", shape=octagon, style=filled, color=yellow]
         EXIT_array[label="EXIT array"]
 
-        array_one_more_value_is_allowed [label="One more value (if allowed)\ncall. trig.: 'can_extend_array'", call_modifier="can_extend_array"]
-        array_exit_allowed [label="Exit is allowed\ncall. trig.: 'can_extend_array'", call_modifier="can_extend_array"]
+        array_one_more_value_is_allowed [label="One more value (if allowed)\ncall. mod.: 'can_extend_array'", call_modifier="can_extend_array"]
+        array_exit_allowed [label="Exit is allowed\ncall. mod.: 'can_extend_array'", call_modifier="can_extend_array"]
         array_multiple_values [label="Multiple values"]
         array_multiple_values -> array_one_more_value_is_allowed
         array_multiple_values -> array_exit_allowed
