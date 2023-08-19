@@ -17,7 +17,7 @@
 # 2) Calls (execution will move to a root of a different subgraph):
 #     call{caller_num}_{node_name} [
 #         TYPES="[{type_name}, ...]" OR "[any]" OR "[known]" OR "[compatible]" OR "[...]" (passes all argument types further),
-#         MODS="[{mod_name}, ...]" OR "[...]" (passes all argument triggers further),
+#         MODS="[{mod_name}, ...]" OR "[...]" (passes all argument modifiers further),
 #         ...
 #     ]
 #
@@ -40,8 +40,8 @@
 # {node_name} [modifier="[trig_name]", modifier_mode="on"/"off"]
 # if `modifier` is present in the modifiers, turn the node on or off according to the modifier_mode.
 
-# 4.2 A node with a call trigger
-# {node_name} [call_trigger="[call_trig_name]"]
+# 4.2 A node with a call modifier
+# {node_name} [call_modifier="[call_trig_name]"]
 # if the function corresponding to call_trig_name returns true (handler registered in code),
 # the node is on. Otherwise, it is off.
 
@@ -218,7 +218,7 @@ digraph G {
 
         Exists_not [label="NOT"]
         Exists [label="EXISTS"]
-        call2_Query [TYPES="[any]", MODS="[]", label="Query", shape=rectangle, style=filled, color=green]
+        call2_Query [TYPES="[any]", MODS="[]", label="Query\nTYPES: ANY", shape=rectangle, style=filled, color=green]
         VAL_3 -> Exists
         Exists -> call2_Query
         call2_Query -> EXIT_VAL_3
@@ -509,27 +509,27 @@ digraph G {
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
         types_select_type_noexpr[label="Non-expression"]
-        types_select_type_numeric[TYPE_NAME="numeric", label="numeric?", affects_call_trigger="is_column_type_available"]
+        types_select_type_numeric[TYPE_NAME="numeric", label="numeric?", affects_call_modifier="is_column_type_available"]
         types -> types_select_type_numeric
         types_select_type_numeric -> types_select_type_noexpr
-        types_select_type_3vl[TYPE_NAME="3VL Value", label="3VL Value?", affects_call_trigger="is_column_type_available"]
+        types_select_type_3vl[TYPE_NAME="3VL Value", label="3VL Value?", affects_call_modifier="is_column_type_available"]
         types -> types_select_type_3vl
         types_select_type_3vl -> types_select_type_noexpr
-        types_select_type_array[TYPE_NAME="array", label="array?", affects_call_trigger="is_column_type_available"]
+        types_select_type_array[TYPE_NAME="array", label="array?", affects_call_modifier="is_column_type_available"]
         types -> types_select_type_array
         types_select_type_array -> types_select_type_noexpr
-        types_select_type_list_expr[TYPE_NAME="list expr", label="list expr?", affects_call_trigger="is_column_type_available"]
+        types_select_type_list_expr[TYPE_NAME="list expr", label="list expr?", affects_call_modifier="is_column_type_available"]
         types -> types_select_type_list_expr
         types_select_type_list_expr -> types_select_type_noexpr
-        types_select_type_string[TYPE_NAME="string", label="string?", affects_call_trigger="is_column_type_available"]
+        types_select_type_string[TYPE_NAME="string", label="string?", affects_call_modifier="is_column_type_available"]
         types -> types_select_type_string
         types_select_type_string -> types_select_type_noexpr
 
-        call0_column_spec [TYPES="[known]", call_trigger="is_column_type_available", modifier="no column spec", modifier_mode="off", label="column specifier\nTYPE: known\nmod.: 'no column spec'\ncall.trig.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
+        call0_column_spec [TYPES="[known]", call_modifier="is_column_type_available", modifier="no column spec", modifier_mode="off", label="column specifier\nTYPE: known\nmod.: 'no column spec'\ncall.trig.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
         types_select_type_noexpr -> call0_column_spec
         call0_column_spec -> EXIT_types
 
-        call1_Query [TYPES="[known]", MODS="[single value]", label="Query\nMODS: single value\nTYPE: known", modifier="no subquery", modifier_mode="off", shape=rectangle, style=filled, color=green]
+        call1_Query [TYPES="[known]", MODS="[single value]", label="Query\nMODS: single value\nTYPE: known\nmod.: 'no subquery'", modifier="no subquery", modifier_mode="off", shape=rectangle, style=filled, color=green]
         types_select_type_noexpr -> call1_Query
         call1_Query -> EXIT_types
 
@@ -571,33 +571,33 @@ digraph G {
         array [TYPES="[numeric, 3VL Value, string, list expr, array]", uses_wrapped_types="true", MODS="[no column spec]", label="array\ntypes=[numeric?, 3VL Value?, string?, array?]\nmods: [no column spec]", shape=octagon, style=filled, color=yellow]
         EXIT_array[label="EXIT array"]
 
-        array_one_more_value_is_allowed [label="One more value (if allowed)\ncall. trig.: 'can_extend_array'", call_trigger="can_extend_array"]
-        array_exit_allowed [label="Exit is allowed\ncall. trig.: 'can_extend_array'", call_trigger="can_extend_array"]
+        array_one_more_value_is_allowed [label="One more value (if allowed)\ncall. trig.: 'can_extend_array'", call_modifier="can_extend_array"]
+        array_exit_allowed [label="Exit is allowed\ncall. trig.: 'can_extend_array'", call_modifier="can_extend_array"]
         array_multiple_values [label="Multiple values"]
         array_multiple_values -> array_one_more_value_is_allowed
         array_multiple_values -> array_exit_allowed
 
-        call50_types [TYPES="[compatible]", label="TYPES: [compatible]\nMODS: [...mods]\naffects: 'can_extend_array'", affects_call_trigger="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call50_types [TYPES="[compatible]", label="TYPES: [compatible]\nMODS: [...mods]\naffects: 'can_extend_array'", affects_call_modifier="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         call50_types -> array_one_more_value_is_allowed
         array_one_more_value_is_allowed -> call50_types
 
-        call12_types [TYPE_NAME="numeric", TYPES="[numeric]", label="TYPE: numeric?\nMODS: [...mods]\naffects: 'can_extend_array'", affects_call_trigger="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call12_types [TYPE_NAME="numeric", TYPES="[numeric]", label="TYPE: numeric?\nMODS: [...mods]\naffects: 'can_extend_array'", affects_call_modifier="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         array -> call12_types
         call12_types -> array_multiple_values
 
-        call13_types [TYPE_NAME="3VL Value", TYPES="[3VL Value]", label="TYPE: 3VL Value?\nMODS: [...mods]\naffects: 'can_extend_array'", affects_call_trigger="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call13_types [TYPE_NAME="3VL Value", TYPES="[3VL Value]", label="TYPE: 3VL Value?\nMODS: [...mods]\naffects: 'can_extend_array'", affects_call_modifier="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         array -> call13_types
         call13_types -> array_multiple_values
 
-        call31_types [TYPE_NAME="string", TYPES="[string]", label="TYPE: string?\nMODS: [...mods]\naffects: 'can_extend_array'", affects_call_trigger="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call31_types [TYPE_NAME="string", TYPES="[string]", label="TYPE: string?\nMODS: [...mods]\naffects: 'can_extend_array'", affects_call_modifier="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         array -> call31_types
         call31_types -> array_multiple_values
 
-        call51_types [TYPE_NAME="list expr", TYPES="[TR...]", label="TYPE: list expr?\nMODS: [...mods]\nTYPES: [(tn.rel.)...]\naffects: 'can_extend_array'", affects_call_trigger="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call51_types [TYPE_NAME="list expr", TYPES="[TR...]", label="TYPE: list expr?\nMODS: [...mods]\nTYPES: [(tn.rel.)...]\naffects: 'can_extend_array'", affects_call_modifier="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         array -> call51_types
         call51_types -> array_multiple_values
 
-        call14_types [TYPE_NAME="array", TYPES="[TR...]", label="TYPE: array?\nMODS: [...mods]\nTYPES: [(tn.rel.)...]\naffects: 'can_extend_array'", affects_call_trigger="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call14_types [TYPE_NAME="array", TYPES="[TR...]", label="TYPE: array?\nMODS: [...mods]\nTYPES: [(tn.rel.)...]\naffects: 'can_extend_array'", affects_call_modifier="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         array -> call14_types
         call14_types -> array_multiple_values
 

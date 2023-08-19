@@ -1,6 +1,6 @@
 #[macro_use]
 pub mod query_info;
-pub mod call_triggers;
+pub mod call_modifiers;
 pub mod expr_precedence;
 
 use std::path::PathBuf;
@@ -16,7 +16,7 @@ use sqlparser::ast::{
 use crate::config::TomlReadable;
 
 use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generators::{SubgraphType, CallTypes}};
-use self::{query_info::{DatabaseSchema, ClauseContext}, expr_precedence::ExpressionPriority, call_triggers::{IsColumnTypeAvailableTrigger, CallTriggerTrait, IsColumnTypeAvailableTriggerState, CanExtendArrayTrigger}};
+use self::{query_info::{DatabaseSchema, ClauseContext}, expr_precedence::ExpressionPriority, call_modifiers::{IsColumnTypeAvailableModifier, CallModifierTrait, IsColumnTypeAvailableModifierState, CanExtendArrayModifier}};
 
 use super::state_generators::{MarkovChainGenerator, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
@@ -65,8 +65,8 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             println!("Relations:\n{}", _self.database_schema);
         }
 
-        _self.state_generator.register_call_trigger(IsColumnTypeAvailableTrigger {});
-        _self.state_generator.register_stateful_call_trigger::<CanExtendArrayTrigger>();
+        _self.state_generator.register_call_modifier(IsColumnTypeAvailableModifier {});
+        _self.state_generator.register_stateful_call_modifier::<CanExtendArrayModifier>();
 
         _self
     }
@@ -635,9 +635,9 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         };
 
         let allowed_type_list = self.state_generator
-            .get_call_trigger_state(&IsColumnTypeAvailableTrigger{}.get_trigger_name())
+            .get_call_modifier_state(&IsColumnTypeAvailableModifier{}.get_name())
             .unwrap()
-            .downcast_ref::<IsColumnTypeAvailableTriggerState>()
+            .downcast_ref::<IsColumnTypeAvailableModifierState>()
             .unwrap()
             .selected_types
             .clone();

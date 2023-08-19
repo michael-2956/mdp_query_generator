@@ -328,19 +328,19 @@ impl FunctionInputsType {
 pub struct NodeCommon {
     /// Node identifier
     pub name: SmolStr,
-    /// Type name if specified (basically an "on" trigger)
+    /// Type name if specified (basically an "on" modifier)
     pub type_name: Option<SubgraphType>,
-    /// Graph trigger with mode if specified
+    /// Graph modifier with mode if specified
     pub modifier: Option<(SmolStr, bool)>,
-    /// Name of the call trigger if specified
-    pub call_trigger_name: Option<SmolStr>,
-    /// Name of the call trigger that this node affects, if specified
-    pub affects_call_trigger_name: Option<SmolStr>,
+    /// Name of the call modifier if specified
+    pub call_modifier_name: Option<SmolStr>,
+    /// Name of the call modifier that this node affects, if specified
+    pub affects_call_modifier_name: Option<SmolStr>,
 }
 
 impl NodeCommon {
     pub fn with_name(name: SmolStr) -> Self {
-        Self { name: name, type_name: None, modifier: None, call_trigger_name: None, affects_call_trigger_name: None }
+        Self { name: name, type_name: None, modifier: None, call_modifier_name: None, affects_call_modifier_name: None }
     }
 }
 
@@ -500,7 +500,7 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                     let modifier_on = match modifier_on {
                                         Some(v) => v,
                                         None => break Some(Err(SyntaxError::new(format!(
-                                            "Expected trigger_mode=\"on\" or trigger_mode=\"off\" after trigger=\"{idents}\" for node {node_name}"
+                                            "Expected modifier_mode=\"on\" or modifier_mode=\"off\" after modifier=\"{idents}\" for node {node_name}"
                                         )))),
                                     };
                                     Some((idents, modifier_on))
@@ -508,14 +508,14 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                 _ => None
                             };
 
-                            let call_trigger_name = match node_spec.remove("CALL_TRIGGER") {
+                            let call_modifier_name = match node_spec.remove("CALL_MODIFIER") {
                                 Some(DotToken::QuotedIdentifiers(idents)) => {
                                     Some(idents)
                                 },
                                 _ => None,
                             };
 
-                            let affects_call_trigger_name = match node_spec.remove("AFFECTS_CALL_TRIGGER") {
+                            let affects_call_modifier_name = match node_spec.remove("AFFECTS_CALL_MODIFIER") {
                                 Some(DotToken::QuotedIdentifiers(idents)) => {
                                     Some(idents)
                                 },
@@ -531,8 +531,8 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                 name: node_name.clone(),
                                 type_name,
                                 modifier,
-                                call_trigger_name,
-                                affects_call_trigger_name
+                                call_modifier_name,
+                                affects_call_modifier_name
                             };
 
                             if self.call_ident_regex.is_match(&node_name) {
