@@ -211,13 +211,12 @@ impl SubgraphType {
 
     /// CURRENTLY NOT USED
     pub fn to_data_type(&self) -> DataType {
-        // TODO: this is a temporary solution
-        // Should randomly select among type variants.
         match self {
             SubgraphType::Numeric => DataType::Numeric(ExactNumberInfo::None),
             SubgraphType::Val3 => DataType::Boolean,
             SubgraphType::Array((inner, _)) => DataType::Array(Some(Box::new(inner.to_data_type()))),
-            SubgraphType::ListExpr(_) => DataType::Custom(ObjectName(vec![Ident::new("row_expression")]), vec![]),
+            /// TODO: my_row_type should be defined
+            SubgraphType::ListExpr(_) => DataType::Custom(ObjectName(vec![Ident::new("my_row_type")]), vec![]),
             SubgraphType::String => DataType::String,
             SubgraphType::Undetermined => panic!("Can't convert SubgraphType::Undetermined to DataType"),
         }

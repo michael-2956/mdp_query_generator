@@ -2,10 +2,11 @@
 pub mod query_info;
 pub mod call_modifiers;
 pub mod expr_precedence;
+mod aggregate_function_settings;
 
 use std::path::PathBuf;
 
-use rand::SeedableRng;
+use rand::{SeedableRng, seq::SliceRandom};
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
@@ -16,7 +17,7 @@ use sqlparser::ast::{
 use crate::config::TomlReadable;
 
 use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generators::{SubgraphType, CallTypes}};
-use self::{query_info::{DatabaseSchema, ClauseContext}, expr_precedence::ExpressionPriority, call_modifiers::{IsColumnTypeAvailableModifier, CallModifierTrait, IsColumnTypeAvailableModifierState, CanExtendArrayModifier}};
+use self::{query_info::{DatabaseSchema, ClauseContext}, expr_precedence::ExpressionPriority, call_modifiers::{IsColumnTypeAvailableModifier, CallModifierTrait, IsColumnTypeAvailableModifierState, CanExtendArrayModifier}, aggregate_function_settings::AggregateFunctionDistribution};
 
 use super::state_generators::{MarkovChainGenerator, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
@@ -25,6 +26,7 @@ pub struct QueryGeneratorConfig {
     pub print_schema: bool,
     pub table_schema_path: PathBuf,
     pub dynamic_model_name: String,
+    pub aggregate_functions_distribution: AggregateFunctionDistribution,
 }
 
 impl TomlReadable for QueryGeneratorConfig {
@@ -35,6 +37,9 @@ impl TomlReadable for QueryGeneratorConfig {
             print_schema: section["print_schema"].as_bool().unwrap(),
             table_schema_path: PathBuf::from(section["table_schema_path"].as_str().unwrap()),
             dynamic_model_name: section["dynamic_model"].as_str().unwrap().to_string(),
+            aggregate_functions_distribution: AggregateFunctionDistribution::parse_file(
+                PathBuf::from(section["aggregate_functions_distribution_map_file"].as_str().unwrap()),
+            ),
         }
     }
 }
@@ -629,7 +634,14 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "types_select_type_string" => {},
             "types_null" => {
                 self.expect_state("EXIT_types");
-                return (SubgraphType::Undetermined, Expr::Value(Value::Null))
+                let null_type = unwrap_variant!(
+                    self.state_generator.get_fn_selected_types_unwrapped(),
+                    CallTypes::TypeList
+                ).choose(&mut self.rng).unwrap().to_data_type();
+                return (SubgraphType::Undetermined, Expr::Cast {
+                    expr: Box::new(Expr::Value(Value::Null)),
+                    data_type: null_type
+                })
             },
             any => self.panic_unexpected(any),
         };
