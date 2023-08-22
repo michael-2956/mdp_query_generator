@@ -1,6 +1,6 @@
 use core::fmt::Debug;
 use logaddexp::LogSumExp;
-use rand::{Rng, SeedableRng};
+use rand::Rng;
 
 use smol_str::SmolStr;
 use rand_chacha::ChaCha8Rng;
@@ -11,20 +11,18 @@ use super::markov_chain::NodeParams;
 
 pub trait StateChooser: Debug + Clone {
     fn new() -> Self where Self: Sized;
-    fn choose_destination(&mut self, outgoing_states: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams>;
+    fn choose_destination(&mut self, rng: &mut ChaCha8Rng, outgoing_states: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams>;
 }
 
 #[derive(Debug, Clone)]
-pub struct ProbabilisticStateChooser {
-    rng: ChaCha8Rng,
-}
+pub struct ProbabilisticStateChooser { }
 
 impl StateChooser for ProbabilisticStateChooser {
     fn new() -> Self {
-        Self { rng: ChaCha8Rng::seed_from_u64(1), }
+        Self { }
     }
 
-    fn choose_destination(&mut self, outgoing_states: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams> {
+    fn choose_destination(&mut self, rng: &mut ChaCha8Rng, outgoing_states: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams> {
         let cur_node_outgoing: Vec<(f64, NodeParams)> = {
             let cur_node_outgoing = outgoing_states.iter().map(|el| {
                 (if el.0 { f64::NEG_INFINITY } else { el.1 }, el.2.clone())
@@ -33,7 +31,7 @@ impl StateChooser for ProbabilisticStateChooser {
             let max_level: f64 = cur_node_outgoing.iter().map(|el| { el.0 }).ln_sum_exp();
             cur_node_outgoing.into_iter().map(|el| { (f64::exp(el.0 - max_level), el.1) }).collect()
         };
-        let level: f64 = self.rng.gen::<f64>();
+        let level: f64 = rng.gen::<f64>();
         let mut cumulative_prob = 0f64;
         let mut destination = Option::<NodeParams>::None;
         for (prob, dest) in cur_node_outgoing {
@@ -540,7 +538,7 @@ impl StateChooser for DeterministicStateChooser {
         }
     }
 
-    fn choose_destination(&mut self, outgoing_states: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams> {
+    fn choose_destination(&mut self, _rng: &mut ChaCha8Rng, outgoing_states: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams> {
         if outgoing_states.len() == 0 {
             println!("List of outgoing nodes is empty!");
             return None

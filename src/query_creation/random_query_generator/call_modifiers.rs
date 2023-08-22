@@ -6,11 +6,15 @@ use crate::{query_creation::state_generators::{SubgraphType, CallTypes, markov_c
 
 use super::query_info::ClauseContext;
 
+/// Call modifier that relies on external (static in function scope) values
 pub trait CallModifierTrait: Debug {
+    /// returns call modifier name
     fn get_name(&self) -> SmolStr;
 
+    /// Sets call modifier state
     fn get_new_state(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> Box<dyn std::any::Any>;
 
+    /// Runs the modifier value based on the current value
     fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, modifier_state: &Box<dyn std::any::Any>) -> bool;
 }
 

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path};
+use std::{collections::BTreeMap, path::Path};
 
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
@@ -170,20 +170,24 @@ pub struct GroupByContents {
 
 impl GroupByContents {
     fn new() -> GroupByContents {
-        todo!()
+        GroupByContents {
+
+        }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct FromContents {
     /// maps aliases to relations themselves
-    relations: HashMap<ObjectName, Relation>,
+    /// This is ordered because we need consistent
+    /// same-seed runs
+    relations: BTreeMap<ObjectName, Relation>,
     free_relation_name_index: usize,
 }
 
 impl FromContents {
     pub fn new() -> Self {
-        Self { relations: HashMap::new(), free_relation_name_index: 0 }
+        Self { relations: BTreeMap::new(), free_relation_name_index: 0 }
     }
 
     fn create_alias(&mut self) -> SmolStr {
@@ -269,8 +273,9 @@ impl FromContents {
 pub struct Relation {
     /// projection alias
     pub alias: ObjectName,
-    /// A HashMap with column names by graph types
-    pub columns: HashMap<SubgraphType, Vec<ObjectName>>,
+    /// A BTreeMap (ordered for consistency) with column
+    /// names by graph types
+    pub columns: BTreeMap<SubgraphType, Vec<ObjectName>>,
     /// A list of unnamed column's types, as they
     /// can be referenced with wildcards
     pub unnamed_columns: Vec<SubgraphType>,
@@ -280,7 +285,7 @@ impl Relation {
     fn with_alias(alias: SmolStr) -> Self {
         Self {
             alias: ObjectName(vec![Ident::new(alias)]),
-            columns: HashMap::new(),
+            columns: BTreeMap::new(),
             unnamed_columns: vec![],
         }
     }

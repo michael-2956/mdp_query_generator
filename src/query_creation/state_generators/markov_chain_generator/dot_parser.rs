@@ -128,7 +128,7 @@ impl TypeWithFields {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub enum SubgraphType {
     /// This type is used as an array inner type
     /// if the inner type is yet to be determined
@@ -531,7 +531,7 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                 type_name,
                                 modifier,
                                 call_modifier_name,
-                                affects_call_modifier_name
+                                affects_call_modifier_name,
                             };
 
                             if self.call_ident_regex.is_match(&node_name) {

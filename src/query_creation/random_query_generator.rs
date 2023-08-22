@@ -6,7 +6,7 @@ mod aggregate_function_settings;
 
 use std::path::PathBuf;
 
-use rand::{SeedableRng, seq::SliceRandom};
+use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
@@ -17,7 +17,7 @@ use sqlparser::ast::{
 use crate::config::TomlReadable;
 
 use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generators::{SubgraphType, CallTypes}};
-use self::{query_info::{DatabaseSchema, ClauseContext}, expr_precedence::ExpressionPriority, call_modifiers::{IsColumnTypeAvailableModifier, CallModifierTrait, IsColumnTypeAvailableModifierState, CanExtendArrayModifier}, aggregate_function_settings::AggregateFunctionDistribution};
+use self::{query_info::{DatabaseSchema, ClauseContext}, expr_precedence::ExpressionPriority, call_modifiers::{IsColumnTypeAvailableModifier, CallModifierTrait, IsColumnTypeAvailableModifierState}, aggregate_function_settings::AggregateFunctionDistribution};
 
 use super::state_generators::{MarkovChainGenerator, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
@@ -69,9 +69,6 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         if _self.config.print_schema {
             println!("Relations:\n{}", _self.database_schema);
         }
-
-        _self.state_generator.register_call_modifier(IsColumnTypeAvailableModifier {});
-        _self.state_generator.register_stateful_call_modifier::<CanExtendArrayModifier>();
 
         _self
     }
@@ -634,14 +631,15 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "types_select_type_string" => {},
             "types_null" => {
                 self.expect_state("EXIT_types");
-                let null_type = unwrap_variant!(
-                    self.state_generator.get_fn_selected_types_unwrapped(),
-                    CallTypes::TypeList
-                ).choose(&mut self.rng).unwrap().to_data_type();
-                return (SubgraphType::Undetermined, Expr::Cast {
-                    expr: Box::new(Expr::Value(Value::Null)),
-                    data_type: null_type
-                })
+                // println!("self.state_generator.get_fn_selected_types_unwrapped(): {:#?}", self.state_generator.get_fn_selected_types_unwrapped());
+                // let null_type = unwrap_variant!(
+                //     self.state_generator.get_fn_selected_types_unwrapped(),
+                //     CallTypes::TypeList
+                // ).choose(&mut self.rng).unwrap().to_data_type();
+                return (SubgraphType::Undetermined, Expr::Value(Value::Null)) // Expr::Cast {
+                //     expr: Box::new(Expr::Value(Value::Null)),
+                //     data_type: null_type
+                // })
             },
             any => self.panic_unexpected(any),
         };
@@ -775,6 +773,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         if self.config.print_queries {
             println!("\n{};\n", query);
         }
+        self.free_projection_alias_index = 1;
         // reset the generator
         if let Some(state) = self.next_state_opt() {
             panic!("Couldn't reset state_generator: Received {state}");

@@ -164,17 +164,8 @@ pub struct Function {
     /// hashmap, which is why this map stores the
     /// NodeParams directly.
     pub chain: HashMap<SmolStr, Vec<(f64, NodeParams)>>,
-    /// This node affects these modifiers with these nodes.
-    ///
-    /// NOTES: this property is for optimization of the graph
-    /// DFS search when checking if any nodes became
-    /// dead-ends to turn them off. If there is a match
-    /// in call parameters and all call modifier states,
-    /// we can only search once for each set of call
-    /// parameters and call modifier states
-    pub call_modifier_affector_nodes_and_modifiered_nodes: Vec<(NodeParams, HashMap<SmolStr, Vec<NodeParams>>)>,
-    /// call modifier names and their nodes
-    pub call_modifier_nodes_map: HashMap<SmolStr, Vec<NodeParams>>,
+    /// function node params
+    pub node_params: HashMap<SmolStr, NodeParams>,
     /// Whether to wrap argument types in this function's
     /// outer type. [Val3, String] would become
     /// [Array<Val3>, Array<String>] for the array subgraph
@@ -190,8 +181,7 @@ impl Function {
             accepted_types: FunctionTypes::from_function_inputs_type(declaration.source_node_name, declaration.input_type),
             accepted_modifiers: declaration.modifiers,
             chain: HashMap::<_, _>::new(),
-            call_modifier_affector_nodes_and_modifiered_nodes: Vec::new(),
-            call_modifier_nodes_map: HashMap::new(),
+            node_params: HashMap::new(),
             uses_wrapped_types: declaration.uses_wrapped_types
         }
     }
@@ -268,31 +258,10 @@ impl MarkovChain {
                 }
                 dot_parser::CodeUnit::CloseDeclaration => {
                     if let Some(mut function) = current_function.take() {
-                        function.call_modifier_nodes_map = function.chain.keys()
-                            .filter_map(|x| {
-                                let node = node_params.get(x).unwrap();
-                                node.node_common.call_modifier_name.clone().map(|modifier_name| (
-                                    modifier_name, node.clone()
-                                ))
-                            })
-                            .fold(HashMap::new(), |mut acc, (key, value)| {
-                                acc.entry(key).or_insert_with(Vec::new).push(value);
-                                acc
-                            });
+                        function.node_params = function.chain.keys().map(|node_name| (
+                            node_name.clone(), node_params.get(node_name).unwrap().clone()
+                        )).collect();
 
-                        function.call_modifier_affector_nodes_and_modifiered_nodes = function.chain.keys()
-                            .filter_map(|x| {
-                                let node = node_params.get(x).unwrap();
-                                node.node_common.affects_call_modifier_name.clone().map(|modifier_name| (modifier_name, node))
-                            })
-                            .map(|(modifier_name, affector_node)| {
-                                let affected = function.call_modifier_nodes_map.iter()
-                                    .filter(|(affected_modifier_name, _)| **affected_modifier_name == modifier_name)
-                                    .map(|x| (x.0.clone(), x.1.clone()))
-                                    .collect();
-                                (affector_node.clone(), affected)
-                            })
-                            .collect();
                         functions.insert(function.source_node_name.clone(), function);
                     } else {
                         return Err(SyntaxError::new(format!("Unexpected CloseDeclaration")));
@@ -515,21 +484,9 @@ impl MarkovChain {
                     }
                 }
             }
-            for (_, affected_nodes) in function.call_modifier_nodes_map.iter_mut() {
-                for affected_node in affected_nodes.iter_mut() {
-                    if let Some(min_calls) = min_calls_till_exit.get(&affected_node.node_common.name) {
-                        affected_node.min_calls_until_function_exit = *min_calls;
-                    }
-                }
-            }
-            for (affector_node, affected_node_map) in function.call_modifier_affector_nodes_and_modifiered_nodes.iter_mut() {
-                affector_node.min_calls_until_function_exit = *min_calls_till_exit.get(&affector_node.node_common.name).unwrap();
-                for (_, affected_nodes) in affected_node_map.iter_mut() {
-                    for affected_node in affected_nodes.iter_mut() {
-                        if let Some(min_calls) = min_calls_till_exit.get(&affected_node.node_common.name) {
-                            affected_node.min_calls_until_function_exit = *min_calls;
-                        }
-                    }
+            for (_, node) in function.node_params.iter_mut() {
+                if let Some(min_calls) = min_calls_till_exit.get(&node.node_common.name) {
+                    node.min_calls_until_function_exit = *min_calls;
                 }
             }
         }

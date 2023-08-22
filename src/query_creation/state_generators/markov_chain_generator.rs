@@ -12,7 +12,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use take_until::TakeUntilExt;
 
-use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_generator::markov_chain::FunctionTypes, random_query_generator::{query_info::ClauseContext, call_modifiers::{CallModifierTrait, StatefulCallModifierTrait}}}, config::TomlReadable};
+use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_generator::markov_chain::FunctionTypes, random_query_generator::{query_info::ClauseContext, call_modifiers::{CallModifierTrait, StatefulCallModifierTrait, IsColumnTypeAvailableModifier, CanExtendArrayModifier}}}, config::TomlReadable};
 
 use self::{
     markov_chain::{
@@ -26,21 +26,123 @@ use dynamic_models::{MarkovModel, DynamicModel};
 pub use self::markov_chain::CallTypes;
 pub use dot_parser::SubgraphType;
 
-#[derive(Clone)]
-struct CallModifier(fn(&ClauseContext) -> bool);
-
-impl Debug for CallModifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ptr to {{fn(&QueryContentsManager) -> bool}}")
-    }
+#[derive(Debug)]
+pub struct FunctionModifierInfo {
+    /// names of all stateful modifiers present in function
+    stateful_modifier_names: HashSet<SmolStr>,
+    /// names of all stateless modifiers present in function
+    stateless_modifier_names: HashSet<SmolStr>,
+    /// every node that affects a modifier, with the affected modifier names and vector of
+    /// corresponding affected nodes
+    affector_nodes_and_affected_nodes: HashMap<NodeParams, HashMap<SmolStr, Vec<NodeParams>>>,
 }
 
-#[derive(Clone)]
-struct CallModifierAffector(fn(&mut ClauseContext) -> ());
+impl FunctionModifierInfo {
+    fn new(
+        function_node_params: &HashMap<SmolStr, NodeParams>,
+        stateful_call_modifier_creators: &HashMap<SmolStr, StatefulCallModifierCreator>,
+    ) -> Self {
+        // modifier name -> modified nodes
+        let modified_nodes_map = function_node_params.values()
+            .filter_map(|node| {
+                node.node_common.call_modifier_name.clone().map(|modifier_name| (
+                    modifier_name, node.clone()
+                ))
+            })
+            .fold(HashMap::new(), |mut acc, (key, value)| {
+                acc.entry(key).or_insert_with(Vec::new).push(value);
+                acc
+            });
 
-impl Debug for CallModifierAffector {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ptr to {{fn(&QueryContentsManager) -> ()}}")
+        let affector_nodes_and_affected_nodes = function_node_params.values()
+            .filter_map(|node| {
+                node.node_common.affects_call_modifier_name.clone().map(|modifier_name| (modifier_name, node))
+            })
+            .map(|(modifier_name, affector_node)| {
+                let affected = modified_nodes_map.iter()
+                    .filter(|(affected_modifier_name, _)| **affected_modifier_name == modifier_name)
+                    .map(|x| (x.0.clone(), x.1.clone()))
+                    .collect();
+                (affector_node.clone(), affected)
+            })
+            .collect();
+
+        let (stateful_modifier_names, stateless_modifier_names) = modified_nodes_map.keys().cloned().partition(
+            |modifier_name| stateful_call_modifier_creators.contains_key(modifier_name)
+        );
+
+        Self {
+            stateful_modifier_names,
+            stateless_modifier_names,
+            affector_nodes_and_affected_nodes,
+        }
+    }
+
+    /// return all the stateful modifiers of the current function in
+    /// their initial state
+    fn create_stateful_modifiers(
+        &self, stateful_call_modifier_creators: &HashMap<SmolStr, StatefulCallModifierCreator>
+    ) -> HashMap<SmolStr, Box<dyn StatefulCallModifierTrait>> {
+        self.stateful_modifier_names.iter()
+            .filter_map(|modifier_name| stateful_call_modifier_creators.get(modifier_name).map(
+                |x| (modifier_name.clone(), x.0())
+            )).collect()
+    }
+
+    /// Returns how running of each stateless affector affects each modified node
+    fn get_stateless_node_relations(
+        &self,
+        function_context: &FunctionContext,
+        clause_context: &ClauseContext,
+        stateless_call_modifiers: &HashMap<SmolStr, Box<dyn CallModifierTrait>>,
+    ) -> BTreeMap<SmolStr, BTreeMap<SmolStr, bool>> {
+        let stateless_affectors_iter = self.affector_nodes_and_affected_nodes.iter()
+            .filter(|(affector_node, _)| {
+                affector_node.node_common.affects_call_modifier_name.as_ref().map_or(false, |modifier_name| {
+                    self.stateless_modifier_names.contains(modifier_name)
+                })
+            });
+
+        stateless_affectors_iter
+            .map(|(affector_node, affected_mods)|
+                (affector_node.node_common.name.clone(), affected_mods.into_iter().flat_map(|(modifier_name, affected_nodes)| {
+                    let stateless_modifier = stateless_call_modifiers.get(modifier_name).unwrap();
+                    let new_state = stateless_modifier.get_new_state(
+                        clause_context, &function_context.with_node(affector_node.clone())
+                    );
+                    affected_nodes.into_iter().map(|affected_node| (affected_node.node_common.name.clone(), stateless_modifier.run(
+                        clause_context,
+                        &function_context.with_node(affected_node.clone()),
+                        &new_state,
+                    ))).collect::<Vec<_>>().into_iter()
+                }).collect())
+            ).collect()
+    }
+
+    /// returns all modifier states in an uninitialised form
+    fn get_initial_affected_node_states(&self) -> HashMap<SmolStr, Option<bool>> {
+        self.affector_nodes_and_affected_nodes.iter()
+            .flat_map(|(_, affected_modifiers)| affected_modifiers.values())
+            .flat_map(|x| x.iter())
+            .map(|x| (x.node_common.name.clone(), None))
+            .collect()
+    }
+
+    /// checks whether stateful affectors are present
+    fn has_stateful_affectors(&self) -> bool {
+        !self.stateful_modifier_names.is_empty()
+    }
+
+    /// checks whether node is a stateful affector
+    fn is_a_stateful_affector(&self, node: &NodeParams) -> bool {
+        self.affector_nodes_and_affected_nodes.get(node).map_or(false, |_| {
+            self.stateful_modifier_names.contains(node.node_common.affects_call_modifier_name.as_ref().unwrap())
+        })
+    }
+
+    /// checks whether node is a stateful affector
+    fn get_affected_nodes(&self, node: &NodeParams) -> &HashMap<SmolStr, Vec<NodeParams>> {
+        self.affector_nodes_and_affected_nodes.get(node).unwrap()
     }
 }
 
@@ -59,6 +161,7 @@ pub struct MarkovChainGenerator<StC: StateChooser> {
     state_chooser: Box<StC>,
     stateless_call_modifiers: HashMap<SmolStr, Box<dyn CallModifierTrait>>,
     stateful_call_modifier_creators: HashMap<SmolStr, StatefulCallModifierCreator>,
+    function_modifier_info: HashMap<SmolStr, FunctionModifierInfo>,
     /// if a dead_end_info was collected for the specific function once,
     /// with set arguments (types & modifiers), and all call modifier
     /// states, depending on which affectors affected what and how,
@@ -101,23 +204,77 @@ impl FunctionContext {
     }
 }
 
+/// Stires the states of all affected nodes and all stateful call modifiers
+#[derive(Debug)]
+struct CallModifierStates {
+    /// stores current node states that are affected by call modifiers
+    affected_node_states: HashMap<SmolStr, Option<bool>>,
+    /// stores all the stateful modifiers of the current function in
+    /// their current state
+    stateful_modifiers: HashMap<SmolStr, Box<dyn StatefulCallModifierTrait>>,
+}
+
+impl DynClone for CallModifierStates {
+    fn dyn_clone(&self) -> Self {
+        Self {
+            affected_node_states: self.affected_node_states.clone(),
+            stateful_modifiers: self.stateful_modifiers.dyn_clone(),
+        }
+    }
+}
+
+impl CallModifierStates {
+    fn new(
+        function_modifier_info: &FunctionModifierInfo,
+        stateful_call_modifier_creators: &HashMap<SmolStr, StatefulCallModifierCreator>,
+    ) -> Self {
+        Self {
+            affected_node_states: function_modifier_info.get_initial_affected_node_states(),
+            stateful_modifiers: function_modifier_info.create_stateful_modifiers(stateful_call_modifier_creators)
+        }
+    }
+
+    fn update_modifier_states(
+        &mut self,
+        function_context: &FunctionContext,
+        function_modifier_info: &FunctionModifierInfo,
+        stateless_node_relations: &BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>,
+        clause_context: &ClauseContext,
+    ) {
+        let node = &function_context.current_node;
+        // update with a cached influence result
+        if let Some(affected) = stateless_node_relations.get(&node.node_common.name) {
+            self.affected_node_states.extend(
+                affected.clone().into_iter().map(|(affected_node_name, how)| (affected_node_name, Some(how)))
+            );
+        }
+        // update stateful affector's states
+        if function_modifier_info.is_a_stateful_affector(node) {
+            let affected_modifiers = function_modifier_info.get_affected_nodes(node);
+            for (modifier_name, affected_nodes) in affected_modifiers.iter() {
+                if let Some(modifier) = self.stateful_modifiers.get_mut(modifier_name) {
+                    modifier.update_state(clause_context, &function_context.with_node(node.clone()));
+                    self.affected_node_states.extend(affected_nodes.into_iter().map(|affected_node| {
+                        (affected_node.node_common.name.clone(), Some(modifier.run(
+                            clause_context, &function_context.with_node(affected_node.clone())
+                        )))
+                    }));
+                }
+            }
+        }
+    }
+}
+
 /// This structure stores all the info about
 /// call modifiers in the current funciton
 #[derive(Debug)]
 struct CallModifierInfo {
-    /// stores current node states that are affected by call modifiers
-    node_states: BTreeMap<SmolStr, Option<bool>>,
+    call_modifier_states: CallModifierStates,
     /// the call modifier inner state memory
     stateless_inner_states: HashMap<SmolStr, Box<dyn std::any::Any>>,
-    /// call modifier configuration: How each call modifier affector
-    /// node affects every node with a call modifier (STATELESS)
+    /// call modifier configuration: How each STATELESS call modifier
+    /// affector node affects every node with a call modifier (STATELESS)
     stateless_node_relations: BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>,
-    /// stores all the stateful modifiers of the current function in
-    /// their current state
-    stateful_modifiers: HashMap<SmolStr, Box<dyn StatefulCallModifierTrait>>,
-    /// call modifier configuration: Which nodes affect which call modifiers
-    /// with which nodes.
-    stateful_affectors_and_modified_nodes: HashMap<NodeParams, HashMap<SmolStr, Vec<NodeParams>>>
 }
 
 trait DynClone {
@@ -132,41 +289,38 @@ impl DynClone for HashMap<SmolStr, Box<dyn StatefulCallModifierTrait>> {
 
 impl CallModifierInfo {
     fn new(
-        modifier_names: Vec<SmolStr>,
-        stateful_modifiers: HashMap<SmolStr, Box<dyn StatefulCallModifierTrait>>,
-        stateful_affectors_and_modifiered_nodes: HashMap<NodeParams, HashMap<SmolStr, Vec<NodeParams>>>,
-        stateless_node_relations: BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>
+        function_modifier_info: &FunctionModifierInfo,
+        stateful_call_modifier_creators: &HashMap<SmolStr, StatefulCallModifierCreator>,
+        stateless_node_relations: BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>,
     ) -> Self {
         Self {
-            node_states: modifier_names.into_iter().map(|x| (x, None)).collect(),
+            call_modifier_states: CallModifierStates::new(function_modifier_info, stateful_call_modifier_creators),
             stateless_inner_states: HashMap::new(),
-            stateless_node_relations,
-            stateful_modifiers: stateful_modifiers,
-            stateful_affectors_and_modified_nodes: stateful_affectors_and_modifiered_nodes,
+            stateless_node_relations
         }
     }
 
-    fn update_stateless_modifier_state(&mut self, stateless_modifier: &mut Box<dyn CallModifierTrait>, clause_context: &ClauseContext, function_context: &FunctionContext) {
-        self.node_states.extend(
-            self.stateless_node_relations.get(&function_context.current_node.node_common.name).unwrap().clone().into_iter()
-            .map(|(affected_node_name, how)| (affected_node_name, Some(how)))
+    fn update_modifier_states(
+        &mut self,
+        function_context: &FunctionContext,
+        function_modifier_info: &FunctionModifierInfo,
+        clause_context: &ClauseContext,
+        stateless_call_modifiers: &HashMap<SmolStr, Box<dyn CallModifierTrait>>,
+    ) {
+        self.call_modifier_states.update_modifier_states(
+            function_context,
+            function_modifier_info,
+            &self.stateless_node_relations,
+            clause_context
         );
-        self.stateless_inner_states.insert(
-            stateless_modifier.get_name(),
-            stateless_modifier.get_new_state(clause_context, function_context)
-        );
-    }
-
-    fn update_stateful_modifier_state(&mut self, clause_context: &ClauseContext, function_context: &FunctionContext) {
-        let affector_node = &function_context.current_node;
-        for (modifier_name, affected_nodes) in self.stateful_affectors_and_modified_nodes.get(affector_node).unwrap().clone().into_iter() {
-            let modifier = self.stateful_modifiers.get_mut(&modifier_name).unwrap();
-            modifier.update_state(clause_context, &function_context);
-            self.node_states.extend(affected_nodes.into_iter().map(|affected_node| {
-                (affected_node.node_common.name.clone(), Some(modifier.run(
-                    clause_context, &function_context.with_node(affected_node.clone())
-                )))
-            }));
+        if let Some(modifier_name) = function_context.current_node.node_common.affects_call_modifier_name.as_ref() {
+            if function_modifier_info.stateless_modifier_names.contains(modifier_name) {
+                let stateless_modifier = stateless_call_modifiers.get(modifier_name).unwrap();
+                let new_state = stateless_modifier.get_new_state(
+                    clause_context, &function_context
+                );
+                self.stateless_inner_states.insert(modifier_name.clone(), new_state);
+            }
         }
     }
 }
@@ -190,7 +344,11 @@ pub struct StackFrame {
 }
 
 impl StackFrame {
-    fn new(function_context: FunctionContext, call_modifier_info: CallModifierInfo, dead_end_info: Arc<Mutex<HashMap<SmolStr, bool>>>) -> Self {
+    fn new(
+        function_context: FunctionContext,
+        call_modifier_info: CallModifierInfo,
+        dead_end_info: Arc<Mutex<HashMap<SmolStr, bool>>>
+    ) -> Self {
         Self {
             function_context,
             call_modifier_info,
@@ -225,20 +383,30 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             state_chooser: Box::new(StC::new()),
             stateless_call_modifiers: HashMap::new(),
             stateful_call_modifier_creators: HashMap::new(),
+            function_modifier_info: HashMap::new(),
             dead_end_infos: HashMap::new(),
         };
+        _self.register_call_modifier(IsColumnTypeAvailableModifier {});
+        _self.register_stateful_call_modifier::<CanExtendArrayModifier>();
+        _self.fill_function_modifier_info();
         _self.reset();
         Ok(_self)
     }
 
-    pub fn register_call_modifier<T: CallModifierTrait + 'static>(&mut self, modifier: T) {
+    fn register_call_modifier<T: CallModifierTrait + 'static>(&mut self, modifier: T) {
         self.stateless_call_modifiers.insert(modifier.get_name(), Box::new(modifier));
     }
 
-    pub fn register_stateful_call_modifier<T: StatefulCallModifierTrait + 'static>(&mut self) {
+    fn register_stateful_call_modifier<T: StatefulCallModifierTrait + 'static>(&mut self) {
         self.stateful_call_modifier_creators.insert(T::new().get_name(), StatefulCallModifierCreator(
             T::new
         ));
+    }
+
+    fn fill_function_modifier_info(&mut self) {
+        self.function_modifier_info = self.markov_chain.functions.iter().map(|(function_name, function)| {
+            (function_name.clone(), FunctionModifierInfo::new(&function.node_params, &self.stateful_call_modifier_creators))
+        }).collect();
     }
 
     pub fn get_call_modifier_state(&self, modifier_name: &SmolStr) -> Option<&Box<dyn std::any::Any>> {
@@ -356,37 +524,12 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     /// update stack, preparing the stack frame by filling it out with all the
     /// cached data
     fn update_stack(&mut self, call_params: CallParams, clause_context: &ClauseContext) {
-        let function = self.markov_chain.functions.get(&call_params.func_name).unwrap();
+        let function_modifier_info = self.function_modifier_info.get(&call_params.func_name).unwrap();
         let function_context = FunctionContext::new(call_params);
 
-        let (
-            stateful_affectors_and_modifiered_nodes, stateless_affectors
-        ): (_, HashMap<_, _>) = function.call_modifier_affector_nodes_and_modifiered_nodes.iter().cloned().partition(
-            |(affector, _)| {
-                let modifier_name = affector.node_common.affects_call_modifier_name.as_ref().unwrap();
-                self.stateful_call_modifier_creators.contains_key(modifier_name)
-            }
+        let stateless_node_relations = function_modifier_info.get_stateless_node_relations(
+            &function_context, clause_context, &self.stateless_call_modifiers
         );
-
-        let stateful_modifiers = function.call_modifier_nodes_map.iter()
-            .filter_map(|(modifier_name, _)| self.stateful_call_modifier_creators.get(modifier_name).map(
-                |x| (modifier_name.clone(), x.0())
-            )).collect();
-
-        let stateless_node_relations: BTreeMap<SmolStr, BTreeMap<SmolStr, bool>> = stateless_affectors.into_iter()
-            .map(|(affector_node, affected)|
-                (affector_node.node_common.name.clone(), affected.into_iter().flat_map(|(modifier_name, affected_nodes)| {
-                    let stateless_modifier = self.stateless_call_modifiers.get(&modifier_name).unwrap();
-                    let new_state = stateless_modifier.get_new_state(
-                        clause_context, &function_context.with_node(affector_node.clone())
-                    );
-                    affected_nodes.into_iter().map(|affected_node| (affected_node.node_common.name.clone(), stateless_modifier.run(
-                        clause_context,
-                        &function_context.with_node(affected_node.clone()),
-                        &new_state,
-                    ))).collect::<Vec<_>>().into_iter()
-                }).collect())
-            ).collect();
 
         let dead_end_info = self.dead_end_infos.entry(
             (function_context.call_params.to_owned(), stateless_node_relations.clone())
@@ -395,9 +538,8 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         self.call_stack.push(StackFrame::new(
             function_context,
             CallModifierInfo::new(
-                function.call_modifier_nodes_map.keys().cloned().collect(),
-                stateful_modifiers,
-                stateful_affectors_and_modifiered_nodes,
+                function_modifier_info,
+                &self.stateful_call_modifier_creators, 
                 stateless_node_relations
             ),
             dead_end_info,
@@ -421,41 +563,29 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         // last_node guaranteed not to be an exit node
         let last_node = stack_frame.function_context.current_node.clone();
         let function = self.markov_chain.functions.get(&stack_frame.function_context.call_params.func_name).unwrap();
+        let function_modifier_info = self.function_modifier_info.get(
+            &stack_frame.function_context.call_params.func_name
+        ).unwrap();
 
         let last_node_outgoing = function.chain.get(&last_node.node_common.name).unwrap();
 
         let last_node_outgoing = last_node_outgoing.iter().map(|el| {
-            (check_node_off_dfs(rng, function, clause_context, stack_frame, &el.1), el.0, el.1.clone())
+            (check_node_off_dfs(rng, function, function_modifier_info, clause_context, stack_frame, &el.1), el.0, el.1.clone())
         }).collect::<Vec<_>>();
 
         dynamic_model.update_current_state(&last_node.node_common.name);
         let last_node_outgoing = dynamic_model.assign_log_probabilities(last_node_outgoing);
 
-        let destination = self.state_chooser.choose_destination(last_node_outgoing);
+        let destination = self.state_chooser.choose_destination(rng, last_node_outgoing);
 
         if let Some(destination) = destination {
-            if check_node_off_dfs(rng, function, clause_context, stack_frame, &destination) {
+            if check_node_off_dfs(rng, function, function_modifier_info, clause_context, stack_frame, &destination) {
                 panic!("Chosen node is off: {} (after {})", destination.node_common.name, last_node.node_common.name);
             }
             stack_frame.function_context.current_node = destination.clone();
         } else {
             self.print_stack();
             panic!("No destination found for {}.", last_node.node_common.name);
-        }
-    }
-
-    /// run all the node modifier affectors associated with the current node
-    fn run_current_node_modifiers(&mut self, clause_context: &ClauseContext) {
-        let stack_frame = self.call_stack.last_mut().unwrap();
-
-        if let Some(ref modifier_name) = stack_frame.function_context.current_node.node_common.affects_call_modifier_name {
-            if let Some(stateless_modifier) = self.stateless_call_modifiers.get_mut(modifier_name) {
-                stack_frame.call_modifier_info.update_stateless_modifier_state(stateless_modifier, clause_context, &stack_frame.function_context);
-            } else if stack_frame.call_modifier_info.stateful_modifiers.contains_key(modifier_name) {
-                stack_frame.call_modifier_info.update_stateful_modifier_state(clause_context, &stack_frame.function_context);
-            } else {
-                panic!("No such modifier: {modifier_name}")
-            }
         }
     }
 
@@ -537,13 +667,18 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
         let (is_an_exit, new_node_name) = {
             self.update_current_node(rng, clause_context, dynamic_model);
-            self.run_current_node_modifiers(clause_context);
 
             let stack_frame = self.call_stack.last_mut().unwrap();
+
+            let function_modifier_info = self.function_modifier_info.get(&stack_frame.function_context.call_params.func_name).unwrap();
+            stack_frame.call_modifier_info.update_modifier_states(
+                &stack_frame.function_context, function_modifier_info, clause_context, &self.stateless_call_modifiers
+            );
+
             self.pending_call = stack_frame.function_context.current_node.call_params.clone();
+
             let new_node_name = stack_frame.function_context.current_node.node_common.name.clone();
             let function = self.markov_chain.functions.get(&stack_frame.function_context.call_params.func_name).unwrap();
-
             (new_node_name == function.exit_node_name, new_node_name)
         };
 
@@ -555,8 +690,15 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 }
 
-fn check_node_off_dfs(rng: &mut ChaCha8Rng, function: &Function, clause_context: &ClauseContext, stack_frame: &StackFrame, node_params: &NodeParams) -> bool {
-    if check_node_off(&stack_frame.function_context.call_params, &stack_frame.call_modifier_info.node_states, &node_params.node_common) {
+fn check_node_off_dfs(
+        rng: &mut ChaCha8Rng,
+        function: &Function,
+        function_modifier_info: &FunctionModifierInfo,
+        clause_context: &ClauseContext,
+        stack_frame: &StackFrame,
+        node_params: &NodeParams
+    ) -> bool {
+    if check_node_off(&stack_frame.function_context.call_params, &stack_frame.call_modifier_info.call_modifier_states.affected_node_states, &node_params.node_common) {
         return true
     }
 
@@ -566,78 +708,58 @@ fn check_node_off_dfs(rng: &mut ChaCha8Rng, function: &Function, clause_context:
     }
 
     // only update dead_end_info for paths that were not affected yet
-    let path_is_not_affected = stack_frame.call_modifier_info.stateless_inner_states.is_empty();
-    let cycles_can_unlock_paths = !stack_frame.call_modifier_info.stateful_affectors_and_modified_nodes.is_empty();
+    let path_not_yet_affected = stack_frame.call_modifier_info.stateless_inner_states.is_empty();
+    let cycles_can_unlock_paths = function_modifier_info.has_stateful_affectors();
 
     let mut visited = HashSet::new();
-    let mut to_mark_as_dead_ends = HashSet::new();
+    let mut cacheable_as_dead_ends = HashSet::new();
     let mut stack = VecDeque::new();
     stack.push_back((
         vec![node_params.clone()],
-        stack_frame.call_modifier_info.stateful_modifiers.dyn_clone(),
-        stack_frame.call_modifier_info.node_states.clone()
+        stack_frame.call_modifier_info.call_modifier_states.dyn_clone(),
     ));
 
-    while let Some((path, mut stateful_modifiers, mut affected_node_states)) = stack.pop_back() {
+    while let Some((path, mut call_modifier_states)) = stack.pop_back() {
         let current_node = path.last().unwrap().clone();
         let current_node_name = current_node.node_common.name.clone();
 
-        if cycles_can_unlock_paths && check_node_off(
-            &stack_frame.function_context.call_params, &affected_node_states, &current_node.node_common
-        ) {  // if we are ok with cycling, the node state wasn't checked while inserting
-            continue;
-        }
-
         if cycles_can_unlock_paths || visited.insert(current_node_name.clone()) {
-            let mut path_until_affector: Option<Vec<SmolStr>> = if path_is_not_affected { Some(path.iter().take_until(
-                |&x| stack_frame.call_modifier_info.stateless_node_relations.contains_key(&x.node_common.name)
-            ).map(|x| x.node_common.name.clone()).collect()) } else { None };
-            if path.iter().any(|x| stack_frame.call_modifier_info.stateful_affectors_and_modified_nodes.contains_key(x)) {
-                path_until_affector = None;
-            }
-    
+            let cacheable_path_part: Vec<SmolStr> = if path_not_yet_affected && path.iter().all(
+                    |x| !function_modifier_info.is_a_stateful_affector(x)
+                ) {
+                path.iter().take_until(
+                    |&x| stack_frame.call_modifier_info.stateless_node_relations.contains_key(&x.node_common.name)
+                ).map(|x| x.node_common.name.clone()).collect()
+            } else {
+                vec![]
+            };
+
             if let Some(is_dead_end) = dead_end_info.get(&current_node_name) {
                 if !*is_dead_end {
-                    if let Some(path_until_affector) = path_until_affector {
-                        dead_end_info.extend(path_until_affector.iter().map(|x| (x.clone(), false)));
-                    }
+                    dead_end_info.extend(cacheable_path_part.into_iter().map(|x| (x, false)));
                     return false;
                 }
             }
 
             if current_node_name == function.exit_node_name {
-                if let Some(path_until_affector) = path_until_affector {
-                    dead_end_info.extend(path_until_affector.iter().map(|x| (x.clone(), false)));
-                }
+                dead_end_info.extend(cacheable_path_part.into_iter().map(|x| (x, false)));
                 return false;
             }
 
-            if let Some(affected) = stack_frame.call_modifier_info.stateless_node_relations.get(&current_node_name) {
-                affected_node_states.extend(
-                    affected.clone().into_iter().map(|(affected_node_name, how)| (affected_node_name, Some(how)))
-                );
-            }
-            if let Some(affected) = stack_frame.call_modifier_info.stateful_affectors_and_modified_nodes.get(&current_node) {
-                for (modifier_name, affected_nodes) in affected.clone().into_iter() {
-                    let modifier = stateful_modifiers.get_mut(&modifier_name).unwrap();
-                    modifier.update_state(clause_context, &stack_frame.function_context.with_node(current_node.clone()));
-                    affected_node_states.extend(affected_nodes.into_iter().map(|affected_node| {
-                        (affected_node.node_common.name.clone(), Some(modifier.run(
-                            clause_context, &stack_frame.function_context.with_node(affected_node.clone())
-                        )))
-                    }));
-                }
-            }
+            call_modifier_states.update_modifier_states(
+                &stack_frame.function_context.with_node(current_node.clone()),
+                function_modifier_info,
+                &stack_frame.call_modifier_info.stateless_node_relations,
+                clause_context
+            );
     
-            if let Some(path_until_affector) = path_until_affector {
-                to_mark_as_dead_ends.extend(path_until_affector.into_iter());
-            }
+            cacheable_as_dead_ends.extend(cacheable_path_part.into_iter());
 
             if let Some(node_outgoing) = function.chain.get(&current_node_name) {
                 let mut outgoing: Vec<_> = node_outgoing.iter()
                     .map(|(_, node)| node.clone())
-                    .filter(|x| cycles_can_unlock_paths || !check_node_off(
-                        &stack_frame.function_context.call_params, &affected_node_states, &x.node_common
+                    .filter(|x| !check_node_off(
+                        &stack_frame.function_context.call_params, &call_modifier_states.affected_node_states, &x.node_common
                     )).collect();
                 if cycles_can_unlock_paths {
                     outgoing.shuffle(rng);
@@ -645,22 +767,19 @@ fn check_node_off_dfs(rng: &mut ChaCha8Rng, function: &Function, clause_context:
                 stack.extend(outgoing.into_iter()
                     .map(|x| (
                         [&path[..], &[x]].concat(),
-                        stateful_modifiers.dyn_clone(),
-                        affected_node_states.clone()
+                        call_modifier_states.dyn_clone(),
                     ))
                 );
             }
         }
     }
-    if path_is_not_affected {
-        dead_end_info.extend(to_mark_as_dead_ends.into_iter().map(|x| (x, true)));
-    }
+    dead_end_info.extend(cacheable_as_dead_ends.into_iter().map(|x| (x, true)));
     true
 }
 
 fn check_node_off(
         call_params: &CallParams,
-        call_modifier_states: &BTreeMap<SmolStr, Option<bool>>,
+        affected_node_states: &HashMap<SmolStr, Option<bool>>,
         node_common: &NodeCommon
     ) -> bool {
     let mut off = false;
@@ -682,7 +801,7 @@ fn check_node_off(
         };
     }
     if let Some(ref modifier_name) = node_common.call_modifier_name {
-        off = off || !call_modifier_states.get(&node_common.name).unwrap().unwrap_or_else(
+        off = off || !affected_node_states.get(&node_common.name).unwrap().unwrap_or_else(
             || panic!("State of call modifier {modifier_name} was not set (node {})", node_common.name)
         )
     }
