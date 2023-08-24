@@ -12,7 +12,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use take_until::TakeUntilExt;
 
-use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_generator::markov_chain::FunctionTypes, random_query_generator::{query_info::ClauseContext, call_modifiers::{StatelessCallModifier, StatefulCallModifier, IsColumnTypeAvailableModifier, CanExtendArrayModifier, TypesTypeValueSetter, ValueSetter, NamedValue}}}, config::TomlReadable};
+use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_generator::markov_chain::FunctionTypes, random_query_generator::{query_info::ClauseContext, call_modifiers::{StatelessCallModifier, StatefulCallModifier, IsColumnTypeAvailableInFromModifier, CanExtendArrayModifier, TypesTypeValueSetter, ValueSetter, NamedValue, IsColumnTypeAvailableInGroupByModifier}}}, config::TomlReadable};
 
 use self::{
     markov_chain::{
@@ -102,8 +102,6 @@ impl StackFrame {
 pub struct FunctionModifierInfo {
     /// names of all stateful modifiers present in function
     stateful_modifier_names: HashSet<SmolStr>,
-    /// names of all stateless modifiers present in function
-    stateless_modifier_names: HashSet<SmolStr>,
     /// every node that affects a modifier, with the affected modifier names and vector of
     /// corresponding affected nodes
     affector_nodes_and_affected_nodes: HashMap<NodeParams, HashMap<SmolStr, Vec<NodeParams>>>,
@@ -127,7 +125,7 @@ impl FunctionModifierInfo {
                 acc
             });
 
-        let (stateful_modifier_names, stateless_modifier_names): (HashSet<_>, _) = modified_nodes_map.keys().cloned().partition(
+        let (stateful_modifier_names, stateless_modifier_names): (_, HashSet<_>) = modified_nodes_map.keys().cloned().partition(
             |modifier_name| stateful_call_modifier_creators.contains_key(modifier_name)
         );
 
@@ -177,7 +175,6 @@ impl FunctionModifierInfo {
 
         Self {
             stateful_modifier_names,
-            stateless_modifier_names,
             affector_nodes_and_affected_nodes,
         }
     }
@@ -203,8 +200,10 @@ impl FunctionModifierInfo {
     ) -> BTreeMap<SmolStr, BTreeMap<SmolStr, bool>> {
         let stateless_affectors_iter = self.affector_nodes_and_affected_nodes.iter()
             .filter(|(affector_node, _)| {
-                affector_node.node_common.affects_call_modifier_name.as_ref().map_or(false, |modifier_name| {
-                    self.stateless_modifier_names.contains(modifier_name)
+                affector_node.node_common.sets_value_name.as_ref().map_or(false, |value_name| {
+                    stateless_call_modifiers.iter().any(
+                        |(_, modifier)| &modifier.get_associated_value_name() == value_name
+                    )
                 })
             });
 
@@ -241,9 +240,15 @@ impl FunctionModifierInfo {
 
     /// checks whether node is a stateful affector
     fn is_a_stateful_affector(&self, node: &NodeParams) -> bool {
-        self.affector_nodes_and_affected_nodes.get(node).map_or(false, |_| {
-            self.stateful_modifier_names.contains(node.node_common.affects_call_modifier_name.as_ref().unwrap())
-        })
+        if !self.affector_nodes_and_affected_nodes.contains_key(node) {
+            false
+        } else {
+            if let Some(ref call_modifier_name) = node.node_common.affects_call_modifier_name {
+                self.stateful_modifier_names.contains(call_modifier_name)
+            } else {
+                false
+            }
+        }
     }
 
     /// checks whether node is a stateful affector
@@ -424,7 +429,8 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             dead_end_infos: HashMap::new(),
         };
         _self.register_value_setter(TypesTypeValueSetter {});
-        _self.register_call_modifier(IsColumnTypeAvailableModifier {});
+        _self.register_stateless_call_modifier(IsColumnTypeAvailableInFromModifier {});
+        _self.register_stateless_call_modifier(IsColumnTypeAvailableInGroupByModifier {});
         _self.register_stateful_call_modifier::<CanExtendArrayModifier>();
         _self.fill_function_modifier_info();
         _self.reset();
@@ -435,7 +441,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         self.value_setters.insert(value_setter.get_value_name(), Box::new(value_setter));
     }
 
-    fn register_call_modifier<T: StatelessCallModifier + 'static>(&mut self, modifier: T) {
+    fn register_stateless_call_modifier<T: StatelessCallModifier + 'static>(&mut self, modifier: T) {
         self.stateless_call_modifiers.insert(modifier.get_name(), Box::new(modifier));
     }
 

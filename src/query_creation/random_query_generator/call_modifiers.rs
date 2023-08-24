@@ -89,11 +89,11 @@ pub trait StatefulCallModifier: Debug {
 }
 
 #[derive(Debug, Clone)]
-pub struct IsColumnTypeAvailableModifier {}
+pub struct IsColumnTypeAvailableInFromModifier {}
 
-impl StatelessCallModifier for IsColumnTypeAvailableModifier {
+impl StatelessCallModifier for IsColumnTypeAvailableInFromModifier {
     fn get_name(&self) -> SmolStr {
-        SmolStr::new("is_column_type_available")
+        SmolStr::new("is_column_type_available_in_from")
     }
 
     fn get_associated_value_name(&self) -> SmolStr {
@@ -101,15 +101,33 @@ impl StatelessCallModifier for IsColumnTypeAvailableModifier {
     }
 
     fn run(&self, clause_context: &ClauseContext, _function_context: &FunctionContext, modifier_state: &Box<dyn std::any::Any>) -> bool {
-        modifier_state
-            .downcast_ref::<TypesTypeValue>()
-            .unwrap()
-            .selected_types
-            .iter()
+        modifier_state.downcast_ref::<TypesTypeValue>().unwrap().selected_types.iter()
             .any(|x|
                 clause_context
                     .from()
-                    .is_type_available(&x)
+                    .is_type_available(x)
+            )
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IsColumnTypeAvailableInGroupByModifier {}
+
+impl StatelessCallModifier for IsColumnTypeAvailableInGroupByModifier {
+    fn get_name(&self) -> SmolStr {
+        SmolStr::new("is_column_type_available_in_group_by")
+    }
+
+    fn get_associated_value_name(&self) -> SmolStr {
+        TypesTypeValue::name()
+    }
+
+    fn run(&self, clause_context: &ClauseContext, _function_context: &FunctionContext, modifier_state: &Box<dyn std::any::Any>) -> bool {
+        modifier_state.downcast_ref::<TypesTypeValue>().unwrap().selected_types.iter()
+            .any(|x|
+                clause_context
+                    .group_by()
+                    .is_type_available(x)
             )
     }
 }

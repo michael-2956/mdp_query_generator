@@ -174,6 +174,10 @@ impl GroupByContents {
 
         }
     }
+
+    pub fn is_type_available(&self, _graph_type: &SubgraphType) -> bool {
+        true
+    }
 }
 
 #[derive(Debug, Clone)]

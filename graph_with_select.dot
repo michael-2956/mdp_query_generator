@@ -505,29 +505,36 @@ digraph G {
     }
     
     subgraph def_types {
-        types [TYPES="[numeric, 3VL Value, array, list expr, string]", MODS="[no column spec, no subquery]", label="TYPE(S) (generic):\ntypes=[numeric?, 3VL Value?, array?, list expr?, string?]\nmods=[no column spec, no subquery]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, 3VL Value, array, list expr, string]", MODS="[no column spec, no subquery, check group by]", label="TYPE(S) (generic):\ntypes=[numeric?, 3VL Value?, array?, list expr?, string?]\nmods=[no column spec, no subquery]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
         types_select_type_noexpr[label="Non-expression"]
-        types_select_type_numeric[TYPE_NAME="numeric", label="numeric?", set_value="types_type", affects_call_modifier="is_column_type_available"]
+        types_select_type_numeric[TYPE_NAME="numeric", label="numeric?", set_value="types_type"]
         types -> types_select_type_numeric
         types_select_type_numeric -> types_select_type_noexpr
-        types_select_type_3vl[TYPE_NAME="3VL Value", label="3VL Value?", set_value="types_type", affects_call_modifier="is_column_type_available"]
+        types_select_type_3vl[TYPE_NAME="3VL Value", label="3VL Value?", set_value="types_type"]
         types -> types_select_type_3vl
         types_select_type_3vl -> types_select_type_noexpr
-        types_select_type_array[TYPE_NAME="array", label="array?", set_value="types_type", affects_call_modifier="is_column_type_available"]
+        types_select_type_array[TYPE_NAME="array", label="array?", set_value="types_type"]
         types -> types_select_type_array
         types_select_type_array -> types_select_type_noexpr
-        types_select_type_list_expr[TYPE_NAME="list expr", label="list expr?", set_value="types_type", affects_call_modifier="is_column_type_available"]
+        types_select_type_list_expr[TYPE_NAME="list expr", label="list expr?", set_value="types_type"]
         types -> types_select_type_list_expr
         types_select_type_list_expr -> types_select_type_noexpr
-        types_select_type_string[TYPE_NAME="string", label="string?", set_value="types_type", affects_call_modifier="is_column_type_available"]
+        types_select_type_string[TYPE_NAME="string", label="string?", set_value="types_type"]
         types -> types_select_type_string
         types_select_type_string -> types_select_type_noexpr
 
-        call0_column_spec [TYPES="[known]", call_modifier="is_column_type_available", modifier="no column spec", modifier_mode="off", label="column specifier\nTYPE: known\nmod.: 'no column spec'\ncall.mod.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
-        types_select_type_noexpr -> call0_column_spec
+        types_column_spec [modifier="no column spec", modifier_mode="off", label="column specifier\nmod.: 'no column spec'"]
+        types_select_type_noexpr -> types_column_spec
+
+        call0_column_spec [TYPES="[known]", call_modifier="is_column_type_available_in_from", modifier="check group by", modifier_mode="off", label="column specifier (src.: FROM)\nTYPE: known\ncall.mod.: 'is_column_type_available_in_from'", shape=rectangle, style=filled, color=gold]
+        types_column_spec -> call0_column_spec
         call0_column_spec -> EXIT_types
+
+        call1_column_spec [TYPES="[known]", call_modifier="is_column_type_available_in_group_by", modifier="check group by", modifier_mode="on", label="column specifier (src.: GROUP BY)\nTYPE: known\ncall.mod.: 'is_column_type_available_in_group_by'", shape=rectangle, style=filled, color=gold]
+        types_column_spec -> call1_column_spec
+        call1_column_spec -> EXIT_types
 
         // call1_Query [TYPES="[known]", MODS="[single value]", label="Query\nMODS: single value\nTYPE: known\nmod.: 'no subquery'", modifier="no subquery", modifier_mode="off", shape=rectangle, style=filled, color=green]
         // types_select_type_noexpr -> call1_Query

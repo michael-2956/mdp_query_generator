@@ -650,10 +650,15 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         let (selected_type, types_value) = match self.next_state().as_str() {
             "types_select_type_noexpr" => {
                 match self.next_state().as_str() {
-                    "call0_column_spec" => {
-                        self.state_generator.set_known_list(allowed_type_list);
-                        self.handle_column_spec()
-                    },
+                    "types_column_spec" => {
+                        match self.next_state().as_str() {
+                            "call0_column_spec" | "call1_column_spec" => {
+                                self.state_generator.set_known_list(allowed_type_list);
+                                self.handle_column_spec()
+                            },
+                            any => self.panic_unexpected(any)
+                        }
+                    }
                     "call1_Query" => {
                         self.state_generator.set_known_list(allowed_type_list);
                         let (subquery, column_types) = self.handle_query();
