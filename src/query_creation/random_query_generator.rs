@@ -17,7 +17,7 @@ use sqlparser::ast::{
 use crate::config::TomlReadable;
 
 use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generators::{SubgraphType, CallTypes}};
-use self::{query_info::{DatabaseSchema, ClauseContext}, expr_precedence::ExpressionPriority, call_modifiers::{IsColumnTypeAvailableModifier, CallModifierTrait, IsColumnTypeAvailableModifierState}, aggregate_function_settings::AggregateFunctionDistribution};
+use self::{query_info::{DatabaseSchema, ClauseContext}, expr_precedence::ExpressionPriority, call_modifiers::TypesTypeValue, aggregate_function_settings::AggregateFunctionDistribution};
 
 use super::state_generators::{MarkovChainGenerator, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
@@ -31,7 +31,7 @@ pub struct QueryGeneratorConfig {
 
 impl TomlReadable for QueryGeneratorConfig {
     fn from_toml(toml_config: &toml::Value) -> Self {
-        let section = &toml_config["generator"];
+        let section = &toml_config["query_generator"];
         Self {
             print_queries: section["print_queries"].as_bool().unwrap(),
             print_schema: section["print_schema"].as_bool().unwrap(),
@@ -645,12 +645,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         };
 
         let allowed_type_list = self.state_generator
-            .get_call_modifier_state(&IsColumnTypeAvailableModifier{}.get_name())
-            .unwrap()
-            .downcast_ref::<IsColumnTypeAvailableModifierState>()
-            .unwrap()
-            .selected_types
-            .clone();
+            .get_named_value::<TypesTypeValue>().unwrap().selected_types.clone();
 
         let (selected_type, types_value) = match self.next_state().as_str() {
             "types_select_type_noexpr" => {

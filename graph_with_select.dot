@@ -509,19 +509,19 @@ digraph G {
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
         types_select_type_noexpr[label="Non-expression"]
-        types_select_type_numeric[TYPE_NAME="numeric", label="numeric?", affects_call_modifier="is_column_type_available"]
+        types_select_type_numeric[TYPE_NAME="numeric", label="numeric?", set_value="types_type", affects_call_modifier="is_column_type_available"]
         types -> types_select_type_numeric
         types_select_type_numeric -> types_select_type_noexpr
-        types_select_type_3vl[TYPE_NAME="3VL Value", label="3VL Value?", affects_call_modifier="is_column_type_available"]
+        types_select_type_3vl[TYPE_NAME="3VL Value", label="3VL Value?", set_value="types_type", affects_call_modifier="is_column_type_available"]
         types -> types_select_type_3vl
         types_select_type_3vl -> types_select_type_noexpr
-        types_select_type_array[TYPE_NAME="array", label="array?", affects_call_modifier="is_column_type_available"]
+        types_select_type_array[TYPE_NAME="array", label="array?", set_value="types_type", affects_call_modifier="is_column_type_available"]
         types -> types_select_type_array
         types_select_type_array -> types_select_type_noexpr
-        types_select_type_list_expr[TYPE_NAME="list expr", label="list expr?", affects_call_modifier="is_column_type_available"]
+        types_select_type_list_expr[TYPE_NAME="list expr", label="list expr?", set_value="types_type", affects_call_modifier="is_column_type_available"]
         types -> types_select_type_list_expr
         types_select_type_list_expr -> types_select_type_noexpr
-        types_select_type_string[TYPE_NAME="string", label="string?", affects_call_modifier="is_column_type_available"]
+        types_select_type_string[TYPE_NAME="string", label="string?", set_value="types_type", affects_call_modifier="is_column_type_available"]
         types -> types_select_type_string
         types_select_type_string -> types_select_type_noexpr
 

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use structopt::StructOpt;
 use toml::Value;
 
-use crate::query_creation::{random_query_generator::QueryGeneratorConfig, state_generators::markov_chain_generator::ChainConfig};
+use crate::query_creation::{random_query_generator::QueryGeneratorConfig, state_generators::markov_chain_generator::StateGeneratorConfig};
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "basic")]
@@ -46,7 +46,7 @@ impl TomlReadable for MainConfig {
 pub struct Config {
     pub main_config: MainConfig,
     pub generator_config: QueryGeneratorConfig,
-    pub chain_config: ChainConfig,
+    pub chain_config: StateGeneratorConfig,
 }
 
 fn read_toml_config(config_path: &PathBuf) -> Result<Value, Box<dyn std::error::Error>> {
@@ -60,7 +60,7 @@ impl Config {
         Ok(Self {
             main_config: MainConfig::from_toml(&toml_config),
             generator_config: QueryGeneratorConfig::from_toml(&toml_config),
-            chain_config: ChainConfig::from_toml(&toml_config),
+            chain_config: StateGeneratorConfig::from_toml(&toml_config),
         })
     }
 

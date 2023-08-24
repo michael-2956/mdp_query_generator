@@ -14,7 +14,7 @@ assert_runs_on_schema=false
 # Pring how many queries were already generated
 print_progress=false
 
-[generator]
+[query_generator]
 # print the queries on generation
 print_queries=true
 # print the table schema after parcing
@@ -26,7 +26,7 @@ dynamic_model="anticall"
 # aggregate functions settings
 aggregate_functions_distribution_map_file="aggregate_functions_distribution_map.json"
 
-[chain]
+[state_generator]
 # Path to graph source for a markov chain
 graph_file_path="graph_with_select.dot"
 

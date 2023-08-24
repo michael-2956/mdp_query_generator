@@ -6,44 +6,38 @@ use crate::{query_creation::state_generators::{SubgraphType, CallTypes, markov_c
 
 use super::query_info::ClauseContext;
 
-/// Call modifier that relies on external (static in function scope) values
-pub trait CallModifierTrait: Debug {
-    /// returns call modifier name
-    fn get_name(&self) -> SmolStr;
+pub trait ValueSetter: Debug {
+    /// returns value name
+    fn get_value_name(&self) -> SmolStr;
 
-    /// Sets call modifier state
-    fn get_new_state(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> Box<dyn std::any::Any>;
-
-    /// Runs the modifier value based on the current value
-    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, modifier_state: &Box<dyn std::any::Any>) -> bool;
+    /// get the value in given context
+    fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> Box<dyn std::any::Any>;
 }
 
-pub trait StatefulCallModifierTrait: Debug {
-    fn new() -> Box<dyn StatefulCallModifierTrait> where Self : Sized;
-
-    fn dyn_box_clone(&self) -> Box<dyn StatefulCallModifierTrait>;
-
-    fn get_name(&self) -> SmolStr;
-
-    fn update_state(&mut self, clause_context: &ClauseContext, function_context: &FunctionContext);
-
-    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> bool;
+pub trait NamedValue: Debug {
+    fn name() -> SmolStr where Self : Sized;
 }
 
 #[derive(Debug, Clone)]
-pub struct IsColumnTypeAvailableModifier {}
+pub struct TypesTypeValueSetter { }
 
-#[derive(Debug)]
-pub struct IsColumnTypeAvailableModifierState {
+#[derive(Debug, Clone)]
+pub struct TypesTypeValue {
     pub selected_types: Vec<SubgraphType>,
 }
 
-impl CallModifierTrait for IsColumnTypeAvailableModifier {
-    fn get_name(&self) -> SmolStr {
-        SmolStr::new("is_column_type_available")
+impl NamedValue for TypesTypeValue {
+    fn name() -> SmolStr {
+        SmolStr::new("types_type")
+    }
+}
+
+impl ValueSetter for TypesTypeValueSetter {
+    fn get_value_name(&self) -> SmolStr {
+        TypesTypeValue::name()
     }
 
-    fn get_new_state(&self, _clause_context: &ClauseContext, function_context: &FunctionContext) -> Box<dyn std::any::Any> {
+    fn get_value(&self, _clause_context: &ClauseContext, function_context: &FunctionContext) -> Box<dyn std::any::Any> {
         let selected_type = match function_context.current_node.node_common.name.as_str() {
             "types_select_type_3vl" => SubgraphType::Val3,
             "types_select_type_array" => SubgraphType::Array((Box::new(SubgraphType::Undetermined), None)),
@@ -64,14 +58,51 @@ impl CallModifierTrait for IsColumnTypeAvailableModifier {
             any => vec![any]
         };
 
-        Box::new(IsColumnTypeAvailableModifierState {
+        Box::new(TypesTypeValue {
             selected_types: allowed_type_list
         })
+    }
+}
+
+/// Call modifier that relies on external (static in function scope) values
+pub trait StatelessCallModifier: Debug {
+    /// returns call modifier name
+    fn get_name(&self) -> SmolStr;
+
+    /// returns associated value, which sets the state of this modifier
+    fn get_associated_value_name(&self) -> SmolStr;
+
+    /// Runs the modifier value based on the current value
+    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, modifier_state: &Box<dyn std::any::Any>) -> bool;
+}
+
+pub trait StatefulCallModifier: Debug {
+    fn new() -> Box<dyn StatefulCallModifier> where Self : Sized;
+
+    fn dyn_box_clone(&self) -> Box<dyn StatefulCallModifier>;
+
+    fn get_name(&self) -> SmolStr;
+
+    fn update_state(&mut self, clause_context: &ClauseContext, function_context: &FunctionContext);
+
+    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> bool;
+}
+
+#[derive(Debug, Clone)]
+pub struct IsColumnTypeAvailableModifier {}
+
+impl StatelessCallModifier for IsColumnTypeAvailableModifier {
+    fn get_name(&self) -> SmolStr {
+        SmolStr::new("is_column_type_available")
+    }
+
+    fn get_associated_value_name(&self) -> SmolStr {
+        TypesTypeValue::name()
     }
 
     fn run(&self, clause_context: &ClauseContext, _function_context: &FunctionContext, modifier_state: &Box<dyn std::any::Any>) -> bool {
         modifier_state
-            .downcast_ref::<IsColumnTypeAvailableModifierState>()
+            .downcast_ref::<TypesTypeValue>()
             .unwrap()
             .selected_types
             .iter()
@@ -89,15 +120,15 @@ pub struct CanExtendArrayModifier {
     desired_element_num: Option<usize>,
 }
 
-impl StatefulCallModifierTrait for CanExtendArrayModifier {
-    fn new() -> Box<dyn StatefulCallModifierTrait> where Self : Sized {
+impl StatefulCallModifier for CanExtendArrayModifier {
+    fn new() -> Box<dyn StatefulCallModifier> where Self : Sized {
         Box::new(CanExtendArrayModifier {
             array_length: 0,
             desired_element_num: None,
         })
     }
 
-    fn dyn_box_clone(&self) -> Box<dyn StatefulCallModifierTrait> {
+    fn dyn_box_clone(&self) -> Box<dyn StatefulCallModifier> {
         Box::new(self.clone())
     }
 

@@ -335,11 +335,13 @@ pub struct NodeCommon {
     pub call_modifier_name: Option<SmolStr>,
     /// Name of the call modifier that this node affects, if specified
     pub affects_call_modifier_name: Option<SmolStr>,
+    /// Name of the value that this node sets, if specified
+    pub sets_value_name: Option<SmolStr>,
 }
 
 impl NodeCommon {
     pub fn with_name(name: SmolStr) -> Self {
-        Self { name: name, type_name: None, modifier: None, call_modifier_name: None, affects_call_modifier_name: None }
+        Self { name: name, type_name: None, modifier: None, call_modifier_name: None, affects_call_modifier_name: None, sets_value_name: None }
     }
 }
 
@@ -521,6 +523,13 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                 _ => None,
                             };
 
+                            let sets_value_name = match node_spec.remove("SET_VALUE") {
+                                Some(DotToken::QuotedIdentifiers(idents)) => {
+                                    Some(idents)
+                                },
+                                _ => None,
+                            };
+
                             let literal = match node_spec.remove("LITERAL") {
                                 Some(DotToken::QuotedIdentifiers(idents)) => idents == SmolStr::new("t"),
                                 _ => false
@@ -532,6 +541,7 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                 modifier,
                                 call_modifier_name,
                                 affects_call_modifier_name,
+                                sets_value_name,
                             };
 
                             if self.call_ident_regex.is_match(&node_name) {
