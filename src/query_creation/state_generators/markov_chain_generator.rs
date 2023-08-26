@@ -12,7 +12,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use take_until::TakeUntilExt;
 
-use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_generator::markov_chain::FunctionTypes, random_query_generator::{query_info::ClauseContext, call_modifiers::{StatelessCallModifier, StatefulCallModifier, IsColumnTypeAvailableInFromModifier, CanExtendArrayModifier, TypesTypeValueSetter, ValueSetter, NamedValue, IsColumnTypeAvailableInGroupByModifier}}}, config::TomlReadable};
+use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_generator::markov_chain::FunctionTypes, random_query_generator::{query_info::ClauseContext, call_modifiers::{StatelessCallModifier, StatefulCallModifier, IsColumnTypeAvailableModifier, CanExtendArrayModifier, TypesTypeValueSetter, ValueSetter, NamedValue, InnerTypeSelectionSwitch}}}, config::TomlReadable};
 
 use self::{
     markov_chain::{
@@ -133,7 +133,9 @@ impl FunctionModifierInfo {
         let associated_values_map: HashMap<_, _> = stateless_modifier_names.iter().map(
             |modifier_name| (
                 modifier_name,
-                stateless_call_modifiers.get(modifier_name).unwrap().get_associated_value_name()
+                stateless_call_modifiers.get(modifier_name).unwrap_or_else(|| panic!(
+                    "Stateless modifier {modifier_name} wasn't registered"
+                )).get_associated_value_name()
             )
         ).collect();
 
@@ -429,8 +431,8 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             dead_end_infos: HashMap::new(),
         };
         _self.register_value_setter(TypesTypeValueSetter {});
-        _self.register_stateless_call_modifier(IsColumnTypeAvailableInFromModifier {});
-        _self.register_stateless_call_modifier(IsColumnTypeAvailableInGroupByModifier {});
+        _self.register_stateless_call_modifier(InnerTypeSelectionSwitch {});
+        _self.register_stateless_call_modifier(IsColumnTypeAvailableModifier {});
         _self.register_stateful_call_modifier::<CanExtendArrayModifier>();
         _self.fill_function_modifier_info();
         _self.reset();
@@ -638,8 +640,9 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             }
             stack_frame.function_context.current_node = destination.clone();
         } else {
+            let function_context = stack_frame.function_context.clone();
             self.print_stack();
-            panic!("No destination found for {}.", last_node.node_common.name);
+            panic!("No destination found for {} in {:#?}.", last_node.node_common.name, function_context);
         }
     }
 

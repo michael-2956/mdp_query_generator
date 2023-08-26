@@ -247,7 +247,7 @@ digraph G {
         call58_types -> InSubqueryNot
         InSubqueryNot -> InSubqueryIn
         call58_types -> InSubqueryIn
-        call3_Query [TYPES="[compatible]", MODS="[]", label="Query\nTYPE: [compatible]", shape=rectangle, style=filled, color=green]
+        call3_Query [TYPES="[compatible]", label="Query\nTYPE: [compatible]", shape=rectangle, style=filled, color=green]
         InSubqueryIn -> call3_Query
         call3_Query -> EXIT_VAL_3
 
@@ -505,62 +505,76 @@ digraph G {
     }
     
     subgraph def_types {
-        types [TYPES="[numeric, 3VL Value, array, list expr, string]", MODS="[no column spec, no subquery, check group by]", label="TYPE(S) (generic):\ntypes=[numeric?, 3VL Value?, array?, list expr?, string?]\nmods=[no column spec, no subquery]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, 3VL Value, array, list expr, string]", MODS="[no column spec, no subquery, check group by, return typed null]", label="TYPE(S) (generic):\ntypes=[numeric?, 3VL Value?, array?, list expr?, string?]\nmods=[no column spec, no subquery, check group by, return typed null]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
-        types_select_type_noexpr[label="Non-expression"]
         types_select_type_numeric[TYPE_NAME="numeric", label="numeric?", set_value="types_type"]
         types -> types_select_type_numeric
-        types_select_type_numeric -> types_select_type_noexpr
         types_select_type_3vl[TYPE_NAME="3VL Value", label="3VL Value?", set_value="types_type"]
         types -> types_select_type_3vl
-        types_select_type_3vl -> types_select_type_noexpr
         types_select_type_array[TYPE_NAME="array", label="array?", set_value="types_type"]
         types -> types_select_type_array
-        types_select_type_array -> types_select_type_noexpr
         types_select_type_list_expr[TYPE_NAME="list expr", label="list expr?", set_value="types_type"]
         types -> types_select_type_list_expr
-        types_select_type_list_expr -> types_select_type_noexpr
         types_select_type_string[TYPE_NAME="string", label="string?", set_value="types_type"]
         types -> types_select_type_string
-        types_select_type_string -> types_select_type_noexpr
+
+        types_return_typed_null [label="Typed null"]
+        types_select_type_numeric -> types_return_typed_null
+        types_select_type_3vl -> types_return_typed_null
+        types_select_type_array -> types_return_typed_null
+        types_select_type_list_expr -> types_return_typed_null
+        types_select_type_string -> types_return_typed_null
+
+        call2_list_expr [TYPE_NAME="list expr", TYPES="[RI...]", MODS="[..., return typed null]", call_modifier="inner_type_selection_switch", label="list expr\nTYPES: [(rel, inner)...]\nMODS: [...mods, return typed null]\ncall mod.: 'inner_type_selection_switch'", shape=rectangle, style=filled, color=blue]
+        types_return_typed_null -> call2_list_expr
+        call2_list_expr -> EXIT_types
+
+        call1_array [TYPE_NAME="array", TYPES="[R...]", MODS="[..., return typed null]", call_modifier="inner_type_selection_switch", label="array\nTYPES: [(rel)...]\nMODS: [...mods, return typed null]\ncall mod.: 'inner_type_selection_switch'", shape=rectangle, style=filled, color=yellow]
+        types_return_typed_null -> call1_array
+        call1_array -> EXIT_types
+
+        types_null_type_selected [label="No need to select inner type\ncall mod.: 'inner_type_selection_switch'", call_modifier="inner_type_selection_switch"]
+        types_return_typed_null -> types_null_type_selected
+        types_null_type_selected -> EXIT_types
+
+        types_select_special_expression [label="select special expression\nmod.: 'return typed null'->OFF", modifier="return typed null", modifier_mode="off"]
+        types_select_type_numeric -> types_select_special_expression
+        types_select_type_3vl -> types_select_special_expression
+        types_select_type_array -> types_select_special_expression
+        types_select_type_list_expr -> types_select_special_expression
+        types_select_type_string -> types_select_special_expression
 
         types_column_spec [modifier="no column spec", modifier_mode="off", label="column specifier\nmod.: 'no column spec'"]
-        types_select_type_noexpr -> types_column_spec
-
-        call0_column_spec [TYPES="[known]", call_modifier="is_column_type_available_in_from", modifier="check group by", modifier_mode="off", label="column specifier (src.: FROM)\nTYPE: known\ncall.mod.: 'is_column_type_available_in_from'", shape=rectangle, style=filled, color=gold]
+        types_select_special_expression -> types_column_spec
+        call0_column_spec [TYPES="[known]", call_modifier="is_column_type_available", modifier="check group by", modifier_mode="off", label="column specifier (src.: FROM)\nTYPE: known\ncall.mod.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
         types_column_spec -> call0_column_spec
         call0_column_spec -> EXIT_types
-
-        call1_column_spec [TYPES="[known]", call_modifier="is_column_type_available_in_group_by", modifier="check group by", modifier_mode="on", label="column specifier (src.: GROUP BY)\nTYPE: known\ncall.mod.: 'is_column_type_available_in_group_by'", shape=rectangle, style=filled, color=gold]
+        call1_column_spec [TYPES="[known]", call_modifier="is_column_type_available", modifier="check group by", modifier_mode="on", label="column specifier (src.: GROUP BY)\nTYPE: known\ncall.mod.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
         types_column_spec -> call1_column_spec
         call1_column_spec -> EXIT_types
 
-        // call1_Query [TYPES="[known]", MODS="[single value]", label="Query\nMODS: single value\nTYPE: known\nmod.: 'no subquery'", modifier="no subquery", modifier_mode="off", shape=rectangle, style=filled, color=green]
-        // types_select_type_noexpr -> call1_Query
-        // call1_Query -> EXIT_types
+        call1_Query [TYPES="[known]", MODS="[single value]", label="Query\nMODS: single value\nTYPE: known\nmod.: 'no subquery'", modifier="no subquery", modifier_mode="off", shape=rectangle, style=filled, color=green]
+        types_select_special_expression -> call1_Query
+        call1_Query -> EXIT_types
 
-        // types_null [label="null"]
-        // types -> types_null
-        // types_null -> EXIT_types
-
-        call0_numeric [label="numeric\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=chocolate]
+        call0_numeric [label="numeric\nMODS: [...mods]\nmod.: 'return typed null'->OFF", modifier="return typed null", modifier_mode="off", MODS="[...]", shape=rectangle, style=filled, color=chocolate]
         types_select_type_numeric -> call0_numeric
         call0_numeric -> EXIT_types
 
-        call1_VAL_3 [label="3VL Value\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=red]
+        call1_VAL_3 [label="3VL Value\nMODS: [...mods]\nmod.: 'return typed null'->OFF", modifier="return typed null", modifier_mode="off", MODS="[...]", shape=rectangle, style=filled, color=red]
         types_select_type_3vl -> call1_VAL_3
         call1_VAL_3 -> EXIT_types
 
-        call0_string [label="string\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=pink]
+        call0_string [label="string\nMODS: [...mods]\nmod.: 'return typed null'->OFF", modifier="return typed null", modifier_mode="off", MODS="[...]", shape=rectangle, style=filled, color=pink]
         types_select_type_string -> call0_string
         call0_string -> EXIT_types
 
-        call0_list_expr [TYPES="[RI...]", MODS="[...]", label="list expr\nTYPES: [(rel, inner)...]\nMODS: [...mods]", shape=rectangle, style=filled, color=blue]
+        call0_list_expr [TYPES="[RI...]", MODS="[...]", label="list expr\nTYPES: [(rel, inner)...]\nMODS: [...mods]\nmod.: 'return typed null'->OFF", modifier="return typed null", modifier_mode="off", shape=rectangle, style=filled, color=blue]
         types_select_type_list_expr -> call0_list_expr
         call0_list_expr -> EXIT_types
 
-        call0_array [TYPES="[R...]", MODS="[...]", label="array\nTYPES: [(rel, inner)...]\nMODS: [...mods]", shape=rectangle, style=filled, color=yellow]
+        call0_array [TYPES="[R...]", MODS="[...]", label="array\nTYPES: [(rel)...]\nMODS: [...mods]\nmod.: 'return typed null'->OFF", modifier="return typed null", modifier_mode="off", shape=rectangle, style=filled, color=yellow]
         types_select_type_array -> call0_array
         call0_array -> EXIT_types
     }
@@ -575,73 +589,83 @@ digraph G {
     }
 
     subgraph def_array {
-        array [TYPES="[numeric, 3VL Value, string, list expr, array]", uses_wrapped_types="true", MODS="[no column spec]", label="array\ntypes=[numeric?, 3VL Value?, string?, array?]\nmods: [no column spec]", shape=octagon, style=filled, color=yellow]
+        array [TYPES="[numeric, 3VL Value, string, list expr, array]", uses_wrapped_types="true", MODS="[no column spec, return typed null]", label="array\ntypes=[numeric?, 3VL Value?, string?, array?]\nmods: [no column spec, return typed null]", shape=octagon, style=filled, color=yellow]
         EXIT_array[label="EXIT array"]
+
+        call12_types [TYPE_NAME="numeric", TYPES="[numeric]", label="TYPE: numeric?\nMODS: [...mods]\naffects: 'can_extend_array'", affects_call_modifier="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        array -> call12_types
+        call13_types [TYPE_NAME="3VL Value", TYPES="[3VL Value]", label="TYPE: 3VL Value?\nMODS: [...mods]\naffects: 'can_extend_array'", affects_call_modifier="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        array -> call13_types
+        call31_types [TYPE_NAME="string", TYPES="[string]", label="TYPE: string?\nMODS: [...mods]\naffects: 'can_extend_array'", affects_call_modifier="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        array -> call31_types
+        call51_types [TYPE_NAME="list expr", TYPES="[TR...]", label="TYPE: list expr?\nMODS: [...mods]\nTYPES: [(tn.rel.)...]\naffects: 'can_extend_array'", affects_call_modifier="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        array -> call51_types
+        call14_types [TYPE_NAME="array", TYPES="[TR...]", label="TYPE: array?\nMODS: [...mods]\nTYPES: [(tn.rel.)...]\naffects: 'can_extend_array'", affects_call_modifier="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        array -> call14_types
+
+        array_return_typed_null [label="Return typed null\nmod.: 'return typed null'->ON", modifier="return typed null", modifier_mode="on"]
+        call12_types -> array_return_typed_null
+        call13_types -> array_return_typed_null
+        call31_types -> array_return_typed_null
+        call51_types -> array_return_typed_null
+        call14_types -> array_return_typed_null
+        array_return_typed_null -> EXIT_array
 
         array_one_more_value_is_allowed [label="One more value (if allowed)\ncall. mod.: 'can_extend_array'", call_modifier="can_extend_array"]
         array_exit_allowed [label="Exit is allowed\ncall. mod.: 'can_extend_array'", call_modifier="can_extend_array"]
-        array_multiple_values [label="Multiple values"]
+        
+        array_multiple_values [label="Multiple values\nmod.: 'return typed null'->OFF", modifier="return typed null", modifier_mode="off"]
         array_multiple_values -> array_one_more_value_is_allowed
         array_multiple_values -> array_exit_allowed
+        call12_types -> array_multiple_values
+        call13_types -> array_multiple_values
+        call31_types -> array_multiple_values
+        call51_types -> array_multiple_values
+        call14_types -> array_multiple_values
 
         call50_types [TYPES="[compatible]", label="TYPES: [compatible]\nMODS: [...mods]\naffects: 'can_extend_array'", affects_call_modifier="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         call50_types -> array_one_more_value_is_allowed
         array_one_more_value_is_allowed -> call50_types
-
-        call12_types [TYPE_NAME="numeric", TYPES="[numeric]", label="TYPE: numeric?\nMODS: [...mods]\naffects: 'can_extend_array'", affects_call_modifier="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
-        array -> call12_types
-        call12_types -> array_multiple_values
-
-        call13_types [TYPE_NAME="3VL Value", TYPES="[3VL Value]", label="TYPE: 3VL Value?\nMODS: [...mods]\naffects: 'can_extend_array'", affects_call_modifier="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
-        array -> call13_types
-        call13_types -> array_multiple_values
-
-        call31_types [TYPE_NAME="string", TYPES="[string]", label="TYPE: string?\nMODS: [...mods]\naffects: 'can_extend_array'", affects_call_modifier="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
-        array -> call31_types
-        call31_types -> array_multiple_values
-
-        call51_types [TYPE_NAME="list expr", TYPES="[TR...]", label="TYPE: list expr?\nMODS: [...mods]\nTYPES: [(tn.rel.)...]\naffects: 'can_extend_array'", affects_call_modifier="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
-        array -> call51_types
-        call51_types -> array_multiple_values
-
-        call14_types [TYPE_NAME="array", TYPES="[TR...]", label="TYPE: array?\nMODS: [...mods]\nTYPES: [(tn.rel.)...]\naffects: 'can_extend_array'", affects_call_modifier="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
-        array -> call14_types
-        call14_types -> array_multiple_values
-
         call50_types -> array_exit_allowed
+
         array_exit_allowed -> EXIT_array
     }
 
     subgraph def_list_expr {
-        list_expr [TYPES="[numeric, 3VL Value, string, list expr, array]", MODS="[no column spec]", label="list expr\ntypes=[numeric?, 3VL Value?, string?, list expr?, array?]\nmods: [no column spec]", shape=octagon, style=filled, color=blue]
+        list_expr [TYPES="[numeric, 3VL Value, string, list expr, array]", MODS="[no column spec, return typed null]", label="list expr\ntypes=[numeric?, 3VL Value?, string?, list expr?, array?]\nmods: [no column spec, return typed null]", shape=octagon, style=filled, color=blue]
         EXIT_list_expr[label="EXIT list expr"]
-
-        list_expr_multiple_values [label="Multiple values"]
-        call49_types [TYPES="[compatible]", label="TYPES: [compatible]\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
 
         call16_types [TYPE_NAME="numeric", TYPES="[numeric]", label="TYPE: numeric?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         list_expr -> call16_types
-        call16_types -> list_expr_multiple_values
-
         call17_types [TYPE_NAME="3VL Value", TYPES="[3VL Value]", label="TYPE: 3VL Value?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         list_expr -> call17_types
-        call17_types -> list_expr_multiple_values
-
         call18_types [TYPE_NAME="string", TYPES="[string]", label="TYPE: string?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         list_expr -> call18_types
-        call18_types -> list_expr_multiple_values
-
         call19_types [TYPE_NAME="list expr", TYPES="[TR...]", label="TYPE: list expr?\nMODS: [...mods]\nTYPES=[(rel)...]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         list_expr -> call19_types
-        call19_types -> list_expr_multiple_values
-
         call20_types [TYPE_NAME="array", TYPES="[TR...]", label="TYPE: array?\nMODS: [...mods]\nTYPES=[(rel)...]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         list_expr -> call20_types
+
+        list_expr_return_typed_null [label="Return typed null\nmod.: 'return typed null'->ON", modifier="return typed null", modifier_mode="on"]
+        call16_types -> list_expr_return_typed_null
+        call17_types -> list_expr_return_typed_null
+        call18_types -> list_expr_return_typed_null
+        call19_types -> list_expr_return_typed_null
+        call20_types -> list_expr_return_typed_null
+        list_expr_return_typed_null -> EXIT_list_expr
+
+        list_expr_multiple_values [label="Multiple values\nmod.: 'return typed null'->OFF", modifier="return typed null", modifier_mode="off"]
+        call16_types -> list_expr_multiple_values
+        call17_types -> list_expr_multiple_values
+        call18_types -> list_expr_multiple_values
+        call19_types -> list_expr_multiple_values
         call20_types -> list_expr_multiple_values
 
+        call49_types [TYPES="[compatible]", label="TYPES: [compatible]\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         list_expr_multiple_values -> call49_types
         // list_expr_multiple_values -> EXIT_list_expr
         call49_types -> call49_types
+
         call49_types -> EXIT_list_expr
     }
 

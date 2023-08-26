@@ -89,46 +89,58 @@ pub trait StatefulCallModifier: Debug {
 }
 
 #[derive(Debug, Clone)]
-pub struct IsColumnTypeAvailableInFromModifier {}
+pub struct IsColumnTypeAvailableModifier {}
 
-impl StatelessCallModifier for IsColumnTypeAvailableInFromModifier {
+impl StatelessCallModifier for IsColumnTypeAvailableModifier {
     fn get_name(&self) -> SmolStr {
-        SmolStr::new("is_column_type_available_in_from")
+        SmolStr::new("is_column_type_available")
     }
 
     fn get_associated_value_name(&self) -> SmolStr {
         TypesTypeValue::name()
     }
 
-    fn run(&self, clause_context: &ClauseContext, _function_context: &FunctionContext, modifier_state: &Box<dyn std::any::Any>) -> bool {
+    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, modifier_state: &Box<dyn std::any::Any>) -> bool {
+        let check_group_by = match function_context.current_node.node_common.name.as_str() {
+            "call0_column_spec" => false,
+            "call1_column_spec" => true,
+            any => panic!("is_column_type_available call trigger unexpectedly called by {any}"),
+        };
         modifier_state.downcast_ref::<TypesTypeValue>().unwrap().selected_types.iter()
             .any(|x|
-                clause_context
-                    .from()
-                    .is_type_available(x)
+                if check_group_by {
+                    clause_context
+                        .group_by()
+                        .is_type_available(x)
+                } else {
+                    clause_context
+                        .from()
+                        .is_type_available(x)
+                }
             )
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct IsColumnTypeAvailableInGroupByModifier {}
+pub struct InnerTypeSelectionSwitch {}
 
-impl StatelessCallModifier for IsColumnTypeAvailableInGroupByModifier {
+impl StatelessCallModifier for InnerTypeSelectionSwitch {
     fn get_name(&self) -> SmolStr {
-        SmolStr::new("is_column_type_available_in_group_by")
+        SmolStr::new("inner_type_selection_switch")
     }
 
     fn get_associated_value_name(&self) -> SmolStr {
         TypesTypeValue::name()
     }
 
-    fn run(&self, clause_context: &ClauseContext, _function_context: &FunctionContext, modifier_state: &Box<dyn std::any::Any>) -> bool {
-        modifier_state.downcast_ref::<TypesTypeValue>().unwrap().selected_types.iter()
-            .any(|x|
-                clause_context
-                    .group_by()
-                    .is_type_available(x)
-            )
+    fn run(&self, _clause_context: &ClauseContext, function_context: &FunctionContext, modifier_state: &Box<dyn std::any::Any>) -> bool {
+        let mut selected_types_it = modifier_state.downcast_ref::<TypesTypeValue>().unwrap().selected_types.iter();
+        match function_context.current_node.node_common.name.as_str() {
+            "call2_list_expr" => selected_types_it.any(|x| matches!(x, SubgraphType::ListExpr(..))),
+            "call1_array" => selected_types_it.any(|x| matches!(x, SubgraphType::Array(..))),
+            "types_null_type_selected" => selected_types_it.any(|x| !x.has_inner()),
+            any => panic!("inner_type_selection_switch call trigger unexpectedly called by {any}")
+        }
     }
 }
 

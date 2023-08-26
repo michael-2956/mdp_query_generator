@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt::Display};
 use regex::Regex;
 use smol_str::SmolStr;
 use logos::{Filter, Lexer, Logos};
-use sqlparser::ast::{DataType, ExactNumberInfo, ObjectName, Ident};
+use sqlparser::ast::{DataType, ExactNumberInfo};
 
 use crate::unwrap_variant;
 
@@ -187,6 +187,14 @@ impl SubgraphType {
         }
     }
 
+    pub fn has_inner(&self) -> bool {
+        match self {
+            SubgraphType::Array(..) => true,
+            SubgraphType::ListExpr(..) => true,
+            _ => false,
+        }
+    }
+
     pub fn inner(&self) -> SubgraphType {
         match self {
             SubgraphType::Array((inner, _)) => *inner.clone(),
@@ -209,16 +217,31 @@ impl SubgraphType {
         }
     }
 
-    /// CURRENTLY NOT USED
-    pub fn to_data_type(&self) -> DataType {
+    pub fn is_determined(&self) -> bool {
         match self {
-            SubgraphType::Numeric => DataType::Numeric(ExactNumberInfo::None),
-            SubgraphType::Val3 => DataType::Boolean,
-            SubgraphType::Array((inner, _)) => DataType::Array(Some(Box::new(inner.to_data_type()))),
-            /// TODO: my_row_type should be defined
-            SubgraphType::ListExpr(_) => DataType::Custom(ObjectName(vec![Ident::new("my_row_type")]), vec![]),
-            SubgraphType::String => DataType::String,
-            SubgraphType::Undetermined => panic!("Can't convert SubgraphType::Undetermined to DataType"),
+            SubgraphType::Undetermined => false,
+            SubgraphType::Array((inner, _)) => inner.is_determined(),
+            SubgraphType::ListExpr(inner) => inner.is_determined(),
+            _ => true
+        }
+    }
+
+    /// Used only for null type casting. Fails if encounters row expression.
+    pub fn try_to_data_type(&self) -> Option<DataType> {
+        match self {
+            SubgraphType::Numeric => Some(DataType::Numeric(ExactNumberInfo::None)),
+            SubgraphType::Val3 => Some(DataType::Boolean),
+            SubgraphType::Array((inner, _)) => {
+                inner.try_to_data_type().map(|dt| DataType::Array(Some(Box::new(dt))))
+            },
+            // TODO: here should be a separate instruction
+            // to define a row type.
+            // Question 1: When is this behaviour needed?
+            // Question 2: How would we design code to handle
+            // query-accompanying instructions? (transactions?)
+            SubgraphType::ListExpr(_) => None, // Some(DataType::Custom(ObjectName(vec![Ident::new("my_row_type")]), vec![])),
+            SubgraphType::String => Some(DataType::Text),
+            SubgraphType::Undetermined => None, // panic!("Can't convert SubgraphType::Undetermined to DataType"),
         }
     }
 }

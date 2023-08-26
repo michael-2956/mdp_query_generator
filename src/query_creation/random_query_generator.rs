@@ -629,18 +629,6 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "types_select_type_list_expr" |
             "types_select_type_numeric" |
             "types_select_type_string" => {},
-            "types_null" => {
-                self.expect_state("EXIT_types");
-                // println!("self.state_generator.get_fn_selected_types_unwrapped(): {:#?}", self.state_generator.get_fn_selected_types_unwrapped());
-                // let null_type = unwrap_variant!(
-                //     self.state_generator.get_fn_selected_types_unwrapped(),
-                //     CallTypes::TypeList
-                // ).choose(&mut self.rng).unwrap().to_data_type();
-                return (SubgraphType::Undetermined, Expr::Value(Value::Null)) // Expr::Cast {
-                //     expr: Box::new(Expr::Value(Value::Null)),
-                //     data_type: null_type
-                // })
-            },
             any => self.panic_unexpected(any),
         };
 
@@ -648,7 +636,30 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             .get_named_value::<TypesTypeValue>().unwrap().selected_types.clone();
 
         let (selected_type, types_value) = match self.next_state().as_str() {
-            "types_select_type_noexpr" => {
+            "types_return_typed_null" => {
+                let null_type = match self.next_state().as_str() {
+                    "types_null_type_selected" => {
+                        let allowed_type_list = allowed_type_list.into_iter()
+                            .filter(|x| !x.has_inner()).collect::<Vec<_>>();
+                        match allowed_type_list.as_slice() {
+                            [tp] => tp.clone(),
+                            any => panic!("allowed_type_list must have single element here (got {:?})", any)
+                        }
+                    },
+                    "call1_array" => self.handle_array().0,
+                    "call2_list_expr" => self.handle_list_expr().0,
+                    any => self.panic_unexpected(any)
+                };
+                if let Some(dt) = null_type.try_to_data_type() {
+                    (null_type.clone(), Expr::Cast {
+                        expr: Box::new(Expr::Value(Value::Null)),
+                        data_type: dt,
+                    })
+                } else {
+                    (SubgraphType::Undetermined, Expr::Value(Value::Null))
+                }
+            }
+            "types_select_special_expression" => {
                 match self.next_state().as_str() {
                     "types_column_spec" => {
                         match self.next_state().as_str() {
@@ -718,26 +729,34 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             any => self.panic_unexpected(any)
         };
         let (inner_type, types_value) = self.handle_types(Some(inner_type.clone()), None);
-        self.state_generator.set_compatible_list(inner_type.get_compat_types());
-        let mut array = vec![types_value];
-        self.expect_state("array_multiple_values");
-        loop {
-            match self.next_state().as_str() {
-                "array_one_more_value_is_allowed" => {
-                    self.expect_state("call50_types");
-                    array.push(self.handle_types(None, Some(inner_type.clone())).1);
-                },
-                "array_exit_allowed" => {
-                    self.expect_state("EXIT_array");
-                    break
-                },
-                any => self.panic_unexpected(any)
-            }
+        match self.next_state().as_str() {
+            "array_multiple_values" => {
+                self.state_generator.set_compatible_list(inner_type.get_compat_types());
+                let mut array = vec![types_value];
+                loop {
+                    match self.next_state().as_str() {
+                        "array_one_more_value_is_allowed" => {
+                            self.expect_state("call50_types");
+                            array.push(self.handle_types(None, Some(inner_type.clone())).1);
+                        },
+                        "array_exit_allowed" => {
+                            self.expect_state("EXIT_array");
+                            break
+                        },
+                        any => self.panic_unexpected(any)
+                    }
+                }
+                (SubgraphType::Array((Box::new(inner_type), Some(array.len()))), Expr::Array(Array {
+                    elem: array,
+                    named: true
+                }))
+            },
+            "array_return_typed_null" => {
+                self.expect_state("EXIT_array");
+                (SubgraphType::Array((Box::new(inner_type), None)), Expr::Value(Value::Null))
+            },
+            any => self.panic_unexpected(any)
         }
-        (SubgraphType::Array((Box::new(inner_type), Some(array.len()))), Expr::Array(Array {
-            elem: array,
-            named: true
-        }))
     }
 
     /// subgraph def_list_expr
@@ -752,19 +771,27 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             any => self.panic_unexpected(any)
         };
         let (inner_type, types_value) = self.handle_types(Some(inner_type.clone()), None);
-        self.state_generator.set_compatible_list(inner_type.get_compat_types());
-        let mut list_expr: Vec<Expr> = vec![types_value];
-        self.expect_state("list_expr_multiple_values");
-        loop {
-            match self.next_state().as_str() {
-                "call49_types" => {
-                    list_expr.push(self.handle_types(None, Some(inner_type.clone())).1);
-                },
-                "EXIT_list_expr" => break,
-                any => self.panic_unexpected(any)
+        match self.next_state().as_str() {
+            "list_expr_multiple_values" => {
+                self.state_generator.set_compatible_list(inner_type.get_compat_types());
+                let mut list_expr: Vec<Expr> = vec![types_value];
+                loop {
+                    match self.next_state().as_str() {
+                        "call49_types" => {
+                            list_expr.push(self.handle_types(None, Some(inner_type.clone())).1);
+                        },
+                        "EXIT_list_expr" => break,
+                        any => self.panic_unexpected(any)
+                    }
+                }
+                (SubgraphType::ListExpr(Box::new(inner_type)), Expr::Tuple(list_expr))
             }
+            "list_expr_return_typed_null" => {
+                self.expect_state("EXIT_list_expr");
+                (SubgraphType::ListExpr(Box::new(inner_type)), Expr::Value(Value::Null))
+            }
+            any => self.panic_unexpected(any)
         }
-        (SubgraphType::ListExpr(Box::new(inner_type)), Expr::Tuple(list_expr))
     }
 
     /// starting point; calls handle_query for the first time

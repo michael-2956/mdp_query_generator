@@ -14,6 +14,9 @@ pub struct ProgramArgs {
     /// Number of queries to generate (if provided, otherwise sourced from config)
     #[structopt(short = "n", long = "num_generate")]
     pub num_generate: Option<usize>,
+    /// Print generated queries, overriding config file settings
+    #[structopt(short = "p", long = "print")]
+    pub print: bool,
 }
 
 pub trait TomlReadable {
@@ -67,6 +70,9 @@ impl Config {
     pub fn update_from_args(&mut self, program_args: &ProgramArgs) {
         if let Some(num_generate) = program_args.num_generate {
             self.main_config.num_generate = num_generate;
+        }
+        if program_args.print {
+            self.generator_config.print_queries = true;
         }
     }
 }
