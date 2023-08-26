@@ -519,24 +519,24 @@ digraph G {
         types_select_type_string[TYPE_NAME="string", label="string?", set_value="types_type"]
         types -> types_select_type_string
 
-        types_return_typed_null [label="Typed null"]
-        types_select_type_numeric -> types_return_typed_null
-        types_select_type_3vl -> types_return_typed_null
-        types_select_type_array -> types_return_typed_null
-        types_select_type_list_expr -> types_return_typed_null
-        types_select_type_string -> types_return_typed_null
+        // types_return_typed_null [label="Typed null"]
+        // types_select_type_numeric -> types_return_typed_null
+        // types_select_type_3vl -> types_return_typed_null
+        // types_select_type_array -> types_return_typed_null
+        // types_select_type_list_expr -> types_return_typed_null
+        // types_select_type_string -> types_return_typed_null
 
-        call2_list_expr [TYPE_NAME="list expr", TYPES="[RI...]", MODS="[..., return typed null]", call_modifier="inner_type_selection_switch", label="list expr\nTYPES: [(rel, inner)...]\nMODS: [...mods, return typed null]\ncall mod.: 'inner_type_selection_switch'", shape=rectangle, style=filled, color=blue]
-        types_return_typed_null -> call2_list_expr
-        call2_list_expr -> EXIT_types
+        // call2_list_expr [TYPE_NAME="list expr", TYPES="[RI...]", MODS="[..., return typed null]", call_modifier="inner_type_selection_switch", label="list expr\nTYPES: [(rel, inner)...]\nMODS: [...mods, return typed null]\ncall mod.: 'inner_type_selection_switch'", shape=rectangle, style=filled, color=blue]
+        // types_return_typed_null -> call2_list_expr
+        // call2_list_expr -> EXIT_types
 
-        call1_array [TYPE_NAME="array", TYPES="[R...]", MODS="[..., return typed null]", call_modifier="inner_type_selection_switch", label="array\nTYPES: [(rel)...]\nMODS: [...mods, return typed null]\ncall mod.: 'inner_type_selection_switch'", shape=rectangle, style=filled, color=yellow]
-        types_return_typed_null -> call1_array
-        call1_array -> EXIT_types
+        // call1_array [TYPE_NAME="array", TYPES="[R...]", MODS="[..., return typed null]", call_modifier="inner_type_selection_switch", label="array\nTYPES: [(rel)...]\nMODS: [...mods, return typed null]\ncall mod.: 'inner_type_selection_switch'", shape=rectangle, style=filled, color=yellow]
+        // types_return_typed_null -> call1_array
+        // call1_array -> EXIT_types
 
-        types_null_type_selected [label="No need to select inner type\ncall mod.: 'inner_type_selection_switch'", call_modifier="inner_type_selection_switch"]
-        types_return_typed_null -> types_null_type_selected
-        types_null_type_selected -> EXIT_types
+        // types_null_type_selected [label="No need to select inner type\ncall mod.: 'inner_type_selection_switch'", call_modifier="inner_type_selection_switch"]
+        // types_return_typed_null -> types_null_type_selected
+        // types_null_type_selected -> EXIT_types
 
         types_select_special_expression [label="select special expression\nmod.: 'return typed null'->OFF", modifier="return typed null", modifier_mode="off"]
         types_select_type_numeric -> types_select_special_expression
