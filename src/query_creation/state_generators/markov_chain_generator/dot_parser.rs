@@ -226,7 +226,7 @@ impl SubgraphType {
         }
     }
 
-    /// Used only for null type casting. Fails if encounters row expression.
+    /// Used only for null type casting. Fails if encounters row expression or "Unndetermined"
     pub fn try_to_data_type(&self) -> Option<DataType> {
         match self {
             SubgraphType::Numeric => Some(DataType::Numeric(ExactNumberInfo::None)),

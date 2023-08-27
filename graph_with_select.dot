@@ -519,6 +519,10 @@ digraph G {
         types_select_type_string[TYPE_NAME="string", label="string?", set_value="types_type"]
         types -> types_select_type_string
 
+        // types_null [label="Untyped null"]
+        // types -> types_null
+        // types_null -> EXIT_types
+
         // types_return_typed_null [label="Typed null"]
         // types_select_type_numeric -> types_return_typed_null
         // types_select_type_3vl -> types_return_typed_null

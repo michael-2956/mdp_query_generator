@@ -629,6 +629,9 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "types_select_type_list_expr" |
             "types_select_type_numeric" |
             "types_select_type_string" => {},
+            "types_null" => {
+                return (SubgraphType::Undetermined, Expr::Value(Value::Null));
+            },
             any => self.panic_unexpected(any),
         };
 
