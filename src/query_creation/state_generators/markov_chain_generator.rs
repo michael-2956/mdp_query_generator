@@ -1,6 +1,7 @@
 pub mod state_choosers;
 pub mod dynamic_models;
 pub mod markov_chain;
+pub mod subgraph_type;
 mod dot_parser;
 mod error;
 
@@ -17,14 +18,13 @@ use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_gene
 use self::{
     markov_chain::{
         MarkovChain, NodeParams, CallParams, CallModifiers, Function
-    }, error::SyntaxError, dot_parser::{NodeCommon, TypeWithFields}
+    }, error::SyntaxError, dot_parser::{NodeCommon, TypeWithFields}, subgraph_type::SubgraphType
 };
 
 use state_choosers::StateChooser;
 use dynamic_models::{MarkovModel, DynamicModel};
 
 pub use self::markov_chain::CallTypes;
-pub use dot_parser::SubgraphType;
 
 #[derive(Clone)]
 pub struct StateGeneratorConfig {

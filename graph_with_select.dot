@@ -503,6 +503,15 @@ digraph G {
         // string_substr_numeric_len_len -> call11_types
         // call11_types -> EXIT_string
     }
+
+    subgraph def_date {
+        date [label="date\nmods: [no column spec]", MODS="[no column spec]", shape=rectangle, style=filled, color=pink]
+        EXIT_date [label="EXIT date"]
+
+        
+
+        date -> EXIT_date
+    }
     
     subgraph def_types {
         types [TYPES="[numeric, 3VL Value, array, list expr, string]", MODS="[no column spec, no subquery, check group by, return typed null]", label="TYPE(S) (generic):\ntypes=[numeric?, 3VL Value?, array?, list expr?, string?]\nmods=[no column spec, no subquery, check group by, return typed null]", shape=octagon, style=filled, color=lightblue]

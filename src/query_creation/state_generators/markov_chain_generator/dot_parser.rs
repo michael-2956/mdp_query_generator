@@ -1,13 +1,12 @@
-use std::{collections::HashMap, fmt::Display};
+use std::collections::HashMap;
 
 use regex::Regex;
 use smol_str::SmolStr;
 use logos::{Filter, Lexer, Logos};
-use sqlparser::ast::{DataType, ExactNumberInfo};
 
 use crate::unwrap_variant;
 
-use super::error::SyntaxError;
+use super::{error::SyntaxError, subgraph_type::SubgraphType};
 
 #[derive(Logos, Debug, PartialEq)]
 enum DotToken {
@@ -128,144 +127,6 @@ impl TypeWithFields {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
-pub enum SubgraphType {
-    /// This type is used as an array inner type
-    /// if the inner type is yet to be determined
-    Undetermined,
-    Numeric,
-    Val3,
-    Array((Box<SubgraphType>, Option<usize>)),
-    ListExpr(Box<SubgraphType>),
-    String,
-}
-
-impl SubgraphType {
-    pub fn wrap_in_func(&self, func_name: &str) -> SubgraphType {
-        let outer = SubgraphType::from_func_name(func_name);
-        self.wrap_in_type(&outer)
-    }
-
-    pub fn wrap_in_type(&self, outer: &SubgraphType) -> SubgraphType {
-        match outer {
-            SubgraphType::Array(..) => SubgraphType::Array((Box::new(self.clone()), None)),
-            SubgraphType::ListExpr(..) => SubgraphType::ListExpr(Box::new(self.clone())),
-            any => panic!("Cannot wrap into {any}")
-        }
-    }
-
-    pub fn from_func_name(func_name: &str) -> Self {
-        match func_name {
-            "numeric" => SubgraphType::Numeric,
-            "VAL_3" => SubgraphType::Val3,
-            "array" => SubgraphType::Array((Box::new(SubgraphType::Undetermined), None)),
-            "list_expr" => SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined)),
-            "string" => SubgraphType::String,
-            any => panic!("Unexpected function name, can't convert to a SubgraphType: {any}")
-        }
-    }
-
-    fn from_type_name(s: &str) -> Result<Self, SyntaxError> {
-        match s {
-            "numeric" => Ok(SubgraphType::Numeric),
-            "3VL Value" => Ok(SubgraphType::Val3),
-            "array" => Ok(SubgraphType::Array((Box::new(SubgraphType::Undetermined), None))),
-            "list expr" => Ok(SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined))),
-            "string" => Ok(SubgraphType::String),
-            any => Err(SyntaxError::new(format!("Type {any} does not exist!")))
-        }
-    }
-
-    pub fn get_subgraph_func_name(&self) -> &str {
-        match *self {
-            SubgraphType::Numeric => "numeric",
-            SubgraphType::Val3 => "VAL_3",
-            SubgraphType::Array(..) => "array",
-            SubgraphType::ListExpr(..) => "list_expr",
-            SubgraphType::String => "string",
-            SubgraphType::Undetermined => panic!("SubgraphType::Undetermined does not have an associated subgraph"),
-        }
-    }
-
-    pub fn has_inner(&self) -> bool {
-        match self {
-            SubgraphType::Array(..) => true,
-            SubgraphType::ListExpr(..) => true,
-            _ => false,
-        }
-    }
-
-    pub fn inner(&self) -> SubgraphType {
-        match self {
-            SubgraphType::Array((inner, _)) => *inner.clone(),
-            SubgraphType::ListExpr(inner) => *inner.clone(),
-            any => panic!("{any} has no inner type"),
-        }
-    }
-
-    pub fn from_data_type(data_type: &DataType) -> Self {
-        match data_type {
-            DataType::Integer(_) => Self::Numeric,  /// TODO
-            DataType::Varchar(_) => Self::String,
-            DataType::CharVarying(_) => Self::String,
-            DataType::Char(_) => Self::String,
-            DataType::Numeric(_) => Self::Numeric,
-            DataType::Date => Self::Numeric,  /// TODO
-            DataType::Boolean => Self::Val3,
-            DataType::Array(inner) => Self::Array((Box::new((*inner.to_owned().unwrap()).into()), None)),
-            any => panic!("DataType not implemented: {any}"),
-        }
-    }
-
-    pub fn is_determined(&self) -> bool {
-        match self {
-            SubgraphType::Undetermined => false,
-            SubgraphType::Array((inner, _)) => inner.is_determined(),
-            SubgraphType::ListExpr(inner) => inner.is_determined(),
-            _ => true
-        }
-    }
-
-    /// Used only for null type casting. Fails if encounters row expression or "Unndetermined"
-    pub fn try_to_data_type(&self) -> Option<DataType> {
-        match self {
-            SubgraphType::Numeric => Some(DataType::Numeric(ExactNumberInfo::None)),
-            SubgraphType::Val3 => Some(DataType::Boolean),
-            SubgraphType::Array((inner, _)) => {
-                inner.try_to_data_type().map(|dt| DataType::Array(Some(Box::new(dt))))
-            },
-            // TODO: here should be a separate instruction
-            // to define a row type.
-            // Question 1: When is this behaviour needed?
-            // Question 2: How would we design code to handle
-            // query-accompanying instructions? (transactions?)
-            SubgraphType::ListExpr(_) => None, // Some(DataType::Custom(ObjectName(vec![Ident::new("my_row_type")]), vec![])),
-            SubgraphType::String => Some(DataType::Text),
-            SubgraphType::Undetermined => None, // panic!("Can't convert SubgraphType::Undetermined to DataType"),
-        }
-    }
-}
-
-impl From<DataType> for SubgraphType {
-    fn from(value: DataType) -> Self {
-        SubgraphType::from_data_type(&value)
-    }
-}
-
-impl Display for SubgraphType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let str = match self {
-            SubgraphType::Numeric => "numeric".to_string(),
-            SubgraphType::Val3 => "3VL Value".to_string(),
-            SubgraphType::Array((inner, length)) => format!("array[{}]({:?})", inner, length),
-            SubgraphType::ListExpr(inner) => format!("list expr[{}]", inner),
-            SubgraphType::String => "string".to_string(),
-            SubgraphType::Undetermined => "undetermined".to_string(),
-        };
-        write!(f, "{}", str)
-    }
-}
-
 /// this structure can be treated in two ways: either
 /// as the output types the function should be restricted
 /// to generate, when in the context of a call node, or
@@ -286,10 +147,10 @@ pub enum FunctionInputsType {
     /// Used in function calls to pass the function's type constraints further
     PassThrough,
     /// Used in function calls to pass the function's type constraints further, but only those
-    /// that are related to the called function's name.
+    /// that are related to the called function call node type name.
     /// Example:
     /// - Args: [Numeric, Array[Val3]]
-    /// - Func.: Array.
+    /// - TYPE_NAME=array
     /// => Passed arguments: Array[Val3]
     PassThroughTypeNameRelated,
     /// Used in function calls to pass the function's type constraints further, but only those
@@ -675,6 +536,15 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<Functi
                                 &node_name,
                                 read_node_specification(lex, &node_name)?,
                             )?;
+                            if let FunctionInputsType::TypeListWithFields(ref type_list) = input_type {
+                                for x in type_list.iter() {
+                                    if matches!(x, TypeWithFields::CompatibleInner(..)) {
+                                        return Err(SyntaxError::new(format!(
+                                            "Can't have {:?} listed in function accepted types ({function_name})", x
+                                        )));
+                                    }
+                                }
+                            }
                             let exit_node_name = parse_function_exit_node_name(lex, &node_name)?;
                             Ok(Some(FunctionDeclaration {
                                 source_node_name: node_name,

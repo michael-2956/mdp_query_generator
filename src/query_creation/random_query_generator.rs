@@ -16,8 +16,8 @@ use sqlparser::ast::{
 
 use crate::config::TomlReadable;
 
-use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generators::{SubgraphType, CallTypes}};
-use self::{query_info::{DatabaseSchema, ClauseContext}, expr_precedence::ExpressionPriority, call_modifiers::TypesTypeValue, aggregate_function_settings::AggregateFunctionDistribution};
+use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generators::{CallTypes, markov_chain_generator::subgraph_type::SubgraphType}};
+use self::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::TypesTypeValue, aggregate_function_settings::AggregateFunctionDistribution, expr_precedence::ExpressionPriority};
 
 use super::state_generators::{MarkovChainGenerator, dynamic_models::DynamicModel, state_choosers::StateChooser};
 

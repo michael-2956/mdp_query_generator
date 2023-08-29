@@ -7,7 +7,7 @@ use smol_str::SmolStr;
 use crate::unwrap_variant;
 
 use super::{
-    dot_parser, dot_parser::{DotTokenizer, FunctionInputsType, SubgraphType, CodeUnit, NodeCommon, FunctionDeclaration, TypeWithFields}, error::SyntaxError,
+    dot_parser, dot_parser::{DotTokenizer, FunctionInputsType, CodeUnit, NodeCommon, FunctionDeclaration, TypeWithFields}, error::SyntaxError, subgraph_type::SubgraphType,
 };
 
 /// this structure contains all the parsed graph functions
@@ -126,11 +126,11 @@ pub enum FunctionTypes {
 }
 
 impl FunctionTypes {
-    fn from_function_inputs_type(source_node_name: SmolStr, input: FunctionInputsType) -> FunctionTypes {
+    fn from_function_inputs_type(source_node_name: &SmolStr, input: FunctionInputsType) -> FunctionTypes {
         match input {
             FunctionInputsType::None => FunctionTypes::None,
             FunctionInputsType::TypeListWithFields(list) => {
-                if list.iter().find(|x| matches!(x, TypeWithFields::CompatibleInner(..))).is_some() {
+                if list.iter().any(|x| matches!(x, TypeWithFields::CompatibleInner(..))) {
                     panic!("Can't have types with inner compatibles (...<compatible>) in function declaration (function {})", source_node_name)
                 }
                 FunctionTypes::TypeList(list.into_iter().map(|x| unwrap_variant!(x, TypeWithFields::Type)).collect())
@@ -176,10 +176,10 @@ impl Function {
     /// create Function struct from its parsed parameters
     fn new(declaration: FunctionDeclaration) -> Self {
         Function {
-            source_node_name: declaration.source_node_name.clone(),
-            exit_node_name: declaration.exit_node_name,
-            accepted_types: FunctionTypes::from_function_inputs_type(declaration.source_node_name, declaration.input_type),
+            accepted_types: FunctionTypes::from_function_inputs_type(&declaration.source_node_name, declaration.input_type),
             accepted_modifiers: declaration.modifiers,
+            source_node_name: declaration.source_node_name,
+            exit_node_name: declaration.exit_node_name,
             chain: HashMap::<_, _>::new(),
             node_params: HashMap::new(),
             uses_wrapped_types: declaration.uses_wrapped_types
