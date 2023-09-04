@@ -258,6 +258,7 @@ pub struct FunctionDeclaration {
     pub exit_node_name: SmolStr,
     pub input_type: FunctionInputsType,
     pub modifiers: Option<Vec<SmolStr>>,
+    pub output_types: Option<Vec<SubgraphType>>,
     pub uses_wrapped_types: bool,
 }
 
@@ -429,14 +430,11 @@ impl<'a> Iterator for DotTokenizer<'a> {
                             };
 
                             if self.call_ident_regex.is_match(&node_name) {
-                                let (input_type, modifiers, uses_wrapped_types) = return_some_err!(
-                                    parse_function_options(&node_name, node_spec)
+                                let (
+                                    input_type, modifiers, _, _
+                                ) = return_some_err!(
+                                    parse_function_options(&node_name, node_spec, true)
                                 );
-                                if uses_wrapped_types.is_some() {
-                                    break Some(Err(SyntaxError::new(format!(
-                                        "call nodes can't have a uses_wrapped_types option, which is reserved for function definitions (node {node_name})"
-                                    ))));
-                                }
                                 if literal {
                                     break Some(Err(SyntaxError::new(format!(
                                         "call nodes can't be declaread as literals (node {node_name})"
@@ -532,9 +530,12 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<Functi
                                     )
                                 ))
                         } else {
-                            let (input_type, modifiers, uses_wrapped_types) = parse_function_options(
+                            let (
+                                input_type, modifiers, output_types, uses_wrapped_types
+                            ) = parse_function_options(
                                 &node_name,
                                 read_node_specification(lex, &node_name)?,
+                                false,
                             )?;
                             if let FunctionInputsType::TypeListWithFields(ref type_list) = input_type {
                                 for x in type_list.iter() {
@@ -551,6 +552,7 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<Functi
                                 exit_node_name,
                                 input_type,
                                 modifiers,
+                                output_types,
                                 uses_wrapped_types: uses_wrapped_types.unwrap_or(false),
                             }))
                         }
@@ -571,9 +573,11 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<Functi
 fn parse_function_options(
     node_name: &SmolStr,
     mut node_spec: HashMap<SmolStr, DotToken>,
-) -> Result<(FunctionInputsType, Option<Vec<SmolStr>>, Option<bool>), SyntaxError> {
+    is_call_node: bool,
+) -> Result<(FunctionInputsType, Option<Vec<SmolStr>>, Option<Vec<SubgraphType>>, Option<bool>), SyntaxError> {
     let mut input_type = FunctionInputsType::None;
     let mut modifiers = Option::<Vec<SmolStr>>::None;
+    let mut output_types = Option::<Vec<SubgraphType>>::None;
     let mut uses_wrapped_types = None;
     if let Some(token) = node_spec.remove("TYPES") {
         if let DotToken::QuotedIdentifiersWithBrackets(idents) = token {
@@ -592,10 +596,8 @@ fn parse_function_options(
     }
     if let Some(token) = node_spec.remove("MODS") {
         if let DotToken::QuotedIdentifiersWithBrackets(value) = token {
-            let mods = get_identifier_names(value)
-                .iter()
+            let mods = get_identifier_names(value).into_iter()
                 .filter(|el| el.len() > 0)
-                .map(|el| el.to_owned())
                 .collect::<Vec<_>>();
 
             if mods.len() > 0 {
@@ -619,7 +621,35 @@ fn parse_function_options(
             }
         }
     }
-    Ok((input_type, modifiers, uses_wrapped_types))
+    if let Some(token) = node_spec.remove("OUT_TYPES") {
+        if let DotToken::QuotedIdentifiersWithBrackets(value) = token {
+            let out_types = get_identifier_names(value).into_iter()
+                .filter(|el| el.len() > 0)
+                .map(|el| SubgraphType::from_type_name(&el))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            if out_types.len() > 0 {
+                output_types = Some(out_types);
+            }
+        } else {
+            return Err(SyntaxError::new(format!(
+                "{node_name}[OUT_TYPES=... should take bracketed form: OUT_TYPES=\"[.., ]\""
+            )));
+        }
+    }
+    if is_call_node {
+        if uses_wrapped_types.is_some() {
+            return Err(SyntaxError::new(format!(
+                "call nodes can't have a uses_wrapped_types option, which is reserved for function definitions (node {node_name})"
+            )));
+        }
+        if output_types.is_some() {
+            return Err(SyntaxError::new(format!(
+                "call nodes can't have a OUT_TYPES option, which is reserved for function definitions (node {node_name})"
+            )));
+        }
+    }
+    Ok((input_type, modifiers, output_types, uses_wrapped_types))
 }
 
 /// expects and parses an exit node name after function declaration

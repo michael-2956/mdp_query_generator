@@ -15,9 +15,10 @@ pub enum SubgraphType {
     Val3,
     Array((Box<SubgraphType>, Option<usize>)),
     ListExpr(Box<SubgraphType>),
+    RowExpr(Option<Vec<SubgraphType>>),
     String,
     Date,
-    // Query(Vec<(Option<ObjectName>, SubgraphType)>)
+    // Query(Option<Vec<(Option<ObjectName>, SubgraphType)>>)
 }
 
 impl SubgraphType {
@@ -42,6 +43,8 @@ impl SubgraphType {
             "list_expr" => SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined)),
             "string" => SubgraphType::String,
             "date" => SubgraphType::Date,
+            "row_expr" => SubgraphType::RowExpr(None),
+            // "query" => SubgraphType::Query(None),
             any => panic!("Unexpected function name, can't convert to a SubgraphType: {any}")
         }
     }
@@ -54,7 +57,9 @@ impl SubgraphType {
             SubgraphType::ListExpr(..) => "list_expr",
             SubgraphType::String => "string",
             SubgraphType::Date => "date",
+            SubgraphType::RowExpr(..) => "row_expr",
             SubgraphType::Undetermined => panic!("SubgraphType::Undetermined does not have an associated subgraph"),
+            // SubgraphType::Query(..) => "query",
         }
     }
 
@@ -66,6 +71,8 @@ impl SubgraphType {
             "list expr" => Ok(SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined))),
             "string" => Ok(SubgraphType::String),
             "date" => Ok(SubgraphType::Date),
+            "row expr" => Ok(SubgraphType::RowExpr(None)),
+            // "query" => Ok(SubgraphType::Query(None)),
             any => Err(SyntaxError::new(format!("Type {any} does not exist!")))
         }
     }
@@ -122,7 +129,9 @@ impl SubgraphType {
             // Question 1: When is this behaviour needed?
             // Question 2: How would we design code to handle
             // query-accompanying instructions? (transactions?)
-            SubgraphType::ListExpr(_) => None, // Some(DataType::Custom(ObjectName(vec![Ident::new("my_row_type")]), vec![])),
+            SubgraphType::RowExpr(..) => None, // Some(DataType::Custom(ObjectName(vec![Ident::new("my_row_type")]), vec![])),
+            /// should this even not produce a panic here?
+            SubgraphType::ListExpr(..) => None, // Some(DataType::Custom(ObjectName(vec![Ident::new("my_row_type")]), vec![])),
             SubgraphType::String => Some(DataType::Text),
             SubgraphType::Undetermined => None, // panic!("Can't convert SubgraphType::Undetermined to DataType"),
             SubgraphType::Date => Some(DataType::Date),
@@ -146,6 +155,7 @@ impl Display for SubgraphType {
             SubgraphType::String => "string".to_string(),
             SubgraphType::Undetermined => "undetermined".to_string(),
             SubgraphType::Date => "date".to_string(),
+            SubgraphType::RowExpr(..) => "row expr".to_string(),
         };
         write!(f, "{}", str)
     }

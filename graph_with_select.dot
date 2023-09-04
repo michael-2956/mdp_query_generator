@@ -80,7 +80,7 @@
 
 digraph G {
     subgraph def_Query {
-        Query [TYPES="[numeric, 3VL Value, array, list expr, string]", MODS="[single value]", label="Query\ntypes=[numeric, 3VL Value, array, list expr, string]\nmods=[single value]", shape=octagon, style=filled, color=green]
+        Query [TYPES="[numeric, 3VL Value, array, list expr, string]", MODS="[single value]", OUT_TYPES="[query]", label="Query\ntypes=[numeric, 3VL Value, array, list expr, string]\nmods=[single value]\noutput=[query]", shape=octagon, style=filled, color=green]
         EXIT_Query [label="EXIT Query"]
 
         FROM []
@@ -191,7 +191,7 @@ digraph G {
     }
 
     subgraph def_VAL_3 {
-        VAL_3 [shape=rectangle, label="3VL Value\nmods: [no column spec]", MODS="[no column spec]", style=filled, color=red]
+        VAL_3 [shape=rectangle, label="3VL Value\nmods: [no column spec]\noutput=[3VL Value]", OUT_TYPES="[3VL Value]", MODS="[no column spec]", style=filled, color=red]
         EXIT_VAL_3 [shape=rectangle, label="EXIT 3VL Value"]
 
         IsNull [label="IS NULL"]
@@ -367,8 +367,8 @@ digraph G {
     }
 
     subgraph def_numeric {
-        numeric [shape=rectangle, label="numeric\nmods: [no column spec]", MODS="[no column spec]", style=filled, color=chocolate]
-        EXIT_numeric [label="EXIT numeric"]
+        numeric [shape=rectangle, label="numeric\nmods: [no column spec]\noutput=[numeric]", MODS="[no column spec]", OUT_TYPES="[numeric]", style=filled, color=chocolate]
+        EXIT_numeric [label="EXIT numeric"]  // TODO: OUT_TYPES="[numeric, integer]", rename numeric[...] to number[...]
 
         numeric_literal[label="literal", literal="t"]
         numeric -> numeric_literal
@@ -454,7 +454,7 @@ digraph G {
     }
 
     subgraph def_string {
-        string [label="string\nmods: [no column spec]", MODS="[no column spec]", shape=rectangle, style=filled, color=pink]
+        string [label="string\nmods: [no column spec]\noutput=[string]", MODS="[no column spec]", OUT_TYPES="[string]", shape=rectangle, style=filled, color=pink]
         EXIT_string [label="EXIT string"]
 
         string_literal [label="random string literal", literal="t"]
@@ -505,16 +505,16 @@ digraph G {
     }
 
     subgraph def_date {
-        date [label="date\nmods: [no column spec]", MODS="[no column spec]", shape=rectangle, style=filled, color=pink]
+        date [label="date\nmods: [no column spec]\noutput=[date]", MODS="[no column spec]", OUT_TYPES="[date]", shape=rectangle, style=filled, color=pink]
         EXIT_date [label="EXIT date"]
 
-        
+
 
         date -> EXIT_date
     }
     
     subgraph def_types {
-        types [TYPES="[numeric, 3VL Value, array, list expr, string]", MODS="[no column spec, no subquery, check group by, return typed null]", label="TYPE(S) (generic):\ntypes=[numeric?, 3VL Value?, array?, list expr?, string?]\nmods=[no column spec, no subquery, check group by, return typed null]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, 3VL Value, array, list expr, string]", OUT_TYPES="[...types]", MODS="[no column spec, no subquery, check group by, return typed null]", label="TYPE(S) (generic):\ntypes=[numeric?, 3VL Value?, array?, list expr?, string?]\nmods=[no column spec, no subquery, check group by, return typed null]\noutput=[...types]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
         types_select_type_numeric[TYPE_NAME="numeric", label="numeric?", set_value="types_type"]
@@ -593,7 +593,7 @@ digraph G {
     }
 
     subgraph def_column_spec {
-        column_spec [TYPES="[numeric, 3VL Value, string, array, list expr]", label="column specifier\ntypes=[numeric, 3VL Value, string, array, list expr]", shape=octagon, style=filled, color=gold]
+        column_spec [TYPES="[numeric, 3VL Value, string, array, list expr]", OUT_TYPES="[...types]", label="column specifier\ntypes=[numeric, 3VL Value, string, array, list expr]\noutput=[...types]", shape=octagon, style=filled, color=gold]
         EXIT_column_spec [label="EXIT column specifier", shape=rectangle]
 
         typed_column_name [label="Unqualified/Qualified column name of type: type"]
@@ -602,7 +602,7 @@ digraph G {
     }
 
     subgraph def_array {
-        array [TYPES="[numeric, 3VL Value, string, list expr, array]", uses_wrapped_types="true", MODS="[no column spec, return typed null]", label="array\ntypes=[numeric?, 3VL Value?, string?, array?]\nmods: [no column spec, return typed null]", shape=octagon, style=filled, color=yellow]
+        array [TYPES="[numeric, 3VL Value, string, list expr, array]", uses_wrapped_types="true", OUT_TYPES="[array]", MODS="[no column spec, return typed null]", label="array\ntypes=[numeric?, 3VL Value?, string?, array?]\nmods: [no column spec, return typed null]\noutput=[array]", shape=octagon, style=filled, color=yellow]
         EXIT_array[label="EXIT array"]
 
         call12_types [TYPE_NAME="numeric", TYPES="[numeric]", label="TYPE: numeric?\nMODS: [...mods]\naffects: 'can_extend_array'", affects_call_modifier="can_extend_array", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
@@ -645,7 +645,7 @@ digraph G {
     }
 
     subgraph def_list_expr {
-        list_expr [TYPES="[numeric, 3VL Value, string, list expr, array]", MODS="[no column spec, return typed null]", label="list expr\ntypes=[numeric?, 3VL Value?, string?, list expr?, array?]\nmods: [no column spec, return typed null]", shape=octagon, style=filled, color=blue]
+        list_expr [TYPES="[numeric, 3VL Value, string, list expr, array]", MODS="[no column spec, return typed null]", OUT_TYPES="[list expr, row expr]", label="list expr\ntypes=[numeric?, 3VL Value?, string?, list expr?, array?]\nmods: [no column spec, return typed null]\noutput=[list expr, row expr]", shape=octagon, style=filled, color=blue]
         EXIT_list_expr[label="EXIT list expr"]
 
         call16_types [TYPE_NAME="numeric", TYPES="[numeric]", label="TYPE: numeric?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
