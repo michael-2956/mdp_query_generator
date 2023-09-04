@@ -4,8 +4,6 @@ use regex::Regex;
 use smol_str::SmolStr;
 use logos::{Filter, Lexer, Logos};
 
-use crate::unwrap_variant;
-
 use super::{error::SyntaxError, subgraph_type::SubgraphType};
 
 #[derive(Logos, Debug, PartialEq)]
@@ -90,15 +88,13 @@ fn block_comment(lex: &mut Lexer<'_, DotToken>) -> Filter<()> {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum TypeWithFields {
-    Type(SubgraphType),
-    CompatibleInner(SubgraphType),
+    Type(SubgraphType),  // no fields here for now
 }
 
 impl TypeWithFields {
     pub fn inner_ref(&self) -> &SubgraphType {
         match self {
             TypeWithFields::Type(tp) => tp,
-            TypeWithFields::CompatibleInner(tp) => tp,
         }
     }
 
@@ -108,9 +104,6 @@ impl TypeWithFields {
             "3VL Value" |
             "list expr" |
             "string" => Ok(Self::Type(SubgraphType::from_type_name(s)?)),
-            type_name @ "list expr<compatible>" => Ok(Self::CompatibleInner(SubgraphType::from_type_name(
-                &type_name[..type_name.len() - 12]
-            )?)),
             any => Err(SyntaxError::new(format!("Type {any} does not exist!")))
         }
     }
@@ -118,7 +111,6 @@ impl TypeWithFields {
     pub fn wrap_in_func(&self, func_name: &str) -> TypeWithFields {
         match self.clone() {
             Self::Type(tp) => Self::Type(tp.wrap_in_func(func_name)),
-            Self::CompatibleInner(..) => panic!("CompatibleInner can't be wrapped as a subtype")
         }
     }
 }
@@ -353,11 +345,8 @@ impl<'a> Iterator for DotTokenizer<'a> {
 
                             let mut type_name = match node_spec.remove("TYPE_NAME") {
                                 Some(DotToken::QuotedIdentifiers(idents)) => Some({
-                                    let tp = return_some_err!(TypeWithFields::from_type_name(&idents));
-                                    if matches!(tp, TypeWithFields::CompatibleInner(..)) {
-                                        panic!("Can't have a compatible inner type in a type name for a node.")
-                                    }
-                                    unwrap_variant!(tp, TypeWithFields::Type)
+                                    let TypeWithFields::Type(tp) = return_some_err!(TypeWithFields::from_type_name(&idents));
+                                    tp
                                 }),
                                 _ => None
                             };
@@ -533,15 +522,6 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<Functi
                                 read_node_specification(lex, &node_name)?,
                                 false,
                             )?;
-                            if let FunctionInputsType::TypeListWithFields(ref type_list) = input_type {
-                                for x in type_list.iter() {
-                                    if matches!(x, TypeWithFields::CompatibleInner(..)) {
-                                        return Err(SyntaxError::new(format!(
-                                            "Can't have {:?} listed in function accepted types ({function_name})", x
-                                        )));
-                                    }
-                                }
-                            }
                             let exit_node_name = parse_function_exit_node_name(lex, &node_name)?;
                             Ok(Some(FunctionDeclaration {
                                 source_node_name: node_name,

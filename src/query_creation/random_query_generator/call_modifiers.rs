@@ -40,7 +40,6 @@ impl ValueSetter for TypesTypeValueSetter {
     fn get_value(&self, _clause_context: &ClauseContext, function_context: &FunctionContext) -> Box<dyn std::any::Any> {
         let selected_type = match function_context.current_node.node_common.name.as_str() {
             "types_select_type_3vl" => SubgraphType::Val3,
-            "types_select_type_list_expr" => SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined)),
             "types_select_type_numeric" => SubgraphType::Numeric,
             "types_select_type_string" => SubgraphType::String,
             any => panic!("{any} unexpectedly triggered the is_column_type_available call modifier affector"),
@@ -135,7 +134,6 @@ impl StatelessCallModifier for InnerTypeSelectionSwitch {
     fn run(&self, _clause_context: &ClauseContext, function_context: &FunctionContext, modifier_state: &Box<dyn std::any::Any>) -> bool {
         let mut selected_types_it = modifier_state.downcast_ref::<TypesTypeValue>().unwrap().selected_types.iter();
         match function_context.current_node.node_common.name.as_str() {
-            "call2_list_expr" => selected_types_it.any(|x| matches!(x, SubgraphType::ListExpr(..))),
             "types_null_type_selected" => selected_types_it.any(|x| !x.has_inner()),
             any => panic!("inner_type_selection_switch call trigger unexpectedly called by {any}")
         }

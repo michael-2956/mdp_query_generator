@@ -525,14 +525,8 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
                     .map(|x| x.inner())
                     .collect::<Vec<_>>())
             },
-            /// there is a problem here because we would wrap twice
             CallTypes::TypeListWithFields(type_list) => CallTypes::TypeList({
-                type_list.into_iter().map(|x| match x {
-                    TypeWithFields::Type(tp) => vec![tp],
-                    TypeWithFields::CompatibleInner(outer_tp) => self.get_compatible_list().into_iter().map(
-                        |x| x.wrap_in_type(&outer_tp)
-                    ).collect()
-                }).collect::<Vec<_>>().concat()
+                type_list.into_iter().map(|TypeWithFields::Type(tp)| tp).collect()
             }),
             any => any,
         };

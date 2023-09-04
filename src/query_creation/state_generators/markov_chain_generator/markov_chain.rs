@@ -4,8 +4,6 @@ use regex::Regex;
 use core::fmt::Debug;
 use smol_str::SmolStr;
 
-use crate::unwrap_variant;
-
 use super::{
     dot_parser, dot_parser::{DotTokenizer, FunctionInputsType, CodeUnit, NodeCommon, FunctionDeclaration, TypeWithFields}, error::SyntaxError, subgraph_type::SubgraphType,
 };
@@ -130,10 +128,7 @@ impl FunctionTypes {
         match input {
             FunctionInputsType::None => FunctionTypes::None,
             FunctionInputsType::TypeListWithFields(list) => {
-                if list.iter().any(|x| matches!(x, TypeWithFields::CompatibleInner(..))) {
-                    panic!("Can't have types with inner compatibles (...<compatible>) in function declaration (function {})", source_node_name)
-                }
-                FunctionTypes::TypeList(list.into_iter().map(|x| unwrap_variant!(x, TypeWithFields::Type)).collect())
+                FunctionTypes::TypeList(list.into_iter().map(|TypeWithFields::Type(x)| x).collect())
             },
             any => panic!("Incorrect input type for function {}: {:?}", source_node_name, any),
         }
