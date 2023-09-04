@@ -80,7 +80,7 @@
 
 digraph G {
     subgraph def_Query {
-        Query [TYPES="[numeric, 3VL Value, list expr, string]", MODS="[single value]", OUT_TYPES="[query]", label="Query\ntypes=[numeric, 3VL Value, list expr, string]\nmods=[single value]\noutput=[query]", shape=octagon, style=filled, color=green]
+        Query [TYPES="[numeric, 3VL Value, string]", MODS="[single value]", OUT_TYPES="[query]", label="Query\ntypes=[numeric, 3VL Value, string]\nmods=[single value]\noutput=[query]", shape=octagon, style=filled, color=green]
         EXIT_Query [label="EXIT Query"]
 
         FROM []
@@ -511,15 +511,13 @@ digraph G {
     }
 
     subgraph def_types {
-        types [TYPES="[numeric, 3VL Value, list expr, string]", OUT_TYPES="[...types]", MODS="[no column spec, no subquery, check group by, return typed null]", label="TYPE(S) (generic):\ntypes=[numeric?, 3VL Value?, list expr?, string?]\nmods=[no column spec, no subquery, check group by, return typed null]\noutput=[...types]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, 3VL Value, string]", OUT_TYPES="[...types]", MODS="[no column spec, no subquery, check group by, return typed null]", label="TYPE(S) (generic):\ntypes=[numeric?, 3VL Value?, string?]\nmods=[no column spec, no subquery, check group by, return typed null]\noutput=[...types]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
         types_select_type_numeric[TYPE_NAME="numeric", label="numeric?", set_value="types_type"]
         types -> types_select_type_numeric
         types_select_type_3vl[TYPE_NAME="3VL Value", label="3VL Value?", set_value="types_type"]
         types -> types_select_type_3vl
-        types_select_type_list_expr[TYPE_NAME="list expr", label="list expr?", set_value="types_type"]
-        types -> types_select_type_list_expr
         types_select_type_string[TYPE_NAME="string", label="string?", set_value="types_type"]
         types -> types_select_type_string
 
@@ -530,12 +528,7 @@ digraph G {
         // types_return_typed_null [label="Typed null"]
         // types_select_type_numeric -> types_return_typed_null
         // types_select_type_3vl -> types_return_typed_null
-        // types_select_type_list_expr -> types_return_typed_null
         // types_select_type_string -> types_return_typed_null
-
-        // call2_list_expr [TYPE_NAME="list expr", TYPES="[RI...]", MODS="[..., return typed null]", call_modifier="inner_type_selection_switch", label="list expr\nTYPES: [(rel, inner)...]\nMODS: [...mods, return typed null]\ncall mod.: 'inner_type_selection_switch'", shape=rectangle, style=filled, color=blue]
-        // types_return_typed_null -> call2_list_expr
-        // call2_list_expr -> EXIT_types
 
         // types_null_type_selected [label="No need to select inner type\ncall mod.: 'inner_type_selection_switch'", call_modifier="inner_type_selection_switch"]
         // types_return_typed_null -> types_null_type_selected
@@ -544,7 +537,6 @@ digraph G {
         types_select_special_expression [label="select special expression\nmod.: 'return typed null'->OFF", modifier="return typed null", modifier_mode="off"]
         types_select_type_numeric -> types_select_special_expression
         types_select_type_3vl -> types_select_special_expression
-        types_select_type_list_expr -> types_select_special_expression
         types_select_type_string -> types_select_special_expression
 
         types_column_spec [modifier="no column spec", modifier_mode="off", label="column specifier\nmod.: 'no column spec'"]
@@ -571,14 +563,10 @@ digraph G {
         call0_string [label="string\nMODS: [...mods]\nmod.: 'return typed null'->OFF", modifier="return typed null", modifier_mode="off", MODS="[...]", shape=rectangle, style=filled, color=pink]
         types_select_type_string -> call0_string
         call0_string -> EXIT_types
-
-        call0_list_expr [TYPES="[RI...]", MODS="[...]", label="list expr\nTYPES: [(rel, inner)...]\nMODS: [...mods]\nmod.: 'return typed null'->OFF", modifier="return typed null", modifier_mode="off", shape=rectangle, style=filled, color=blue]
-        types_select_type_list_expr -> call0_list_expr
-        call0_list_expr -> EXIT_types
     }
 
     subgraph def_column_spec {
-        column_spec [TYPES="[numeric, 3VL Value, string, list expr]", OUT_TYPES="[...types]", label="column specifier\ntypes=[numeric, 3VL Value, string, list expr]\noutput=[...types]", shape=octagon, style=filled, color=gold]
+        column_spec [TYPES="[numeric, 3VL Value, string]", OUT_TYPES="[...types]", label="column specifier\ntypes=[numeric, 3VL Value, string]\noutput=[...types]", shape=octagon, style=filled, color=gold]
         EXIT_column_spec [label="EXIT column specifier", shape=rectangle]
 
         typed_column_name [label="Unqualified/Qualified column name of type: type"]
@@ -587,7 +575,7 @@ digraph G {
     }
 
     subgraph def_list_expr {
-        list_expr [TYPES="[numeric, 3VL Value, string, list expr]", MODS="[no column spec, return typed null]", OUT_TYPES="[list expr, row expr]", label="list expr\ntypes=[numeric?, 3VL Value?, string?, list expr?]\nmods: [no column spec, return typed null]\noutput=[list expr, row expr]", shape=octagon, style=filled, color=blue]
+        list_expr [TYPES="[numeric, 3VL Value, string]", MODS="[no column spec]", OUT_TYPES="[list expr]", label="list expr\ntypes=[numeric?, 3VL Value?, string?]\nmods: [no column spec]\noutput=[list expr]", shape=octagon, style=filled, color=blue]
         EXIT_list_expr[label="EXIT list expr"]
 
         call16_types [TYPE_NAME="numeric", TYPES="[numeric]", label="TYPE: numeric?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
@@ -596,25 +584,15 @@ digraph G {
         list_expr -> call17_types
         call18_types [TYPE_NAME="string", TYPES="[string]", label="TYPE: string?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         list_expr -> call18_types
-        call19_types [TYPE_NAME="list expr", TYPES="[TR...]", label="TYPE: list expr?\nMODS: [...mods]\nTYPES=[(rel)...]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
-        list_expr -> call19_types
 
-        list_expr_return_typed_null [label="Return typed null\nmod.: 'return typed null'->ON", modifier="return typed null", modifier_mode="on"]
-        call16_types -> list_expr_return_typed_null
-        call17_types -> list_expr_return_typed_null
-        call18_types -> list_expr_return_typed_null
-        call19_types -> list_expr_return_typed_null
-        list_expr_return_typed_null -> EXIT_list_expr
-
-        list_expr_multiple_values [label="Multiple values\nmod.: 'return typed null'->OFF", modifier="return typed null", modifier_mode="off"]
+        list_expr_multiple_values [label="Multiple values"]
         call16_types -> list_expr_multiple_values
         call17_types -> list_expr_multiple_values
         call18_types -> list_expr_multiple_values
-        call19_types -> list_expr_multiple_values
 
         call49_types [TYPES="[compatible]", label="TYPES: [compatible]\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         list_expr_multiple_values -> call49_types
-        // list_expr_multiple_values -> EXIT_list_expr
+        list_expr_multiple_values -> EXIT_list_expr
         call49_types -> call49_types
 
         call49_types -> EXIT_list_expr

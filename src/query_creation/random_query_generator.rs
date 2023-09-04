@@ -621,7 +621,6 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         self.expect_state("types");
         match self.next_state().as_str() {
             "types_select_type_3vl" |
-            "types_select_type_list_expr" |
             "types_select_type_numeric" |
             "types_select_type_string" => {},
             "types_null" => {
@@ -644,17 +643,12 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                             any => panic!("allowed_type_list must have single element here (got {:?})", any)
                         }
                     },
-                    "call2_list_expr" => self.handle_list_expr().0,
                     any => self.panic_unexpected(any)
                 };
-                if let Some(dt) = null_type.try_to_data_type() {
-                    (null_type.clone(), Expr::Cast {
-                        expr: Box::new(Expr::Value(Value::Null)),
-                        data_type: dt,
-                    })
-                } else {
-                    (SubgraphType::Undetermined, Expr::Value(Value::Null))
-                }
+                (null_type.clone(), Expr::Cast {
+                    expr: Box::new(Expr::Value(Value::Null)),
+                    data_type: null_type.to_data_type(),
+                })
             }
             "types_select_special_expression" => {
                 match self.next_state().as_str() {
@@ -682,7 +676,6 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "call0_numeric" => self.handle_numeric(),
             "call1_VAL_3" => self.handle_val_3(),
             "call0_string" => self.handle_string(),
-            "call0_list_expr" => self.handle_list_expr(),
             any => self.panic_unexpected(any)
         };
         self.expect_state("EXIT_types");
@@ -720,7 +713,6 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "call16_types" => SubgraphType::Numeric,
             "call17_types" => SubgraphType::Val3,
             "call18_types" => SubgraphType::String,
-            "call19_types" => SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined)),
             any => self.panic_unexpected(any)
         };
         let (inner_type, types_value) = self.handle_types(Some(inner_type.clone()), None);
@@ -738,10 +730,6 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     }
                 }
                 (SubgraphType::ListExpr(Box::new(inner_type)), Expr::Tuple(list_expr))
-            }
-            "list_expr_return_typed_null" => {
-                self.expect_state("EXIT_list_expr");
-                (SubgraphType::ListExpr(Box::new(inner_type)), Expr::Value(Value::Null))
             }
             any => self.panic_unexpected(any)
         }

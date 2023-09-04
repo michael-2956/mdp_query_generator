@@ -2,7 +2,7 @@ use smol_str::SmolStr;
 
 use core::fmt::Debug;
 
-use crate::{query_creation::state_generators::{CallTypes, markov_chain_generator::{FunctionContext, subgraph_type::SubgraphType}}, unwrap_variant, unwrap_variant_ref};
+use crate::{query_creation::state_generators::{CallTypes, markov_chain_generator::{FunctionContext, subgraph_type::SubgraphType}}, unwrap_variant};
 
 use super::query_info::ClauseContext;
 

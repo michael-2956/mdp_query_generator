@@ -446,7 +446,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         self.stateless_call_modifiers.insert(modifier.get_name(), Box::new(modifier));
     }
 
-    fn register_stateful_call_modifier<T: StatefulCallModifier + 'static>(&mut self) {
+    fn _register_stateful_call_modifier<T: StatefulCallModifier + 'static>(&mut self) {
         self.stateful_call_modifier_creators.insert(T::new().get_name(), StatefulCallModifierCreator(
             T::new
         ));

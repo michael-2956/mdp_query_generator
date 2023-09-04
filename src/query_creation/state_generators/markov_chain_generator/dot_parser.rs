@@ -108,9 +108,7 @@ impl TypeWithFields {
             "3VL Value" |
             "list expr" |
             "string" => Ok(Self::Type(SubgraphType::from_type_name(s)?)),
-            type_name @ (
-                "list expr<compatible>"
-            ) => Ok(Self::CompatibleInner(SubgraphType::from_type_name(
+            type_name @ "list expr<compatible>" => Ok(Self::CompatibleInner(SubgraphType::from_type_name(
                 &type_name[..type_name.len() - 12]
             )?)),
             any => Err(SyntaxError::new(format!("Type {any} does not exist!")))

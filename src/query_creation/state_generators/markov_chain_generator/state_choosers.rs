@@ -398,7 +398,6 @@ impl DeterministicStateChooser {
 //             "types_select_type" => {
 //                 let types_selected_type = match self.next_state().as_str() {
 //                     "types_select_type_3vl" => TypesSelectedType::Val3,
-//                     "types_select_type_list_expr" => TypesSelectedType::ListExpr,
 //                     "types_select_type_numeric" => TypesSelectedType::Numeric,
 //                     "types_select_type_string" => TypesSelectedType::String,
 //                     any => self.panic_unexpected(any)
@@ -415,13 +414,6 @@ impl DeterministicStateChooser {
 //             "call0_numeric" => (TypesSelectedType::Numeric, self.process_numeric()),
 //             "call1_VAL_3" => (TypesSelectedType::Val3, self.process_val_3()),
 //             "call0_string" => (TypesSelectedType::String, self.process_string()),
-//             "call0_list_expr" => {
-//                 self.state_generator.push_known(match self.state_generator.get_inputs() {
-//                     FunctionInputsType::TypeNameList(list) => list,
-//                     any => panic!("Couldn't pass {:?} to subgraph def_list_expr", any)
-//                 });
-//                 (TypesSelectedType::ListExpr, self.process_list_expr())
-//             },
 //             any => self.panic_unexpected(any)
 //         };
 //         self.push_state("EXIT_types");
