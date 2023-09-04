@@ -7,7 +7,7 @@
                 "AGG_FUN_2": 3
             }
         },
-        "[array, numeric]": {
+        "[numeric, string]": {
             "[string]": {
                 "AGG_FUN": 1,
                 "AGG_FUN_1": 2,

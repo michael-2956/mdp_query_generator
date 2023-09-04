@@ -8,12 +8,10 @@ use super::error::SyntaxError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub enum SubgraphType {
-    /// This type is used as an array inner type
-    /// if the inner type is yet to be determined
+    /// This type is used if the type is yet to be determined
     Undetermined,
     Numeric,
     Val3,
-    Array((Box<SubgraphType>, Option<usize>)),
     ListExpr(Box<SubgraphType>),
     RowExpr(Option<Vec<SubgraphType>>),
     String,
@@ -29,7 +27,6 @@ impl SubgraphType {
 
     pub fn wrap_in_type(&self, outer: &SubgraphType) -> SubgraphType {
         match outer {
-            SubgraphType::Array(..) => SubgraphType::Array((Box::new(self.clone()), None)),
             SubgraphType::ListExpr(..) => SubgraphType::ListExpr(Box::new(self.clone())),
             any => panic!("Cannot wrap into {any}")
         }
@@ -39,7 +36,6 @@ impl SubgraphType {
         match func_name {
             "numeric" => SubgraphType::Numeric,
             "VAL_3" => SubgraphType::Val3,
-            "array" => SubgraphType::Array((Box::new(SubgraphType::Undetermined), None)),
             "list_expr" => SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined)),
             "string" => SubgraphType::String,
             "date" => SubgraphType::Date,
@@ -53,7 +49,6 @@ impl SubgraphType {
         match *self {
             SubgraphType::Numeric => "numeric",
             SubgraphType::Val3 => "VAL_3",
-            SubgraphType::Array(..) => "array",
             SubgraphType::ListExpr(..) => "list_expr",
             SubgraphType::String => "string",
             SubgraphType::Date => "date",
@@ -67,7 +62,6 @@ impl SubgraphType {
         match s {
             "numeric" => Ok(SubgraphType::Numeric),
             "3VL Value" => Ok(SubgraphType::Val3),
-            "array" => Ok(SubgraphType::Array((Box::new(SubgraphType::Undetermined), None))),
             "list expr" => Ok(SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined))),
             "string" => Ok(SubgraphType::String),
             "date" => Ok(SubgraphType::Date),
@@ -79,7 +73,6 @@ impl SubgraphType {
 
     pub fn has_inner(&self) -> bool {
         match self {
-            SubgraphType::Array(..) => true,
             SubgraphType::ListExpr(..) => true,
             _ => false,
         }
@@ -87,7 +80,6 @@ impl SubgraphType {
 
     pub fn inner(&self) -> SubgraphType {
         match self {
-            SubgraphType::Array((inner, _)) => *inner.clone(),
             SubgraphType::ListExpr(inner) => *inner.clone(),
             any => panic!("{any} has no inner type"),
         }
@@ -102,7 +94,6 @@ impl SubgraphType {
             DataType::Numeric(_) => Self::Numeric,
             DataType::Date => Self::Numeric,  /// TODO
             DataType::Boolean => Self::Val3,
-            DataType::Array(inner) => Self::Array((Box::new((*inner.to_owned().unwrap()).into()), None)),
             any => panic!("DataType not implemented: {any}"),
         }
     }
@@ -110,7 +101,6 @@ impl SubgraphType {
     pub fn is_determined(&self) -> bool {
         match self {
             SubgraphType::Undetermined => false,
-            SubgraphType::Array((inner, _)) => inner.is_determined(),
             SubgraphType::ListExpr(inner) => inner.is_determined(),
             _ => true
         }
@@ -121,9 +111,6 @@ impl SubgraphType {
         match self {
             SubgraphType::Numeric => Some(DataType::Numeric(ExactNumberInfo::None)),
             SubgraphType::Val3 => Some(DataType::Boolean),
-            SubgraphType::Array((inner, _)) => {
-                inner.try_to_data_type().map(|dt| DataType::Array(Some(Box::new(dt))))
-            },
             // TODO: here should be a separate instruction
             // to define a row type.
             // Question 1: When is this behaviour needed?
@@ -150,7 +137,6 @@ impl Display for SubgraphType {
         let str = match self {
             SubgraphType::Numeric => "numeric".to_string(),
             SubgraphType::Val3 => "3VL Value".to_string(),
-            SubgraphType::Array((inner, length)) => format!("array[{}]({:?})", inner, length),
             SubgraphType::ListExpr(inner) => format!("list expr[{}]", inner),
             SubgraphType::String => "string".to_string(),
             SubgraphType::Undetermined => "undetermined".to_string(),
@@ -166,7 +152,7 @@ impl SubgraphType {
     pub fn get_compat_types(&self) -> Vec<SubgraphType> {
         let (inner_type, wrapper): (&Box<SubgraphType>, Box<dyn Fn(SubgraphType) -> SubgraphType>) = match self {
             SubgraphType::ListExpr(inner) => (inner, Box::new(|x| SubgraphType::ListExpr(Box::new(x)))),
-            any => return vec![any.clone()],   // as of postgresql 14.3, arrays do not get automatically converted
+            any => return vec![any.clone()],
         };
         inner_type.get_compat_types()
             .into_iter()
@@ -191,18 +177,6 @@ impl SubgraphType {
             return true;
         }
         match self {
-            SubgraphType::Array((inner, length)) => {
-                if matches!(as_what, SubgraphType::Array(..)) {
-                    let (other_inner, other_length) = unwrap_variant!(as_what, SubgraphType::Array);
-                    (
-                        **other_inner == SubgraphType::Undetermined || inner.is_same_or_more_determined_or_undetermined(&other_inner)
-                    ) && (
-                        *other_length == None || other_length == length
-                    )
-                } else {
-                    false
-                }
-            },
             SubgraphType::ListExpr(inner) => {
                 if matches!(as_what, SubgraphType::ListExpr(..)) {
                     let other_inner = unwrap_variant!(as_what, SubgraphType::ListExpr);

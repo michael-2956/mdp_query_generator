@@ -82,11 +82,3 @@ CREATE TABLE REGION (
   R_NAME           char(25),
   R_COMMENT        varchar(152)
 );
-
--- ADDITIONAL TABLE WITH ARRAYS
--- CREATE TABLE books (
---     id SERIAL PRIMARY KEY,
---     title VARCHAR(100) NOT NULL,
---     authors TEXT[] NOT NULL,
---     genres TEXT[]
--- );

@@ -106,11 +106,9 @@ impl TypeWithFields {
         match s {
             "numeric" |
             "3VL Value" |
-            "array" |
             "list expr" |
             "string" => Ok(Self::Type(SubgraphType::from_type_name(s)?)),
             type_name @ (
-                "array<compatible>" |
                 "list expr<compatible>"
             ) => Ok(Self::CompatibleInner(SubgraphType::from_type_name(
                 &type_name[..type_name.len() - 12]

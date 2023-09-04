@@ -4,7 +4,7 @@ use rand::Rng;
 
 use smol_str::SmolStr;
 use rand_chacha::ChaCha8Rng;
-use sqlparser::ast::Query; // , Expr, Value, SetExpr, TableFactor, SelectItem, BinaryOperator, Array, UnaryOperator, TrimWhereField};
+use sqlparser::ast::Query; // , Expr, Value, SetExpr, TableFactor, SelectItem, BinaryOperator, UnaryOperator, TrimWhereField};
 
 // use super::super::super::random_query_generator::TypesSelectedType;
 use super::markov_chain::NodeParams;
@@ -239,10 +239,6 @@ impl DeterministicStateChooser {
 //                         self.push_state("call4_Query");
 //                         self.process_query(*subquery);
 //                     },
-//                     Expr::Array(array) => {
-//                         self.push_state("call1_array");
-//                         self.process_array(array);
-//                     },
 //                     any => panic_unexpected_struct!(any),
 //                 }
 //                 self.push_states(vec!["AnyAllAnyAll", any_all_val]);
@@ -402,7 +398,6 @@ impl DeterministicStateChooser {
 //             "types_select_type" => {
 //                 let types_selected_type = match self.next_state().as_str() {
 //                     "types_select_type_3vl" => TypesSelectedType::Val3,
-//                     "types_select_type_array" => TypesSelectedType::Array,
 //                     "types_select_type_list_expr" => TypesSelectedType::ListExpr,
 //                     "types_select_type_numeric" => TypesSelectedType::Numeric,
 //                     "types_select_type_string" => TypesSelectedType::String,
@@ -426,13 +421,6 @@ impl DeterministicStateChooser {
 //                     any => panic!("Couldn't pass {:?} to subgraph def_list_expr", any)
 //                 });
 //                 (TypesSelectedType::ListExpr, self.process_list_expr())
-//             },
-//             "call0_array" => {
-//                 self.state_generator.push_known(match self.state_generator.get_inputs() {
-//                     FunctionInputsType::TypeNameList(list) => list,
-//                     any => panic!("Couldn't pass {:?} to subgraph def_array", any)
-//                 });
-//                 (TypesSelectedType::Array, self.process_array())
 //             },
 //             any => self.panic_unexpected(any)
 //         };
@@ -471,36 +459,6 @@ impl DeterministicStateChooser {
 //         ret
 //     }
 
-//     /// subgraph def_array
-//     fn process_array(&mut self, array: Array) {
-//         self.push_state("array");
-//         let array_compat_type = match self.next_state().as_str() {
-//             "call12_types" => TypesSelectedType::Numeric,
-//             "call13_types" => TypesSelectedType::Val3,
-//             "call31_types" => TypesSelectedType::String,
-//             "call51_types" => TypesSelectedType::ListExpr,
-//             "call14_types" => TypesSelectedType::Array,
-//             any => self.panic_unexpected(any)
-//         };
-//         let types_value = self.process_types(Some(array_compat_type.clone()), None).1;
-//         let mut array: Vec<Expr> = vec![types_value];
-//         loop {
-//             match self.next_state().as_str() {
-//                 "call50_types" => {
-//                     self.state_generator.push_compatible(array_compat_type.get_compat_types());
-//                     let types_value = self.process_types(None, Some(array_compat_type.clone())).1;
-//                     array.push(types_value);
-//                 },
-//                 "EXIT_array" => break,
-//                 any => self.panic_unexpected(any)
-//             }
-//         }
-//         Expr::Array(Array {
-//             elem: array,
-//             named: true
-//         })
-//     }
-
 //     /// subgraph def_list_expr
 //     fn process_list_expr(&mut self, selected_type: Option<TypesSelectedType>, list_expr: Vec<Expr>) {
     //     self.push_state("list_expr");
@@ -509,7 +467,6 @@ impl DeterministicStateChooser {
     //         "call17_types" => TypesSelectedType::Val3,
     //         "call18_types" => TypesSelectedType::String,
     //         "call19_types" => TypesSelectedType::ListExpr,
-    //         "call20_types" => TypesSelectedType::Array,
     //         any => self.panic_unexpected(any)
     //     };
     //     let types_value = self.process_types(Some(list_compat_type.clone()), None).1;
