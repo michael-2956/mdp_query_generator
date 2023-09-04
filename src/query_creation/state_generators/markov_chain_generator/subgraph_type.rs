@@ -19,42 +19,6 @@ pub enum SubgraphType {
 }
 
 impl SubgraphType {
-    pub fn wrap_in_func(&self, func_name: &str) -> SubgraphType {
-        let outer = SubgraphType::from_func_name(func_name);
-        self.wrap_in_type(&outer)
-    }
-
-    pub fn wrap_in_type(&self, outer: &SubgraphType) -> SubgraphType {
-        match outer {
-            SubgraphType::ListExpr(..) => SubgraphType::ListExpr(Box::new(self.clone())),
-            any => panic!("Cannot wrap into {any}")
-        }
-    }
-
-    pub fn from_func_name(func_name: &str) -> Self {
-        match func_name {
-            "numeric" => SubgraphType::Numeric,
-            "VAL_3" => SubgraphType::Val3,
-            "list_expr" => SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined)),
-            "string" => SubgraphType::String,
-            "date" => SubgraphType::Date,
-            // "query" => SubgraphType::Query(None),
-            any => panic!("Unexpected function name, can't convert to a SubgraphType: {any}")
-        }
-    }
-
-    pub fn get_subgraph_func_name(&self) -> &str {
-        match *self {
-            SubgraphType::Numeric => "numeric",
-            SubgraphType::Val3 => "VAL_3",
-            SubgraphType::ListExpr(..) => "list_expr",
-            SubgraphType::String => "string",
-            SubgraphType::Date => "date",
-            SubgraphType::Undetermined => panic!("SubgraphType::Undetermined does not have an associated subgraph"),
-            // SubgraphType::Query(..) => "query",
-        }
-    }
-
     pub fn from_type_name(s: &str) -> Result<Self, SyntaxError> {
         match s {
             "numeric" => Ok(SubgraphType::Numeric),

@@ -107,12 +107,6 @@ impl TypeWithFields {
             any => Err(SyntaxError::new(format!("Type {any} does not exist!")))
         }
     }
-
-    pub fn wrap_in_func(&self, func_name: &str) -> TypeWithFields {
-        match self.clone() {
-            Self::Type(tp) => Self::Type(tp.wrap_in_func(func_name)),
-        }
-    }
 }
 
 /// this structure can be treated in two ways: either
