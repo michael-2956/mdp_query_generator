@@ -118,24 +118,3 @@ impl StatelessCallModifier for IsColumnTypeAvailableModifier {
             )
     }
 }
-
-#[derive(Debug, Clone)]
-pub struct InnerTypeSelectionSwitch {}
-
-impl StatelessCallModifier for InnerTypeSelectionSwitch {
-    fn get_name(&self) -> SmolStr {
-        SmolStr::new("inner_type_selection_switch")
-    }
-
-    fn get_associated_value_name(&self) -> SmolStr {
-        TypesTypeValue::name()
-    }
-
-    fn run(&self, _clause_context: &ClauseContext, function_context: &FunctionContext, modifier_state: &Box<dyn std::any::Any>) -> bool {
-        let mut selected_types_it = modifier_state.downcast_ref::<TypesTypeValue>().unwrap().selected_types.iter();
-        match function_context.current_node.node_common.name.as_str() {
-            "types_null_type_selected" => selected_types_it.any(|x| !x.has_inner()),
-            any => panic!("inner_type_selection_switch call trigger unexpectedly called by {any}")
-        }
-    }
-}

@@ -526,9 +526,7 @@ digraph G {
         // types_select_type_3vl -> types_return_typed_null
         // types_select_type_string -> types_return_typed_null
 
-        // types_null_type_selected [label="No need to select inner type\ncall mod.: 'inner_type_selection_switch'", call_modifier="inner_type_selection_switch"]
-        // types_return_typed_null -> types_null_type_selected
-        // types_null_type_selected -> EXIT_types
+        // types_return_typed_null -> EXIT_types
 
         types_select_special_expression [label="select special expression\nmod.: 'return typed null'->OFF", modifier="return typed null", modifier_mode="off"]
         types_select_type_numeric -> types_select_special_expression

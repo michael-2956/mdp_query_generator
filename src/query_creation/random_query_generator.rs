@@ -634,16 +634,13 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
 
         let (selected_type, types_value) = match self.next_state().as_str() {
             "types_return_typed_null" => {
-                let null_type = match self.next_state().as_str() {
-                    "types_null_type_selected" => {
-                        let allowed_type_list = allowed_type_list.into_iter()
-                            .filter(|x| !x.has_inner()).collect::<Vec<_>>();
-                        match allowed_type_list.as_slice() {
-                            [tp] => tp.clone(),
-                            any => panic!("allowed_type_list must have single element here (got {:?})", any)
-                        }
-                    },
-                    any => self.panic_unexpected(any)
+                let null_type = {
+                    let allowed_type_list = allowed_type_list.into_iter()
+                        .filter(|x| !x.has_inner()).collect::<Vec<_>>();
+                    match allowed_type_list.as_slice() {
+                        [tp] => tp.clone(),
+                        any => panic!("allowed_type_list must have single element here (got {:?})", any)
+                    }
                 };
                 (null_type.clone(), Expr::Cast {
                     expr: Box::new(Expr::Value(Value::Null)),
