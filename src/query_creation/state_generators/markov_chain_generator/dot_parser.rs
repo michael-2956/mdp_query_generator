@@ -134,28 +134,6 @@ pub enum FunctionInputsType {
     Compatible,
     /// Used in function calls to pass the function's type constraints further
     PassThrough,
-    /// Used in function calls to pass the function's type constraints further, but only those
-    /// that are related to the called function call node type name.
-    /// Example:
-    /// - Args: [Numeric, Array[Val3]]
-    /// - TYPE_NAME=array
-    /// => Passed arguments: Array[Val3]
-    PassThroughTypeNameRelated,
-    /// Used in function calls to pass the function's type constraints further, but only those
-    /// that are related to the called function's name
-    /// Example:
-    /// - Args: [Numeric, Array[Val3]]
-    /// - Func.: Array.
-    /// => Passed arguments: Array[Val3]
-    /// NOTE: if uses_wrapped_types is ON, the arguments are not wrapped again.
-    PassThroughRelated,
-    /// Used in function calls to pass the function's type constraints further, but only those
-    /// that are related to the called function's name, and also taking the inner type
-    /// Example:
-    /// - Args: [Numeric, Array[Val3]]
-    /// - Func.: Array.
-    /// => Passed arguments: Val3
-    PassThroughRelatedInner,
     /// Used in function calls to select multiple types among the allowed type list.
     /// Used in function declarations to specify the allowed type list, of which multiple can be selected.
     TypeListWithFields(Vec<TypeWithFields>),
@@ -174,9 +152,6 @@ impl FunctionInputsType {
     fn try_extract_special_type(idents: &SmolStr) -> Option<FunctionInputsType> {
         match idents.as_str() {
             "any" => Some(FunctionInputsType::Any),
-            "TR..." => Some(FunctionInputsType::PassThroughTypeNameRelated),
-            "R..." => Some(FunctionInputsType::PassThroughRelated),
-            "RI..." => Some(FunctionInputsType::PassThroughRelatedInner),
             "..." => Some(FunctionInputsType::PassThrough),
             "compatible" => Some(FunctionInputsType::Compatible),
             "known" => Some(FunctionInputsType::KnownList),
@@ -247,7 +222,6 @@ pub struct FunctionDeclaration {
     pub input_type: FunctionInputsType,
     pub modifiers: Option<Vec<SmolStr>>,
     pub output_types: Option<Vec<SubgraphType>>,
-    pub uses_wrapped_types: bool,
 }
 
 /// this structure stores the interral parser values needed
@@ -311,19 +285,12 @@ impl<'a> Iterator for DotTokenizer<'a> {
                 },
                 DotToken::Subgraph => {
                     match return_some_err!(try_parse_function_def(&mut self.lexer)) {
-                        Some(mut func) => {
+                        Some(func) => {
                             if self.current_function_definition.is_some() {
                                 break Some(Err(SyntaxError::new(
                                     format!("nested functional node definitions are not supported")
                                 )))
                             } else {
-                                if func.uses_wrapped_types {
-                                    if let FunctionInputsType::TypeListWithFields(type_list) = func.input_type {
-                                        func.input_type = FunctionInputsType::TypeListWithFields(
-                                            type_list.into_iter().map(|x| x.wrap_in_func(&func.source_node_name)).collect()
-                                        );
-                                    }
-                                }
                                 self.current_function_definition = Some(func.clone());
                                 break Some(Ok(CodeUnit::FunctionDeclaration(func)))
                             }
@@ -343,7 +310,7 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                 read_opened_node_specification(&mut self.lexer, &node_name)
                             );
 
-                            let mut type_name = match node_spec.remove("TYPE_NAME") {
+                            let type_name = match node_spec.remove("TYPE_NAME") {
                                 Some(DotToken::QuotedIdentifiers(idents)) => Some({
                                     let TypeWithFields::Type(tp) = return_some_err!(TypeWithFields::from_type_name(&idents));
                                     tp
@@ -351,11 +318,7 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                 _ => None
                             };
 
-                            if let Some(ref definition) = self.current_function_definition {
-                                if definition.uses_wrapped_types {
-                                    type_name = type_name.map(|x| x.wrap_in_func(&definition.source_node_name));
-                                }
-                            } else {
+                            if self.current_function_definition.is_none() {
                                 return Some(Err(SyntaxError::new(format!(
                                     "Node definitions outside of subgraphs are not allowed"
                                 ))))
@@ -416,7 +379,7 @@ impl<'a> Iterator for DotTokenizer<'a> {
 
                             if self.call_ident_regex.is_match(&node_name) {
                                 let (
-                                    input_type, modifiers, _, _
+                                    input_type, modifiers, _,
                                 ) = return_some_err!(
                                     parse_function_options(&node_name, node_spec, true)
                                 );
@@ -516,7 +479,7 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<Functi
                                 ))
                         } else {
                             let (
-                                input_type, modifiers, output_types, uses_wrapped_types
+                                input_type, modifiers, output_types
                             ) = parse_function_options(
                                 &node_name,
                                 read_node_specification(lex, &node_name)?,
@@ -529,7 +492,6 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<Functi
                                 input_type,
                                 modifiers,
                                 output_types,
-                                uses_wrapped_types: uses_wrapped_types.unwrap_or(false),
                             }))
                         }
                     }
@@ -550,11 +512,10 @@ fn parse_function_options(
     node_name: &SmolStr,
     mut node_spec: HashMap<SmolStr, DotToken>,
     is_call_node: bool,
-) -> Result<(FunctionInputsType, Option<Vec<SmolStr>>, Option<Vec<SubgraphType>>, Option<bool>), SyntaxError> {
+) -> Result<(FunctionInputsType, Option<Vec<SmolStr>>, Option<Vec<SubgraphType>>), SyntaxError> {
     let mut input_type = FunctionInputsType::None;
     let mut modifiers = Option::<Vec<SmolStr>>::None;
     let mut output_types = Option::<Vec<SubgraphType>>::None;
-    let mut uses_wrapped_types = None;
     if let Some(token) = node_spec.remove("TYPES") {
         if let DotToken::QuotedIdentifiersWithBrackets(idents) = token {
             if let Some(special_type) = FunctionInputsType::try_extract_special_type(&idents) {
@@ -585,18 +546,6 @@ fn parse_function_options(
             )));
         }
     }
-    if let Some(token) = node_spec.remove("USES_WRAPPED_TYPES") {
-        match token {
-            DotToken::QuotedIdentifiers(value) if ["true", "false"].contains(&value.as_str()) => {
-                uses_wrapped_types = Some(value == "true");
-            },
-            _ => {
-                return Err(SyntaxError::new(format!(
-                    "{node_name}[uses_wrapped_types=... can only be either \"true\" or \"false\" (default)"
-                )));
-            }
-        }
-    }
     if let Some(token) = node_spec.remove("OUT_TYPES") {
         if let DotToken::QuotedIdentifiersWithBrackets(value) = token {
             let out_types = get_identifier_names(value).into_iter()
@@ -614,18 +563,13 @@ fn parse_function_options(
         }
     }
     if is_call_node {
-        if uses_wrapped_types.is_some() {
-            return Err(SyntaxError::new(format!(
-                "call nodes can't have a uses_wrapped_types option, which is reserved for function definitions (node {node_name})"
-            )));
-        }
         if output_types.is_some() {
             return Err(SyntaxError::new(format!(
                 "call nodes can't have a OUT_TYPES option, which is reserved for function definitions (node {node_name})"
             )));
         }
     }
-    Ok((input_type, modifiers, output_types, uses_wrapped_types))
+    Ok((input_type, modifiers, output_types))
 }
 
 /// expects and parses an exit node name after function declaration

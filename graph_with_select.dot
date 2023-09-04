@@ -21,10 +21,6 @@
 #         ...
 #     ]
 #
-# For types, can also use [TR...], [R...], or [RI...] for passing further only the types that correcpond to TYPE_NAME ([TR...]),
-# or corresponding to function name ([R...]), optionally passing the inner types ([RI...]).
-# NOTE: uses_wrapped_types DOES NOT wrap types when using "[R...]", because it assumes they are already wrapped
-#
 # TYPE, TYPES and MOD in definitions are only for type-checking.
 # All specified types of modifiers (TYPE, TYPES, MOD) are required to be passed by caller.
 # If TYPES="[any]", all types are selected.

@@ -51,28 +51,6 @@ pub enum CallTypes {
     Compatible,
     /// Used when we want to pass the function's type constraints further
     PassThrough,
-    /// Used in function calls to pass the function's type constraints further, but only those
-    /// that are related to the type name.
-    /// Example:
-    /// - Args: [Numeric, Array[Val3]]
-    /// - Func.: Types (Args: Array[...]).
-    /// => Passed arguments: Array[Val3]
-    PassThroughTypeNameRelated,
-    /// Used in function calls to pass the function's type constraints further, but only those
-    /// that are related to the called function's name
-    /// Example:
-    /// - Args: [Numeric, Array[Val3]]
-    /// - Func.: Array.
-    /// => Passed arguments: Array[Val3]
-    /// NOTE: if uses_wrapped_types is ON, the arguments are not wrapped again.
-    PassThroughRelated,
-    /// Used in function calls to pass the function's type constraints further, but only those
-    /// that are related to the called function's name, and also taking the inner type
-    /// Example:
-    /// - Args: [Numeric, Array[Val3]]
-    /// - Func.: Array.
-    /// => Passed arguments: Val3
-    PassThroughRelatedInner,
     /// Select multiple types among possible type variants.
     TypeList(Vec<SubgraphType>),
     /// Select multiple types among possible type variants.
@@ -92,9 +70,6 @@ impl CallTypes {
             FunctionInputsType::KnownList => CallTypes::KnownList,
             FunctionInputsType::Compatible => CallTypes::Compatible,
             FunctionInputsType::PassThrough => CallTypes::PassThrough,
-            FunctionInputsType::PassThroughTypeNameRelated => CallTypes::PassThroughTypeNameRelated,
-            FunctionInputsType::PassThroughRelatedInner => CallTypes::PassThroughRelatedInner,
-            FunctionInputsType::PassThroughRelated => CallTypes::PassThroughRelated,
             FunctionInputsType::TypeListWithFields(tp_list) => CallTypes::TypeListWithFields(tp_list),
         }
     }
@@ -163,10 +138,6 @@ pub struct Function {
     pub chain: HashMap<SmolStr, Vec<(f64, NodeParams)>>,
     /// function node params
     pub node_params: HashMap<SmolStr, NodeParams>,
-    /// Whether to wrap argument types in this function's
-    /// outer type. [Val3, String] would become
-    /// [Array<Val3>, Array<String>] for the array subgraph
-    pub uses_wrapped_types: bool,
 }
 
 impl Function {
@@ -180,7 +151,6 @@ impl Function {
             exit_node_name: declaration.exit_node_name,
             chain: HashMap::<_, _>::new(),
             node_params: HashMap::new(),
-            uses_wrapped_types: declaration.uses_wrapped_types
         }
     }
 }
@@ -366,9 +336,7 @@ impl MarkovChain {
                         ) if types_list.iter().all(|t| func_types_list.contains(t.inner_ref())) => {},
                         (CallTypes::None, FunctionTypes::TypeList(..) | FunctionTypes::None) => {},
                         (
-                            CallTypes::PassThrough | CallTypes::PassThroughTypeNameRelated |
-                            CallTypes::PassThroughRelated | CallTypes::PassThroughRelatedInner,
-                            FunctionTypes::TypeList(..)
+                            CallTypes::PassThrough, FunctionTypes::TypeList(..)
                         ) => {},
                         (CallTypes::Compatible, FunctionTypes::TypeList(..)) => {},
                         (CallTypes::KnownList, FunctionTypes::TypeList(..)) => {},
