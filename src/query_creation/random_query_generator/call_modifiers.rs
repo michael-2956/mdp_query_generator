@@ -42,6 +42,7 @@ impl ValueSetter for TypesTypeValueSetter {
             "types_select_type_3vl" => SubgraphType::Val3,
             "types_select_type_numeric" => SubgraphType::Numeric,
             "types_select_type_string" => SubgraphType::String,
+            "types_select_type_date" => SubgraphType::Date,
             any => panic!("{any} unexpectedly triggered the is_column_type_available call modifier affector"),
         };
         let allowed_type_list = match selected_type {

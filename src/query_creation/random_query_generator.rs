@@ -11,7 +11,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
     Expr, Ident, Query, Select, SetExpr, TableFactor,
-    TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, SelectItem, WildcardAdditionalOptions, ObjectName,
+    TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, SelectItem, WildcardAdditionalOptions, ObjectName, DataType,
 };
 
 use crate::config::TomlReadable;
@@ -614,6 +614,18 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         (SubgraphType::String, string)
     }
 
+    /// subgarph def_date
+    fn handle_date(&mut self) -> (SubgraphType, Expr) {
+        self.expect_state("date");
+        self.expect_state("date_literal");
+        let date = Expr::TypedString {
+            data_type: DataType::Date,
+            value: "2023-08-27".to_string(),
+        };
+        self.expect_state("EXIT_date");
+        (SubgraphType::Date, date)
+    }
+
     /// subgraph def_types
     fn handle_types(
         &mut self, check_generated_by: Option<SubgraphType>, check_compatible_with: Option<SubgraphType>
@@ -622,7 +634,8 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         match self.next_state().as_str() {
             "types_select_type_3vl" |
             "types_select_type_numeric" |
-            "types_select_type_string" => {},
+            "types_select_type_string" |
+            "types_select_type_date" => {},
             "types_null" => {
                 return (SubgraphType::Undetermined, Expr::Value(Value::Null));
             },
@@ -673,6 +686,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "call0_numeric" => self.handle_numeric(),
             "call1_VAL_3" => self.handle_val_3(),
             "call0_string" => self.handle_string(),
+            "call0_date" => self.handle_date(),
             any => self.panic_unexpected(any)
         };
         self.expect_state("EXIT_types");

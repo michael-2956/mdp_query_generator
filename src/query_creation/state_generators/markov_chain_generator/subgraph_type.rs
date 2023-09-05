@@ -50,7 +50,7 @@ impl SubgraphType {
             DataType::CharVarying(_) => Self::String,
             DataType::Char(_) => Self::String,
             DataType::Numeric(_) => Self::Numeric,
-            DataType::Date => Self::Numeric,  /// TODO
+            DataType::Date => Self::Date,
             DataType::Boolean => Self::Val3,
             any => panic!("DataType not implemented: {any}"),
         }
@@ -73,12 +73,6 @@ impl SubgraphType {
             SubgraphType::Date => DataType::Date,
             any => panic!("Can't convert {any} to DataType"),
         }
-    }
-}
-
-impl From<DataType> for SubgraphType {
-    fn from(value: DataType) -> Self {
-        SubgraphType::from_data_type(&value)
     }
 }
 

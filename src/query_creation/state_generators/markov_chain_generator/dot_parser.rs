@@ -99,13 +99,7 @@ impl TypeWithFields {
     }
 
     fn from_type_name(s: &str) -> Result<Self, SyntaxError> {
-        match s {
-            "numeric" |
-            "3VL Value" |
-            "list expr" |
-            "string" => Ok(Self::Type(SubgraphType::from_type_name(s)?)),
-            any => Err(SyntaxError::new(format!("Type {any} does not exist!")))
-        }
+        Ok(Self::Type(SubgraphType::from_type_name(s)?))
     }
 }
 
