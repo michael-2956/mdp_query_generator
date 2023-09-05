@@ -89,11 +89,11 @@ digraph G {
         Query -> single_value_false
         single_value_false -> FROM
 
-        limit [label="limit [num]"]
-        single_value_false -> limit
-        call52_types [TYPES="[numeric]", MODS="[no column spec]", label="TYPES: numeric\nmodif: [no column spec]", shape=rectangle, style=filled, color=lightblue]
-        limit -> call52_types
-        call52_types -> FROM
+        // limit [label="limit [num]"]
+        // single_value_false -> limit
+        // call52_types [TYPES="[numeric]", MODS="[no column spec]", label="TYPES: numeric\nMODS: [no column spec]", shape=rectangle, style=filled, color=lightblue]
+        // limit -> call52_types
+        // call52_types -> FROM
 
         FROM_multiple_relations [label="multiple relations"]
 

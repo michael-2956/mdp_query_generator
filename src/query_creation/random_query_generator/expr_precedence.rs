@@ -70,6 +70,26 @@ impl ExpressionNesting for Expr {
     }
 }
 
+fn nest_rightwards_if_is_a_text_binary_op(expr: Box<Expr>, parent_priority: i32) -> Box<Expr> {
+    let is_a_text_binary_op = match &*expr {
+        Expr::Like { .. } |
+        Expr::ILike { .. } |
+        Expr::Between { .. } |
+        Expr::InList { .. } |
+        Expr::InSubquery { .. } |
+        Expr::InUnnest { .. } |
+        Expr::SimilarTo { .. } |
+        Expr::IsDistinctFrom(..) |
+        Expr::IsNotDistinctFrom(..) => true,
+        _ => false,
+    };
+    if is_a_text_binary_op {
+        expr.p_nest_r(parent_priority)
+    } else {
+        expr.p_nest_l(parent_priority)
+    }
+}
+
 impl ExpressionPriority for Expr {
     fn get_priority(&self) -> i32 {
         match self {
@@ -143,12 +163,12 @@ impl ExpressionPriority for Expr {
                     BinaryOperator::PGRegexNotMatch => 7,
                     BinaryOperator::PGRegexNotIMatch => 7,
                     BinaryOperator::PGCustomBinaryOperator(..) => 7,
-                    BinaryOperator::Gt => 9,
-                    BinaryOperator::Lt => 9,
-                    BinaryOperator::GtEq => 9,
-                    BinaryOperator::LtEq => 9,
-                    BinaryOperator::Eq => 9,
-                    BinaryOperator::NotEq => 9,
+                    BinaryOperator::Gt => 9, // all of those have p_nest_r on the left! (because double comparison not possible)
+                    BinaryOperator::Lt => 9,  // ...
+                    BinaryOperator::GtEq => 9,  // ...
+                    BinaryOperator::LtEq => 9,  // ...
+                    BinaryOperator::Eq => 9,  // ...
+                    BinaryOperator::NotEq => 9, // all of those have p_nest_r on the left! (because double comparison not possible)
                     BinaryOperator::And => 12,
                     BinaryOperator::Or => 13,
                 }
@@ -164,8 +184,8 @@ impl ExpressionPriority for Expr {
             Expr::IsTrue(..) => 10,
             Expr::IsNull(..) => 10,
             Expr::IsNotNull(..) => 10,
-            Expr::IsDistinctFrom(_, _) => 10,
-            Expr::IsNotDistinctFrom(_, _) => 10,
+            Expr::IsDistinctFrom(..) => 10,
+            Expr::IsNotDistinctFrom(..) => 10,
             Expr::IsNotFalse(..) => 10,
             Expr::IsNotTrue(..) => 10,
             Expr::IsUnknown(..) => 10,
@@ -210,28 +230,43 @@ impl ExpressionPriority for Expr {
                 }
                 Expr::UnaryOp { op, expr: expr.p_nest_r(parent_priority) }  // p_nest_r is because unary operations are prefix ones.
             },
-            Expr::BinaryOp { left, op, right } => Expr::BinaryOp { left: left.p_nest_l(parent_priority), op, right: right.p_nest_r(parent_priority) },
-            Expr::Like { negated, expr, pattern, escape_char } => Expr::Like { negated, expr: expr.p_nest_l(parent_priority), pattern: pattern.p_nest_r(parent_priority), escape_char },
-            Expr::ILike { negated, expr, pattern, escape_char } => Expr::ILike { negated, expr: expr.p_nest_l(parent_priority), pattern: pattern.p_nest_r(parent_priority), escape_char },
-            Expr::Between { expr, negated, low, high } => Expr::Between { expr: expr.p_nest_l(parent_priority), negated, low: low.p_nest_r(parent_priority), high: high.p_nest_r(parent_priority) },
-            Expr::InList { expr, list, negated } => Expr::InList { expr: expr.p_nest_l(parent_priority), list, negated },
-            Expr::InSubquery { expr, subquery, negated } => Expr::InSubquery { expr: expr.p_nest_l(parent_priority), subquery, negated },
-            Expr::InUnnest { expr, array_expr, negated } => Expr::InUnnest { expr: expr.p_nest_l(parent_priority), array_expr: array_expr, negated },
-            Expr::SimilarTo { negated, expr, pattern, escape_char } => Expr::SimilarTo { negated, expr: expr.p_nest_l(parent_priority), pattern: pattern.p_nest_r(parent_priority), escape_char },
-            Expr::IsFalse(expr) => Expr::IsFalse(expr.p_nest_l(parent_priority)),
-            Expr::IsTrue(expr) => Expr::IsTrue(expr.p_nest_l(parent_priority)),
-            Expr::IsNull(expr) => Expr::IsNull(expr.p_nest_l(parent_priority)),
-            Expr::IsNotNull(expr) => Expr::IsNotNull(expr.p_nest_l(parent_priority)),
-            Expr::IsDistinctFrom(expr1, expr2) => Expr::IsDistinctFrom(expr1.p_nest_l(parent_priority), expr2.p_nest_r(parent_priority)),
-            Expr::IsNotDistinctFrom(expr1, expr2) => Expr::IsNotDistinctFrom(expr1.p_nest_l(parent_priority), expr2.p_nest_r(parent_priority)),
-            Expr::IsNotFalse(expr) => Expr::IsNotFalse(expr.p_nest_l(parent_priority)),
-            Expr::IsNotTrue(expr) => Expr::IsNotTrue(expr.p_nest_l(parent_priority)),
-            Expr::IsUnknown(expr) => Expr::IsUnknown(expr.p_nest_l(parent_priority)),
-            Expr::IsNotUnknown(expr) => Expr::IsNotUnknown(expr.p_nest_l(parent_priority)),
+            Expr::BinaryOp { left, op, right } => {
+                let is_cmp = match &op {
+                    BinaryOperator::Gt |
+                    BinaryOperator::Lt |
+                    BinaryOperator::GtEq |
+                    BinaryOperator::LtEq |
+                    BinaryOperator::Eq |
+                    BinaryOperator::NotEq => true,
+                    _ => false
+                };
+                if is_cmp {
+                    Expr::BinaryOp { left: left.p_nest_r(parent_priority), op, right: right.p_nest_r(parent_priority) }
+                } else {
+                    Expr::BinaryOp { left: left.p_nest_l(parent_priority), op, right: right.p_nest_r(parent_priority) }
+                }
+            },
+            Expr::Like { negated, expr, pattern, escape_char } => Expr::Like { negated, expr: nest_rightwards_if_is_a_text_binary_op(expr, parent_priority), pattern: pattern.p_nest_r(parent_priority), escape_char },
+            Expr::ILike { negated, expr, pattern, escape_char } => Expr::ILike { negated, expr: nest_rightwards_if_is_a_text_binary_op(expr, parent_priority), pattern: pattern.p_nest_r(parent_priority), escape_char },
+            Expr::Between { expr, negated, low, high } => Expr::Between { expr: nest_rightwards_if_is_a_text_binary_op(expr, parent_priority), negated, low: low.p_nest_r(parent_priority), high: high.p_nest_r(parent_priority) },
+            Expr::InList { expr, list, negated } => Expr::InList { expr: nest_rightwards_if_is_a_text_binary_op(expr, parent_priority), list, negated },
+            Expr::InSubquery { expr, subquery, negated } => Expr::InSubquery { expr: nest_rightwards_if_is_a_text_binary_op(expr, parent_priority), subquery, negated },
+            Expr::InUnnest { expr, array_expr, negated } => Expr::InUnnest { expr: nest_rightwards_if_is_a_text_binary_op(expr, parent_priority), array_expr: array_expr, negated },
+            Expr::SimilarTo { negated, expr, pattern, escape_char } => Expr::SimilarTo { negated, expr: nest_rightwards_if_is_a_text_binary_op(expr, parent_priority), pattern: pattern.p_nest_r(parent_priority), escape_char },
+            Expr::IsFalse(expr) => Expr::IsFalse(nest_rightwards_if_is_a_text_binary_op(expr, parent_priority)),
+            Expr::IsTrue(expr) => Expr::IsTrue(nest_rightwards_if_is_a_text_binary_op(expr, parent_priority)),
+            Expr::IsNull(expr) => Expr::IsNull(nest_rightwards_if_is_a_text_binary_op(expr, parent_priority)),
+            Expr::IsNotNull(expr) => Expr::IsNotNull(nest_rightwards_if_is_a_text_binary_op(expr, parent_priority)),
+            Expr::IsDistinctFrom(expr1, expr2) => Expr::IsDistinctFrom(nest_rightwards_if_is_a_text_binary_op(expr1, parent_priority), expr2.p_nest_r(parent_priority)),
+            Expr::IsNotDistinctFrom(expr1, expr2) => Expr::IsNotDistinctFrom(nest_rightwards_if_is_a_text_binary_op(expr1, parent_priority), expr2.p_nest_r(parent_priority)),
+            Expr::IsNotFalse(expr) => Expr::IsNotFalse(nest_rightwards_if_is_a_text_binary_op(expr, parent_priority)),
+            Expr::IsNotTrue(expr) => Expr::IsNotTrue(nest_rightwards_if_is_a_text_binary_op(expr, parent_priority)),
+            Expr::IsUnknown(expr) => Expr::IsUnknown(nest_rightwards_if_is_a_text_binary_op(expr, parent_priority)),
+            Expr::IsNotUnknown(expr) => Expr::IsNotUnknown(nest_rightwards_if_is_a_text_binary_op(expr, parent_priority)),
             Expr::JsonAccess { left, operator, right } => Expr::JsonAccess { left: left.p_nest_l(parent_priority), operator, right: right.p_nest_r(parent_priority) },
-            Expr::Collate { expr, collation } => Expr::Collate { expr: expr.p_nest_l(parent_priority), collation },
+            Expr::Collate { expr, collation } => Expr::Collate { expr: nest_rightwards_if_is_a_text_binary_op(expr, parent_priority), collation },
             Expr::TypedString { data_type, value } => Expr::TypedString { data_type, value },
-            Expr::AtTimeZone { timestamp, time_zone } => Expr::AtTimeZone { timestamp: timestamp.p_nest_l(parent_priority), time_zone },
+            Expr::AtTimeZone { timestamp, time_zone } => Expr::AtTimeZone { timestamp: nest_rightwards_if_is_a_text_binary_op(timestamp, parent_priority), time_zone },
             Expr::IntroducedString { introducer, value } => Expr::IntroducedString { introducer, value },
             Expr::Interval { value, leading_field, leading_precision, last_field, fractional_seconds_precision } => Expr::Interval { value: value.p_nest_l(parent_priority), leading_field, leading_precision, last_field, fractional_seconds_precision },
             any => any
