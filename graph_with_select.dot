@@ -302,7 +302,7 @@ digraph G {
         AnyAllLessEqual -> AnyAllSelectIter
         AnyAllSelectOp -> AnyAllUnEqual
         AnyAllUnEqual -> AnyAllSelectIter
-        call4_Query [TYPES="[compatible]", label="Query\nTYPE: [compatible]", shape=rectangle, style=filled, color=green]
+        call4_Query [TYPES="[compatible]", MODS="[single column]", label="Query\nTYPE: [compatible]\nMODS: [single column]", shape=rectangle, style=filled, color=green]
         AnyAllSelectIter -> call4_Query
         call4_Query -> AnyAllAnyAll
         AnyAllAnyAll -> AnyAllAnyAllAny
