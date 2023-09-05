@@ -41,7 +41,7 @@ impl ValueSetter for TypesTypeValueSetter {
         let selected_type = match function_context.current_node.node_common.name.as_str() {
             "types_select_type_3vl" => SubgraphType::Val3,
             "types_select_type_numeric" => SubgraphType::Numeric,
-            "types_select_type_string" => SubgraphType::String,
+            "types_select_type_text" => SubgraphType::Text,
             "types_select_type_date" => SubgraphType::Date,
             any => panic!("{any} unexpectedly triggered the is_column_type_available call modifier affector"),
         };

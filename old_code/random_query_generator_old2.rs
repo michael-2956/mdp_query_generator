@@ -783,9 +783,9 @@ impl QueryGenerator {
 
     fn handle_string(&mut self, info: &mut QueryInfo) {
         match self.next_state().as_str() {
-            "string_literal" => push_var!(info, String, Expr::Value(Value::SingleQuotedString("HJeihfbwei".to_string()))),  // TODO: hardcoded
-            "string_trim" => self.handle_trim(info),
-            "string_concat" => self.handle_concat(info),
+            "text_literal" => push_var!(info, String, Expr::Value(Value::SingleQuotedString("HJeihfbwei".to_string()))),  // TODO: hardcoded
+            "text_trim" => self.handle_trim(info),
+            "text_concat" => self.handle_concat(info),
             any => self.panic_unexpected(any, "string")
         }
     }
@@ -794,7 +794,7 @@ impl QueryGenerator {
         match self.next_state().as_str() {
             "call6_types" => { push_var!(info, TrimSpecFlag, true); },
             "call5_types" => { push_var!(info, TrimSpecFlag, false); },
-            any => self.panic_unexpected(any, "string_trim")
+            any => self.panic_unexpected(any, "text_trim")
         }
     }
 
@@ -812,7 +812,7 @@ impl QueryGenerator {
                 push_var!(info, TrimSpecValue, TrimWhereField::Trailing);
                 self.expect_state("call5_types", "TRAILING");
             },
-            any => self.panic_unexpected(any, "string_trim")
+            any => self.panic_unexpected(any, "text_trim")
         }
     }
 
@@ -840,20 +840,20 @@ impl QueryGenerator {
     }
 
     fn handle_concat(&mut self, _info: &mut QueryInfo) {
-        self.expect_state("call7_types", "string_concat");
+        self.expect_state("call7_types", "text_concat");
     }
 
     fn handle_concat_1st_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::String {
-            panic!("string_concat expected TypesSelectedType::String as 1st value")
+            panic!("text_concat expected TypesSelectedType::String as 1st value")
         }
-        self.expect_state("string_concat_concat", "call7_types");
-        self.expect_state("call8_types", "string_concat_concat");
+        self.expect_state("text_concat_concat", "call7_types");
+        self.expect_state("call8_types", "text_concat_concat");
     }
 
     fn handle_concat_2nd_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::String {
-            panic!("string_concat expected TypesSelectedType::String as 2nd value")
+            panic!("text_concat expected TypesSelectedType::String as 2nd value")
         }
         let right = Box::new(pop_var!(info, TypesValue));
         let left = Box::new(pop_var!(info, TypesValue));
@@ -910,10 +910,10 @@ impl QueryGenerator {
                 self.state_generator.known_type_name_stack.push((TypesSelectedType::Numeric).get_types());
                 self.expect_state("types_select_type_end", "types_select_type_numeric");
             },
-            "types_select_type_string" => {
+            "types_select_type_text" => {
                 push_var!(info, TypesSelectedType, TypesSelectedType::String);
                 self.state_generator.known_type_name_stack.push((TypesSelectedType::String).get_types());
-                self.expect_state("types_select_type_end", "types_select_type_string");
+                self.expect_state("types_select_type_end", "types_select_type_text");
             },
             any => self.panic_unexpected(any, "types_select_type")
         }
@@ -1159,9 +1159,9 @@ impl QueryGenerator {
 "call2_list_expr" => {},
 
 "numericRight" => {},
-"string_substr_numeric_from_from" => {},
-"string_substr_numeric_len_len" => {},
-"string_substring" => {},
+"text_substr_numeric_from_from" => {},
+"text_substr_numeric_len_len" => {},
+"text_substring" => {},
 */
 
 impl Iterator for QueryGenerator {

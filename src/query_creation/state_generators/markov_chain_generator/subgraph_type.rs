@@ -13,7 +13,7 @@ pub enum SubgraphType {
     Numeric,
     Val3,
     ListExpr(Box<SubgraphType>),
-    String,
+    Text,
     Date,
 }
 
@@ -23,7 +23,7 @@ impl SubgraphType {
             "numeric" => Ok(SubgraphType::Numeric),
             "3VL Value" => Ok(SubgraphType::Val3),
             "list expr" => Ok(SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined))),
-            "string" => Ok(SubgraphType::String),
+            "text" => Ok(SubgraphType::Text),
             "date" => Ok(SubgraphType::Date),
             any => Err(SyntaxError::new(format!("Type {any} does not exist!")))
         }
@@ -46,9 +46,10 @@ impl SubgraphType {
     pub fn from_data_type(data_type: &DataType) -> Self {
         match data_type {
             DataType::Integer(_) => Self::Numeric,  /// TODO
-            DataType::Varchar(_) => Self::String,
-            DataType::CharVarying(_) => Self::String,
-            DataType::Char(_) => Self::String,
+            DataType::Varchar(_) => Self::Text,
+            DataType::CharVarying(_) => Self::Text,
+            DataType::Char(_) => Self::Text,
+            DataType::Text => Self::Text,
             DataType::Numeric(_) => Self::Numeric,
             DataType::Date => Self::Date,
             DataType::Boolean => Self::Val3,
@@ -69,7 +70,7 @@ impl SubgraphType {
         match self {
             SubgraphType::Numeric => DataType::Numeric(ExactNumberInfo::None),
             SubgraphType::Val3 => DataType::Boolean,
-            SubgraphType::String => DataType::Text,
+            SubgraphType::Text => DataType::Text,
             SubgraphType::Date => DataType::Date,
             any => panic!("Can't convert {any} to DataType"),
         }
@@ -82,7 +83,7 @@ impl Display for SubgraphType {
             SubgraphType::Numeric => "numeric".to_string(),
             SubgraphType::Val3 => "3VL Value".to_string(),
             SubgraphType::ListExpr(inner) => format!("list expr[{}]", inner),
-            SubgraphType::String => "string".to_string(),
+            SubgraphType::Text => "text".to_string(),
             SubgraphType::Undetermined => "undetermined".to_string(),
             SubgraphType::Date => "date".to_string(),
         };

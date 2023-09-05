@@ -359,10 +359,10 @@ impl DeterministicStateChooser {
 //         self.push_state("string");
 //         match expr {
 //             Expr::Value(Value::SingleQuotedString(literal)) => {
-//                 self.push_state("string_literal");
+//                 self.push_state("text_literal");
 //             },
 //             Expr::Trim { expr, trim_where, trim_what } => {
-//                 self.push_state("string_trim");
+//                 self.push_state("text_trim");
 //                 match (trim_where, trim_what) {
 //                     (Some(trim_where), Some(trim_what)) => {
 //                         self.push_state("call6_types");
@@ -381,9 +381,9 @@ impl DeterministicStateChooser {
 //                 self.process_types(Some(TypesSelectedType::String), *expr);
 //             },
 //             Expr::BinaryOp { left, op, right } => {
-//                 self.push_states(vec!["string_concat", "call7_types"]);
+//                 self.push_states(vec!["text_concat", "call7_types"]);
 //                 self.process_types(Some(TypesSelectedType::String), *left);
-//                 self.push_states(vec!["string_concat_concat", "call8_types"]);
+//                 self.push_states(vec!["text_concat_concat", "call8_types"]);
 //                 self.process_types(Some(TypesSelectedType::String), *right);
 //             },
 //             any => panic_unexpected_struct!(any),
@@ -399,7 +399,7 @@ impl DeterministicStateChooser {
 //                 let types_selected_type = match self.next_state().as_str() {
 //                     "types_select_type_3vl" => TypesSelectedType::Val3,
 //                     "types_select_type_numeric" => TypesSelectedType::Numeric,
-//                     "types_select_type_string" => TypesSelectedType::String,
+//                     "types_select_type_text" => TypesSelectedType::String,
 //                     any => self.panic_unexpected(any)
 //                 };
 //                 self.state_generator.push_known(types_selected_type.get_types());

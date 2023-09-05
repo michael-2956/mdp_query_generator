@@ -1810,39 +1810,39 @@
 <path fill="none" stroke="#000000" d="M1936.457,-1335.7909C1858.2722,-1319.8495 1717.2784,-1291.1018 1635.4047,-1274.4083"/>
 <polygon fill="#000000" stroke="#000000" points="1635.9752,-1270.9526 1625.4775,-1272.3842 1634.5766,-1277.8115 1635.9752,-1270.9526"/>
 </g>
-<!-- string_literal -->
+<!-- text_literal -->
 <g id="node123" class="node">
-<title>string_literal</title>
+<title>text_literal</title>
 <ellipse fill="none" stroke="#000000" cx="1446.7981" cy="-1031.6" rx="89.7634" ry="18"/>
 <text text-anchor="middle" x="1446.7981" y="-1027.4" font-family="Times,serif" font-size="14.00" fill="#000000">random string literal</text>
 </g>
-<!-- string&#45;&gt;string_literal -->
+<!-- string&#45;&gt;text_literal -->
 <g id="edge178" class="edge">
-<title>string-&gt;string_literal</title>
+<title>string-&gt;text_literal</title>
 <path fill="none" stroke="#000000" d="M1555.9667,-1157.3623C1533.9887,-1132.0436 1494.1229,-1086.1182 1469.1289,-1057.3251"/>
 <polygon fill="#000000" stroke="#000000" points="1471.6993,-1054.947 1462.5009,-1049.6896 1466.4131,-1059.5357 1471.6993,-1054.947"/>
 </g>
-<!-- string_trim -->
+<!-- text_trim -->
 <g id="node124" class="node">
-<title>string_trim</title>
+<title>text_trim</title>
 <ellipse fill="none" stroke="#000000" cx="1571.7981" cy="-1103.6" rx="35.3509" ry="18"/>
 <text text-anchor="middle" x="1571.7981" y="-1099.4" font-family="Times,serif" font-size="14.00" fill="#000000">TRIM</text>
 </g>
-<!-- string&#45;&gt;string_trim -->
+<!-- string&#45;&gt;text_trim -->
 <g id="edge180" class="edge">
-<title>string-&gt;string_trim</title>
+<title>string-&gt;text_trim</title>
 <path fill="none" stroke="#000000" d="M1571.7981,-1157.4314C1571.7981,-1149.731 1571.7981,-1140.5743 1571.7981,-1132.0166"/>
 <polygon fill="#000000" stroke="#000000" points="1575.2982,-1132.0132 1571.7981,-1122.0133 1568.2982,-1132.0133 1575.2982,-1132.0132"/>
 </g>
-<!-- string_concat -->
+<!-- text_concat -->
 <g id="node130" class="node">
-<title>string_concat</title>
+<title>text_concat</title>
 <ellipse fill="none" stroke="#000000" cx="1952.7981" cy="-1103.6" rx="64.8273" ry="18"/>
 <text text-anchor="middle" x="1952.7981" y="-1099.4" font-family="Times,serif" font-size="14.00" fill="#000000">concatenation</text>
 </g>
-<!-- string&#45;&gt;string_concat -->
+<!-- string&#45;&gt;text_concat -->
 <g id="edge190" class="edge">
-<title>string-&gt;string_concat</title>
+<title>string-&gt;text_concat</title>
 <path fill="none" stroke="#000000" d="M1598.8932,-1170.4797C1658.9298,-1159.1342 1804.5126,-1131.6225 1889.0716,-1115.6428"/>
 <polygon fill="#000000" stroke="#000000" points="1889.8951,-1119.0492 1899.0713,-1113.7531 1888.5952,-1112.1709 1889.8951,-1119.0492"/>
 </g>
@@ -1852,9 +1852,9 @@
 <ellipse fill="none" stroke="#000000" cx="1683.7981" cy="-815.6" rx="57.3609" ry="18"/>
 <text text-anchor="middle" x="1683.7981" y="-811.4" font-family="Times,serif" font-size="14.00" fill="#000000">EXIT string</text>
 </g>
-<!-- string_literal&#45;&gt;EXIT_string -->
+<!-- text_literal&#45;&gt;EXIT_string -->
 <g id="edge179" class="edge">
-<title>string_literal-&gt;EXIT_string</title>
+<title>text_literal-&gt;EXIT_string</title>
 <path fill="none" stroke="#000000" d="M1466.1928,-1013.9238C1508.5004,-975.3649 1609.1349,-883.6475 1657.2665,-839.7806"/>
 <polygon fill="#000000" stroke="#000000" points="1659.7644,-842.2396 1664.7978,-832.9167 1655.0492,-837.066 1659.7644,-842.2396"/>
 </g>
@@ -1864,9 +1864,9 @@
 <polygon fill="#0000ff" stroke="#0000ff" points="1732.8521,-905.6 1634.7441,-905.6 1634.7441,-869.6 1732.8521,-869.6 1732.8521,-905.6"/>
 <text text-anchor="middle" x="1683.7981" y="-883.4" font-family="Times,serif" font-size="14.00" fill="#000000">TYPES: string</text>
 </g>
-<!-- string_trim&#45;&gt;call5_types -->
+<!-- text_trim&#45;&gt;call5_types -->
 <g id="edge181" class="edge">
-<title>string_trim-&gt;call5_types</title>
+<title>text_trim-&gt;call5_types</title>
 <path fill="none" stroke="#000000" d="M1567.9248,-1085.565C1562.1276,-1053.6708 1554.7429,-986.4546 1583.7981,-941.6 1593.617,-926.4418 1609.1991,-915.2197 1625.1676,-907.0569"/>
 <polygon fill="#000000" stroke="#000000" points="1627.0371,-910.0441 1634.5737,-902.5976 1624.0384,-903.7189 1627.0371,-910.0441"/>
 </g>
@@ -1876,9 +1876,9 @@
 <polygon fill="#0000ff" stroke="#0000ff" points="1739.8521,-1049.6 1641.7441,-1049.6 1641.7441,-1013.6 1739.8521,-1013.6 1739.8521,-1049.6"/>
 <text text-anchor="middle" x="1690.7981" y="-1027.4" font-family="Times,serif" font-size="14.00" fill="#000000">TYPES: string</text>
 </g>
-<!-- string_trim&#45;&gt;call6_types -->
+<!-- text_trim&#45;&gt;call6_types -->
 <g id="edge182" class="edge">
-<title>string_trim-&gt;call6_types</title>
+<title>text_trim-&gt;call6_types</title>
 <path fill="none" stroke="#000000" d="M1594.7425,-1089.7177C1610.9513,-1079.9106 1633.0695,-1066.5282 1651.9958,-1055.077"/>
 <polygon fill="#000000" stroke="#000000" points="1653.9677,-1057.9748 1660.7117,-1049.8035 1650.344,-1051.9857 1653.9677,-1057.9748"/>
 </g>
@@ -1948,21 +1948,21 @@
 <polygon fill="#0000ff" stroke="#0000ff" points="2017.8521,-1049.6 1919.7441,-1049.6 1919.7441,-1013.6 2017.8521,-1013.6 2017.8521,-1049.6"/>
 <text text-anchor="middle" x="1968.7981" y="-1027.4" font-family="Times,serif" font-size="14.00" fill="#000000">TYPES: string</text>
 </g>
-<!-- string_concat&#45;&gt;call7_types -->
+<!-- text_concat&#45;&gt;call7_types -->
 <g id="edge191" class="edge">
-<title>string_concat-&gt;call7_types</title>
+<title>text_concat-&gt;call7_types</title>
 <path fill="none" stroke="#000000" d="M1956.8356,-1085.4314C1958.5468,-1077.731 1960.5816,-1068.5743 1962.4833,-1060.0166"/>
 <polygon fill="#000000" stroke="#000000" points="1965.9535,-1060.5344 1964.7062,-1050.0133 1959.1202,-1059.0159 1965.9535,-1060.5344"/>
 </g>
-<!-- string_concat_concat -->
+<!-- text_concat_concat -->
 <g id="node132" class="node">
-<title>string_concat_concat</title>
+<title>text_concat_concat</title>
 <ellipse fill="none" stroke="#000000" cx="1969.7981" cy="-959.6" rx="27" ry="18"/>
 <text text-anchor="middle" x="1969.7981" y="-955.4" font-family="Times,serif" font-size="14.00" fill="#000000">||</text>
 </g>
-<!-- call7_types&#45;&gt;string_concat_concat -->
+<!-- call7_types&#45;&gt;text_concat_concat -->
 <g id="edge192" class="edge">
-<title>call7_types-&gt;string_concat_concat</title>
+<title>call7_types-&gt;text_concat_concat</title>
 <path fill="none" stroke="#000000" d="M1969.0504,-1013.4314C1969.1574,-1005.731 1969.2845,-996.5743 1969.4034,-988.0166"/>
 <polygon fill="#000000" stroke="#000000" points="1972.903,-988.0609 1969.5423,-978.0133 1965.9037,-987.9637 1972.903,-988.0609"/>
 </g>
@@ -1972,9 +1972,9 @@
 <polygon fill="#0000ff" stroke="#0000ff" points="1960.8521,-905.6 1862.7441,-905.6 1862.7441,-869.6 1960.8521,-869.6 1960.8521,-905.6"/>
 <text text-anchor="middle" x="1911.7981" y="-883.4" font-family="Times,serif" font-size="14.00" fill="#000000">TYPES: string</text>
 </g>
-<!-- string_concat_concat&#45;&gt;call8_types -->
+<!-- text_concat_concat&#45;&gt;call8_types -->
 <g id="edge193" class="edge">
-<title>string_concat_concat-&gt;call8_types</title>
+<title>text_concat_concat-&gt;call8_types</title>
 <path fill="none" stroke="#000000" d="M1956.926,-943.6209C1949.8863,-934.8819 1940.9874,-923.835 1932.9561,-913.8651"/>
 <polygon fill="#000000" stroke="#000000" points="1935.4727,-911.41 1926.4737,-905.8181 1930.0214,-915.8013 1935.4727,-911.41"/>
 </g>
@@ -2143,15 +2143,15 @@
 <path fill="none" stroke="#000000" d="M2726.2027,-2417.0767C2733.6753,-2402.904 2744.2431,-2382.8609 2752.7231,-2366.7774"/>
 <polygon fill="#000000" stroke="#000000" points="2755.8677,-2368.3177 2757.4356,-2357.8396 2749.6756,-2365.0529 2755.8677,-2368.3177"/>
 </g>
-<!-- types_select_type_string -->
+<!-- types_select_type_text -->
 <g id="node142" class="node">
-<title>types_select_type_string</title>
+<title>types_select_type_text</title>
 <ellipse fill="none" stroke="#000000" cx="2868.7981" cy="-2340.0825" rx="37.1367" ry="18"/>
 <text text-anchor="middle" x="2868.7981" y="-2335.8825" font-family="Times,serif" font-size="14.00" fill="#000000">string?</text>
 </g>
-<!-- types_select_type&#45;&gt;types_select_type_string -->
+<!-- types_select_type&#45;&gt;types_select_type_text -->
 <g id="edge204" class="edge">
-<title>types_select_type-&gt;types_select_type_string</title>
+<title>types_select_type-&gt;types_select_type_text</title>
 <path fill="none" stroke="#000000" d="M2740.8624,-2420.2142C2762.3914,-2407.0274 2794.7819,-2387.0991 2822.7981,-2369.4981 2827.6141,-2366.4725 2832.6995,-2363.2493 2837.6634,-2360.0873"/>
 <polygon fill="#000000" stroke="#000000" points="2839.8394,-2362.8505 2846.3829,-2354.5177 2836.0713,-2356.9512 2839.8394,-2362.8505"/>
 </g>
@@ -2212,9 +2212,9 @@
 <path fill="none" stroke="#000000" d="M2748.9201,-2323.1286C2732.551,-2307.6055 2708.2164,-2284.5288 2690.284,-2267.5232"/>
 <polygon fill="#000000" stroke="#000000" points="2692.2114,-2264.5274 2682.5469,-2260.186 2687.3946,-2269.6067 2692.2114,-2264.5274"/>
 </g>
-<!-- types_select_type_string&#45;&gt;types_select_type_end -->
+<!-- types_select_type_text&#45;&gt;types_select_type_end -->
 <g id="edge205" class="edge">
-<title>types_select_type_string-&gt;types_select_type_end</title>
+<title>types_select_type_text-&gt;types_select_type_end</title>
 <path fill="none" stroke="#000000" d="M2847.2618,-2325.2291C2839.6945,-2320.3033 2831.0252,-2314.9814 2822.7981,-2310.6669 2781.9626,-2289.2516 2732.5373,-2269.4986 2700.4189,-2257.4243"/>
 <polygon fill="#000000" stroke="#000000" points="2701.2246,-2253.9897 2690.6318,-2253.7815 2698.7828,-2260.55 2701.2246,-2253.9897"/>
 </g>

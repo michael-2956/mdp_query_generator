@@ -440,7 +440,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             },
             "BinaryStringLike" => {
                 self.expect_state("call25_types");
-                let types_value_1 = self.handle_types(Some(SubgraphType::String), None).1;
+                let types_value_1 = self.handle_types(Some(SubgraphType::Text), None).1;
                 let string_like_not_flag = match self.next_state().as_str() {
                     "BinaryStringLikeNot" => {
                         self.expect_state("BinaryStringLikeIn");
@@ -450,7 +450,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     any => self.panic_unexpected(any)
                 };
                 self.expect_state("call26_types");
-                let types_value_2 = self.handle_types(Some(SubgraphType::String), None).1;
+                let types_value_2 = self.handle_types(Some(SubgraphType::Text), None).1;
                 Expr::Like {
                     negated: string_like_not_flag,
                     expr: Box::new(types_value_1),
@@ -550,10 +550,10 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             },
             "numeric_string_Position" => {
                 self.expect_state("call2_types");
-                let types_value_1 = self.handle_types(Some(SubgraphType::String), None).1;
+                let types_value_1 = self.handle_types(Some(SubgraphType::Text), None).1;
                 self.expect_state("string_position_in");
                 self.expect_state("call3_types");
-                let types_value_2 = self.handle_types(Some(SubgraphType::String), None).1;
+                let types_value_2 = self.handle_types(Some(SubgraphType::Text), None).1;
                 Expr::Position {
                     expr: Box::new(types_value_1),
                     r#in: Box::new(types_value_2)
@@ -570,15 +570,15 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         (SubgraphType::Numeric, numeric)
     }
 
-    /// subgraph def_string
-    fn handle_string(&mut self) -> (SubgraphType, Expr) {
-        self.expect_state("string");
+    /// subgraph def_text
+    fn handle_text(&mut self) -> (SubgraphType, Expr) {
+        self.expect_state("text");
         let string = match self.next_state().as_str() {
-            "string_literal" => Expr::Value(Value::SingleQuotedString("HJeihfbwei".to_string())),  // TODO: hardcoded
-            "string_trim" => {
+            "text_literal" => Expr::Value(Value::SingleQuotedString("HJeihfbwei".to_string())),  // TODO: hardcoded
+            "text_trim" => {
                 let (trim_where, trim_what) = match self.next_state().as_str() {
                     "call6_types" => {
-                        let types_value = self.handle_types(Some(SubgraphType::String), None).1;
+                        let types_value = self.handle_types(Some(SubgraphType::Text), None).1;
                         let spec_mode = match self.next_state().as_str() {
                             "BOTH" => TrimWhereField::Both,
                             "LEADING" => TrimWhereField::Leading,
@@ -591,17 +591,17 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     "call5_types" => (None, None),
                     any => self.panic_unexpected(any)
                 };
-                let types_value = self.handle_types(Some(SubgraphType::String), None).1;
+                let types_value = self.handle_types(Some(SubgraphType::Text), None).1;
                 Expr::Trim {
                     expr: Box::new(types_value), trim_where, trim_what
                 }
             },
-            "string_concat" => {
+            "text_concat" => {
                 self.expect_state("call7_types");
-                let types_value_1 = self.handle_types(Some(SubgraphType::String), None).1;
-                self.expect_state("string_concat_concat");
+                let types_value_1 = self.handle_types(Some(SubgraphType::Text), None).1;
+                self.expect_state("text_concat_concat");
                 self.expect_state("call8_types");
-                let types_value_2 = self.handle_types(Some(SubgraphType::String), None).1;
+                let types_value_2 = self.handle_types(Some(SubgraphType::Text), None).1;
                 Expr::BinaryOp {
                     left: Box::new(types_value_1),
                     op: BinaryOperator::StringConcat,
@@ -610,8 +610,8 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             },
             any => self.panic_unexpected(any)
         };
-        self.expect_state("EXIT_string");
-        (SubgraphType::String, string)
+        self.expect_state("EXIT_text");
+        (SubgraphType::Text, string)
     }
 
     /// subgarph def_date
@@ -634,7 +634,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         match self.next_state().as_str() {
             "types_select_type_3vl" |
             "types_select_type_numeric" |
-            "types_select_type_string" |
+            "types_select_type_text" |
             "types_select_type_date" => {},
             "types_null" => {
                 return (SubgraphType::Undetermined, Expr::Value(Value::Null));
@@ -685,7 +685,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             },
             "call0_numeric" => self.handle_numeric(),
             "call1_VAL_3" => self.handle_val_3(),
-            "call0_string" => self.handle_string(),
+            "call0_text" => self.handle_text(),
             "call0_date" => self.handle_date(),
             any => self.panic_unexpected(any)
         };
@@ -723,7 +723,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         let inner_type = match self.next_state().as_str() {
             "call16_types" => SubgraphType::Numeric,
             "call17_types" => SubgraphType::Val3,
-            "call18_types" => SubgraphType::String,
+            "call18_types" => SubgraphType::Text,
             "call62_types" => SubgraphType::Date,
             any => self.panic_unexpected(any)
         };
