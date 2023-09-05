@@ -593,6 +593,7 @@ digraph G {
         call16_types -> list_expr_multiple_values
         call17_types -> list_expr_multiple_values
         call18_types -> list_expr_multiple_values
+        call62_types -> list_expr_multiple_values
 
         call49_types [TYPES="[compatible]", label="TYPES: [compatible]\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         list_expr_multiple_values -> call49_types
