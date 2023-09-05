@@ -724,6 +724,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "call16_types" => SubgraphType::Numeric,
             "call17_types" => SubgraphType::Val3,
             "call18_types" => SubgraphType::String,
+            "call62_types" => SubgraphType::Date,
             any => self.panic_unexpected(any)
         };
         let (inner_type, types_value) = self.handle_types(Some(inner_type.clone()), None);

@@ -587,7 +587,7 @@ digraph G {
         call18_types [TYPE_NAME="string", TYPES="[string]", label="TYPE: string?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         list_expr -> call18_types
         call62_types [TYPE_NAME="date", TYPES="[date]", label="TYPE: date?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
-        list_expr -> call18_types
+        list_expr -> call62_types
 
         list_expr_multiple_values [label="Multiple values"]
         call16_types -> list_expr_multiple_values
