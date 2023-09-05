@@ -76,16 +76,16 @@
 
 digraph G {
     subgraph def_Query {
-        Query [TYPES="[numeric, 3VL Value, string]", MODS="[single value]", OUT_TYPES="[query]", label="Query\ntypes=[numeric, 3VL Value, string]\nmods=[single value]\noutput=[query]", shape=octagon, style=filled, color=green]
+        Query [TYPES="[numeric, 3VL Value, string]", MODS="[single column, single row]", label="Query\ntypes=[numeric, 3VL Value, string]\nmods=[single column, single row]", shape=octagon, style=filled, color=green]
         EXIT_Query [label="EXIT Query"]
 
         FROM []
 
-        single_value_true [label="limit 1 (mod.: 'single value')", modifier="single value", modifier_mode="on"]
+        single_value_true [label="limit 1 (ON: 'single row')", modifier="single row", modifier_mode="on"]
         Query -> single_value_true
         single_value_true -> FROM
 
-        single_value_false [label="mod.: '!single value'", modifier="single value", modifier_mode="off"]
+        single_value_false [label="OFF: 'single row'", modifier="single row", modifier_mode="off"]
         Query -> single_value_false
         single_value_false -> FROM
 
@@ -175,9 +175,9 @@ digraph G {
         // call0_aggregate_function -> SELECT_list_multiple_values
         call54_types -> SELECT_list_multiple_values // call0_aggregate_function
         SELECT_list_multiple_values -> EXIT_SELECT
-        SELECT_list_multiple_values_single_value_false [label="mod. single value = false", modifier="single value", modifier_mode="off"]
-        SELECT_list_multiple_values -> SELECT_list_multiple_values_single_value_false
-        SELECT_list_multiple_values_single_value_false -> SELECT_list
+        SELECT_list_multiple_values_single_column_false [label="OFF: single column", modifier="single column", modifier_mode="off"]
+        SELECT_list_multiple_values -> SELECT_list_multiple_values_single_column_false
+        SELECT_list_multiple_values_single_column_false -> SELECT_list
 
         // call0_having [label="HAVING", TYPES="[known]", MODS="[]", shape=rectangle, style=filled, color=mediumvioletred]
         // EXIT_SELECT -> call0_having
@@ -187,7 +187,7 @@ digraph G {
     }
 
     subgraph def_VAL_3 {
-        VAL_3 [shape=rectangle, label="3VL Value\nmods: [no column spec]\noutput=[3VL Value]", OUT_TYPES="[3VL Value]", MODS="[no column spec]", style=filled, color=red]
+        VAL_3 [shape=rectangle, label="3VL Value\nmods: [no column spec]", MODS="[no column spec]", style=filled, color=red]
         EXIT_VAL_3 [shape=rectangle, label="EXIT 3VL Value"]
 
         IsNull [label="IS NULL"]
@@ -243,7 +243,7 @@ digraph G {
         call58_types -> InSubqueryNot
         InSubqueryNot -> InSubqueryIn
         call58_types -> InSubqueryIn
-        call3_Query [TYPES="[compatible]", label="Query\nTYPE: [compatible]", shape=rectangle, style=filled, color=green]
+        call3_Query [TYPES="[compatible]", MODS="[single column]", label="Query\nTYPE: [compatible]\nMODS: [single column]", shape=rectangle, style=filled, color=green]
         InSubqueryIn -> call3_Query
         call3_Query -> EXIT_VAL_3
 
@@ -360,7 +360,7 @@ digraph G {
     }
 
     subgraph def_numeric {
-        numeric [shape=rectangle, label="numeric\nmods: [no column spec]\noutput=[numeric]", MODS="[no column spec]", OUT_TYPES="[numeric]", style=filled, color=chocolate]
+        numeric [shape=rectangle, label="numeric\nmods: [no column spec]", MODS="[no column spec]", style=filled, color=chocolate]
         EXIT_numeric [label="EXIT numeric"]  // TODO: OUT_TYPES="[numeric, integer]", rename numeric[...] to number[...]
 
         numeric_literal[label="literal", literal="t"]
@@ -447,7 +447,7 @@ digraph G {
     }
 
     subgraph def_string {
-        string [label="string\nmods: [no column spec]\noutput=[string]", MODS="[no column spec]", OUT_TYPES="[string]", shape=rectangle, style=filled, color=pink]
+        string [label="string\nmods: [no column spec]", MODS="[no column spec]", shape=rectangle, style=filled, color=pink]
         EXIT_string [label="EXIT string"]
 
         string_literal [label="random string literal", literal="t"]
@@ -498,7 +498,7 @@ digraph G {
     }
 
     subgraph def_date {
-        date [label="date\nmods: [no column spec]\noutput=[date]", MODS="[no column spec]", OUT_TYPES="[date]", shape=rectangle, style=filled, color=pink]
+        date [label="date\nmods: [no column spec]", MODS="[no column spec]", shape=rectangle, style=filled, color=pink]
         EXIT_date [label="EXIT date"]
 
 
@@ -507,7 +507,7 @@ digraph G {
     }
 
     subgraph def_types {
-        types [TYPES="[numeric, 3VL Value, string]", OUT_TYPES="[...types]", MODS="[no column spec, no subquery, check group by, return typed null]", label="TYPE(S) (generic):\ntypes=[numeric?, 3VL Value?, string?]\nmods=[no column spec, no subquery, check group by, return typed null]\noutput=[...types]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, 3VL Value, string]", MODS="[no column spec, no subquery, check group by, return typed null]", label="TYPE(S) (generic):\ntypes=[numeric?, 3VL Value?, string?]\nmods=[no column spec, no subquery, check group by, return typed null]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
         types_select_type_numeric[TYPE_NAME="numeric", label="numeric?", set_value="types_type"]
@@ -521,12 +521,12 @@ digraph G {
         // types -> types_null
         // types_null -> EXIT_types
 
-        // types_return_typed_null [label="Typed null"]
-        // types_select_type_numeric -> types_return_typed_null
-        // types_select_type_3vl -> types_return_typed_null
-        // types_select_type_string -> types_return_typed_null
+        types_return_typed_null [label="Typed null"]
+        types_select_type_numeric -> types_return_typed_null
+        types_select_type_3vl -> types_return_typed_null
+        types_select_type_string -> types_return_typed_null
 
-        // types_return_typed_null -> EXIT_types
+        types_return_typed_null -> EXIT_types
 
         types_select_special_expression [label="select special expression\nmod.: 'return typed null'->OFF", modifier="return typed null", modifier_mode="off"]
         types_select_type_numeric -> types_select_special_expression
@@ -542,7 +542,7 @@ digraph G {
         types_column_spec -> call1_column_spec
         call1_column_spec -> EXIT_types
 
-        call1_Query [TYPES="[known]", MODS="[single value]", label="Query\nMODS: single value\nTYPE: known\nmod.: 'no subquery'", modifier="no subquery", modifier_mode="off", shape=rectangle, style=filled, color=green]
+        call1_Query [TYPES="[known]", MODS="[single row, single column]", label="Query\nMODS: [single row, single column]\nTYPE: known\nmod.: 'no subquery'", modifier="no subquery", modifier_mode="off", shape=rectangle, style=filled, color=green]
         types_select_special_expression -> call1_Query
         call1_Query -> EXIT_types
 
@@ -560,7 +560,7 @@ digraph G {
     }
 
     subgraph def_column_spec {
-        column_spec [TYPES="[numeric, 3VL Value, string]", OUT_TYPES="[...types]", label="column specifier\ntypes=[numeric, 3VL Value, string]\noutput=[...types]", shape=octagon, style=filled, color=gold]
+        column_spec [TYPES="[numeric, 3VL Value, string]", label="column specifier\ntypes=[numeric, 3VL Value, string]", shape=octagon, style=filled, color=gold]
         EXIT_column_spec [label="EXIT column specifier", shape=rectangle]
 
         typed_column_name [label="Unqualified/Qualified column name of type: type"]
@@ -569,7 +569,7 @@ digraph G {
     }
 
     subgraph def_list_expr {
-        list_expr [TYPES="[numeric, 3VL Value, string]", MODS="[no column spec]", OUT_TYPES="[list expr]", label="list expr\ntypes=[numeric?, 3VL Value?, string?]\nmods: [no column spec]\noutput=[list expr]", shape=octagon, style=filled, color=blue]
+        list_expr [TYPES="[numeric, 3VL Value, string]", MODS="[no column spec]", label="list expr\ntypes=[numeric?, 3VL Value?, string?]\nmods: [no column spec]", shape=octagon, style=filled, color=blue]
         EXIT_list_expr[label="EXIT list expr"]
 
         call16_types [TYPE_NAME="numeric", TYPES="[numeric]", label="TYPE: numeric?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]

@@ -127,8 +127,6 @@ pub struct Function {
     /// a vector of special function modifiers. Affects
     /// the function behaviour, but not the nodes
     pub accepted_modifiers: Option<Vec<SmolStr>>,
-    /// a vector of function output types
-    pub output_types: Option<Vec<SubgraphType>>,
     /// the chain of the function, contains all of the
     /// function nodes and connectiona between them.
     /// We suppose that it's cheaper by time to clone
@@ -146,7 +144,6 @@ impl Function {
         Function {
             accepted_types: FunctionTypes::from_function_inputs_type(&declaration.source_node_name, declaration.input_type),
             accepted_modifiers: declaration.modifiers,
-            output_types: declaration.output_types,
             source_node_name: declaration.source_node_name,
             exit_node_name: declaration.exit_node_name,
             chain: HashMap::<_, _>::new(),

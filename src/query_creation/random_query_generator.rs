@@ -202,7 +202,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         self.expect_state("SELECT_projection");
         while match self.next_state().as_str() {
             "SELECT_list" => true,
-            "SELECT_list_multiple_values_single_value_false" => {
+            "SELECT_list_multiple_values_single_column_false" => {
                 self.expect_state("SELECT_list");
                 true
             },

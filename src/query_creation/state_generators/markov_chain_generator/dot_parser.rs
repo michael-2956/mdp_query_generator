@@ -215,7 +215,6 @@ pub struct FunctionDeclaration {
     pub exit_node_name: SmolStr,
     pub input_type: FunctionInputsType,
     pub modifiers: Option<Vec<SmolStr>>,
-    pub output_types: Option<Vec<SubgraphType>>,
 }
 
 /// this structure stores the interral parser values needed
@@ -473,7 +472,7 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<Functi
                                 ))
                         } else {
                             let (
-                                input_type, modifiers, output_types
+                                input_type, modifiers, _,
                             ) = parse_function_options(
                                 &node_name,
                                 read_node_specification(lex, &node_name)?,
@@ -485,7 +484,6 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<Functi
                                 exit_node_name,
                                 input_type,
                                 modifiers,
-                                output_types,
                             }))
                         }
                     }

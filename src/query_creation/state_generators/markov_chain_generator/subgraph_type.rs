@@ -15,7 +15,6 @@ pub enum SubgraphType {
     ListExpr(Box<SubgraphType>),
     String,
     Date,
-    // Query(Option<Vec<(Option<ObjectName>, SubgraphType)>>)
 }
 
 impl SubgraphType {
@@ -26,7 +25,6 @@ impl SubgraphType {
             "list expr" => Ok(SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined))),
             "string" => Ok(SubgraphType::String),
             "date" => Ok(SubgraphType::Date),
-            // "query" => Ok(SubgraphType::Query(None)),
             any => Err(SyntaxError::new(format!("Type {any} does not exist!")))
         }
     }
