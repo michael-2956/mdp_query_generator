@@ -659,8 +659,9 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     ) -> (SubgraphType, Expr) {
         self.expect_state("types");
         match self.next_state().as_str() {
-            "types_select_type_3vl" |
+            "types_select_type_integer" |
             "types_select_type_numeric" |
+            "types_select_type_3vl" |
             "types_select_type_text" |
             "types_select_type_date" => {},
             "types_null" => {
@@ -710,6 +711,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     any => self.panic_unexpected(any)
                 }
             },
+            "call1_numeric" => self.handle_numeric(),
             "call0_numeric" => self.handle_numeric(),
             "call1_VAL_3" => self.handle_val_3(),
             "call0_text" => self.handle_text(),

@@ -76,7 +76,7 @@
 
 digraph G {
     subgraph def_Query {
-        Query [TYPES="[numeric, 3VL Value, text, date]", MODS="[single column, single row]", label="Query\ntypes=[numeric, 3VL Value, text, date]\nmods=[single column, single row]", shape=octagon, style=filled, color=green]
+        Query [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[single column, single row]", label="Query\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[single column, single row]", shape=octagon, style=filled, color=green]
         EXIT_Query [label="EXIT Query"]
 
         FROM []
@@ -91,7 +91,7 @@ digraph G {
 
         // limit [label="limit [num]"]
         // single_value_false -> limit
-        // call52_types [TYPES="[numeric]", MODS="[no column spec]", label="TYPES: numeric\nMODS: [no column spec]", shape=rectangle, style=filled, color=lightblue]
+        // call52_types [TYPES="[numeric, integer]", MODS="[no column spec]", label="TYPES: numeric\nMODS: [no column spec]", shape=rectangle, style=filled, color=lightblue]
         // limit -> call52_types
         // call52_types -> FROM
 
@@ -133,7 +133,7 @@ digraph G {
         SELECT_DISTINCT [label="DISTINCT"]
         // SELECT_PERCENT [label="PERCENT"]
         // SELECT_TOP [label="TOP"]
-        // call43_types [TYPES="[numeric]", label="TYPES: numeric", shape=rectangle, style=filled, color=lightblue]
+        // call43_types [TYPES="[numeric, integer]", label="TYPES: [numeric, integer]", shape=rectangle, style=filled, color=lightblue]
         // SELECT_WITH_TIES [label="WITH TIES"]
         SELECT_distinct_end [label=";"]
         // SELECT_percent_end [label=";"]
@@ -361,7 +361,7 @@ digraph G {
 
     subgraph def_numeric {
         numeric [shape=rectangle, label="numeric\nmods: [no column spec]", MODS="[no column spec]", style=filled, color=chocolate]
-        EXIT_numeric [label="EXIT numeric"]  // TODO: OUT_TYPES="[numeric, integer]", rename numeric[...] to number[...]
+        EXIT_numeric [label="EXIT numeric"]
 
         numeric_literal[label="literal", literal="t"]
         numeric -> numeric_literal
@@ -373,9 +373,9 @@ digraph G {
         numeric_literal_float -> EXIT_numeric
 
         BinaryNumericOp[label="binary op."]
-        call47_types [TYPES="[numeric]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call47_types [TYPES="[numeric, integer]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         numeric -> BinaryNumericOp
-        call48_types [TYPES="[numeric]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call48_types [TYPES="[numeric, integer]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         BinaryNumericOp -> call48_types
         binary_numeric_plus [label="+"]
         call48_types -> binary_numeric_plus
@@ -401,7 +401,7 @@ digraph G {
         call47_types -> EXIT_numeric
 
         UnaryNumericOp [label="unary op."]
-        call1_types [TYPES="[numeric]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call1_types [TYPES="[numeric, integer]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         numeric -> UnaryNumericOp
         unary_numeric_plus[label="+"]
         UnaryNumericOp -> unary_numeric_plus
@@ -441,7 +441,7 @@ digraph G {
 
         Nested_numeric[label="([expr])"]
         numeric -> Nested_numeric
-        call4_types [TYPES="[numeric]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call4_types [TYPES="[numeric, integer]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         Nested_numeric -> call4_types
         call4_types -> EXIT_numeric
     }
@@ -492,12 +492,12 @@ digraph G {
         call9_types -> text_substring_for
         text_substring_end [label="finish"]
 
-        call10_types [TYPES="[numeric]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call10_types [TYPES="[numeric, integer]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         text_substring_from -> call10_types
         call10_types -> text_substring_for
         call10_types -> text_substring_end
 
-        call11_types [TYPES="[numeric]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call11_types [TYPES="[numeric, integer]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         text_substring_for -> call11_types
         call11_types -> text_substring_end
 
@@ -514,9 +514,11 @@ digraph G {
     }
 
     subgraph def_types {
-        types [TYPES="[numeric, 3VL Value, text, date]", MODS="[no column spec, no subquery, check group by]", label="TYPE(S) (generic):\ntypes=[numeric, 3VL Value, text, date]\nmods=[no column spec, no subquery, check group by]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no column spec, no subquery, check group by]", label="TYPE(S) (generic):\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[no column spec, no subquery, check group by]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
+        types_select_type_integer[TYPE_NAME="integer", label="integer?", set_value="types_type"]
+        types -> types_select_type_integer
         types_select_type_numeric[TYPE_NAME="numeric", label="numeric?", set_value="types_type"]
         types -> types_select_type_numeric
         types_select_type_3vl[TYPE_NAME="3VL Value", label="3VL Value?", set_value="types_type"]
@@ -531,6 +533,7 @@ digraph G {
         // types_null -> EXIT_types
 
         types_return_typed_null [label="Typed null"]
+        types_select_type_integer -> types_return_typed_null
         types_select_type_numeric -> types_return_typed_null
         types_select_type_3vl -> types_return_typed_null
         types_select_type_text -> types_return_typed_null
@@ -539,6 +542,7 @@ digraph G {
         types_return_typed_null -> EXIT_types
 
         types_select_special_expression [label="select special expression"]
+        types_select_type_integer -> types_select_special_expression
         types_select_type_numeric -> types_select_special_expression
         types_select_type_3vl -> types_select_special_expression
         types_select_type_text -> types_select_special_expression
@@ -556,6 +560,10 @@ digraph G {
         call1_Query [TYPES="[known]", MODS="[single row, single column]", label="Query\nMODS: [single row, single column]\nTYPE: known\nmod.: 'no subquery'", modifier="no subquery", modifier_mode="off", shape=rectangle, style=filled, color=green]
         types_select_special_expression -> call1_Query
         call1_Query -> EXIT_types
+
+        call1_numeric [label="numeric\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=chocolate]
+        types_select_type_integer -> call1_numeric
+        call1_numeric -> EXIT_types
 
         call0_numeric [label="numeric\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=chocolate]
         types_select_type_numeric -> call0_numeric
@@ -575,7 +583,7 @@ digraph G {
     }
 
     subgraph def_column_spec {
-        column_spec [TYPES="[numeric, 3VL Value, text, date]", label="column specifier\ntypes=[numeric, 3VL Value, text, date]", shape=octagon, style=filled, color=gold]
+        column_spec [TYPES="[numeric, integer, 3VL Value, text, date]", label="column specifier\ntypes=[numeric, integer, 3VL Value, text, date]", shape=octagon, style=filled, color=gold]
         EXIT_column_spec [label="EXIT column specifier", shape=rectangle]
 
         typed_column_name [label="Unqualified/Qualified column name of type: type"]
@@ -584,10 +592,10 @@ digraph G {
     }
 
     subgraph def_list_expr {
-        list_expr [TYPES="[numeric, 3VL Value, text, date]", MODS="[no column spec]", label="list expr\ntypes=[numeric, 3VL Value, text, date]\nmods: [no column spec]", shape=octagon, style=filled, color=blue]
+        list_expr [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no column spec]", label="list expr\ntypes=[numeric, integer, 3VL Value, text, date]\nmods: [no column spec]", shape=octagon, style=filled, color=blue]
         EXIT_list_expr[label="EXIT list expr"]
 
-        call16_types [TYPE_NAME="numeric", TYPES="[numeric]", label="TYPE: numeric?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call16_types [TYPE_NAME="numeric", TYPES="[numeric, integer]", label="TYPE: numeric?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         list_expr -> call16_types
         call17_types [TYPE_NAME="3VL Value", TYPES="[3VL Value]", label="TYPE: 3VL Value?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         list_expr -> call17_types
@@ -653,20 +661,20 @@ digraph G {
         EXIT_fun_choice -> EXIT_aggregate_function
         EXIT_fun_choice -> aggr_distinct
 
-        AVG[label="AVG\nTYPE: [numeric]", TYPES="[numeric]"]
+        AVG[label="AVG\nTYPE: [numeric, integer]", TYPES="[numeric, integer]"]
         call32_types [TYPES="[compatible]", label="TYPES: [compatible]", shape=rectangle, style=filled, color=lightblue]
         aggregate_function -> AVG
         AVG -> call32_types
         call32_types -> EXIT_fun_choice
         AVG -> EXIT_fun_choice
 
-        CHECKSUM_AGG[label="CHECKSUM_AGG\nTYPE: [numeric]", TYPES="[numeric]"]
+        CHECKSUM_AGG[label="CHECKSUM_AGG\nTYPE: [numeric, integer]", TYPES="[numeric, integer]"]
         call33_types [TYPES="[compatible]", label="TYPES: [compatible]", shape=rectangle, style=filled, color=lightblue]
         aggregate_function -> CHECKSUM_AGG
         CHECKSUM_AGG -> call33_types
         call33_types -> EXIT_fun_choice
 
-        COUNT[label="COUNT\nTYPE: [numeric]", TYPES="[numeric]"]
+        COUNT[label="COUNT\nTYPE: [numeric, integer]", TYPES="[numeric, integer]"]
         call34_types [TYPES="[any]", label="TYPES: ANY", shape=rectangle, style=filled, color=lightblue]
         COUNT_wildcard [label="wildcard"]
         aggregate_function -> COUNT
@@ -675,7 +683,7 @@ digraph G {
         COUNT_wildcard -> EXIT_fun_choice
         call34_types -> EXIT_fun_choice
 
-        COUNT_BIG[label="COUNT_BIG\nTYPE: [numeric]", TYPES="[numeric]"]
+        COUNT_BIG[label="COUNT_BIG\nTYPE: [numeric, integer]", TYPES="[numeric, integer]"]
         call35_types [TYPES="[any]", label="TYPES: ANY", shape=rectangle, style=filled, color=lightblue]
         COUNT_BIG_wildcard [label="wildcard"]
         aggregate_function -> COUNT_BIG
@@ -697,7 +705,7 @@ digraph G {
         call37_types -> EXIT_fun_choice
 
         STDDEV[label="STDDEV\nTYPE: [float]", TYPES="[float]"]
-        call38_types [TYPES="[numeric]", label="TYPES: numeric", shape=rectangle, style=filled, color=lightblue]
+        call38_types [TYPES="[numeric, integer]", label="TYPES: [numeric, integer]", shape=rectangle, style=filled, color=lightblue]
         aggregate_function -> STDDEV
         STDDEV -> call38_types
         call38_types -> EXIT_fun_choice
@@ -718,7 +726,7 @@ digraph G {
         STRING_AGG_arg -> call40_types
         call40_types -> EXIT_fun_choice
 
-        SUM[label="SUM\nTYPE: [numeric]", TYPES="[numeric]"]
+        SUM[label="SUM\nTYPE: [numeric, integer]", TYPES="[numeric, integer]"]
         call41_types [TYPES="[compatible]", label="TYPES: [compatible]", shape=rectangle, style=filled, color=lightblue]
         aggregate_function -> SUM
         SUM -> call41_types

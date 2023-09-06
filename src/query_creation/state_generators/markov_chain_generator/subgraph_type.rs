@@ -11,6 +11,7 @@ pub enum SubgraphType {
     /// This type is used if the type is yet to be determined
     Undetermined,
     Numeric,
+    Integer,
     Val3,
     ListExpr(Box<SubgraphType>),
     Text,
@@ -21,6 +22,7 @@ impl SubgraphType {
     pub fn from_type_name(s: &str) -> Result<Self, SyntaxError> {
         match s {
             "numeric" => Ok(SubgraphType::Numeric),
+            "integer" => Ok(SubgraphType::Integer),
             "3VL Value" => Ok(SubgraphType::Val3),
             "list expr" => Ok(SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined))),
             "text" => Ok(SubgraphType::Text),
@@ -45,7 +47,7 @@ impl SubgraphType {
 
     pub fn from_data_type(data_type: &DataType) -> Self {
         match data_type {
-            DataType::Integer(_) => Self::Numeric,  /// TODO
+            DataType::Integer(_) => Self::Integer,
             DataType::Varchar(_) => Self::Text,
             DataType::CharVarying(_) => Self::Text,
             DataType::Char(_) => Self::Text,
@@ -69,6 +71,7 @@ impl SubgraphType {
     pub fn to_data_type(&self) -> DataType {
         match self {
             SubgraphType::Numeric => DataType::Numeric(ExactNumberInfo::None),
+            SubgraphType::Integer => DataType::Integer(None),
             SubgraphType::Val3 => DataType::Boolean,
             SubgraphType::Text => DataType::Text,
             SubgraphType::Date => DataType::Date,
@@ -81,6 +84,7 @@ impl Display for SubgraphType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str = match self {
             SubgraphType::Numeric => "numeric".to_string(),
+            SubgraphType::Integer => "integer".to_string(),
             SubgraphType::Val3 => "3VL Value".to_string(),
             SubgraphType::ListExpr(inner) => format!("list expr[{}]", inner),
             SubgraphType::Text => "text".to_string(),
@@ -96,6 +100,7 @@ impl SubgraphType {
     pub fn get_compat_types(&self) -> Vec<SubgraphType> {
         let (inner_type, wrapper): (&Box<SubgraphType>, Box<dyn Fn(SubgraphType) -> SubgraphType>) = match self {
             SubgraphType::ListExpr(inner) => (inner, Box::new(|x| SubgraphType::ListExpr(Box::new(x)))),
+            SubgraphType::Numeric => return vec![SubgraphType::Numeric, SubgraphType::Integer],
             any => return vec![any.clone()],
         };
         inner_type.get_compat_types()
