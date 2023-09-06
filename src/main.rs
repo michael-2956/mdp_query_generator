@@ -11,6 +11,7 @@ use equivalence_testing::{query_creation::{
     check_query, string_to_query
 }, config::{Config, ProgramArgs, MainConfig}};
 
+use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::Statement};
 use structopt::StructOpt;
 
 fn run_generation<DynMod: DynamicModel, StC: StateChooser>(markov_generator: MarkovChainGenerator<StC>, generator_config: QueryGeneratorConfig, main_config: MainConfig) {
@@ -68,10 +69,23 @@ fn select_model_and_run_generation<StC: StateChooser>(config: Config) {
     };
 }
 
+fn run_training(config: Config) {
+    let db = std::fs::read_to_string(config.main_config.training_db_path).unwrap();
+    for statement in Parser::parse_sql(&PostgreSqlDialect {}, &db).unwrap() {
+        if let Statement::Query(query) = statement {
+            println!("{}", query);
+        }
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let program_args = ProgramArgs::from_args();
     let mut config = Config::read_config(&program_args.config_path)?;
     config.update_from_args(&program_args);
-    select_model_and_run_generation::<ProbabilisticStateChooser>(config);
+    if config.main_config.train {
+        run_training(config);
+    } else {
+        select_model_and_run_generation::<ProbabilisticStateChooser>(config);
+    }
     Ok(())
 }

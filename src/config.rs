@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, str::FromStr};
 
 use structopt::StructOpt;
 use toml::Value;
@@ -24,6 +24,8 @@ pub trait TomlReadable {
 }
 
 pub struct MainConfig {
+    pub train: bool,
+    pub training_db_path: PathBuf,
     pub num_generate: usize,
     pub count_equivalence: bool,
     pub measure_generation_time: bool,
@@ -36,6 +38,8 @@ impl TomlReadable for MainConfig {
     fn from_toml(toml_config: &toml::Value) -> Self {
         let section = &toml_config["main"];
         Self {
+            train: section["train"].as_bool().unwrap(),
+            training_db_path: PathBuf::from_str(section["training_db_path"].as_str().unwrap()).unwrap(),
             num_generate: section["num_generate"].as_integer().unwrap() as usize,
             count_equivalence: section["count_equivalence"].as_bool().unwrap(),
             measure_generation_time: section["measure_generation_time"].as_bool().unwrap(),

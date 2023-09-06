@@ -1,4 +1,8 @@
 [main]
+# Whether training mode is on
+train=true
+# path to a file with all the training queries separated by ";\n"
+training_db_path="training_dbs/all_default_queries.sql"
 # number of queries to generate
 num_generate=20
 # count the 2vl-3vl equivalent queries
