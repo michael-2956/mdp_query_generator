@@ -500,10 +500,10 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "number_literal" => {
                 let (number_type, number_str) = match self.next_state().as_str() {
                     "number_literal_numeric" => {
-                        (SubgraphType::Numeric, (self.rng.gen_range(-10000f64..=10000f64)).to_string())
+                        (SubgraphType::Numeric, (self.rng.gen_range(0f64..=10000f64)).to_string())
                     },
                     "number_literal_integer" => {
-                        (SubgraphType::Integer, self.rng.gen_range(-10000..=10000).to_string())
+                        (SubgraphType::Integer, self.rng.gen_range(0..=10000).to_string())
                     },
                     any => self.panic_unexpected(any)
                 };
