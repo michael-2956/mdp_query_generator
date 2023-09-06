@@ -220,13 +220,9 @@ impl ExpressionPriority for Expr {
                         return Expr::UnaryOp { op, expr: Box::new(Expr::Nested(expr)) }
                     }
                 }
-                if op == UnaryOperator::Minus {
-                    if let Expr::UnaryOp { op: op2, expr: _ } = *expr {
-                        if op2 == UnaryOperator::Minus {
-                            // -- is a comment in SQL.
-                            return Expr::UnaryOp { op, expr: Box::new(Expr::Nested(expr)) }
-                        }
-                    }
+                if matches!(*expr, Expr::UnaryOp { .. }) {
+                    // Postgres can't separate @ from - in @-3, and -- is a comment in SQL.
+                    return Expr::UnaryOp { op, expr: Box::new(Expr::Nested(expr)) }
                 }
                 Expr::UnaryOp { op, expr: expr.p_nest_r(parent_priority) }  // p_nest_r is because unary operations are prefix ones.
             },

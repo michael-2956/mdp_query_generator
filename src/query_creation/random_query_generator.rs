@@ -17,7 +17,7 @@ use sqlparser::ast::{
 use crate::config::TomlReadable;
 
 use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generators::{CallTypes, markov_chain_generator::subgraph_type::SubgraphType}};
-use self::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{TypesTypeValue, NumberOperationOutputType}, aggregate_function_settings::AggregateFunctionDistribution, expr_precedence::ExpressionPriority};
+use self::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::TypesTypeValue, aggregate_function_settings::AggregateFunctionDistribution, expr_precedence::ExpressionPriority};
 
 use super::state_generators::{MarkovChainGenerator, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
@@ -496,70 +496,63 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     /// subgraph def_numeric
     fn handle_number(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("number");
+        if unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList).len() == 2 {
+            todo!(
+                "The number subgraph cannot yet choose between types / perform mixed type \
+                operations / type casts. It only accepts either integer or numeric, but not both"
+            );
+        }
         let (number_type, number) = match self.next_state().as_str() {
             "number_literal" => {
                 let (number_type, number_str) = match self.next_state().as_str() {
                     "number_literal_numeric" => {
-                        (SubgraphType::Numeric, (self.rng.gen_range(0f64..=10000f64)).to_string())
+                        (SubgraphType::Numeric, (self.rng.gen_range(0f64..=10f64)).to_string())
                     },
                     "number_literal_integer" => {
-                        (SubgraphType::Integer, self.rng.gen_range(0..=10000).to_string())
+                        (SubgraphType::Integer, self.rng.gen_range(0..=10).to_string())
                     },
                     any => self.panic_unexpected(any)
                 };
                 (number_type, Expr::Value(Value::Number(number_str, false)))
             },
-            "number_determine_operation_output_type" => {
-                match self.next_state().as_str() {
-                    "number_integer" |
-                    "number_numeric" => {},
+            "BinaryNumberOp" => {
+                self.expect_state("call48_types");
+                let (number_type, types_value_1) = self.handle_types(None, None);
+                let numeric_binary_op = match self.next_state().as_str() {
+                    "binary_number_bin_and" => BinaryOperator::BitwiseAnd,
+                    "binary_number_bin_or" => BinaryOperator::BitwiseOr,
+                    "binary_number_bin_xor" => BinaryOperator::PGBitwiseXor,
+                    "binary_number_exp" => BinaryOperator::PGExp,
+                    "binary_number_div" => BinaryOperator::Divide,
+                    "binary_number_minus" => BinaryOperator::Minus,
+                    "binary_number_mul" => BinaryOperator::Multiply,
+                    "binary_number_plus" => BinaryOperator::Plus,
                     any => self.panic_unexpected(any),
                 };
-                self.expect_state("number_operation");
-                let op_number_type = self.state_generator.get_named_value::<NumberOperationOutputType>().unwrap().selected_type.clone();
-                self.state_generator.set_known_list(vec![op_number_type.clone()]);
-                match self.next_state().as_str() {
-                    "BinaryNumberOp" => {
-                        self.expect_state("call48_types");
-                        let types_value_1 = self.handle_types(Some(&[op_number_type.clone()]), None).1;
-                        let numeric_binary_op = match self.next_state().as_str() {
-                            "binary_number_bin_and" => BinaryOperator::BitwiseAnd,
-                            "binary_number_bin_or" => BinaryOperator::BitwiseOr,
-                            "binary_number_bin_xor" => BinaryOperator::PGBitwiseXor,
-                            "binary_number_exp" => BinaryOperator::PGExp,
-                            "binary_number_div" => BinaryOperator::Divide,
-                            "binary_number_minus" => BinaryOperator::Minus,
-                            "binary_number_mul" => BinaryOperator::Multiply,
-                            "binary_number_plus" => BinaryOperator::Plus,
-                            any => self.panic_unexpected(any),
-                        };
-                        self.expect_state("call47_types");
-                        let types_value_2 = self.handle_types(Some(&[op_number_type.clone()]), None).1;
-                        (op_number_type, Expr::BinaryOp {
-                            left: Box::new(types_value_1),
-                            op: numeric_binary_op,
-                            right: Box::new(types_value_2)
-                        })
-                    },
-                    "UnaryNumberOp" => {
-                        let numeric_unary_op = match self.next_state().as_str() {
-                            "unary_number_abs" => UnaryOperator::PGAbs,
-                            "unary_number_bin_not" => UnaryOperator::PGBitwiseNot,
-                            "unary_number_cub_root" => UnaryOperator::PGCubeRoot,
-                            "unary_number_minus" => UnaryOperator::Minus,
-                            "unary_number_plus" => UnaryOperator::Plus,
-                            "unary_number_sq_root" => UnaryOperator::PGSquareRoot,
-                            any => self.panic_unexpected(any),
-                        };
-                        self.expect_state("call1_types");
-                        let types_value = self.handle_types(Some(&[op_number_type.clone()]), None).1;
-                        (op_number_type, Expr::UnaryOp {
-                            op: numeric_unary_op,
-                            expr: Box::new(types_value)
-                        })
-                    },
+                self.expect_state("call47_types");
+                let types_value_2 = self.handle_types(None, None).1;
+                (number_type, Expr::BinaryOp {
+                    left: Box::new(types_value_1),
+                    op: numeric_binary_op,
+                    right: Box::new(types_value_2)
+                })
+            },
+            "UnaryNumberOp" => {
+                let numeric_unary_op = match self.next_state().as_str() {
+                    "unary_number_abs" => UnaryOperator::PGAbs,
+                    "unary_number_bin_not" => UnaryOperator::PGBitwiseNot,
+                    "unary_number_cub_root" => UnaryOperator::PGCubeRoot,
+                    "unary_number_minus" => UnaryOperator::Minus,
+                    "unary_number_plus" => UnaryOperator::Plus,
+                    "unary_number_sq_root" => UnaryOperator::PGSquareRoot,
                     any => self.panic_unexpected(any),
-                }
+                };
+                self.expect_state("call1_types");
+                let (number_type, number) = self.handle_types(None, None);
+                (number_type, Expr::UnaryOp {
+                    op: numeric_unary_op,
+                    expr: Box::new(number)
+                })
             },
             "number_string_position" => {
                 self.expect_state("call2_types");

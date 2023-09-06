@@ -18,36 +18,6 @@ pub trait NamedValue: Debug {
     fn name() -> SmolStr where Self : Sized;
 }
 
-// "number_op_out_type"
-#[derive(Debug, Clone)]
-pub struct NumberOperationOutputTypeSetter { }
-
-#[derive(Debug, Clone)]
-pub struct NumberOperationOutputType {
-    pub selected_type: SubgraphType,
-}
-
-impl NamedValue for NumberOperationOutputType {
-    fn name() -> SmolStr {
-        SmolStr::new("number_operation_output_type")
-    }
-}
-
-impl ValueSetter for NumberOperationOutputTypeSetter {
-    fn get_value_name(&self) -> SmolStr {
-        NumberOperationOutputType::name()
-    }
-
-    fn get_value(&self, _clause_context: &ClauseContext, function_context: &FunctionContext) -> Box<dyn std::any::Any> {
-        let selected_type = match function_context.current_node.node_common.name.as_str() {
-            "number_integer" => SubgraphType::Integer,
-            "number_numeric" => SubgraphType::Numeric,
-            any => panic!("{any} unexpectedly triggered the is_column_type_available call modifier affector"),
-        };
-        Box::new(NumberOperationOutputType { selected_type })
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct TypesTypeValueSetter { }
 
@@ -116,23 +86,6 @@ pub trait StatefulCallModifier: Debug {
     fn update_state(&mut self, clause_context: &ClauseContext, function_context: &FunctionContext);
 
     fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> bool;
-}
-
-#[derive(Debug, Clone)]
-pub struct WasIntegerSelectedModifier {}
-
-impl StatelessCallModifier for WasIntegerSelectedModifier {
-    fn get_name(&self) -> SmolStr {
-        SmolStr::new("was_integer_selected")
-    }
-
-    fn get_associated_value_name(&self) -> SmolStr {
-        NumberOperationOutputType::name()
-    }
-
-    fn run(&self, _clause_context: &ClauseContext, _function_context: &FunctionContext, associated_value: &Box<dyn std::any::Any>) -> bool {
-        associated_value.downcast_ref::<NumberOperationOutputType>().unwrap().selected_type == SubgraphType::Integer
-    }
 }
 
 #[derive(Debug, Clone)]

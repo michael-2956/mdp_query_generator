@@ -372,20 +372,10 @@ digraph G {
         number_literal -> number_literal_numeric
         number_literal_numeric -> EXIT_number
 
-        number_determine_operation_output_type [label="Determine output type"]
-        number -> number_determine_operation_output_type
-        number_integer [label="integer\nTYPE_NAME=integer?\nsets: number operation output type", TYPE_NAME="integer", set_value="number_operation_output_type"]
-        number_determine_operation_output_type -> number_integer
-        number_numeric [label="numeric\nTYPE_NAME=numeric?\nsets: number operation output type", TYPE_NAME="numeric", set_value="number_operation_output_type"]
-        number_determine_operation_output_type -> number_numeric
-        number_operation [label="number operation"]
-        number_integer -> number_operation
-        number_numeric -> number_operation
-
         BinaryNumberOp[label="binary op."]
-        call47_types [TYPES="[known]", MODS="[...]", label="TYPES: [known]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        number_operation -> BinaryNumberOp
-        call48_types [TYPES="[known]", MODS="[...]", label="TYPES: [known]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call47_types [TYPES="[...]", MODS="[...]", label="TYPES: [...types]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        number -> BinaryNumberOp
+        call48_types [TYPES="[...]", MODS="[...]", label="TYPES: [...types]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         BinaryNumberOp -> call48_types
         binary_number_plus [label="+"]
         call48_types -> binary_number_plus
@@ -399,41 +389,41 @@ digraph G {
         binary_number_div [label="/"]
         call48_types -> binary_number_div
         binary_number_div -> call47_types
-        binary_number_exp [label="^"]
-        call48_types -> binary_number_exp
-        binary_number_exp -> call47_types
-        binary_number_bin_or [label="|\nif(int)", call_modifier="was_integer_selected"]
+        binary_number_bin_or [label="|\ntn(int)", TYPE_NAME="integer"]
         call48_types -> binary_number_bin_or
         binary_number_bin_or -> call47_types
-        binary_number_bin_and [label="&\nif(int)", call_modifier="was_integer_selected"]
+        binary_number_bin_and [label="&\ntn(int)", TYPE_NAME="integer"]
         call48_types -> binary_number_bin_and
         binary_number_bin_and -> call47_types
-        binary_number_bin_xor [label="#\nif(int)", call_modifier="was_integer_selected"]
+        binary_number_bin_xor [label="#\ntn(int)", TYPE_NAME="integer"]
         call48_types -> binary_number_bin_xor
         binary_number_bin_xor -> call47_types
+        binary_number_exp [label="^\ntn(num)", TYPE_NAME="numeric"]
+        call48_types -> binary_number_exp
+        binary_number_exp -> call47_types
         call47_types -> EXIT_number
 
         UnaryNumberOp [label="unary op."]
-        call1_types [TYPES="[known]", MODS="[...]", label="TYPES: [known]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        number_operation -> UnaryNumberOp
+        call1_types [TYPES="[...]", MODS="[...]", label="TYPES: [...types]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        number -> UnaryNumberOp
         unary_number_plus[label="+"]
         UnaryNumberOp -> unary_number_plus
         unary_number_plus -> call1_types
         unary_number_minus[label="-"]
         UnaryNumberOp -> unary_number_minus
         unary_number_minus -> call1_types
-        unary_number_sq_root [label="|/"]
-        UnaryNumberOp -> unary_number_sq_root
-        unary_number_sq_root -> call1_types
-        unary_number_cub_root [label="||/"]
-        UnaryNumberOp -> unary_number_cub_root
-        unary_number_cub_root -> call1_types
         unary_number_abs [label="@"]
         UnaryNumberOp -> unary_number_abs
         unary_number_abs -> call1_types
-        unary_number_bin_not [label="~\nif(int)", call_modifier="was_integer_selected"]
+        unary_number_bin_not [label="~\ntn(int)", TYPE_NAME="integer"]
         UnaryNumberOp -> unary_number_bin_not
         unary_number_bin_not -> call1_types
+        // unary_number_sq_root [label="|/\ntn(num)", TYPE_NAME="numeric"]
+        // UnaryNumberOp -> unary_number_sq_root
+        // unary_number_sq_root -> call1_types
+        unary_number_cub_root [label="||/\ntn(num)", TYPE_NAME="numeric"]
+        UnaryNumberOp -> unary_number_cub_root
+        unary_number_cub_root -> call1_types
         call1_types -> EXIT_number
 
         number_string_position[label="POSITION([expr] in [expr])\nTYPE_NAME=integer?", TYPE_NAME="integer"]
