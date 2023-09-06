@@ -6,7 +6,7 @@ mod aggregate_function_settings;
 
 use std::path::PathBuf;
 
-use rand::SeedableRng;
+use rand::{SeedableRng, Rng};
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
@@ -499,16 +499,15 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         let (number_type, number) = match self.next_state().as_str() {
             "number_literal" => {
                 let (number_type, number_str) = match self.next_state().as_str() {
-                    /// TODO
                     "number_literal_numeric" => {
-                        (SubgraphType::Numeric, "3.1415")
+                        (SubgraphType::Numeric, (self.rng.gen_range(-10000f64..=10000f64)).to_string())
                     },
                     "number_literal_integer" => {
-                        (SubgraphType::Integer, "3")
+                        (SubgraphType::Integer, self.rng.gen_range(-10000..=10000).to_string())
                     },
                     any => self.panic_unexpected(any)
                 };
-                (number_type, Expr::Value(Value::Number(number_str.to_string(), false)))
+                (number_type, Expr::Value(Value::Number(number_str, false)))
             },
             "number_determine_operation_output_type" => {
                 match self.next_state().as_str() {
