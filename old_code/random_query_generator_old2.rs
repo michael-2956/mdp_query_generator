@@ -622,25 +622,25 @@ impl QueryGenerator {
 
     fn handle_numeric(&mut self, info: &mut QueryInfo) {
         match self.next_state().as_str() {
-            "numeric_literal" => self.handle_numeric_literal(info),
-            "BinaryNumericOp" => self.handle_numeric_binary(info),
-            "UnaryNumericOp" => self.handle_numeric_unary(info),
-            "numeric_string_Position" => self.handle_string_position(info),
-            "Nested_numeric" => self.handle_numeric_nested_val(info),
-            any => self.panic_unexpected(any, "numeric")
+            "number_literal" => self.handle_number_literal(info),
+            "BinaryNumberOp" => self.handle_numeric_binary(info),
+            "UnaryNumberOp" => self.handle_numeric_unary(info),
+            "number_string_position" => self.handle_string_position(info),
+            "nested_number" => self.handle_numeric_nested_val(info),
+            any => self.panic_unexpected(any, "number")
         }
     }
 
-    fn handle_numeric_literal(&mut self, info: &mut QueryInfo) {
+    fn handle_number_literal(&mut self, info: &mut QueryInfo) {
         let num_str = match self.next_state().as_str() {
-            "numeric_literal_float" => {
+            "number_literal_numeric" => {
                 "3.1415"  // TODO: hardcode
             },
-            "numeric_literal_int" => {
+            "number_literal_integer" => {
                 "3"       // TODO: hardcode
             },
             any => {
-                self.panic_unexpected(any, "numeric_literal");
+                self.panic_unexpected(any, "number_literal");
                 panic!() // compiler dumb
             }
         }.to_string();
@@ -648,41 +648,41 @@ impl QueryGenerator {
     }
 
     fn handle_numeric_binary(&mut self, _info: &mut QueryInfo) {
-        self.expect_state("call33_types", "BinaryNumericOp");
+        self.expect_state("call33_types", "BinaryNumberOp");
     }
 
     fn handle_numeric_binary_1st_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::Numeric {
-            panic!("BinaryNumericOp expected TypesSelectedType::Numeric as argument")
+            panic!("BinaryNumberOp expected TypesSelectedType::Numeric as argument")
         }
         match self.next_state().as_str() {
-            "binary_numeric_bin_and" => {
+            "binary_number_bin_and" => {
                 push_var!(info, NumericBinaryOp, BinaryOperator::BitwiseAnd);
-                self.expect_state("call32_types", "binary_numeric_bin_and")
+                self.expect_state("call32_types", "binary_number_bin_and")
             },
-            "binary_numeric_bin_or" => {
+            "binary_number_bin_or" => {
                 push_var!(info, NumericBinaryOp, BinaryOperator::BitwiseOr);
-                self.expect_state("call32_types", "binary_numeric_bin_or")
+                self.expect_state("call32_types", "binary_number_bin_or")
             },
-            "binary_numeric_bin_xor" => {
+            "binary_number_bin_xor" => {
                 push_var!(info, NumericBinaryOp, BinaryOperator::BitwiseXor);
-                self.expect_state("call32_types", "binary_numeric_bin_xor")
+                self.expect_state("call32_types", "binary_number_bin_xor")
             },
-            "binary_numeric_div" => {
+            "binary_number_div" => {
                 push_var!(info, NumericBinaryOp, BinaryOperator::Divide);
-                self.expect_state("call32_types", "binary_numeric_div")
+                self.expect_state("call32_types", "binary_number_div")
             },
-            "binary_numeric_minus" => {
+            "binary_number_minus" => {
                 push_var!(info, NumericBinaryOp, BinaryOperator::Minus);
-                self.expect_state("call32_types", "binary_numeric_minus")
+                self.expect_state("call32_types", "binary_number_minus")
             },
-            "binary_numeric_mul" => {
+            "binary_number_mul" => {
                 push_var!(info, NumericBinaryOp, BinaryOperator::Multiply);
-                self.expect_state("call32_types", "binary_numeric_mul")
+                self.expect_state("call32_types", "binary_number_mul")
             },
-            "binary_numeric_plus" => {
+            "binary_number_plus" => {
                 push_var!(info, NumericBinaryOp, BinaryOperator::Plus);
-                self.expect_state("call32_types", "binary_numeric_plus")
+                self.expect_state("call32_types", "binary_number_plus")
             },
             any => self.panic_unexpected(any, "call33_types"),
         }
@@ -690,7 +690,7 @@ impl QueryGenerator {
 
     fn handle_numeric_binary_2nd_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::Numeric {
-            panic!("BinaryNumericOp expected TypesSelectedType::Numeric as argument")
+            panic!("BinaryNumberOp expected TypesSelectedType::Numeric as argument")
         }
         let right = Box::new(pop_var!(info, TypesValue));
         let op = pop_var!(info, NumericBinaryOp);
@@ -701,37 +701,37 @@ impl QueryGenerator {
 
     fn handle_numeric_unary(&mut self, info: &mut QueryInfo) {
         match self.next_state().as_str() {
-            "unary_numeric_abs" => {
+            "unary_number_abs" => {
                 push_var!(info, NumericUnaryOp, UnaryOperator::PGAbs);
-                self.expect_state("call1_types", "unary_numeric_abs");
+                self.expect_state("call1_types", "unary_number_abs");
             },
-            "unary_numeric_bin_not" => {
+            "unary_number_bin_not" => {
                 push_var!(info, NumericUnaryOp, UnaryOperator::PGBitwiseNot);
-                self.expect_state("call1_types", "unary_numeric_bin_not");
+                self.expect_state("call1_types", "unary_number_bin_not");
             },
-            "unary_numeric_cub_root" => {
+            "unary_number_cub_root" => {
                 push_var!(info, NumericUnaryOp, UnaryOperator::PGCubeRoot);
-                self.expect_state("call1_types", "unary_numeric_cub_root");
+                self.expect_state("call1_types", "unary_number_cub_root");
             },
-            "unary_numeric_minus" => {
+            "unary_number_minus" => {
                 push_var!(info, NumericUnaryOp, UnaryOperator::Minus);
-                self.expect_state("call1_types", "unary_numeric_minus");
+                self.expect_state("call1_types", "unary_number_minus");
             },
-            "unary_numeric_plus" => {
+            "unary_number_plus" => {
                 push_var!(info, NumericUnaryOp, UnaryOperator::Plus);
-                self.expect_state("call1_types", "unary_numeric_plus");
+                self.expect_state("call1_types", "unary_number_plus");
             },
-            "unary_numeric_postfix_fact" => {
+            "unary_number_postfix_fact" => {
                 push_var!(info, NumericUnaryOp, UnaryOperator::PGPostfixFactorial);
-                self.expect_state("call1_types", "unary_numeric_postfix_fact");
+                self.expect_state("call1_types", "unary_number_postfix_fact");
             },
-            "unary_numeric_prefix_fact" => {
+            "unary_number_prefix_fact" => {
                 push_var!(info, NumericUnaryOp, UnaryOperator::PGPrefixFactorial);
-                self.expect_state("call1_types", "unary_numeric_prefix_fact");
+                self.expect_state("call1_types", "unary_number_prefix_fact");
             },
-            "unary_numeric_sq_root" => {
+            "unary_number_sq_root" => {
                 push_var!(info, NumericUnaryOp, UnaryOperator::PGSquareRoot);
-                self.expect_state("call1_types", "unary_numeric_sq_root");
+                self.expect_state("call1_types", "unary_number_sq_root");
             },
             any => self.panic_unexpected(any, "call33_types"),
         }
@@ -739,7 +739,7 @@ impl QueryGenerator {
 
     fn handle_numeric_unary_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::Numeric {
-            panic!("UnaryNumericOp expected TypesSelectedType::Numeric as argument")
+            panic!("UnaryNumberOp expected TypesSelectedType::Numeric as argument")
         }
         let op = pop_var!(info, NumericUnaryOp);
         let expr = Box::new(pop_var!(info, TypesValue));
@@ -747,12 +747,12 @@ impl QueryGenerator {
     }
 
     fn handle_string_position(&mut self, _info: &mut QueryInfo) {
-        self.expect_state("call2_types", "numeric_string_Position");
+        self.expect_state("call2_types", "number_string_position");
     }
 
     fn handle_string_position_1st_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::String {
-            panic!("numeric_string_Position expected TypesSelectedType::String as 1st argument")
+            panic!("number_string_position expected TypesSelectedType::String as 1st argument")
         }
         self.expect_state("string_position_in", "call2_types");
         self.expect_state("call3_types", "string_position_in");
@@ -760,7 +760,7 @@ impl QueryGenerator {
 
     fn handle_string_position_2nd_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::String {
-            panic!("numeric_string_Position expected TypesSelectedType::String as 2nd argument")
+            panic!("number_string_position expected TypesSelectedType::String as 2nd argument")
         }
         let right = Box::new(pop_var!(info, TypesValue));
         let left = Box::new(pop_var!(info, TypesValue));
@@ -768,12 +768,12 @@ impl QueryGenerator {
     }
 
     fn handle_numeric_nested_val(&mut self, _info: &mut QueryInfo) {
-        self.expect_state("call4_types", "Nested_numeric");
+        self.expect_state("call4_types", "nested_number");
     }
 
     fn handle_numeric_nested_val_val(&mut self, info: &mut QueryInfo) {
         if pop_var!(info, TypesSelectedType) != TypesSelectedType::Numeric {
-            panic!("Nested_numeric expected TypesSelectedType::Numeric as argument")
+            panic!("nested_number expected TypesSelectedType::Numeric as argument")
         }
         let nested = Box::new(pop_var!(info, TypesValue));
         push_var!(info, Numeric, Expr::Nested(nested));
@@ -1080,8 +1080,8 @@ impl QueryGenerator {
                 "Rcall30_types" => self.handle_unary_not_val(info),
 
                 // ===== subgraph def_numeric
-                "numeric" => self.handle_numeric(info),
-                "EXIT_numeric" => {},
+                "number" => self.handle_numeric(info),
+                "EXIT_number" => {},
                 "Rcall33_types" => self.handle_numeric_binary_1st_val(info),
                 "Rcall32_types" => self.handle_numeric_binary_2nd_val(info),
                 "Rcall1_types" => self.handle_numeric_unary_val(info),

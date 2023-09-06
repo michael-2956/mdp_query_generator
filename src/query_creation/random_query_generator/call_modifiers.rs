@@ -18,6 +18,36 @@ pub trait NamedValue: Debug {
     fn name() -> SmolStr where Self : Sized;
 }
 
+// "number_op_out_type"
+#[derive(Debug, Clone)]
+pub struct NumberOperationOutputTypeSetter { }
+
+#[derive(Debug, Clone)]
+pub struct NumberOperationOutputType {
+    pub selected_type: SubgraphType,
+}
+
+impl NamedValue for NumberOperationOutputType {
+    fn name() -> SmolStr {
+        SmolStr::new("number_operation_output_type")
+    }
+}
+
+impl ValueSetter for NumberOperationOutputTypeSetter {
+    fn get_value_name(&self) -> SmolStr {
+        NumberOperationOutputType::name()
+    }
+
+    fn get_value(&self, _clause_context: &ClauseContext, function_context: &FunctionContext) -> Box<dyn std::any::Any> {
+        let selected_type = match function_context.current_node.node_common.name.as_str() {
+            "number_integer" => SubgraphType::Integer,
+            "number_numeric" => SubgraphType::Numeric,
+            any => panic!("{any} unexpectedly triggered the is_column_type_available call modifier affector"),
+        };
+        Box::new(NumberOperationOutputType { selected_type })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TypesTypeValueSetter { }
 
@@ -73,7 +103,7 @@ pub trait StatelessCallModifier: Debug {
     fn get_associated_value_name(&self) -> SmolStr;
 
     /// Runs the modifier value based on the current value
-    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, modifier_state: &Box<dyn std::any::Any>) -> bool;
+    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, associated_value: &Box<dyn std::any::Any>) -> bool;
 }
 
 pub trait StatefulCallModifier: Debug {
@@ -89,6 +119,23 @@ pub trait StatefulCallModifier: Debug {
 }
 
 #[derive(Debug, Clone)]
+pub struct WasIntegerSelectedModifier {}
+
+impl StatelessCallModifier for WasIntegerSelectedModifier {
+    fn get_name(&self) -> SmolStr {
+        SmolStr::new("was_integer_selected")
+    }
+
+    fn get_associated_value_name(&self) -> SmolStr {
+        NumberOperationOutputType::name()
+    }
+
+    fn run(&self, _clause_context: &ClauseContext, _function_context: &FunctionContext, associated_value: &Box<dyn std::any::Any>) -> bool {
+        associated_value.downcast_ref::<NumberOperationOutputType>().unwrap().selected_type == SubgraphType::Integer
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct IsColumnTypeAvailableModifier {}
 
 impl StatelessCallModifier for IsColumnTypeAvailableModifier {
@@ -100,13 +147,13 @@ impl StatelessCallModifier for IsColumnTypeAvailableModifier {
         TypesTypeValue::name()
     }
 
-    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, modifier_state: &Box<dyn std::any::Any>) -> bool {
+    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, associated_value: &Box<dyn std::any::Any>) -> bool {
         let check_group_by = match function_context.current_node.node_common.name.as_str() {
             "call0_column_spec" => false,
             "call1_column_spec" => true,
             any => panic!("is_column_type_available call trigger unexpectedly called by {any}"),
         };
-        modifier_state.downcast_ref::<TypesTypeValue>().unwrap().selected_types.iter()
+        associated_value.downcast_ref::<TypesTypeValue>().unwrap().selected_types.iter()
             .any(|x|
                 if check_group_by {
                     clause_context

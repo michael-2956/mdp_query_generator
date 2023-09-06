@@ -299,59 +299,59 @@ impl DeterministicStateChooser {
 
 //     /// subgraph def_numeric
 //     fn process_numeric(&mut self, expr: Expr) {
-//         self.push_state("numeric");
+//         self.push_state("number");
 //         match expr {
 //             Expr::Value(Value::Number(literal, _)) => {
-//                 self.push_state("numeric_literal");
+//                 self.push_state("number_literal");
 //                 if let Ok(..) = literal.parse::<i64>() {
-//                     self.push_state("numeric_literal_int");
+//                     self.push_state("number_literal_integer");
 //                 } else if let Ok(..) = literal.parse::<f64>() {
-//                     self.push_state("numeric_literal_float");
+//                     self.push_state("number_literal_numeric");
 //                 } else {
 //                     panic_unexpected_struct!(literal);
 //                 }
 //             },
 //             Expr::BinaryOp { left, op, right } => {
-//                 self.push_states(vec!["BinaryNumericOp", "call48_types"]);
+//                 self.push_states(vec!["BinaryNumberOp", "call48_types"]);
 //                 self.process_types(Some(TypesSelectedType::Numeric), *left);
 //                 self.push_state(match op {
-//                     BinaryOperator::BitwiseAnd => "binary_numeric_bin_and",
-//                     BinaryOperator::BitwiseOr => "binary_numeric_bin_or",
-//                     BinaryOperator::PGBitwiseXor => "binary_numeric_bin_xor",  // BitwiseXor is exponentiation
-//                     BinaryOperator::Divide => "binary_numeric_div",
-//                     BinaryOperator::Minus => "binary_numeric_minus",
-//                     BinaryOperator::Multiply => "binary_numeric_mul",
-//                     BinaryOperator::Plus => "binary_numeric_plus",
+//                     BinaryOperator::BitwiseAnd => "binary_number_bin_and",
+//                     BinaryOperator::BitwiseOr => "binary_number_bin_or",
+//                     BinaryOperator::PGBitwiseXor => "binary_number_bin_xor",  // BitwiseXor is exponentiation
+//                     BinaryOperator::Divide => "binary_number_div",
+//                     BinaryOperator::Minus => "binary_number_minus",
+//                     BinaryOperator::Multiply => "binary_number_mul",
+//                     BinaryOperator::Plus => "binary_number_plus",
 //                     any => panic_unexpected_struct!(any),
 //                 });
 //                 self.push_state("call47_types");
 //                 self.process_types(Some(TypesSelectedType::Numeric), *right);
 //             },
 //             Expr::UnaryOp { op, expr } => {
-//                 self.push_states(vec!["UnaryNumericOp", match op {
-//                     UnaryOperator::PGAbs => "unary_numeric_abs",
-//                     UnaryOperator::PGBitwiseNot => "unary_numeric_bin_not",
-//                     UnaryOperator::PGCubeRoot => "unary_numeric_cub_root",
-//                     UnaryOperator::Minus => "unary_numeric_minus",
-//                     UnaryOperator::Plus => "unary_numeric_plus",
-//                     UnaryOperator::PGSquareRoot => "unary_numeric_sq_root",
+//                 self.push_states(vec!["UnaryNumberOp", match op {
+//                     UnaryOperator::PGAbs => "unary_number_abs",
+//                     UnaryOperator::PGBitwiseNot => "unary_number_bin_not",
+//                     UnaryOperator::PGCubeRoot => "unary_number_cub_root",
+//                     UnaryOperator::Minus => "unary_number_minus",
+//                     UnaryOperator::Plus => "unary_number_plus",
+//                     UnaryOperator::PGSquareRoot => "unary_number_sq_root",
 //                     any => panic_unexpected_struct!(any),
 //                 }, "call1_types"]);
 //                 self.process_types(Some(TypesSelectedType::Numeric), *expr);
 //             },
 //             Expr::Position { expr, r#in } => {
-//                 self.push_states(vec!["numeric_string_Position", "call2_types"]);
+//                 self.push_states(vec!["number_string_position", "call2_types"]);
 //                 self.process_types(Some(TypesSelectedType::String), *expr);
 //                 self.push_states(vec!["string_position_in", "call3_types"]);
 //                 self.process_types(Some(TypesSelectedType::String), *r#in);
 //             },
 //             Expr::Nested(expr) => {
-//                 self.push_states(vec!["Nested_numeric", "call4_types"]);
+//                 self.push_states(vec!["nested_number", "call4_types"]);
 //                 self.process_types(Some(TypesSelectedType::Numeric), *expr);
 //             },
 //             any => panic_unexpected_struct!(any),
 //         };
-//         self.push_state("EXIT_numeric");
+//         self.push_state("EXIT_number");
 //     }
 
 //     /// subgraph def_string

@@ -91,7 +91,7 @@ digraph G {
 
         // limit [label="limit [num]"]
         // single_value_false -> limit
-        // call52_types [TYPES="[numeric, integer]", MODS="[no column spec]", label="TYPES: numeric\nMODS: [no column spec]", shape=rectangle, style=filled, color=lightblue]
+        // call52_types [TYPES="[integer, numeric]", MODS="[no column spec]", label="TYPES: [integer, numeric]\nMODS: [no column spec]", shape=rectangle, style=filled, color=lightblue]
         // limit -> call52_types
         // call52_types -> FROM
 
@@ -133,7 +133,7 @@ digraph G {
         SELECT_DISTINCT [label="DISTINCT"]
         // SELECT_PERCENT [label="PERCENT"]
         // SELECT_TOP [label="TOP"]
-        // call43_types [TYPES="[numeric, integer]", label="TYPES: [numeric, integer]", shape=rectangle, style=filled, color=lightblue]
+        // call43_types [TYPES="[integer, numeric]", label="TYPES: [integer, numeric]", shape=rectangle, style=filled, color=lightblue]
         // SELECT_WITH_TIES [label="WITH TIES"]
         SELECT_distinct_end [label=";"]
         // SELECT_percent_end [label=";"]
@@ -359,91 +359,98 @@ digraph G {
         call30_types -> EXIT_VAL_3
     }
 
-    subgraph def_numeric {
-        numeric [shape=rectangle, label="numeric\nmods: [no column spec]", MODS="[no column spec]", style=filled, color=chocolate]
-        EXIT_numeric [label="EXIT numeric"]
+    subgraph def_number {
+        number [shape=rectangle, label="number\nmods: [no column spec]", TYPES="[integer, numeric]", MODS="[no column spec]", style=filled, color=chocolate]
+        EXIT_number [label="EXIT numeric"]
 
-        numeric_literal[label="literal", literal="t"]
-        numeric -> numeric_literal
-        numeric_literal_int[label="random int", literal="t"]
-        numeric_literal -> numeric_literal_int
-        numeric_literal_int -> EXIT_numeric
-        numeric_literal_float[label="random float", literal="t"]
-        numeric_literal -> numeric_literal_float
-        numeric_literal_float -> EXIT_numeric
+        number_literal[label="literal", literal="t"]
+        number -> number_literal
+        number_literal_integer[label="random integer\nTYPE_NAME=integer?", TYPE_NAME="integer", literal="t"]
+        number_literal -> number_literal_integer
+        number_literal_integer -> EXIT_number
+        number_literal_numeric[label="random numeric\nTYPE_NAME=numeric?", TYPE_NAME="numeric", literal="t"]
+        number_literal -> number_literal_numeric
+        number_literal_numeric -> EXIT_number
 
-        BinaryNumericOp[label="binary op."]
-        call47_types [TYPES="[numeric, integer]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        numeric -> BinaryNumericOp
-        call48_types [TYPES="[numeric, integer]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        BinaryNumericOp -> call48_types
-        binary_numeric_plus [label="+"]
-        call48_types -> binary_numeric_plus
-        binary_numeric_plus -> call47_types
-        binary_numeric_minus [label="-"]
-        call48_types -> binary_numeric_minus
-        binary_numeric_minus -> call47_types
-        binary_numeric_mul [label="*"]
-        call48_types -> binary_numeric_mul
-        binary_numeric_mul -> call47_types
-        binary_numeric_div [label="/"]
-        call48_types -> binary_numeric_div
-        binary_numeric_div -> call47_types
-        binary_numeric_bin_or [label="|"]
-        call48_types -> binary_numeric_bin_or
-        binary_numeric_bin_or -> call47_types
-        binary_numeric_bin_and [label="&"]
-        call48_types -> binary_numeric_bin_and
-        binary_numeric_bin_and -> call47_types
-        binary_numeric_bin_xor [label="^"]
-        call48_types -> binary_numeric_bin_xor
-        binary_numeric_bin_xor -> call47_types
-        call47_types -> EXIT_numeric
+        number_determine_operation_output_type [label="Determine output type"]
+        number -> number_determine_operation_output_type
+        number_integer [label="integer\nTYPE_NAME=integer?\nsets: number operation output type", TYPE_NAME="integer", set_value="number_operation_output_type"]
+        number_determine_operation_output_type -> number_integer
+        number_numeric [label="numeric\nTYPE_NAME=numeric?\nsets: number operation output type", TYPE_NAME="numeric", set_value="number_operation_output_type"]
+        number_determine_operation_output_type -> number_numeric
+        number_operation [label="number operation"]
+        number_integer -> number_operation
+        number_numeric -> number_operation
 
-        UnaryNumericOp [label="unary op."]
-        call1_types [TYPES="[numeric, integer]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        numeric -> UnaryNumericOp
-        unary_numeric_plus[label="+"]
-        UnaryNumericOp -> unary_numeric_plus
-        unary_numeric_plus -> call1_types
-        unary_numeric_minus[label="-"]
-        UnaryNumericOp -> unary_numeric_minus
-        unary_numeric_minus -> call1_types
-        unary_numeric_bin_not [label="~"]
-        UnaryNumericOp -> unary_numeric_bin_not
-        unary_numeric_bin_not -> call1_types
-        unary_numeric_sq_root [label="|/"]
-        UnaryNumericOp -> unary_numeric_sq_root
-        unary_numeric_sq_root -> call1_types
-        unary_numeric_cub_root [label="||/"]
-        UnaryNumericOp -> unary_numeric_cub_root
-        unary_numeric_cub_root -> call1_types
-        // unary_numeric_postfix_fact [label="!"]         // THESE 2 WERE REMOVED FROM POSTGRESQL
-        // UnaryNumericOp -> unary_numeric_postfix_fact
-        // unary_numeric_postfix_fact -> call1_types
-        // unary_numeric_prefix_fact [label="!!"]
-        // UnaryNumericOp -> unary_numeric_prefix_fact
-        // unary_numeric_prefix_fact -> call1_types
-        unary_numeric_abs [label="@"]
-        UnaryNumericOp -> unary_numeric_abs
-        unary_numeric_abs -> call1_types
-        call1_types -> EXIT_numeric
+        BinaryNumberOp[label="binary op."]
+        call47_types [TYPES="[known]", MODS="[...]", label="TYPES: [known]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        number_operation -> BinaryNumberOp
+        call48_types [TYPES="[known]", MODS="[...]", label="TYPES: [known]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        BinaryNumberOp -> call48_types
+        binary_number_plus [label="+"]
+        call48_types -> binary_number_plus
+        binary_number_plus -> call47_types
+        binary_number_minus [label="-"]
+        call48_types -> binary_number_minus
+        binary_number_minus -> call47_types
+        binary_number_mul [label="*"]
+        call48_types -> binary_number_mul
+        binary_number_mul -> call47_types
+        binary_number_div [label="/"]
+        call48_types -> binary_number_div
+        binary_number_div -> call47_types
+        binary_number_exp [label="^"]
+        call48_types -> binary_number_exp
+        binary_number_exp -> call47_types
+        binary_number_bin_or [label="|\nif(int)", call_modifier="was_integer_selected"]
+        call48_types -> binary_number_bin_or
+        binary_number_bin_or -> call47_types
+        binary_number_bin_and [label="&\nif(int)", call_modifier="was_integer_selected"]
+        call48_types -> binary_number_bin_and
+        binary_number_bin_and -> call47_types
+        binary_number_bin_xor [label="#\nif(int)", call_modifier="was_integer_selected"]
+        call48_types -> binary_number_bin_xor
+        binary_number_bin_xor -> call47_types
+        call47_types -> EXIT_number
 
-        numeric_string_Position[label="POSITION([expr] in [expr])"]
-        numeric -> numeric_string_Position
+        UnaryNumberOp [label="unary op."]
+        call1_types [TYPES="[known]", MODS="[...]", label="TYPES: [known]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        number_operation -> UnaryNumberOp
+        unary_number_plus[label="+"]
+        UnaryNumberOp -> unary_number_plus
+        unary_number_plus -> call1_types
+        unary_number_minus[label="-"]
+        UnaryNumberOp -> unary_number_minus
+        unary_number_minus -> call1_types
+        unary_number_sq_root [label="|/"]
+        UnaryNumberOp -> unary_number_sq_root
+        unary_number_sq_root -> call1_types
+        unary_number_cub_root [label="||/"]
+        UnaryNumberOp -> unary_number_cub_root
+        unary_number_cub_root -> call1_types
+        unary_number_abs [label="@"]
+        UnaryNumberOp -> unary_number_abs
+        unary_number_abs -> call1_types
+        unary_number_bin_not [label="~\nif(int)", call_modifier="was_integer_selected"]
+        UnaryNumberOp -> unary_number_bin_not
+        unary_number_bin_not -> call1_types
+        call1_types -> EXIT_number
+
+        number_string_position[label="POSITION([expr] in [expr])\nTYPE_NAME=integer?", TYPE_NAME="integer"]
+        number -> number_string_position
         call2_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        numeric_string_Position -> call2_types
+        number_string_position -> call2_types
         string_position_in [label="in"]
         call2_types -> string_position_in
         call3_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         string_position_in -> call3_types
-        call3_types -> EXIT_numeric
+        call3_types -> EXIT_number
 
-        Nested_numeric[label="([expr])"]
-        numeric -> Nested_numeric
-        call4_types [TYPES="[numeric, integer]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        Nested_numeric -> call4_types
-        call4_types -> EXIT_numeric
+        nested_number[label="([expr])"]
+        number -> nested_number
+        call4_types [TYPES="[...]", MODS="[...]", label="TYPES: [...types]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        nested_number -> call4_types
+        call4_types -> EXIT_number
     }
 
     subgraph def_text {
@@ -485,22 +492,18 @@ digraph G {
         text -> text_substring
         call9_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         text_substring -> call9_types
-
         text_substring_from [label="from"]
         text_substring_for [label="for"]
         call9_types -> text_substring_from
         call9_types -> text_substring_for
         text_substring_end [label="finish"]
-
-        call10_types [TYPES="[numeric, integer]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call10_types [TYPES="[integer]", MODS="[...]", label="TYPES: [integer]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         text_substring_from -> call10_types
         call10_types -> text_substring_for
         call10_types -> text_substring_end
-
-        call11_types [TYPES="[numeric, integer]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call11_types [TYPES="[integer]", MODS="[...]", label="TYPES: [integer]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         text_substring_for -> call11_types
         call11_types -> text_substring_end
-
         text_substring_end -> EXIT_text
     }
 
@@ -561,13 +564,13 @@ digraph G {
         types_select_special_expression -> call1_Query
         call1_Query -> EXIT_types
 
-        call1_numeric [label="numeric\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=chocolate]
-        types_select_type_integer -> call1_numeric
-        call1_numeric -> EXIT_types
+        call1_number [label="number\nTYPES: [integer]\nMODS: [...mods]", TYPES="[integer]", MODS="[...]", shape=rectangle, style=filled, color=chocolate]
+        types_select_type_integer -> call1_number
+        call1_number -> EXIT_types
 
-        call0_numeric [label="numeric\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=chocolate]
-        types_select_type_numeric -> call0_numeric
-        call0_numeric -> EXIT_types
+        call0_number [label="number\nTYPES: [numeric]\nMODS: [...mods]", TYPES="[numeric]", MODS="[...]", shape=rectangle, style=filled, color=chocolate]
+        types_select_type_numeric -> call0_number
+        call0_number -> EXIT_types
 
         call1_VAL_3 [label="3VL Value\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=red]
         types_select_type_3vl -> call1_VAL_3
@@ -595,20 +598,11 @@ digraph G {
         list_expr [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no column spec]", label="list expr\ntypes=[numeric, integer, 3VL Value, text, date]\nmods: [no column spec]", shape=octagon, style=filled, color=blue]
         EXIT_list_expr[label="EXIT list expr"]
 
-        call16_types [TYPE_NAME="numeric", TYPES="[numeric, integer]", label="TYPE: numeric?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call16_types [TYPES="[...]", MODS="[...]", label="TYPES: [...types]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         list_expr -> call16_types
-        call17_types [TYPE_NAME="3VL Value", TYPES="[3VL Value]", label="TYPE: 3VL Value?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
-        list_expr -> call17_types
-        call18_types [TYPE_NAME="text", TYPES="[text]", label="TYPE: text?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
-        list_expr -> call18_types
-        call62_types [TYPE_NAME="date", TYPES="[date]", label="TYPE: date?\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
-        list_expr -> call62_types
 
         list_expr_multiple_values [label="Multiple values"]
         call16_types -> list_expr_multiple_values
-        call17_types -> list_expr_multiple_values
-        call18_types -> list_expr_multiple_values
-        call62_types -> list_expr_multiple_values
 
         call49_types [TYPES="[compatible]", label="TYPES: [compatible]\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         list_expr_multiple_values -> call49_types
@@ -661,20 +655,20 @@ digraph G {
         EXIT_fun_choice -> EXIT_aggregate_function
         EXIT_fun_choice -> aggr_distinct
 
-        AVG[label="AVG\nTYPE: [numeric, integer]", TYPES="[numeric, integer]"]
+        AVG[label="AVG\nTYPE: [integer, numeric]", TYPES="[integer, numeric]"]
         call32_types [TYPES="[compatible]", label="TYPES: [compatible]", shape=rectangle, style=filled, color=lightblue]
         aggregate_function -> AVG
         AVG -> call32_types
         call32_types -> EXIT_fun_choice
         AVG -> EXIT_fun_choice
 
-        CHECKSUM_AGG[label="CHECKSUM_AGG\nTYPE: [numeric, integer]", TYPES="[numeric, integer]"]
+        CHECKSUM_AGG[label="CHECKSUM_AGG\nTYPE: [integer, numeric]", TYPES="[integer, numeric]"]
         call33_types [TYPES="[compatible]", label="TYPES: [compatible]", shape=rectangle, style=filled, color=lightblue]
         aggregate_function -> CHECKSUM_AGG
         CHECKSUM_AGG -> call33_types
         call33_types -> EXIT_fun_choice
 
-        COUNT[label="COUNT\nTYPE: [numeric, integer]", TYPES="[numeric, integer]"]
+        COUNT[label="COUNT\nTYPE: [integer, numeric]", TYPES="[integer, numeric]"]
         call34_types [TYPES="[any]", label="TYPES: ANY", shape=rectangle, style=filled, color=lightblue]
         COUNT_wildcard [label="wildcard"]
         aggregate_function -> COUNT
@@ -683,7 +677,7 @@ digraph G {
         COUNT_wildcard -> EXIT_fun_choice
         call34_types -> EXIT_fun_choice
 
-        COUNT_BIG[label="COUNT_BIG\nTYPE: [numeric, integer]", TYPES="[numeric, integer]"]
+        COUNT_BIG[label="COUNT_BIG\nTYPE: [integer, numeric]", TYPES="[integer, numeric]"]
         call35_types [TYPES="[any]", label="TYPES: ANY", shape=rectangle, style=filled, color=lightblue]
         COUNT_BIG_wildcard [label="wildcard"]
         aggregate_function -> COUNT_BIG
@@ -705,7 +699,7 @@ digraph G {
         call37_types -> EXIT_fun_choice
 
         STDDEV[label="STDDEV\nTYPE: [float]", TYPES="[float]"]
-        call38_types [TYPES="[numeric, integer]", label="TYPES: [numeric, integer]", shape=rectangle, style=filled, color=lightblue]
+        call38_types [TYPES="[integer, numeric]", label="TYPES: [integer, numeric]", shape=rectangle, style=filled, color=lightblue]
         aggregate_function -> STDDEV
         STDDEV -> call38_types
         call38_types -> EXIT_fun_choice
@@ -726,7 +720,7 @@ digraph G {
         STRING_AGG_arg -> call40_types
         call40_types -> EXIT_fun_choice
 
-        SUM[label="SUM\nTYPE: [numeric, integer]", TYPES="[numeric, integer]"]
+        SUM[label="SUM\nTYPE: [integer, numeric]", TYPES="[integer, numeric]"]
         call41_types [TYPES="[compatible]", label="TYPES: [compatible]", shape=rectangle, style=filled, color=lightblue]
         aggregate_function -> SUM
         SUM -> call41_types
@@ -775,8 +769,8 @@ digraph G {
 
     # cosmetic
     subgraph ignore {
-        EXIT_VAL_3 -> numeric [color=none]
-        EXIT_numeric -> text [color=none]
+        EXIT_VAL_3 -> number [color=none]
+        EXIT_number -> text [color=none]
         EXIT_types -> column_spec [color=none]
         EXIT_column_spec -> list_expr[color=none]
         EXIT_Query -> group_by [color=none]

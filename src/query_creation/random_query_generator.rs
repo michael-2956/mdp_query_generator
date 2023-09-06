@@ -17,7 +17,7 @@ use sqlparser::ast::{
 use crate::config::TomlReadable;
 
 use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generators::{CallTypes, markov_chain_generator::subgraph_type::SubgraphType}};
-use self::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::TypesTypeValue, aggregate_function_settings::AggregateFunctionDistribution, expr_precedence::ExpressionPriority};
+use self::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{TypesTypeValue, NumberOperationOutputType}, aggregate_function_settings::AggregateFunctionDistribution, expr_precedence::ExpressionPriority};
 
 use super::state_generators::{MarkovChainGenerator, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
@@ -122,7 +122,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                 match self.next_state().as_str() {
                     "limit" => {
                         self.expect_state("call52_types");
-                        let num = self.handle_types(Some(SubgraphType::Numeric), None).1;
+                        let num = self.handle_types(Some(&[SubgraphType::Numeric]), None).1;
                         self.expect_state("FROM");
                         Some(num)
                     },
@@ -180,7 +180,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         match self.next_state().as_str() {
             "WHERE" => {
                 self.expect_state("call53_types");
-                select_body.selection = Some(self.handle_types(Some(SubgraphType::Val3), None).1);
+                select_body.selection = Some(self.handle_types(Some(&[SubgraphType::Val3]), None).1);
                 self.expect_state("EXIT_WHERE");
             },
             "EXIT_WHERE" => {},
@@ -440,7 +440,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             },
             "BinaryStringLike" => {
                 self.expect_state("call25_types");
-                let types_value_1 = self.handle_types(Some(SubgraphType::Text), None).1;
+                let types_value_1 = self.handle_types(Some(&[SubgraphType::Text]), None).1;
                 let string_like_not_flag = match self.next_state().as_str() {
                     "BinaryStringLikeNot" => {
                         self.expect_state("BinaryStringLikeIn");
@@ -450,7 +450,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     any => self.panic_unexpected(any)
                 };
                 self.expect_state("call26_types");
-                let types_value_2 = self.handle_types(Some(SubgraphType::Text), None).1;
+                let types_value_2 = self.handle_types(Some(&[SubgraphType::Text]), None).1;
                 Expr::Like {
                     negated: string_like_not_flag,
                     expr: Box::new(types_value_1),
@@ -460,7 +460,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             },
             "BinaryBooleanOpV3" => {
                 self.expect_state("call27_types");
-                let types_value_1 = self.handle_types(Some(SubgraphType::Val3), None).1;
+                let types_value_1 = self.handle_types(Some(&[SubgraphType::Val3]), None).1;
                 let binary_bool_op = match self.next_state().as_str() {
                     "BinaryBooleanOpV3AND" => BinaryOperator::And,
                     "BinaryBooleanOpV3OR" => BinaryOperator::Or,
@@ -468,7 +468,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     any => self.panic_unexpected(any)
                 };
                 self.expect_state("call28_types");
-                let types_value_2 = self.handle_types(Some(SubgraphType::Val3), None).1;
+                let types_value_2 = self.handle_types(Some(&[SubgraphType::Val3]), None).1;
                 Expr::BinaryOp {
                     left: Box::new(types_value_1),
                     op: binary_bool_op,
@@ -479,12 +479,12 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "false" => Expr::Value(Value::Boolean(false)),
             "Nested_VAL_3" => {
                 self.expect_state("call29_types");
-                Expr::Nested(Box::new(self.handle_types(Some(SubgraphType::Val3), None).1))
+                Expr::Nested(Box::new(self.handle_types(Some(&[SubgraphType::Val3]), None).1))
             },
             "UnaryNot_VAL_3" => {
                 self.expect_state("call30_types");
                 Expr::UnaryOp { op: UnaryOperator::Not, expr: Box::new( self.handle_types(
-                    Some(SubgraphType::Val3), None
+                    Some(&[SubgraphType::Val3]), None
                 ).1) }
             },
             any => self.panic_unexpected(any)
@@ -494,80 +494,96 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     }
 
     /// subgraph def_numeric
-    fn handle_numeric(&mut self) -> (SubgraphType, Expr) {
-        self.expect_state("numeric");
-        let numeric = match self.next_state().as_str() {
-            "numeric_literal" => {
-                Expr::Value(Value::Number(match self.next_state().as_str() {
-                    "numeric_literal_float" => {
-                        "3.1415"  // TODO: hardcode
+    fn handle_number(&mut self) -> (SubgraphType, Expr) {
+        self.expect_state("number");
+        let (number_type, number) = match self.next_state().as_str() {
+            "number_literal" => {
+                let (number_type, number_str) = match self.next_state().as_str() {
+                    /// TODO
+                    "number_literal_numeric" => {
+                        (SubgraphType::Numeric, "3.1415")
                     },
-                    "numeric_literal_int" => {
-                        "3"       // TODO: hardcode
+                    "number_literal_integer" => {
+                        (SubgraphType::Integer, "3")
                     },
                     any => self.panic_unexpected(any)
-                }.to_string(), false))
+                };
+                (number_type, Expr::Value(Value::Number(number_str.to_string(), false)))
             },
-            "BinaryNumericOp" => {
-                self.expect_state("call48_types");
-                let types_value_1 = self.handle_types(Some(SubgraphType::Numeric), None).1;
-                let numeric_binary_op = match self.next_state().as_str() {
-                    "binary_numeric_bin_and" => BinaryOperator::BitwiseAnd,
-                    "binary_numeric_bin_or" => BinaryOperator::BitwiseOr,
-                    "binary_numeric_bin_xor" => BinaryOperator::PGBitwiseXor,  // BitwiseXor is exponentiation
-                    "binary_numeric_div" => BinaryOperator::Divide,
-                    "binary_numeric_minus" => BinaryOperator::Minus,
-                    "binary_numeric_mul" => BinaryOperator::Multiply,
-                    "binary_numeric_plus" => BinaryOperator::Plus,
+            "number_determine_operation_output_type" => {
+                match self.next_state().as_str() {
+                    "number_integer" |
+                    "number_numeric" => {},
                     any => self.panic_unexpected(any),
                 };
-                self.expect_state("call47_types");
-                let types_value_2 = self.handle_types(Some(SubgraphType::Numeric), None).1;
-                Expr::BinaryOp {
-                    left: Box::new(types_value_1),
-                    op: numeric_binary_op,
-                    right: Box::new(types_value_2)
-                }
-            },
-            "UnaryNumericOp" => {
-                let numeric_unary_op = match self.next_state().as_str() {
-                    "unary_numeric_abs" => UnaryOperator::PGAbs,
-                    "unary_numeric_bin_not" => UnaryOperator::PGBitwiseNot,
-                    "unary_numeric_cub_root" => UnaryOperator::PGCubeRoot,
-                    "unary_numeric_minus" => UnaryOperator::Minus,
-                    "unary_numeric_plus" => UnaryOperator::Plus,
-                    // "unary_numeric_postfix_fact" => UnaryOperator::PGPostfixFactorial,
-                    // "unary_numeric_prefix_fact" => UnaryOperator::PGPrefixFactorial,  // THESE 2 WERE REMOVED FROM POSTGRESQL
-                    "unary_numeric_sq_root" => UnaryOperator::PGSquareRoot,
+                self.expect_state("number_operation");
+                let op_number_type = self.state_generator.get_named_value::<NumberOperationOutputType>().unwrap().selected_type.clone();
+                self.state_generator.set_known_list(vec![op_number_type.clone()]);
+                match self.next_state().as_str() {
+                    "BinaryNumberOp" => {
+                        self.expect_state("call48_types");
+                        let types_value_1 = self.handle_types(Some(&[op_number_type.clone()]), None).1;
+                        let numeric_binary_op = match self.next_state().as_str() {
+                            "binary_number_bin_and" => BinaryOperator::BitwiseAnd,
+                            "binary_number_bin_or" => BinaryOperator::BitwiseOr,
+                            "binary_number_bin_xor" => BinaryOperator::PGBitwiseXor,
+                            "binary_number_exp" => BinaryOperator::PGExp,
+                            "binary_number_div" => BinaryOperator::Divide,
+                            "binary_number_minus" => BinaryOperator::Minus,
+                            "binary_number_mul" => BinaryOperator::Multiply,
+                            "binary_number_plus" => BinaryOperator::Plus,
+                            any => self.panic_unexpected(any),
+                        };
+                        self.expect_state("call47_types");
+                        let types_value_2 = self.handle_types(Some(&[op_number_type.clone()]), None).1;
+                        (op_number_type, Expr::BinaryOp {
+                            left: Box::new(types_value_1),
+                            op: numeric_binary_op,
+                            right: Box::new(types_value_2)
+                        })
+                    },
+                    "UnaryNumberOp" => {
+                        let numeric_unary_op = match self.next_state().as_str() {
+                            "unary_number_abs" => UnaryOperator::PGAbs,
+                            "unary_number_bin_not" => UnaryOperator::PGBitwiseNot,
+                            "unary_number_cub_root" => UnaryOperator::PGCubeRoot,
+                            "unary_number_minus" => UnaryOperator::Minus,
+                            "unary_number_plus" => UnaryOperator::Plus,
+                            "unary_number_sq_root" => UnaryOperator::PGSquareRoot,
+                            any => self.panic_unexpected(any),
+                        };
+                        self.expect_state("call1_types");
+                        let types_value = self.handle_types(Some(&[op_number_type.clone()]), None).1;
+                        (op_number_type, Expr::UnaryOp {
+                            op: numeric_unary_op,
+                            expr: Box::new(types_value)
+                        })
+                    },
                     any => self.panic_unexpected(any),
-                };
-                self.expect_state("call1_types");
-                let types_value = self.handle_types(Some(SubgraphType::Numeric), None).1;
-                Expr::UnaryOp {
-                    op: numeric_unary_op,
-                    expr: Box::new(types_value)
                 }
             },
-            "numeric_string_Position" => {
+            "number_string_position" => {
                 self.expect_state("call2_types");
-                let types_value_1 = self.handle_types(Some(SubgraphType::Text), None).1;
+                let types_value_1 = self.handle_types(Some(&[SubgraphType::Text]), None).1;
                 self.expect_state("string_position_in");
                 self.expect_state("call3_types");
-                let types_value_2 = self.handle_types(Some(SubgraphType::Text), None).1;
-                Expr::Position {
+                let types_value_2 = self.handle_types(Some(&[SubgraphType::Text]), None).1;
+                (SubgraphType::Integer, Expr::Position {
                     expr: Box::new(types_value_1),
                     r#in: Box::new(types_value_2)
-                }
+                })
             },
-            "Nested_numeric" => {
+            "nested_number" => {
                 self.expect_state("call4_types");
-                let types_value = self.handle_types(Some(SubgraphType::Numeric), None).1;
-                Expr::Nested(Box::new(types_value))
+                let (number_type, number) = self.handle_types(
+                    Some(&[SubgraphType::Numeric, SubgraphType::Integer]), None
+                );
+                (number_type, Expr::Nested(Box::new(number)))
             },
             any => self.panic_unexpected(any)
         };
-        self.expect_state("EXIT_numeric");
-        (SubgraphType::Numeric, numeric)
+        self.expect_state("EXIT_number");
+        (number_type, number)
     }
 
     /// subgraph def_text
@@ -578,7 +594,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             "text_trim" => {
                 let (trim_where, trim_what) = match self.next_state().as_str() {
                     "call6_types" => {
-                        let types_value = self.handle_types(Some(SubgraphType::Text), None).1;
+                        let types_value = self.handle_types(Some(&[SubgraphType::Text]), None).1;
                         let spec_mode = match self.next_state().as_str() {
                             "BOTH" => TrimWhereField::Both,
                             "LEADING" => TrimWhereField::Leading,
@@ -591,17 +607,17 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     "call5_types" => (None, None),
                     any => self.panic_unexpected(any)
                 };
-                let types_value = self.handle_types(Some(SubgraphType::Text), None).1;
+                let types_value = self.handle_types(Some(&[SubgraphType::Text]), None).1;
                 Expr::Trim {
                     expr: Box::new(types_value), trim_where, trim_what
                 }
             },
             "text_concat" => {
                 self.expect_state("call7_types");
-                let types_value_1 = self.handle_types(Some(SubgraphType::Text), None).1;
+                let types_value_1 = self.handle_types(Some(&[SubgraphType::Text]), None).1;
                 self.expect_state("text_concat_concat");
                 self.expect_state("call8_types");
-                let types_value_2 = self.handle_types(Some(SubgraphType::Text), None).1;
+                let types_value_2 = self.handle_types(Some(&[SubgraphType::Text]), None).1;
                 Expr::BinaryOp {
                     left: Box::new(types_value_1),
                     op: BinaryOperator::StringConcat,
@@ -610,18 +626,18 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             },
             "text_substring" => {
                 self.expect_state("call9_types");
-                let target_string = self.handle_types(Some(SubgraphType::Text), None).1;
+                let target_string = self.handle_types(Some(&[SubgraphType::Text]), None).1;
                 let mut substring_from = None;
                 let mut substring_for = None;
                 loop {
                     match self.next_state().as_str() {
                         "text_substring_from" => {
                             self.expect_state("call10_types");
-                            substring_from = Some(Box::new(self.handle_types(Some(SubgraphType::Numeric), None).1));
+                            substring_from = Some(Box::new(self.handle_types(Some(&[SubgraphType::Integer]), None).1));
                         },
                         "text_substring_for" => {
                             self.expect_state("call11_types");
-                            substring_for = Some(Box::new(self.handle_types(Some(SubgraphType::Numeric), None).1));
+                            substring_for = Some(Box::new(self.handle_types(Some(&[SubgraphType::Integer]), None).1));
                             self.expect_state("text_substring_end");
                             break;
                         },
@@ -655,7 +671,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
 
     /// subgraph def_types
     fn handle_types(
-        &mut self, check_generated_by: Option<SubgraphType>, check_compatible_with: Option<SubgraphType>
+        &mut self, check_generated_by_one_of: Option<&[SubgraphType]>, check_compatible_with: Option<SubgraphType>
     ) -> (SubgraphType, Expr) {
         self.expect_state("types");
         match self.next_state().as_str() {
@@ -711,8 +727,8 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     any => self.panic_unexpected(any)
                 }
             },
-            "call1_numeric" => self.handle_numeric(),
-            "call0_numeric" => self.handle_numeric(),
+            "call1_number" => self.handle_number(),
+            "call0_number" => self.handle_number(),
             "call1_VAL_3" => self.handle_val_3(),
             "call0_text" => self.handle_text(),
             "call0_date" => self.handle_date(),
@@ -720,10 +736,10 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         };
         self.expect_state("EXIT_types");
 
-        if let Some(as_what) = check_generated_by {
-            if !selected_type.is_same_or_more_determined_or_undetermined(&as_what) {
+        if let Some(generators) = check_generated_by_one_of {
+            if !generators.iter().any(|as_what| selected_type.is_same_or_more_determined_or_undetermined(&as_what)) {
                 self.state_generator.print_stack();
-                panic!("Unexpected type: expected {:?}, got {:?}", as_what, selected_type);
+                panic!("Unexpected type: expected one of {:?}, got {:?}", generators, selected_type);
             }
         }
         if let Some(with) = check_compatible_with {
@@ -749,14 +765,8 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     /// subgraph def_list_expr
     fn handle_list_expr(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("list_expr");
-        let inner_type = match self.next_state().as_str() {
-            "call16_types" => SubgraphType::Numeric,
-            "call17_types" => SubgraphType::Val3,
-            "call18_types" => SubgraphType::Text,
-            "call62_types" => SubgraphType::Date,
-            any => self.panic_unexpected(any)
-        };
-        let (inner_type, types_value) = self.handle_types(Some(inner_type.clone()), None);
+        self.expect_state("call16_types");
+        let (inner_type, types_value) = self.handle_types(None, None);
         match self.next_state().as_str() {
             "list_expr_multiple_values" => {
                 self.state_generator.set_compatible_list(inner_type.get_compat_types());
