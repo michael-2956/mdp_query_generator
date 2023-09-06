@@ -9,9 +9,8 @@ use equivalence_testing::{query_creation::{
     },
 }, equivalence_testing_function::{
     check_query, string_to_query
-}, config::{Config, ProgramArgs, MainConfig}};
+}, config::{Config, ProgramArgs, MainConfig}, training::ast_to_path::AstToPathConverter};
 
-use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::Statement};
 use structopt::StructOpt;
 
 fn run_generation<DynMod: DynamicModel, StC: StateChooser>(markov_generator: MarkovChainGenerator<StC>, generator_config: QueryGeneratorConfig, main_config: MainConfig) {
@@ -70,12 +69,8 @@ fn select_model_and_run_generation<StC: StateChooser>(config: Config) {
 }
 
 fn run_training(config: Config) {
-    let db = std::fs::read_to_string(config.main_config.training_db_path).unwrap();
-    for statement in Parser::parse_sql(&PostgreSqlDialect {}, &db).unwrap() {
-        if let Statement::Query(query) = statement {
-            println!("{}", query);
-        }
-    }
+    let ast_to_path = AstToPathConverter::with_config(config.training_config);
+    println!("{:#?}", ast_to_path.get_paths())
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

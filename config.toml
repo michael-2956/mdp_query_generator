@@ -1,8 +1,6 @@
 [main]
 # Whether training mode is on
 train=true
-# path to a file with all the training queries separated by ";\n"
-training_db_path="training_dbs/all_default_queries.sql"
 # number of queries to generate
 num_generate=20
 # count the 2vl-3vl equivalent queries
@@ -17,6 +15,12 @@ assert_parcing_equivalence=true
 assert_runs_on_schema=false
 # Pring how many queries were already generated
 print_progress=true
+
+[training]
+# path to a file with all the training queries separated by ";\n"
+training_db_path="training_dbs/all_default_queries.sql"
+# schema of the training queries
+training_schema="schema/tpc-h_tables.sql"
 
 [query_generator]
 # print the queries on generation

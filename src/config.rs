@@ -1,9 +1,9 @@
-use std::{path::PathBuf, str::FromStr};
+use std::path::PathBuf;
 
 use structopt::StructOpt;
 use toml::Value;
 
-use crate::query_creation::{random_query_generator::QueryGeneratorConfig, state_generators::markov_chain_generator::StateGeneratorConfig};
+use crate::{query_creation::{random_query_generator::QueryGeneratorConfig, state_generators::markov_chain_generator::StateGeneratorConfig}, training::ast_to_path::TrainingConfig};
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "basic")]
@@ -25,7 +25,6 @@ pub trait TomlReadable {
 
 pub struct MainConfig {
     pub train: bool,
-    pub training_db_path: PathBuf,
     pub num_generate: usize,
     pub count_equivalence: bool,
     pub measure_generation_time: bool,
@@ -39,7 +38,6 @@ impl TomlReadable for MainConfig {
         let section = &toml_config["main"];
         Self {
             train: section["train"].as_bool().unwrap(),
-            training_db_path: PathBuf::from_str(section["training_db_path"].as_str().unwrap()).unwrap(),
             num_generate: section["num_generate"].as_integer().unwrap() as usize,
             count_equivalence: section["count_equivalence"].as_bool().unwrap(),
             measure_generation_time: section["measure_generation_time"].as_bool().unwrap(),
@@ -54,6 +52,7 @@ pub struct Config {
     pub main_config: MainConfig,
     pub generator_config: QueryGeneratorConfig,
     pub chain_config: StateGeneratorConfig,
+    pub training_config: TrainingConfig,
 }
 
 fn read_toml_config(config_path: &PathBuf) -> Result<Value, Box<dyn std::error::Error>> {
@@ -68,6 +67,7 @@ impl Config {
             main_config: MainConfig::from_toml(&toml_config),
             generator_config: QueryGeneratorConfig::from_toml(&toml_config),
             chain_config: StateGeneratorConfig::from_toml(&toml_config),
+            training_config: TrainingConfig::from_toml(&toml_config),
         })
     }
 
