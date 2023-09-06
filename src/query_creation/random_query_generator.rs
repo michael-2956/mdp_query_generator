@@ -608,6 +608,33 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     right: Box::new(types_value_2)
                 }
             },
+            "text_substring" => {
+                self.expect_state("call9_types");
+                let target_string = self.handle_types(Some(SubgraphType::Text), None).1;
+                let mut substring_from = None;
+                let mut substring_for = None;
+                loop {
+                    match self.next_state().as_str() {
+                        "text_substring_from" => {
+                            self.expect_state("call10_types");
+                            substring_from = Some(Box::new(self.handle_types(Some(SubgraphType::Numeric), None).1));
+                        },
+                        "text_substring_for" => {
+                            self.expect_state("call11_types");
+                            substring_for = Some(Box::new(self.handle_types(Some(SubgraphType::Numeric), None).1));
+                            self.expect_state("text_substring_end");
+                            break;
+                        },
+                        "text_substring_end" => break,
+                        any => self.panic_unexpected(any),
+                    }
+                }
+                Expr::Substring {
+                    expr: Box::new(target_string),
+                    substring_from,
+                    substring_for,
+                }
+            },
             any => self.panic_unexpected(any)
         };
         self.expect_state("EXIT_text");

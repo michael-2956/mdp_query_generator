@@ -481,20 +481,27 @@ digraph G {
         text_concat_concat -> call8_types
         call8_types -> EXIT_text
 
-        // text_substring[label="substring"]
-        // text -> text_substring
-        // call9_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        // text_substring -> call9_types
-        // text_substr_numeric_from_from[label="from"]
-        // call9_types -> text_substr_numeric_from_from
-        // call10_types [TYPES="[numeric]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        // text_substr_numeric_from_from -> call10_types
-        // call10_types -> EXIT_text
-        // text_substr_numeric_len_len [label="length"]
-        // call10_types -> text_substr_numeric_len_len
-        // call11_types [TYPES="[numeric]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        // text_substr_numeric_len_len -> call11_types
-        // call11_types -> EXIT_text
+        text_substring[label="substring"]
+        text -> text_substring
+        call9_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        text_substring -> call9_types
+
+        text_substring_from [label="from"]
+        text_substring_for [label="for"]
+        call9_types -> text_substring_from
+        call9_types -> text_substring_for
+        text_substring_end [label="finish"]
+
+        call10_types [TYPES="[numeric]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        text_substring_from -> call10_types
+        call10_types -> text_substring_for
+        call10_types -> text_substring_end
+
+        call11_types [TYPES="[numeric]", MODS="[...]", label="TYPES: numeric\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        text_substring_for -> call11_types
+        call11_types -> text_substring_end
+
+        text_substring_end -> EXIT_text
     }
 
     subgraph def_date {

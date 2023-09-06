@@ -1159,8 +1159,8 @@ impl QueryGenerator {
 "call2_list_expr" => {},
 
 "numericRight" => {},
-"text_substr_numeric_from_from" => {},
-"text_substr_numeric_len_len" => {},
+"text_substring_from" => {},
+"text_substring_for" => {},
 "text_substring" => {},
 */
 
