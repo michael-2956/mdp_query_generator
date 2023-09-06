@@ -70,7 +70,7 @@ fn select_model_and_run_generation<StC: StateChooser>(config: Config) {
 
 fn run_training(config: Config) {
     let ast_to_path = AstToPathConverter::with_config(config.training_config);
-    println!("{:#?}", ast_to_path.get_paths())
+    println!("{:#?}", ast_to_path.get_paths().unwrap())
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

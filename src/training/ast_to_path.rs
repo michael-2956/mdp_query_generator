@@ -1,4 +1,4 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{path::PathBuf, str::FromStr, error::Error, fmt};
 
 use smol_str::SmolStr;
 use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query}};
@@ -38,9 +38,39 @@ impl AstToPathConverter {
         }
     }
 
-    pub fn get_paths(&self) -> Vec<Vec<SmolStr>> {
+    pub fn get_paths(&self) -> Result<Vec<Vec<SmolStr>>, ConvertionError> {
         println!("{}", self.database_schema);
-        println!("{}", self.query_asts[0]);
-        vec![]
+        let mut paths = Vec::<_>::new();
+        for query in self.query_asts.iter() {
+            println!("Converting query {}", query);
+            paths.push(self.handle_query(query)?);
+        }
+        Ok(paths)
+    }
+}
+
+#[derive(Debug)]
+pub struct ConvertionError {
+    reason: String,
+}
+
+impl Error for ConvertionError { }
+
+impl fmt::Display for ConvertionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Error: {}", self.reason)
+    }
+}
+
+impl ConvertionError {
+    fn new(reason: String) -> Self {
+        Self { reason }
+    }
+}
+
+impl AstToPathConverter {
+    fn handle_query(&self, _query: &Box<Query>) -> Result<Vec<SmolStr>, ConvertionError> {
+        // TODO: convert query here
+        Err(ConvertionError::new(format!("Query to path convertion not yet implemented")))
     }
 }
