@@ -18,7 +18,7 @@ print_progress=true
 
 [training]
 # path to a file with all the training queries separated by ";\n"
-training_db_path="training_dbs/all_default_queries.sql"
+training_db_path="training_dbs/untrained_db.sql"
 # schema of the training queries
 training_schema="schema/tpc-h_tables.sql"
 

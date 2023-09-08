@@ -2,8 +2,8 @@ pub mod state_choosers;
 pub mod dynamic_models;
 pub mod markov_chain;
 pub mod subgraph_type;
+pub mod error;
 mod dot_parser;
-mod error;
 
 use std::{path::PathBuf, collections::{HashMap, HashSet, VecDeque, BTreeMap}, sync::{Arc, Mutex}};
 
@@ -417,8 +417,8 @@ impl CallModifierStates {
 }
 
 impl<StC: StateChooser> MarkovChainGenerator<StC> {
-    pub fn with_config(config: StateGeneratorConfig) -> Result<Self, SyntaxError> {
-        let chain = MarkovChain::parse_dot(config.graph_file_path)?;
+    pub fn with_config(config: &StateGeneratorConfig) -> Result<Self, SyntaxError> {
+        let chain = MarkovChain::parse_dot(&config.graph_file_path)?;
         let mut _self = MarkovChainGenerator::<StC> {
             markov_chain: chain,
             call_stack: vec![],

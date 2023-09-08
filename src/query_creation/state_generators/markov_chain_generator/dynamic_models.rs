@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use smol_str::SmolStr;
 
 use super::markov_chain::NodeParams;
@@ -27,6 +29,40 @@ impl DynamicModel for MarkovModel {
     }
     fn assign_log_probabilities(&mut self, node_outgoing: Vec<(bool, f64, NodeParams)>) -> Vec::<(bool, f64, NodeParams)> {
         node_outgoing
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DeterministicModel {
+    states_to_choose: VecDeque<SmolStr>,
+}
+
+impl DeterministicModel {
+    pub fn push_state(&mut self, state: SmolStr) {
+        self.states_to_choose.push_back(state);
+    }
+}
+
+impl DynamicModel for DeterministicModel {
+    fn new() -> Self where Self: Sized {
+        Self {
+            states_to_choose: VecDeque::new(),
+        }
+    }
+
+    fn assign_log_probabilities(&mut self, node_outgoing: Vec<(bool, f64, NodeParams)>) -> Vec::<(bool, f64, NodeParams)> {
+        let node_name = self.states_to_choose.pop_front().unwrap();
+        node_outgoing.iter().map(
+            |(on, _, node)| (
+                *on,
+                if node.node_common.name == node_name {
+                    1f64
+                } else {
+                    0f64
+                },
+                node.clone(),
+            )
+        ).collect()
     }
 }
 

@@ -9,7 +9,7 @@ use equivalence_testing::{query_creation::{
     },
 }, equivalence_testing_function::{
     check_query, string_to_query
-}, config::{Config, ProgramArgs, MainConfig}, training::ast_to_path::AstToPathConverter};
+}, config::{Config, ProgramArgs, MainConfig}, training::ast_to_path::SQLTrainer};
 
 use structopt::StructOpt;
 
@@ -53,7 +53,7 @@ fn run_generation<DynMod: DynamicModel, StC: StateChooser>(markov_generator: Mar
 }
 
 fn select_model_and_run_generation<StC: StateChooser>(config: Config) {
-    let markov_generator = match MarkovChainGenerator::<StC>::with_config(config.chain_config) {
+    let markov_generator = match MarkovChainGenerator::<StC>::with_config(&config.chain_config) {
         Ok(generator) => generator,
         Err(err) => {
             println!("{}", err);
@@ -69,8 +69,17 @@ fn select_model_and_run_generation<StC: StateChooser>(config: Config) {
 }
 
 fn run_training(config: Config) {
-    let ast_to_path = AstToPathConverter::with_config(config.training_config);
-    println!("{:#?}", ast_to_path.get_paths().unwrap())
+    let mut sql_trainer = match SQLTrainer::with_config(config.training_config, &config.chain_config) {
+        Ok(trainer) => trainer,
+        Err(err) => {
+            println!("{}", err);
+            return;
+        },
+    };
+    match sql_trainer.train() {
+        Ok(paths) => println!("{:#?}", paths),
+        Err(err) => println!("\n{err}"),
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
