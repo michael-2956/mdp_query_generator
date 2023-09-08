@@ -5,7 +5,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query, ObjectName, Expr}};
 
-use crate::{query_creation::{random_query_generator::query_info::{DatabaseSchema, ClauseContext}, state_generators::{subgraph_type::SubgraphType, state_choosers::MaxProbStateChooser, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::CallModifiers}, dynamic_models::{DeterministicModel, DynamicModel}}}, config::TomlReadable, unwrap_variant};
+use crate::{query_creation::{random_query_generator::query_info::{DatabaseSchema, ClauseContext}, state_generators::{subgraph_type::SubgraphType, state_choosers::MaxProbStateChooser, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::CallModifiers}, dynamic_models::{DeterministicModel, DynamicModel}}}, config::TomlReadable};
 
 pub struct SQLTrainer {
     query_asts: Vec<Box<Query>>,
@@ -125,20 +125,19 @@ impl PathGenerator {
         self.clause_context.on_query_begin();
         self.push_state("Query");
 
-        if unwrap_variant!(
-            self.state_generator.get_fn_modifiers(), CallModifiers::StaticList
-        ).contains(&SmolStr::new("single row")) {
-            self.push_state("single_value_true");
-        } else {
-            self.push_state("single_value_false");
-            if let Some(ref limit) = query.limit {
-                self.push_states(&["limit", "call52_types"]);
-                self.handle_types(limit, Some(&[SubgraphType::Numeric]), None)?;
+        match self.state_generator.get_fn_modifiers() {
+            CallModifiers::StaticList(list) if list.contains(&SmolStr::new("single row")) => {
+                self.push_state("single_value_true");
+            }
+            _ => {
+                self.push_state("single_value_false");
+                if let Some(ref limit) = query.limit {
+                    self.push_states(&["limit", "call52_types"]);
+                    self.handle_types(limit, Some(&[SubgraphType::Numeric]), None)?;
+                }
             }
         }
         self.push_state("FROM");
-
-        
 
         return Err(ConvertionError::new(format!("subgraph def_query not yet implemented")))
     }
