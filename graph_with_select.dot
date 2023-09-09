@@ -81,16 +81,16 @@ digraph G {
 
         FROM []
 
-        single_value_true [label="limit 1 (ON: 'single row')", modifier="single row", modifier_mode="on"]
-        Query -> single_value_true
-        single_value_true -> FROM
+        single_row_true [label="limit 1 (ON: 'single row')", modifier="single row", modifier_mode="on"]
+        Query -> single_row_true
+        single_row_true -> FROM
 
-        single_value_false [label="OFF: 'single row'", modifier="single row", modifier_mode="off"]
-        Query -> single_value_false
-        single_value_false -> FROM
+        single_row_false [label="OFF: 'single row'", modifier="single row", modifier_mode="off"]
+        Query -> single_row_false
+        single_row_false -> FROM
 
         limit [label="limit [num]"]
-        single_value_false -> limit
+        single_row_false -> limit
         call52_types [TYPES="[integer, numeric]", MODS="[no column spec]", label="TYPES: [integer, numeric]\nMODS: [no column spec]", shape=rectangle, style=filled, color=lightblue]
         limit -> call52_types
         call52_types -> FROM

@@ -114,11 +114,11 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         self.expect_state("Query");
 
         let select_limit = match self.next_state().as_str() {
-            "single_value_true" => {
+            "single_row_true" => {
                 self.expect_state("FROM");
                 Some(Expr::Value(Value::Number("1".to_string(), false)))
             },
-            "single_value_false" => {
+            "single_row_false" => {
                 match self.next_state().as_str() {
                     "limit" => {
                         self.expect_state("call52_types");

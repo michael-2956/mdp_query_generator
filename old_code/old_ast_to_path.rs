@@ -36,13 +36,13 @@ impl DeterministicStateChooser {
         match query.limit {
             Some(limit) => {
                 if limit == Expr::Value(Value::Number("1".to_string(), false)) {
-                    self.push_state("single_value_true");
+                    self.push_state("single_row_true");
                 } else {
-                    self.push_states(vec!["single_value_false", "call52_types"]);
+                    self.push_states(vec!["single_row_false", "call52_types"]);
                     self.process_types(Some(TypesSelectedType::Numeric), limit);
                 }
             },
-            None => self.push_state("single_value_false"),
+            None => self.push_state("single_row_false"),
         };
         self.push_state("FROM");
 

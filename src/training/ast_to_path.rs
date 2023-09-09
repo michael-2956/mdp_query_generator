@@ -3,7 +3,7 @@ use std::{path::PathBuf, str::FromStr, error::Error, fmt};
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
-use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query, ObjectName, Expr, SetExpr, SelectItem}};
+use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query, ObjectName, Expr, SetExpr, SelectItem, Value}};
 
 use crate::{query_creation::{random_query_generator::query_info::{DatabaseSchema, ClauseContext}, state_generators::{subgraph_type::SubgraphType, state_choosers::MaxProbStateChooser, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::CallModifiers}, dynamic_models::{DeterministicModel, DynamicModel}}}, config::TomlReadable, unwrap_variant};
 
@@ -147,10 +147,15 @@ impl PathGenerator {
 
         match self.state_generator.get_fn_modifiers() {
             CallModifiers::StaticList(list) if list.contains(&SmolStr::new("single row")) => {
-                self.push_state("single_value_true");
+                if query.limit != Some(Expr::Value(Value::Number("1".to_string(), false))) {
+                    return Err(ConvertionError::new(format!(
+                        "Expected query to have \"LIMIT 1\" because of \'single row\', got {:#?}", query.limit
+                    )))
+                }
+                self.push_state("single_row_true");
             }
             _ => {
-                self.push_state("single_value_false");
+                self.push_state("single_row_false");
                 if let Some(ref limit) = query.limit {
                     self.push_states(&["limit", "call52_types"]);
                     self.handle_types(limit, Some(&[SubgraphType::Numeric]), None)?;
