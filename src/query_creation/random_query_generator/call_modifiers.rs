@@ -6,20 +6,9 @@ use crate::{query_creation::state_generators::{CallTypes, markov_chain_generator
 
 use super::query_info::ClauseContext;
 
-pub trait ValueSetter: Debug {
-    /// returns value name
-    fn get_value_name(&self) -> SmolStr;
-
-    /// get the value in given context
-    fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> Box<dyn std::any::Any>;
-}
-
 pub trait NamedValue: Debug {
     fn name() -> SmolStr where Self : Sized;
 }
-
-#[derive(Debug, Clone)]
-pub struct TypesTypeValueSetter { }
 
 #[derive(Debug, Clone)]
 pub struct TypesTypeValue {
@@ -32,12 +21,36 @@ impl NamedValue for TypesTypeValue {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum ValueSetterValue {
+    TypesTypeValue(TypesTypeValue),
+}
+
+impl ValueSetterValue {
+    pub fn name(&self) -> SmolStr {
+        match self {
+            ValueSetterValue::TypesTypeValue { .. } => TypesTypeValue::name(),
+        }
+    }
+}
+
+pub trait ValueSetter: Debug {
+    /// returns value name
+    fn get_value_name(&self) -> SmolStr;
+
+    /// get the value in given context
+    fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue;
+}
+
+#[derive(Debug, Clone)]
+pub struct TypesTypeValueSetter { }
+
 impl ValueSetter for TypesTypeValueSetter {
     fn get_value_name(&self) -> SmolStr {
         TypesTypeValue::name()
     }
 
-    fn get_value(&self, _clause_context: &ClauseContext, function_context: &FunctionContext) -> Box<dyn std::any::Any> {
+    fn get_value(&self, _clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
         let selected_type = match function_context.current_node.node_common.name.as_str() {
             "types_select_type_integer" => SubgraphType::Integer,
             "types_select_type_numeric" => SubgraphType::Numeric,
@@ -58,7 +71,7 @@ impl ValueSetter for TypesTypeValueSetter {
             any => vec![any]
         };
 
-        Box::new(TypesTypeValue {
+        ValueSetterValue::TypesTypeValue(TypesTypeValue {
             selected_types: allowed_type_list
         })
     }
@@ -73,7 +86,7 @@ pub trait StatelessCallModifier: Debug {
     fn get_associated_value_name(&self) -> SmolStr;
 
     /// Runs the modifier value based on the current value
-    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, associated_value: &Box<dyn std::any::Any>) -> bool;
+    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, associated_value: &ValueSetterValue) -> bool;
 }
 
 pub trait StatefulCallModifier: Debug {
@@ -100,13 +113,14 @@ impl StatelessCallModifier for IsColumnTypeAvailableModifier {
         TypesTypeValue::name()
     }
 
-    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, associated_value: &Box<dyn std::any::Any>) -> bool {
+    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, associated_value: &ValueSetterValue) -> bool {
         let check_group_by = match function_context.current_node.node_common.name.as_str() {
             "call0_column_spec" => false,
             "call1_column_spec" => true,
             any => panic!("is_column_type_available call trigger unexpectedly called by {any}"),
         };
-        associated_value.downcast_ref::<TypesTypeValue>().unwrap().selected_types.iter()
+        let ValueSetterValue::TypesTypeValue(associated_value) = associated_value;
+        associated_value.selected_types.iter()
             .any(|x|
                 if check_group_by {
                     clause_context

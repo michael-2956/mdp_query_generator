@@ -13,7 +13,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use take_until::TakeUntilExt;
 
-use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_generator::markov_chain::FunctionTypes, random_query_generator::{query_info::ClauseContext, call_modifiers::{StatelessCallModifier, StatefulCallModifier, IsColumnTypeAvailableModifier, TypesTypeValueSetter, ValueSetter, NamedValue}}}, config::TomlReadable};
+use crate::{unwrap_variant, query_creation::{state_generators::markov_chain_generator::markov_chain::FunctionTypes, random_query_generator::{query_info::ClauseContext, call_modifiers::{StatelessCallModifier, StatefulCallModifier, IsColumnTypeAvailableModifier, TypesTypeValueSetter, ValueSetter, NamedValue, ValueSetterValue}}}, config::TomlReadable};
 
 use self::{
     markov_chain::{
@@ -300,7 +300,7 @@ impl FunctionContext {
 struct CallModifierInfo {
     call_modifier_states: CallModifierStates,
     /// the call modifier inner state memory
-    values: HashMap<SmolStr, Box<dyn std::any::Any>>,
+    values: HashMap<SmolStr, ValueSetterValue>,
     /// call modifier configuration: How each STATELESS call modifier
     /// affector node affects every node with a call modifier (STATELESS)
     stateless_node_relations: BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>,
@@ -461,10 +461,8 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         }).collect();
     }
 
-    pub fn get_named_value<T: NamedValue + 'static>(&self) -> Option<&T> {
-        self.call_stack.last().unwrap().call_modifier_info.values.get(&T::name()).map(
-            |named_value| named_value.downcast_ref::<T>().unwrap()
-        )
+    pub fn get_named_value<T: NamedValue + 'static>(&self) -> Option<&ValueSetterValue> {
+        self.call_stack.last().unwrap().call_modifier_info.values.get(&T::name())
     }
 
     /// used to print the call stack of the markov chain functions

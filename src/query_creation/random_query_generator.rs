@@ -17,7 +17,7 @@ use sqlparser::ast::{
 use crate::config::TomlReadable;
 
 use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generators::{CallTypes, markov_chain_generator::subgraph_type::SubgraphType}};
-use self::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::TypesTypeValue, aggregate_function_settings::AggregateFunctionDistribution, expr_precedence::ExpressionPriority};
+use self::{query_info::{DatabaseSchema, ClauseContext}, aggregate_function_settings::AggregateFunctionDistribution, expr_precedence::ExpressionPriority, call_modifiers::{TypesTypeValue, ValueSetterValue}};
 
 use super::state_generators::{MarkovChainGenerator, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
@@ -337,7 +337,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                 self.expect_state("call1_list_expr");
                 Expr::InList {
                     expr: Box::new(types_value),
-                    list: unwrap_variant!(self.handle_list_expr().1, Expr::Tuple),
+                    list: self.handle_list_expr().1,
                     negated: in_list_not_flag
                 }
             },
@@ -673,8 +673,8 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
             any => self.panic_unexpected(any),
         };
 
-        let allowed_type_list = self.state_generator
-            .get_named_value::<TypesTypeValue>().unwrap().selected_types.clone();
+        let ValueSetterValue::TypesTypeValue(allowed_type_list) = self.state_generator.get_named_value::<TypesTypeValue>().unwrap();
+        let allowed_type_list = allowed_type_list.selected_types.clone();
 
         let (selected_type, types_value) = match self.next_state().as_str() {
             "types_return_typed_null" => {
@@ -750,7 +750,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     }
 
     /// subgraph def_list_expr
-    fn handle_list_expr(&mut self) -> (SubgraphType, Expr) {
+    fn handle_list_expr(&mut self) -> (SubgraphType, Vec<Expr>) {
         self.expect_state("list_expr");
         self.expect_state("call16_types");
         let (inner_type, types_value) = self.handle_types(None, None);
@@ -767,7 +767,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                         any => self.panic_unexpected(any)
                     }
                 }
-                (SubgraphType::ListExpr(Box::new(inner_type)), Expr::Tuple(list_expr))
+                (SubgraphType::ListExpr(Box::new(inner_type)), list_expr)
             }
             any => self.panic_unexpected(any)
         }
