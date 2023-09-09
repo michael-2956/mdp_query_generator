@@ -3,7 +3,7 @@ use std::{path::PathBuf, str::FromStr, error::Error, fmt};
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
-use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query, ObjectName, Expr, SetExpr, SelectItem, Value}};
+use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query, ObjectName, Expr, SetExpr, SelectItem, Value, BinaryOperator}};
 
 use crate::{query_creation::{random_query_generator::query_info::{DatabaseSchema, ClauseContext}, state_generators::{subgraph_type::SubgraphType, state_choosers::MaxProbStateChooser, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::CallModifiers}, dynamic_models::{DeterministicModel, DynamicModel}}}, config::TomlReadable, unwrap_variant};
 
@@ -259,6 +259,161 @@ impl PathGenerator {
         return Ok(column_idents_and_graph_types)
     }
 
+    /// subgraph def_VAL_3
+    fn handle_val_3(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+        self.push_state("VAL_3");
+
+        match expr {
+            x @ (Expr::IsNull(expr) | Expr::IsNotNull(expr)) => {
+                self.push_state("IsNull");
+                if matches!(x, Expr::IsNotNull(..)) { self.push_state("IsNull_not"); }
+                self.push_state("call55_types");
+                self.handle_types(expr, None, None)?;
+            },
+            x @ (Expr::IsDistinctFrom(expr_1, expr_2) | Expr::IsNotDistinctFrom(expr_1, expr_2)) =>  {
+                self.push_states(&["IsDistinctFrom", "call56_types"]);
+                let types_selected_type = self.handle_types(expr_1, None, None)?;
+                self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
+                if matches!(x, Expr::IsNotDistinctFrom(..)) { self.push_state("IsDistinctNOT"); }
+                self.push_states(&["DISTINCT", "call21_types"]);
+                self.handle_types(expr_2, None, Some(types_selected_type))?;
+            },
+            Expr::Exists { subquery, negated } => {
+                self.push_state("Exists");
+                if *negated { self.push_state("Exists_not"); }
+                self.push_state("call2_Query");
+                self.handle_query(subquery)?;
+            },
+            Expr::InList { expr, list, negated } => {
+                self.push_states(&["InList", "call57_types"]);
+                let types_selected_type = self.handle_types(expr, None, None)?;
+                self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
+                if *negated { self.push_state("InListNot"); }
+                self.push_states(&["InListIn", "call1_list_expr"]);
+                self.handle_list_expr(list)?;
+            },
+            Expr::InSubquery { expr, subquery, negated } => {
+                self.push_states(&["InSubquery", "call58_types"]);
+                let types_selected_type = self.handle_types(expr, None, None)?;
+                self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
+                if *negated { self.push_state("InSubqueryNot"); }
+                self.push_states(&["InSubqueryIn", "call3_Query"]);
+                self.handle_query(subquery)?;
+            },
+            Expr::Between { expr, negated, low, high } => {
+                self.push_states(&["Between", "call59_types"]);
+                let types_selected_type = self.handle_types(expr, None, None)?;
+                self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
+                if *negated { self.push_state("BetweenBetweenNot"); }
+                self.push_states(&["BetweenBetween", "call22_types"]);
+                self.handle_types(low, None, Some(types_selected_type.clone()))?;
+                self.push_states(&["BetweenBetweenAnd", "call23_types"]);
+                self.handle_types(high, None, Some(types_selected_type))?;
+            },
+            Expr::BinaryOp { left, op, right } => {
+                self.push_states(&["BinaryComp", "call60_types"]);
+                let types_selected_type = self.handle_types(left, None, None)?;
+                self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
+                self.push_state(match op {
+                    BinaryOperator::Eq => "BinaryCompEqual",
+                    BinaryOperator::Lt => "BinaryCompLess",
+                    BinaryOperator::LtEq => "BinaryCompLessEqual",
+                    BinaryOperator::NotEq => "BinaryCompUnEqual",
+                    any => unexpected_expr!(any),
+                });
+                self.push_state("call24_types");
+                self.handle_types(right, None, Some(types_selected_type))?;
+            },
+            any => unexpected_expr!(any),
+        }
+
+        self.push_state("EXIT_VAL_3");
+
+        Ok(SubgraphType::Val3)
+        //     "AnyAll" => {
+        //         self.expect_state("call61_types");
+        //         let (types_selected_type, types_value) = self.handle_types(None, None);
+        //         self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
+        //         self.expect_state("AnyAllSelectOp");
+        //         let any_all_op = match self.next_state().as_str() {
+        //             "AnyAllEqual" => BinaryOperator::Eq,
+        //             "AnyAllLess" => BinaryOperator::Lt,
+        //             "AnyAllLessEqual" => BinaryOperator::LtEq,
+        //             "AnyAllUnEqual" => BinaryOperator::NotEq,
+        //             any => self.panic_unexpected(any)
+        //         };
+        //         self.expect_state("AnyAllSelectIter");
+        //         let iterable = Box::new(match self.next_state().as_str() {
+        //             "call4_Query" => Expr::Subquery(Box::new(self.handle_query().0)),
+        //             any => self.panic_unexpected(any)
+        //         });
+        //         self.expect_state("AnyAllAnyAll");
+        //         let iterable = Box::new(match self.next_state().as_str() {
+        //             "AnyAllAnyAllAll" => Expr::AllOp(iterable),
+        //             "AnyAllAnyAllAny" => Expr::AnyOp(iterable),
+        //             any => self.panic_unexpected(any),
+        //         });
+        //         Expr::BinaryOp {
+        //             left: Box::new(types_value),
+        //             op: any_all_op,
+        //             right: iterable,
+        //         }
+        //     },
+        //     "BinaryBooleanOpV3" => {
+        //         self.expect_state("call27_types");
+        //         let types_value_1 = self.handle_types(Some(&[SubgraphType::Val3]), None).1;
+        //         let binary_bool_op = match self.next_state().as_str() {
+        //             "BinaryBooleanOpV3AND" => BinaryOperator::And,
+        //             "BinaryBooleanOpV3OR" => BinaryOperator::Or,
+        //             "BinaryBooleanOpV3XOR" => BinaryOperator::Xor,
+        //             any => self.panic_unexpected(any)
+        //         };
+        //         self.expect_state("call28_types");
+        //         let types_value_2 = self.handle_types(Some(&[SubgraphType::Val3]), None).1;
+        //         Expr::BinaryOp {
+        //             left: Box::new(types_value_1),
+        //             op: binary_bool_op,
+        //             right: Box::new(types_value_2)
+        //         }
+        //     },
+        //     "BinaryStringLike" => {
+        //         self.expect_state("call25_types");
+        //         let types_value_1 = self.handle_types(Some(&[SubgraphType::Text]), None).1;
+        //         let string_like_not_flag = match self.next_state().as_str() {
+        //             "BinaryStringLikeNot" => {
+        //                 self.expect_state("BinaryStringLikeIn");
+        //                 true
+        //             }
+        //             "BinaryStringLikeIn" => false,
+        //             any => self.panic_unexpected(any)
+        //         };
+        //         self.expect_state("call26_types");
+        //         let types_value_2 = self.handle_types(Some(&[SubgraphType::Text]), None).1;
+        //         Expr::Like {
+        //             negated: string_like_not_flag,
+        //             expr: Box::new(types_value_1),
+        //             pattern: Box::new(types_value_2),
+        //             escape_char: None
+        //         }
+        //     },
+        //     "true" => Expr::Value(Value::Boolean(true)),
+        //     "false" => Expr::Value(Value::Boolean(false)),
+        //     "Nested_VAL_3" => {
+        //         self.expect_state("call29_types");
+        //         Expr::Nested(Box::new(self.handle_types(Some(&[SubgraphType::Val3]), None).1))
+        //     },
+        //     "UnaryNot_VAL_3" => {
+        //         self.expect_state("call30_types");
+        //         Expr::UnaryOp { op: UnaryOperator::Not, expr: Box::new( self.handle_types(
+        //             Some(&[SubgraphType::Val3]), None
+        //         ).1) }
+        //     },
+        //     any => self.panic_unexpected(any)
+        // };
+        // self.expect_state("EXIT_VAL_3");
+        // (SubgraphType::Val3, val3)
+    }
+
     /// subgraph def_types
     fn handle_types(
         &mut self,
@@ -282,5 +437,19 @@ impl PathGenerator {
         }
 
         return Err(ConvertionError::new(format!("subgraph def_types not yet implemented")))
+    }
+
+    /// subgraph def_list_expr
+    fn handle_list_expr(&mut self, list: &Vec<Expr>) -> Result<SubgraphType, ConvertionError> {
+        self.push_states(&["list_expr", "call16_types"]);
+        let inner_type = self.handle_types(&list[0], None, None)?;
+        self.push_state("list_expr_multiple_values");
+        self.state_generator.set_compatible_list(inner_type.get_compat_types());
+        for expr in list.iter().skip(1) {
+            self.push_state("call49_types");
+            self.handle_types(expr, None, Some(inner_type.clone()))?;
+        }
+        self.push_state("EXIT_list_expr");
+        Ok(SubgraphType::ListExpr(Box::new(inner_type)))
     }
 }
