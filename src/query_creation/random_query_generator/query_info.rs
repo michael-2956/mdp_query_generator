@@ -116,6 +116,10 @@ impl DatabaseSchema {
     pub fn get_random_table_def(&self, rng: &mut ChaCha8Rng) -> &CreateTableSt {
         &self.table_defs[rng.gen_range(0..self.table_defs.len())]
     }
+
+    pub fn get_table_def_by_name(&self, name: &ObjectName) -> &CreateTableSt {
+        &self.table_defs.iter().find(|x| &x.name == name).unwrap()
+    }
 }
 
 /// Contains all the structures responsible for the generation context while query is being generated.
@@ -234,6 +238,10 @@ impl FromContents {
         self.relations.iter().skip(rng.gen_range(0..self.relations.len())).next().unwrap()
     }
 
+    pub fn get_relation_by_name(&self, name: &ObjectName) -> &Relation {
+        self.relations.iter().find(|(rl_name, _)| *rl_name == name).unwrap().1
+    }
+
     /// Returns columns in the following format: alias.column_name
     pub fn get_columns_by_relation_alias(&self, alias: &ObjectName) -> Vec<(Option<ObjectName>, SubgraphType)> {
         self.relations
@@ -282,6 +290,9 @@ pub struct Relation {
     /// A list of unnamed column's types, as they
     /// can be referenced with wildcards
     pub unnamed_columns: Vec<SubgraphType>,
+    /// A list of ambiguous column names and types,
+    /// as they can be referenced with wildcards
+    pub ambiguous_columns: Vec<(ObjectName, SubgraphType)>,
 }
 
 impl Relation {
@@ -290,6 +301,7 @@ impl Relation {
             alias: ObjectName(vec![Ident::new(alias)]),
             columns: BTreeMap::new(),
             unnamed_columns: vec![],
+            ambiguous_columns: vec![],
         }
     }
 
@@ -304,11 +316,24 @@ impl Relation {
 
     fn from_query(alias: SmolStr, column_idents_and_graph_types: Vec<(Option<ObjectName>, SubgraphType)>) -> Self {
         let mut _self = Relation::with_alias(alias);
+        let mut named_columns = vec![];
         for (column_name, graph_type) in column_idents_and_graph_types {
             if let Some(column_name) = column_name {
-                _self.append_column(column_name, graph_type);
+                named_columns.push((column_name, graph_type));
             } else {
                 _self.unnamed_columns.push(graph_type);
+            }
+        }
+        let mut names_to_types = BTreeMap::new();
+        for (column_name, graph_type) in named_columns {
+            names_to_types.entry(column_name).or_insert(vec![]).push(graph_type);
+        }
+        for (column_name, graph_types) in names_to_types {
+            match graph_types.as_slice() {
+                &[ref graph_type] => _self.append_column(column_name, graph_type.clone()),
+                other => {
+                    _self.ambiguous_columns.extend(other.into_iter().map(|x| (column_name.clone(), x.clone())))
+                }
             }
         }
         _self
@@ -324,33 +349,27 @@ impl Relation {
         self.columns.keys().any(|x| x.is_same_or_more_determined_or_undetermined(graph_type))
     }
 
-    /// get all columns with their types, including the unnamed ones
+    /// get all columns with their types, including the unnamed ones and ambiguous ones
     pub fn get_columns_with_types(&self) -> Vec<(Option<ObjectName>, SubgraphType)> {
-        self.columns
-            .iter()
-            .map(|x| (Some(x.1.last().unwrap().clone()), x.0.to_owned()))
-            .chain(
-                self.unnamed_columns
-                    .iter()
-                    .map(|x| (None, x.to_owned()))
-            )
+        self.columns.iter()
+            .flat_map(|(graph_type, column_names)| column_names.iter().map(
+                |column_name| (Some(column_name.clone()), graph_type.clone())
+            ))
+            .chain(self.unnamed_columns.iter().map(|x| (None, x.to_owned())))
+            .chain(self.ambiguous_columns.iter().map(|(column_name, graph_type)| (
+                Some(column_name.clone()), graph_type.clone()
+            )))
             .collect()
     }
 
     /// Retrieve an identifier vector of a random column of the specified type.
     pub fn get_random_column_with_type(&self, rng: &mut ChaCha8Rng, graph_type: &SubgraphType) -> (SubgraphType, Vec<Ident>) {
-        let type_columns = self.columns
-            .keys()
+        let type_columns = self.columns.keys()
             .filter(|x| x.is_same_or_more_determined_or_undetermined(graph_type))
-            .map(|x| self.columns
-                .get(x)
-                .unwrap()
-                .iter()
-                .map(|y| (x.to_owned(), y))
-                .collect::<Vec<_>>()
+            .flat_map(|col_graph_type| self.columns.get(col_graph_type).unwrap().iter()
+                .map(|column_name| (col_graph_type.clone(), column_name))
             )
-            .collect::<Vec<_>>()
-            .concat();
+            .collect::<Vec<_>>();
         let num_skip = rng.gen_range(0..type_columns.len());
         let (column_type, column) = type_columns.into_iter().skip(num_skip).next().unwrap();
         (column_type, vec![

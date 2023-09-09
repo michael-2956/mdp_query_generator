@@ -122,7 +122,9 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                 match self.next_state().as_str() {
                     "limit" => {
                         self.expect_state("call52_types");
-                        let num = self.handle_types(Some(&[SubgraphType::Numeric]), None).1;
+                        let num = self.handle_types(
+                            Some(&[SubgraphType::Numeric, SubgraphType::Integer]), None
+                        ).1;
                         self.expect_state("FROM");
                         Some(num)
                     },
@@ -202,7 +204,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         self.expect_state("SELECT_projection");
         while match self.next_state().as_str() {
             "SELECT_list" => true,
-            "SELECT_list_multiple_values_single_column_false" => {
+            "SELECT_list_multiple_values" => {
                 self.expect_state("SELECT_list");
                 true
             },
@@ -211,12 +213,9 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         } {
             match self.next_state().as_str() {
                 "SELECT_wildcard" => {
-                    column_idents_and_graph_types = [
-                        column_idents_and_graph_types,
-                        self.clause_context
-                            .from()
-                            .get_wildcard_columns()
-                    ].concat();
+                    column_idents_and_graph_types.extend(self.clause_context
+                        .from().get_wildcard_columns().into_iter()
+                    );
                     select_body.projection.push(SelectItem::Wildcard(WildcardAdditionalOptions {
                         opt_exclude: None, opt_except: None, opt_rename: None,
                     }));
@@ -225,10 +224,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                 "SELECT_qualified_wildcard" => {
                     let from_contents = self.clause_context.from();
                     let (alias, relation) = from_contents.get_random_relation(&mut self.rng);
-                    column_idents_and_graph_types = [
-                        column_idents_and_graph_types,
-                        relation.get_columns_with_types()
-                    ].concat();
+                    column_idents_and_graph_types.extend(relation.get_columns_with_types().into_iter());
                     select_body.projection.push(SelectItem::QualifiedWildcard(
                         alias.to_owned(),
                         WildcardAdditionalOptions {
@@ -256,7 +252,6 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                 },
                 any => self.panic_unexpected(any)
             };
-            self.expect_state("SELECT_list_multiple_values");
         }
 
         self.expect_state("EXIT_Query");
