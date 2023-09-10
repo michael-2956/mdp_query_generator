@@ -75,7 +75,7 @@ pub trait StatelessCallModifier: Debug {
     fn get_name(&self) -> SmolStr;
 
     /// returns associated value, which sets the state of this modifier
-    fn get_associated_value_name(&self) -> SmolStr;
+    fn get_associated_value_name(&self) -> Option<SmolStr>;
 
     /// Runs the modifier value based on the current value
     fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, associated_value: &ValueSetterValue) -> bool;
@@ -101,8 +101,8 @@ impl StatelessCallModifier for IsColumnTypeAvailableModifier {
         SmolStr::new("is_column_type_available")
     }
 
-    fn get_associated_value_name(&self) -> SmolStr {
-        TypesTypeValue::name()
+    fn get_associated_value_name(&self) -> Option<SmolStr> {
+        Some(TypesTypeValue::name())
     }
 
     fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, associated_value: &ValueSetterValue) -> bool {
@@ -131,8 +131,8 @@ impl StatelessCallModifier for HasUniqueColumnNamesForTypeModifier {
         SmolStr::new("has_unique_column_names_for_type")
     }
 
-    fn get_associated_value_name(&self) -> SmolStr {
-        todo!()  // TODO: Have an option and return None here
+    fn get_associated_value_name(&self) -> Option<SmolStr> {
+        None
     }
 
     fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, _associated_value: &ValueSetterValue) -> bool {

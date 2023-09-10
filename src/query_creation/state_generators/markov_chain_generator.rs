@@ -135,13 +135,12 @@ impl FunctionModifierInfo {
         );
 
         // modifier name -> associated value
-        let associated_values_map: HashMap<_, _> = stateless_modifier_names.iter().map(
-            |modifier_name| (
-                modifier_name,
-                stateless_call_modifiers.get(modifier_name).unwrap_or_else(|| panic!(
-                    "Stateless modifier {modifier_name} wasn't registered"
-                )).get_associated_value_name()
-            )
+        let associated_values_map: HashMap<_, _> = stateless_modifier_names.iter().filter_map(
+            |modifier_name| stateless_call_modifiers.get(modifier_name).unwrap_or_else(|| panic!(
+                "Stateless modifier {modifier_name} wasn't registered"
+            )).get_associated_value_name().map(|associated_value| (
+                modifier_name, associated_value
+            ))
         ).collect();
 
         let affector_nodes_and_affected_nodes = function_node_params.values()
@@ -165,8 +164,7 @@ impl FunctionModifierInfo {
 
                 if let Some(value_name) = sets_value_name {
                     affected.extend(modified_nodes_map.iter()
-                        .filter(|(affected_modifier_name, _)| associated_values_map
-                            .get(affected_modifier_name)
+                        .filter(|(affected_modifier_name, _)| associated_values_map.get(affected_modifier_name)
                             .map_or(false,|accosiated_value| accosiated_value == value_name)
                         )
                         .map(|x| (x.0.clone(), x.1.clone()))
@@ -209,7 +207,9 @@ impl FunctionModifierInfo {
             .filter(|(affector_node, _)| {
                 affector_node.node_common.sets_value_name.as_ref().map_or(false, |value_name| {
                     stateless_call_modifiers.iter().any(
-                        |(_, modifier)| &modifier.get_associated_value_name() == value_name
+                        |(_, modifier)| if let Some(ref associated_value) = modifier.get_associated_value_name() {
+                            associated_value == value_name
+                        } else { false }
                     )
                 })
             });
