@@ -107,6 +107,10 @@ impl StackFrame {
 pub struct FunctionModifierInfo {
     /// names of all stateful modifiers present in function
     stateful_modifier_names: HashSet<SmolStr>,
+    /// names of all stateless modifiers present in function
+    stateless_modifier_names: HashSet<SmolStr>,
+    /// Modified nodes based on modifier name
+    modified_nodes_map: HashMap<SmolStr, Vec<NodeParams>>,
     /// every node that affects a modifier, with the affected modifier names and vector of
     /// corresponding affected nodes
     affector_nodes_and_affected_nodes: HashMap<NodeParams, HashMap<SmolStr, Vec<NodeParams>>>,
@@ -130,7 +134,7 @@ impl FunctionModifierInfo {
                 acc
             });
 
-        let (stateful_modifier_names, stateless_modifier_names): (_, HashSet<_>) = modified_nodes_map.keys().cloned().partition(
+        let (stateful_modifier_names, stateless_modifier_names): (HashSet<_>, _) = modified_nodes_map.keys().cloned().partition(
             |modifier_name| stateful_call_modifier_creators.contains_key(modifier_name)
         );
 
@@ -180,6 +184,8 @@ impl FunctionModifierInfo {
 
         Self {
             stateful_modifier_names,
+            stateless_modifier_names,
+            modified_nodes_map,
             affector_nodes_and_affected_nodes,
         }
     }
@@ -195,43 +201,67 @@ impl FunctionModifierInfo {
             )).collect()
     }
 
-    /// Returns how running of each value setter affects each stateless-modified node
+    /// Returns how running of each value setter affects each stateless-modified node,
+    /// And all the states of the valueless call modifiers
     fn get_stateless_node_relations(
         &self,
         function_context: &FunctionContext,
         clause_context: &ClauseContext,
         value_setters: &HashMap<SmolStr, Box<dyn ValueSetter>>,
         stateless_call_modifiers: &HashMap<SmolStr, Box<dyn StatelessCallModifier>>,
-    ) -> BTreeMap<SmolStr, BTreeMap<SmolStr, bool>> {
+    ) -> (BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>, Vec<(SmolStr, Option<bool>)>) {
+        let stateless_call_modifiers: HashMap<_, _> = stateless_call_modifiers.iter().filter(
+            |(modifier_name, _)| self.stateless_modifier_names.contains(*modifier_name)
+        ).collect();
+
         let stateless_affectors_iter = self.affector_nodes_and_affected_nodes.iter()
             .filter(|(affector_node, _)| {
                 affector_node.node_common.sets_value_name.as_ref().map_or(false, |value_name| {
-                    stateless_call_modifiers.iter().any(
-                        |(_, modifier)| if let Some(ref associated_value) = modifier.get_associated_value_name() {
+                    stateless_call_modifiers.iter().any(|(_, modifier)| {
+                        if let Some(ref associated_value) = modifier.get_associated_value_name() {
                             associated_value == value_name
                         } else { false }
-                    )
+                    })
                 })
             });
 
-        stateless_affectors_iter
-            .map(|(affector_node, affected_mods)|
-                (affector_node.node_common.name.clone(), affected_mods.into_iter().flat_map(|(modifier_name, affected_nodes)| {
-                    let stateless_modifier = stateless_call_modifiers.get(modifier_name).unwrap();
-                    let value_setter = value_setters.get(affector_node.node_common.sets_value_name.as_ref().unwrap()).unwrap();
-                    let new_state = value_setter.get_value(
-                        clause_context, &function_context.with_node(affector_node.clone())
-                    );
-                    affected_nodes.into_iter().map(|affected_node| (affected_node.node_common.name.clone(), stateless_modifier.run(
+        let valueless_modifier_node_states = stateless_call_modifiers.iter().filter(
+            |(_, x)| x.get_associated_value_name().is_none()
+        ).flat_map(|(mod_name, x)| (
+            self.modified_nodes_map.get(*mod_name).unwrap().iter().map(
+                |node| (
+                    node.node_common.name.clone(),
+                    Some(x.run(
                         clause_context,
-                        &function_context.with_node(affected_node.clone()),
-                        &new_state,
-                    ))).collect::<Vec<_>>().into_iter()
-                }).collect())
-            ).collect()
+                        &function_context.with_node(node.clone()),
+                        None
+                    ))
+                )
+            ).collect::<Vec<_>>().into_iter()
+        )).collect();
+
+        (
+            stateless_affectors_iter
+                .map(|(affector_node, affected_mods)|
+                    (affector_node.node_common.name.clone(), affected_mods.into_iter().flat_map(|(modifier_name, affected_nodes)| {
+                        let stateless_modifier = stateless_call_modifiers.get(modifier_name).unwrap();
+                        let value_setter = value_setters.get(affector_node.node_common.sets_value_name.as_ref().unwrap()).unwrap();
+                        let new_state = value_setter.get_value(
+                            clause_context, &function_context.with_node(affector_node.clone())
+                        );
+                        affected_nodes.into_iter().map(|affected_node| (affected_node.node_common.name.clone(), stateless_modifier.run(
+                            clause_context,
+                            &function_context.with_node(affected_node.clone()),
+                            Some(&new_state),
+                        ))).collect::<Vec<_>>().into_iter()
+                    }).collect())
+                ).collect(),
+            valueless_modifier_node_states
+        )
     }
 
-    /// returns all modifier states in an uninitialised form
+    /// returns all modifier states in an uninitialised form, only for modifiers that
+    /// have associated values, others are ignored.
     fn get_initial_affected_node_states(&self) -> HashMap<SmolStr, Option<bool>> {
         self.affector_nodes_and_affected_nodes.iter()
             .flat_map(|(_, affected_modifiers)| affected_modifiers.values())
@@ -316,9 +346,10 @@ impl CallModifierInfo {
         function_modifier_info: &FunctionModifierInfo,
         stateful_call_modifier_creators: &HashMap<SmolStr, StatefulCallModifierCreator>,
         stateless_node_relations: BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>,
+        valueless_modifier_node_states: Vec<(SmolStr, Option<bool>)>,
     ) -> Self {
         Self {
-            call_modifier_states: CallModifierStates::new(function_modifier_info, stateful_call_modifier_creators),
+            call_modifier_states: CallModifierStates::new(function_modifier_info, stateful_call_modifier_creators, valueless_modifier_node_states),
             values: HashMap::new(),
             stateless_node_relations
         }
@@ -407,11 +438,14 @@ impl CallModifierStates {
     fn new(
         function_modifier_info: &FunctionModifierInfo,
         stateful_call_modifier_creators: &HashMap<SmolStr, StatefulCallModifierCreator>,
+        valueless_modifier_node_states: Vec<(SmolStr, Option<bool>)>,
     ) -> Self {
-        Self {
+        let mut _self = Self {
             affected_node_states: function_modifier_info.get_initial_affected_node_states(),
             stateful_modifiers: function_modifier_info.create_stateful_modifiers(stateful_call_modifier_creators)
-        }
+        };
+        _self.affected_node_states.extend(valueless_modifier_node_states.into_iter());
+        _self
     }
 
     fn update_modifier_states(
@@ -582,7 +616,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         let function_modifier_info = self.function_modifier_info.get(&call_params.func_name).unwrap();
         let function_context = FunctionContext::new(call_params);
 
-        let stateless_node_relations = function_modifier_info.get_stateless_node_relations(
+        let (stateless_node_relations, valueless_modifier_node_states) = function_modifier_info.get_stateless_node_relations(
             &function_context, clause_context, &self.value_setters, &self.stateless_call_modifiers
         );
 
@@ -595,7 +629,8 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             CallModifierInfo::new(
                 function_modifier_info,
                 &self.stateful_call_modifier_creators, 
-                stateless_node_relations
+                stateless_node_relations,
+                valueless_modifier_node_states,
             ),
             dead_end_info,
         ));

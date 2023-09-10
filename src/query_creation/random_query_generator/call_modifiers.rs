@@ -78,7 +78,7 @@ pub trait StatelessCallModifier: Debug {
     fn get_associated_value_name(&self) -> Option<SmolStr>;
 
     /// Runs the modifier value based on the current value
-    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, associated_value: &ValueSetterValue) -> bool;
+    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool;
 }
 
 pub trait StatefulCallModifier: Debug {
@@ -105,13 +105,13 @@ impl StatelessCallModifier for IsColumnTypeAvailableModifier {
         Some(TypesTypeValue::name())
     }
 
-    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, associated_value: &ValueSetterValue) -> bool {
+    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
         let check_group_by = match function_context.current_node.node_common.name.as_str() {
             "call0_column_spec" => false,
             "call1_column_spec" => true,
             any => panic!("is_column_type_available call trigger unexpectedly called by {any}"),
         };
-        let ValueSetterValue::TypesTypeValue(associated_value) = associated_value;
+        let ValueSetterValue::TypesTypeValue(associated_value) = associated_value.unwrap();
         associated_value.selected_types.iter()
             .any(|x|
                 if check_group_by {
@@ -135,7 +135,7 @@ impl StatelessCallModifier for HasUniqueColumnNamesForTypeModifier {
         None
     }
 
-    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, _associated_value: &ValueSetterValue) -> bool {
+    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, _associated_value: Option<&ValueSetterValue>) -> bool {
         let column_types = unwrap_variant!(
             &function_context.call_params.selected_types, CallTypes::TypeList
         );
