@@ -64,6 +64,11 @@ pub struct MarkovChainGenerator<StC: StateChooser> {
     dead_end_infos: HashMap<(CallParams, BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>), Arc<Mutex<HashMap<SmolStr, bool>>>>,
 }
 
+pub struct ChainStateMemory {
+    call_stack: Vec<StackFrame>,
+    pending_call: Option<CallParams>,
+}
+
 #[derive(Debug)]
 pub struct StackFrame {
     /// function context, like the current node, and the
@@ -370,6 +375,34 @@ impl DynClone for CallModifierStates {
     }
 }
 
+impl DynClone for CallModifierInfo {
+    fn dyn_clone(&self) -> Self {
+        Self {
+            call_modifier_states: self.call_modifier_states.dyn_clone(),
+            values: self.values.clone(),
+            stateless_node_relations: self.stateless_node_relations.clone(),
+        }
+    }
+}
+
+impl DynClone for StackFrame {
+    fn dyn_clone(&self) -> Self {
+        Self {
+            function_context: self.function_context.clone(),
+            call_modifier_info: self.call_modifier_info.dyn_clone(),
+            dead_end_info: self.dead_end_info.clone(),
+            known_type_list: self.known_type_list.clone(),
+            compatible_type_list: self.compatible_type_list.clone(),
+        }
+    }
+}
+
+impl DynClone for Vec<StackFrame> {
+    fn dyn_clone(&self) -> Self {
+        self.iter().map(|x| x.dyn_clone()).collect()
+    }
+}
+
 impl CallModifierStates {
     fn new(
         function_modifier_info: &FunctionModifierInfo,
@@ -485,6 +518,18 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             selected_types: CallTypes::TypeList(accepted_types),  // CallTypes::TypeList(vec![SubgraphType::Numeric]),  // 
             modifiers: CallModifiers::None  // CallModifiers::StaticList(vec![SmolStr::new("single value")])  //
         });
+    }
+
+    pub fn remember_chain_state(&self) -> ChainStateMemory {
+        ChainStateMemory {
+            call_stack: self.call_stack.dyn_clone(),
+            pending_call: self.pending_call.clone(),
+        }
+    }
+
+    pub fn set_chain_state(&mut self, chain_state_memory: ChainStateMemory) {
+        self.call_stack = chain_state_memory.call_stack;
+        self.pending_call = chain_state_memory.pending_call;
     }
 
     /// push all the known data to fields of call params that

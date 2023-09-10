@@ -26,14 +26,6 @@ pub enum ValueSetterValue {
     TypesTypeValue(TypesTypeValue),
 }
 
-impl ValueSetterValue {
-    pub fn name(&self) -> SmolStr {
-        match self {
-            ValueSetterValue::TypesTypeValue { .. } => TypesTypeValue::name(),
-        }
-    }
-}
-
 pub trait ValueSetter: Debug {
     /// returns value name
     fn get_value_name(&self) -> SmolStr;
