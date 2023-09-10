@@ -115,14 +115,30 @@ impl StatelessCallModifier for IsColumnTypeAvailableModifier {
         associated_value.selected_types.iter()
             .any(|x|
                 if check_group_by {
-                    clause_context
-                        .group_by()
-                        .is_type_available(x)
+                    clause_context.group_by().is_type_available(x)
                 } else {
-                    clause_context
-                        .from()
-                        .is_type_available(x)
+                    clause_context.from().is_type_available(x, None)
                 }
             )
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HasUniqueColumnNamesForTypeModifier {}
+
+impl StatelessCallModifier for HasUniqueColumnNamesForTypeModifier {
+    fn get_name(&self) -> SmolStr {
+        SmolStr::new("has_unique_column_names_for_type")
+    }
+
+    fn get_associated_value_name(&self) -> SmolStr {
+        todo!()  // TODO: Have an option and return None here
+    }
+
+    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, _associated_value: &ValueSetterValue) -> bool {
+        let column_types = unwrap_variant!(
+            &function_context.call_params.selected_types, CallTypes::TypeList
+        );
+        clause_context.from().has_unique_columns_for_types(column_types)
     }
 }

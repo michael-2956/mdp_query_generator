@@ -1,9 +1,9 @@
-use std::{collections::BTreeMap, path::Path};
+use std::{collections::{BTreeMap, HashMap, HashSet}, path::Path};
 
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
-use crate::query_creation::state_generators::subgraph_type::SubgraphType;
+use crate::{query_creation::state_generators::subgraph_type::SubgraphType, training::ast_to_path::ConvertionError};
 
 use sqlparser::{ast::{Ident, ObjectName, Statement, ColumnDef, HiveDistributionStyle, TableConstraint, HiveFormat, SqlOption, FileFormat, Query, OnCommit, TableAlias}, dialect::PostgreSqlDialect, parser::Parser};
 
@@ -207,30 +207,67 @@ impl FromContents {
         TableAlias { name: Ident { value: alias.to_string(), quote_style: None }, columns: vec![] }
     }
 
-    pub fn is_type_available(&self, graph_type: &SubgraphType) -> bool {
-        self.relations.iter().any(|x| x.1.is_type_available(graph_type))
+    pub fn is_type_available(&self, graph_type: &SubgraphType, allowed_columns: Option<&HashSet<ObjectName>>) -> bool {
+        self.relations.iter().any(|x| x.1.is_type_available(graph_type, allowed_columns))
     }
 
-    pub fn get_random_column_with_type_of(&self, rng: &mut ChaCha8Rng, graph_type_list: &Vec<SubgraphType>) -> (SubgraphType, Vec<Ident>) {
-        let available_graph_types = graph_type_list
-            .into_iter()
-            .filter(|x| self.is_type_available(x))
+    /// checks if FROM has columns with names that are unique for all its tables
+    pub fn has_unique_columns_for_types(&self, graph_types: &Vec<SubgraphType>) -> bool {
+        let allowed_columns = self.get_unique_columns();
+        graph_types.iter().any(|graph_type|
+            self.relations.iter().any(|(_, relation)| relation.is_type_available(graph_type, Some(&allowed_columns)))
+        )
+    }
+
+    /// get all the columns represented in only a single relation in FROM
+    fn get_unique_columns(&self) -> HashSet<ObjectName> {
+        self.relations.iter()
+            .flat_map(|(_, rel)| rel.columns.values())
+            .flat_map(|x| x.iter())
+            .fold(HashMap::new(), |mut acc, x| {
+                *acc.entry(x).or_insert(0usize) += 1usize;
+                acc
+            }).into_iter()
+            .filter(|(_, num)| *num == 1)
+            .map(|(col_name, _)| col_name.clone())
+            .collect()
+    }
+
+    /// if qualified is false, returns only the column name, only considering columns which
+    /// have names unique among all the tables
+    pub fn get_random_column_with_type_of(&self, rng: &mut ChaCha8Rng, graph_type_list: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>) {
+        let allowed_columns = if !qualified {
+            Some(self.get_unique_columns())
+        } else { None };
+        let available_graph_types = graph_type_list.into_iter()
+            .filter(|x| self.is_type_available(x, allowed_columns.as_ref()))
             .collect::<Vec<_>>();
-        let selected_graph_type = available_graph_types
-            .iter()
+        let selected_graph_type = available_graph_types.iter()
             .skip(rng.gen_range(0..available_graph_types.len()))
             .next().unwrap();
-        self.get_random_column_with_type(rng, selected_graph_type)
+        self.get_random_column_with_type(rng, selected_graph_type, allowed_columns.as_ref(), qualified)
     }
 
-    pub fn get_random_column_with_type(&self, rng: &mut ChaCha8Rng, graph_type: &SubgraphType) -> (SubgraphType, Vec<Ident>) {
-        let relations_with_type: Vec<&Relation> = self.relations
-            .iter()
-            .filter(|x| x.1.is_type_available(graph_type))
+    pub fn get_column_type_by_ident_components(&self, ident_components: &Vec<Ident>) -> Result<SubgraphType, ConvertionError> {
+        // if ident has two components, we can find relation and column name easily
+        // if not, there are two ways of doing things:
+        // - This function panics. Run all training queries through a nesting + column identification 
+        // processing stage, so that this doesn't happen. Problem: a totally new funtionality, lots of time.
+        // - SELECTED ONE: This function tries different relations and probably finds the one (or does not producing a ConvertionError)
+        // but then it has to be possible to generate an unspecified column, which will be possible by adding a corresponding node
+        // and turning it off via a call modifier if there are no column names that unambiguously map to a table.
+        // This would also mean get_random_column_with_type_of and get_random_column_with_type would need to know to
+        // not select columns that are ambiguous, in case we select an unspecified column name.
+        Err(ConvertionError::new(format!("Couldn't find column named {}", ObjectName(ident_components.clone()))))
+    }
+
+    fn get_random_column_with_type(&self, rng: &mut ChaCha8Rng, graph_type: &SubgraphType, allowed_columns: Option<&HashSet<ObjectName>>, qualified: bool) -> (SubgraphType, Vec<Ident>) {
+        let relations_with_type: Vec<&Relation> = self.relations.iter()
+            .filter(|x| x.1.is_type_available(graph_type, allowed_columns))
             .map(|x| x.1)
             .collect::<Vec<_>>();
         let selected_relation = relations_with_type[rng.gen_range(0..relations_with_type.len())];
-        selected_relation.get_random_column_with_type(rng, graph_type)
+        selected_relation.get_random_column_with_type(rng, graph_type, qualified)
     }
 
     /// Returns a relation and its alias
@@ -345,8 +382,12 @@ impl Relation {
             .or_insert(vec![column_name.clone()]);
     }
 
-    pub fn is_type_available(&self, graph_type: &SubgraphType) -> bool {
-        self.columns.keys().any(|x| x.is_same_or_more_determined_or_undetermined(graph_type))
+    pub fn is_type_available(&self, graph_type: &SubgraphType, allowed_columns: Option<&HashSet<ObjectName>>) -> bool {
+        self.columns.iter()
+            .filter(|(_, cols)| if let Some(allowed_columns) = allowed_columns {
+                cols.iter().any(|x| allowed_columns.contains(x))
+            } else { true })
+            .any(|(col_type, _)| col_type.is_same_or_more_determined_or_undetermined(graph_type))
     }
 
     /// get all columns with their types, including the unnamed ones and ambiguous ones
@@ -363,7 +404,7 @@ impl Relation {
     }
 
     /// Retrieve an identifier vector of a random column of the specified type.
-    pub fn get_random_column_with_type(&self, rng: &mut ChaCha8Rng, graph_type: &SubgraphType) -> (SubgraphType, Vec<Ident>) {
+    pub fn get_random_column_with_type(&self, rng: &mut ChaCha8Rng, graph_type: &SubgraphType, qualified: bool) -> (SubgraphType, Vec<Ident>) {
         let type_columns = self.columns.keys()
             .filter(|x| x.is_same_or_more_determined_or_undetermined(graph_type))
             .flat_map(|col_graph_type| self.columns.get(col_graph_type).unwrap().iter()
@@ -373,7 +414,7 @@ impl Relation {
         let num_skip = rng.gen_range(0..type_columns.len());
         let (column_type, column) = type_columns.into_iter().skip(num_skip).next().unwrap();
         (column_type, vec![
-            self.alias.0.clone(),
+            if qualified { self.alias.0.clone() } else { vec![] },
             column.0.clone()
         ].concat())
     }

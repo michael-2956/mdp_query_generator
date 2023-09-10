@@ -581,9 +581,13 @@ digraph G {
         column_spec [TYPES="[numeric, integer, 3VL Value, text, date]", label="column specifier\ntypes=[numeric, integer, 3VL Value, text, date]", shape=octagon, style=filled, color=gold]
         EXIT_column_spec [label="EXIT column specifier", shape=rectangle]
 
-        typed_column_name [label="Unqualified/Qualified column name of type: type"]
-        column_spec -> typed_column_name
-        typed_column_name -> EXIT_column_spec
+        qualified_column_name [label="Qualified column name of type: type"]
+        column_spec -> qualified_column_name
+        qualified_column_name -> EXIT_column_spec
+
+        unqualified_column_name [label="Unqualified column name of type: type", call_modifier="has_unique_column_names_for_type"]
+        column_spec -> unqualified_column_name
+        unqualified_column_name -> EXIT_column_spec
     }
 
     subgraph def_list_expr {

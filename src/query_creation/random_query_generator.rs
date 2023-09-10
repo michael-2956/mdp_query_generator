@@ -738,12 +738,17 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     /// subgraph def_column_spec
     fn handle_column_spec(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("column_spec");
-        self.expect_state("typed_column_name");
-        let (selected_type, ident_components) = {
-            let column_types = unwrap_variant_or_else!(
-                self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList, || self.state_generator.print_stack()
-            );
-            self.clause_context.from().get_random_column_with_type_of(&mut self.rng, &column_types)
+        let column_types = unwrap_variant_or_else!(
+            self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList, || self.state_generator.print_stack()
+        );
+        let (selected_type, ident_components) = match self.next_state().as_str() {
+            "unqualified_column_name" => {
+                self.clause_context.from().get_random_column_with_type_of(&mut self.rng, &column_types, false)
+            },
+            "qualified_column_name" => {
+                self.clause_context.from().get_random_column_with_type_of(&mut self.rng, &column_types, true)
+            },
+            any => self.panic_unexpected(any)
         };
         self.expect_state("EXIT_column_spec");
         (selected_type, Expr::CompoundIdentifier(ident_components))
