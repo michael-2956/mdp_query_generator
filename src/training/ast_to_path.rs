@@ -3,7 +3,7 @@ use std::{path::PathBuf, str::FromStr, error::Error, fmt};
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
-use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query, ObjectName, Expr, SetExpr, SelectItem, Value, BinaryOperator}};
+use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query, ObjectName, Expr, SetExpr, SelectItem, Value, BinaryOperator, UnaryOperator}};
 
 use crate::{query_creation::{random_query_generator::query_info::{DatabaseSchema, ClauseContext}, state_generators::{subgraph_type::SubgraphType, state_choosers::MaxProbStateChooser, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::CallModifiers}, dynamic_models::{DeterministicModel, DynamicModel}}}, config::TomlReadable, unwrap_variant};
 
@@ -311,107 +311,97 @@ impl PathGenerator {
                 self.handle_types(high, None, Some(types_selected_type))?;
             },
             Expr::BinaryOp { left, op, right } => {
-                self.push_states(&["BinaryComp", "call60_types"]);
-                let types_selected_type = self.handle_types(left, None, None)?;
-                self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
-                self.push_state(match op {
-                    BinaryOperator::Eq => "BinaryCompEqual",
-                    BinaryOperator::Lt => "BinaryCompLess",
-                    BinaryOperator::LtEq => "BinaryCompLessEqual",
-                    BinaryOperator::NotEq => "BinaryCompUnEqual",
+                match op {
+                    BinaryOperator::And |
+                    BinaryOperator::Or |
+                    BinaryOperator::Xor => {
+                        self.push_states(&["BinaryBooleanOpV3", "call27_types"]);
+                        self.handle_types(left, Some(&[SubgraphType::Val3]), None)?;
+                        self.push_state(match op {
+                            BinaryOperator::And => "BinaryBooleanOpV3AND",
+                            BinaryOperator::Or => "BinaryBooleanOpV3OR",
+                            BinaryOperator::Xor => "BinaryBooleanOpV3XOR",
+                            any => unexpected_expr!(any),
+                        });
+                        self.push_state("call28_types");
+                        self.handle_types(right, Some(&[SubgraphType::Val3]), None)?;
+                    },
+                    BinaryOperator::Eq |
+                    BinaryOperator::Lt |
+                    BinaryOperator::LtEq |
+                    BinaryOperator::NotEq => {
+                        match &**right {
+                            Expr::AnyOp(right_inner) | Expr::AllOp(right_inner) => {
+                                self.push_states(&["AnyAll", "call61_types"]);
+                                let types_selected_type = self.handle_types(left, None, None)?;
+                                self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
+                                self.push_state("AnyAllSelectOp");
+                                self.push_state(match op {
+                                    BinaryOperator::Eq => "AnyAllEqual",
+                                    BinaryOperator::Lt => "AnyAllLess",
+                                    BinaryOperator::LtEq => "AnyAllLessEqual",
+                                    BinaryOperator::NotEq => "AnyAllUnEqual",
+                                    any => unexpected_expr!(any),
+                                });
+                                self.push_state("AnyAllSelectIter");
+                                match &**right_inner {
+                                    Expr::Subquery(query) => {
+                                        self.push_state("call4_Query");
+                                        self.handle_query(query)?;
+                                    },
+                                    any => unexpected_expr!(any),
+                                }
+                                self.push_state("AnyAllAnyAll");
+                                self.push_state(match &**right {
+                                    Expr::AllOp(..) => "AnyAllAnyAllAll",
+                                    Expr::AnyOp(..) => "AnyAllAnyAllAny",
+                                    any => unexpected_expr!(any),
+                                });
+                            },
+                            _ => {
+                                self.push_states(&["BinaryComp", "call60_types"]);
+                                let types_selected_type = self.handle_types(left, None, None)?;
+                                self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
+                                self.push_state(match op {
+                                    BinaryOperator::Eq => "BinaryCompEqual",
+                                    BinaryOperator::Lt => "BinaryCompLess",
+                                    BinaryOperator::LtEq => "BinaryCompLessEqual",
+                                    BinaryOperator::NotEq => "BinaryCompUnEqual",
+                                    any => unexpected_expr!(any),
+                                });
+                                self.push_state("call24_types");
+                                self.handle_types(right, None, Some(types_selected_type))?;
+                            }
+                        }
+                    },
                     any => unexpected_expr!(any),
-                });
-                self.push_state("call24_types");
-                self.handle_types(right, None, Some(types_selected_type))?;
+                }
             },
+            Expr::Like { negated, expr, pattern, .. } => {
+                self.push_states(&["BinaryStringLike", "call25_types"]);
+                self.handle_types(expr, Some(&[SubgraphType::Text]), None)?;
+                if *negated { self.push_state("BinaryStringLikeNot"); }
+                self.push_states(&["BinaryStringLikeIn", "call26_types"]);
+                self.handle_types(pattern, Some(&[SubgraphType::Text]), None)?;
+            }
+            Expr::Value(Value::Boolean(true)) => self.push_state("true"),
+            Expr::Value(Value::Boolean(false)) => self.push_state("false"),
+            Expr::Nested(expr) => {
+                self.push_states(&["Nested_VAL_3", "call29_types"]);
+                self.handle_types(expr, Some(&[SubgraphType::Val3]), None)?;
+            },
+            Expr::UnaryOp { op, expr } if *op == UnaryOperator::Not => {
+                self.push_states(&["UnaryNot_VAL_3", "call30_types"]);
+                self.handle_types(
+                    expr, Some(&[SubgraphType::Val3]), None
+                )?;
+            }
             any => unexpected_expr!(any),
         }
 
         self.push_state("EXIT_VAL_3");
 
         Ok(SubgraphType::Val3)
-        //     "AnyAll" => {
-        //         self.expect_state("call61_types");
-        //         let (types_selected_type, types_value) = self.handle_types(None, None);
-        //         self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
-        //         self.expect_state("AnyAllSelectOp");
-        //         let any_all_op = match self.next_state().as_str() {
-        //             "AnyAllEqual" => BinaryOperator::Eq,
-        //             "AnyAllLess" => BinaryOperator::Lt,
-        //             "AnyAllLessEqual" => BinaryOperator::LtEq,
-        //             "AnyAllUnEqual" => BinaryOperator::NotEq,
-        //             any => self.panic_unexpected(any)
-        //         };
-        //         self.expect_state("AnyAllSelectIter");
-        //         let iterable = Box::new(match self.next_state().as_str() {
-        //             "call4_Query" => Expr::Subquery(Box::new(self.handle_query().0)),
-        //             any => self.panic_unexpected(any)
-        //         });
-        //         self.expect_state("AnyAllAnyAll");
-        //         let iterable = Box::new(match self.next_state().as_str() {
-        //             "AnyAllAnyAllAll" => Expr::AllOp(iterable),
-        //             "AnyAllAnyAllAny" => Expr::AnyOp(iterable),
-        //             any => self.panic_unexpected(any),
-        //         });
-        //         Expr::BinaryOp {
-        //             left: Box::new(types_value),
-        //             op: any_all_op,
-        //             right: iterable,
-        //         }
-        //     },
-        //     "BinaryBooleanOpV3" => {
-        //         self.expect_state("call27_types");
-        //         let types_value_1 = self.handle_types(Some(&[SubgraphType::Val3]), None).1;
-        //         let binary_bool_op = match self.next_state().as_str() {
-        //             "BinaryBooleanOpV3AND" => BinaryOperator::And,
-        //             "BinaryBooleanOpV3OR" => BinaryOperator::Or,
-        //             "BinaryBooleanOpV3XOR" => BinaryOperator::Xor,
-        //             any => self.panic_unexpected(any)
-        //         };
-        //         self.expect_state("call28_types");
-        //         let types_value_2 = self.handle_types(Some(&[SubgraphType::Val3]), None).1;
-        //         Expr::BinaryOp {
-        //             left: Box::new(types_value_1),
-        //             op: binary_bool_op,
-        //             right: Box::new(types_value_2)
-        //         }
-        //     },
-        //     "BinaryStringLike" => {
-        //         self.expect_state("call25_types");
-        //         let types_value_1 = self.handle_types(Some(&[SubgraphType::Text]), None).1;
-        //         let string_like_not_flag = match self.next_state().as_str() {
-        //             "BinaryStringLikeNot" => {
-        //                 self.expect_state("BinaryStringLikeIn");
-        //                 true
-        //             }
-        //             "BinaryStringLikeIn" => false,
-        //             any => self.panic_unexpected(any)
-        //         };
-        //         self.expect_state("call26_types");
-        //         let types_value_2 = self.handle_types(Some(&[SubgraphType::Text]), None).1;
-        //         Expr::Like {
-        //             negated: string_like_not_flag,
-        //             expr: Box::new(types_value_1),
-        //             pattern: Box::new(types_value_2),
-        //             escape_char: None
-        //         }
-        //     },
-        //     "true" => Expr::Value(Value::Boolean(true)),
-        //     "false" => Expr::Value(Value::Boolean(false)),
-        //     "Nested_VAL_3" => {
-        //         self.expect_state("call29_types");
-        //         Expr::Nested(Box::new(self.handle_types(Some(&[SubgraphType::Val3]), None).1))
-        //     },
-        //     "UnaryNot_VAL_3" => {
-        //         self.expect_state("call30_types");
-        //         Expr::UnaryOp { op: UnaryOperator::Not, expr: Box::new( self.handle_types(
-        //             Some(&[SubgraphType::Val3]), None
-        //         ).1) }
-        //     },
-        //     any => self.panic_unexpected(any)
-        // };
-        // self.expect_state("EXIT_VAL_3");
-        // (SubgraphType::Val3, val3)
     }
 
     /// subgraph def_types
