@@ -48,6 +48,7 @@ impl SQLTrainer {
         for query in self.query_asts.iter() {
             println!("Converting query {}", query);
             paths.push(self.path_generator.get_query_path(query)?);
+            break;
         }
         Ok(paths)
     }

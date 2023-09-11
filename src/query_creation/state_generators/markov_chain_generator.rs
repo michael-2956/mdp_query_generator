@@ -614,6 +614,13 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
                     &modifiers[..]
                 ].concat())
             },
+            CallModifiers::None => {
+                if called_function.accepted_modifiers.is_some() {
+                    CallModifiers::StaticList(vec![])
+                } else {
+                    CallModifiers::None
+                }
+            },
             any => any,
         };
 
