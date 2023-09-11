@@ -207,7 +207,7 @@ impl FromContents {
         TableAlias { name: Ident { value: alias.to_string(), quote_style: None }, columns: vec![] }
     }
 
-    pub fn is_type_available(&self, graph_type: &SubgraphType, allowed_columns: Option<&HashSet<ObjectName>>) -> bool {
+    pub fn is_type_available(&self, graph_type: &SubgraphType, allowed_columns: Option<&HashSet<Ident>>) -> bool {
         self.relations.iter().any(|x| x.1.is_type_available(graph_type, allowed_columns))
     }
 
@@ -220,7 +220,7 @@ impl FromContents {
     }
 
     /// get all the columns represented in only a single relation in FROM
-    fn get_unique_columns(&self) -> HashSet<ObjectName> {
+    fn get_unique_columns(&self) -> HashSet<Ident> {
         self.relations.iter()
             .flat_map(|(_, rel)| rel.columns.values())
             .flat_map(|x| x.iter())
@@ -261,7 +261,7 @@ impl FromContents {
         Err(ConvertionError::new(format!("Couldn't find column named {}", ObjectName(ident_components.clone()))))
     }
 
-    fn get_random_column_with_type(&self, rng: &mut ChaCha8Rng, graph_type: &SubgraphType, allowed_columns: Option<&HashSet<ObjectName>>, qualified: bool) -> (SubgraphType, Vec<Ident>) {
+    fn get_random_column_with_type(&self, rng: &mut ChaCha8Rng, graph_type: &SubgraphType, allowed_columns: Option<&HashSet<Ident>>, qualified: bool) -> (SubgraphType, Vec<Ident>) {
         let relations_with_type: Vec<&Relation> = self.relations.iter()
             .filter(|x| x.1.is_type_available(graph_type, allowed_columns))
             .map(|x| x.1)
@@ -280,24 +280,11 @@ impl FromContents {
     }
 
     /// Returns columns in the following format: alias.column_name
-    pub fn get_columns_by_relation_alias(&self, alias: &ObjectName) -> Vec<(Option<ObjectName>, SubgraphType)> {
-        self.relations
-            .get(alias)
-            .unwrap()
-            .get_columns_with_types()
-            .into_iter()
-            .map(|x| (
-                x.0.map(|y| ObjectName([alias.0.to_owned(), y.0].concat())),
-                x.1
-            ))
-            .collect::<_>()
-    }
-
-    /// Returns columns in the following format: alias.column_name
-    pub fn get_wildcard_columns(&self) -> Vec<(Option<ObjectName>, SubgraphType)> {
-        self.relations
-            .keys()
-            .map(|x| self.get_columns_by_relation_alias(x))
+    pub fn get_wildcard_columns(&self) -> Vec<(Option<Ident>, SubgraphType)> {
+        self.relations.keys()
+            .map(|alias|
+                self.relations.get(alias).unwrap().get_columns_with_types()
+            )
             .collect::<Vec<_>>()
             .concat()
     }
@@ -309,7 +296,7 @@ impl FromContents {
         Self::get_table_alias(alias)
     }
 
-    pub fn append_query(&mut self, column_idents_and_graph_types: Vec<(Option<ObjectName>, SubgraphType)>) -> TableAlias {
+    pub fn append_query(&mut self, column_idents_and_graph_types: Vec<(Option<Ident>, SubgraphType)>) -> TableAlias {
         let alias = self.create_alias();
         let relation = Relation::from_query(alias.clone(), column_idents_and_graph_types);
         self.relations.insert(relation.alias.clone(), relation);
@@ -323,13 +310,13 @@ pub struct Relation {
     pub alias: ObjectName,
     /// A BTreeMap (ordered for consistency) with column
     /// names by graph types
-    pub columns: BTreeMap<SubgraphType, Vec<ObjectName>>,
+    pub columns: BTreeMap<SubgraphType, Vec<Ident>>,
     /// A list of unnamed column's types, as they
     /// can be referenced with wildcards
     pub unnamed_columns: Vec<SubgraphType>,
     /// A list of ambiguous column names and types,
     /// as they can be referenced with wildcards
-    pub ambiguous_columns: Vec<(ObjectName, SubgraphType)>,
+    pub ambiguous_columns: Vec<(Ident, SubgraphType)>,
 }
 
 impl Relation {
@@ -346,13 +333,13 @@ impl Relation {
         let mut _self = Relation::with_alias(alias);
         for column in &create_table.columns {
             let graph_type = SubgraphType::from_data_type(&column.data_type);
-            _self.append_column(ObjectName(vec![column.name.clone()]), graph_type);
+            _self.append_column(column.name.clone(), graph_type);
         }
         _self
     }
 
-    fn from_query(alias: SmolStr, column_idents_and_graph_types: Vec<(Option<ObjectName>, SubgraphType)>) -> Self {
-        let mut _self = Relation::with_alias(alias);
+    fn from_query(alias: SmolStr, column_idents_and_graph_types: Vec<(Option<Ident>, SubgraphType)>) -> Self {
+        let mut _self = Relation::with_alias(alias.clone());
         let mut named_columns = vec![];
         for (column_name, graph_type) in column_idents_and_graph_types {
             if let Some(column_name) = column_name {
@@ -376,13 +363,13 @@ impl Relation {
         _self
     }
 
-    fn append_column(&mut self, column_name: ObjectName, graph_type: SubgraphType) {
+    fn append_column(&mut self, column_name: Ident, graph_type: SubgraphType) {
         self.columns.entry(graph_type)
             .and_modify(|v| v.push(column_name.clone()))
             .or_insert(vec![column_name.clone()]);
     }
 
-    pub fn is_type_available(&self, graph_type: &SubgraphType, allowed_columns: Option<&HashSet<ObjectName>>) -> bool {
+    pub fn is_type_available(&self, graph_type: &SubgraphType, allowed_columns: Option<&HashSet<Ident>>) -> bool {
         self.columns.iter()
             .filter(|(_, cols)| if let Some(allowed_columns) = allowed_columns {
                 cols.iter().any(|x| allowed_columns.contains(x))
@@ -391,7 +378,7 @@ impl Relation {
     }
 
     /// get all columns with their types, including the unnamed ones and ambiguous ones
-    pub fn get_columns_with_types(&self) -> Vec<(Option<ObjectName>, SubgraphType)> {
+    pub fn get_columns_with_types(&self) -> Vec<(Option<Ident>, SubgraphType)> {
         self.columns.iter()
             .flat_map(|(graph_type, column_names)| column_names.iter().map(
                 |column_name| (Some(column_name.clone()), graph_type.clone())
@@ -415,7 +402,7 @@ impl Relation {
         let (column_type, column) = type_columns.into_iter().skip(num_skip).next().unwrap();
         (column_type, vec![
             if qualified { self.alias.0.clone() } else { vec![] },
-            column.0.clone()
+            vec![column.clone()],
         ].concat())
     }
 }

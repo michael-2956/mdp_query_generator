@@ -11,7 +11,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
     Expr, Ident, Query, Select, SetExpr, TableFactor,
-    TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, SelectItem, WildcardAdditionalOptions, ObjectName, DataType,
+    TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, SelectItem, WildcardAdditionalOptions, DataType,
 };
 
 use crate::config::TomlReadable;
@@ -52,6 +52,19 @@ pub struct QueryGenerator<DynMod: DynamicModel, StC: StateChooser> {
     clause_context: ClauseContext,
     free_projection_alias_index: u32,
     rng: ChaCha8Rng,
+}
+
+pub trait Unnested {
+    fn unnested(&self) -> &Expr;
+}
+
+impl Unnested for Expr {
+    fn unnested(&self) -> &Expr {
+        match self {
+            Expr::Nested(expr) => expr.unnested(),
+            any => any,
+        }
+    }
 }
 
 impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
@@ -101,14 +114,14 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         }
     }
 
-    pub fn gen_select_alias(&mut self) -> ObjectName {
+    pub fn gen_select_alias(&mut self) -> Ident {
         let name = format!("C{}", self.free_projection_alias_index);
         self.free_projection_alias_index += 1;
-        ObjectName(vec![Ident { value: name.clone(), quote_style: None }])
+        Ident { value: name.clone(), quote_style: None }
     }
 
     /// subgraph def_Query
-    fn handle_query(&mut self) -> (Query, Vec<(Option<ObjectName>, SubgraphType)>) {
+    fn handle_query(&mut self) -> (Query, Vec<(Option<Ident>, SubgraphType)>) {
         self.dynamic_model.notify_subquery_creation_begin();
         self.clause_context.on_query_begin();
         self.expect_state("Query");
@@ -236,13 +249,18 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     self.expect_state("call54_types");
                     let (subgraph_type, expr) = self.handle_types(None, None);
                     let (alias, select_item) = match arm {
-                        "SELECT_unnamed_expr" => (
-                            None, SelectItem::UnnamedExpr(expr)
-                        ),
+                        "SELECT_unnamed_expr" => {
+                            let alias = match &expr.unnested() {
+                                Expr::Identifier(ident) => Some(ident.clone()),
+                                Expr::CompoundIdentifier(idents) => Some(idents.last().unwrap().clone()),
+                                _ => None,
+                            };
+                            (alias, SelectItem::UnnamedExpr(expr))
+                        },
                         "SELECT_expr_with_alias" => {
                             let select_alias = self.gen_select_alias();
                             (Some(select_alias.clone()), SelectItem::ExprWithAlias {
-                                expr, alias: select_alias.0[0].clone(),
+                                expr, alias: select_alias.clone(),
                             })
                         },
                         any => self.panic_unexpected(any)
@@ -738,6 +756,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     /// subgraph def_column_spec
     fn handle_column_spec(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("column_spec");
+        /// TODO: add modifiers to check in GROUP BY, not in FROM
         let column_types = unwrap_variant_or_else!(
             self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList, || self.state_generator.print_stack()
         );
