@@ -188,7 +188,7 @@ pub struct FromContents {
     /// maps aliases to relations themselves
     /// This is ordered because we need consistent
     /// same-seed runs
-    relations: BTreeMap<ObjectName, Relation>,
+    relations: BTreeMap<Ident, Relation>,
     free_relation_name_index: usize,
 }
 
@@ -248,17 +248,22 @@ impl FromContents {
         self.get_random_column_with_type(rng, selected_graph_type, allowed_columns.as_ref(), qualified)
     }
 
-    pub fn get_column_type_by_ident_components(&self, ident_components: &Vec<Ident>) -> Result<SubgraphType, ConvertionError> {
-        // if ident has two components, we can find relation and column name easily
-        // if not, there are two ways of doing things:
-        // - This function panics. Run all training queries through a nesting + column identification 
-        // processing stage, so that this doesn't happen. Problem: a totally new funtionality, lots of time.
-        // - SELECTED ONE: This function tries different relations and probably finds the one (or does not producing a ConvertionError)
-        // but then it has to be possible to generate an unspecified column, which will be possible by adding a corresponding node
-        // and turning it off via a call modifier if there are no column names that unambiguously map to a table.
-        // This would also mean get_random_column_with_type_of and get_random_column_with_type would need to know to
-        // not select columns that are ambiguous, in case we select an unspecified column name.
-        Err(ConvertionError::new(format!("Couldn't find column named {}", ObjectName(ident_components.clone()))))
+    pub fn get_column_type_by_ident_components(&self, ident_components: &Vec<Ident>) -> SubgraphType {
+        let type_opt = match ident_components.as_slice() {
+            [col_ident] => {
+                self.relations.iter().find_map(|(_, relation)|
+                    relation.try_get_column_type_by_name(col_ident)
+                )
+            },
+            [rl_ident, col_ident] => {
+                self.get_relation_by_name(rl_ident).try_get_column_type_by_name(col_ident)
+            },
+            _ => None,
+        };
+        match type_opt {
+            Some(val) => val,
+            None => panic!("Couldn't find column named {}", ObjectName(ident_components.clone())),
+        }
     }
 
     fn get_random_column_with_type(&self, rng: &mut ChaCha8Rng, graph_type: &SubgraphType, allowed_columns: Option<&HashSet<Ident>>, qualified: bool) -> (SubgraphType, Vec<Ident>) {
@@ -271,11 +276,11 @@ impl FromContents {
     }
 
     /// Returns a relation and its alias
-    pub fn get_random_relation(&self, rng: &mut ChaCha8Rng) -> (&ObjectName, &Relation) {
+    pub fn get_random_relation(&self, rng: &mut ChaCha8Rng) -> (&Ident, &Relation) {
         self.relations.iter().skip(rng.gen_range(0..self.relations.len())).next().unwrap()
     }
 
-    pub fn get_relation_by_name(&self, name: &ObjectName) -> &Relation {
+    pub fn get_relation_by_name(&self, name: &Ident) -> &Relation {
         self.relations.iter().find(|(rl_name, _)| *rl_name == name).unwrap().1
     }
 
@@ -307,7 +312,7 @@ impl FromContents {
 #[derive(Debug, Clone)]
 pub struct Relation {
     /// projection alias
-    pub alias: ObjectName,
+    pub alias: Ident,
     /// A BTreeMap (ordered for consistency) with column
     /// names by graph types
     pub columns: BTreeMap<SubgraphType, Vec<Ident>>,
@@ -322,7 +327,7 @@ pub struct Relation {
 impl Relation {
     fn with_alias(alias: SmolStr) -> Self {
         Self {
-            alias: ObjectName(vec![Ident::new(alias)]),
+            alias: Ident::new(alias),
             columns: BTreeMap::new(),
             unnamed_columns: vec![],
             ambiguous_columns: vec![],
@@ -400,9 +405,14 @@ impl Relation {
             .collect::<Vec<_>>();
         let num_skip = rng.gen_range(0..type_columns.len());
         let (column_type, column) = type_columns.into_iter().skip(num_skip).next().unwrap();
-        (column_type, vec![
-            if qualified { self.alias.0.clone() } else { vec![] },
-            vec![column.clone()],
-        ].concat())
+        let mut column_name = vec![column.clone()];
+        if qualified { column_name = [vec![self.alias.clone()], column_name ].concat(); }
+        (column_type, column_name)
+    }
+
+    pub fn try_get_column_type_by_name(&self, column_name: &Ident) -> Option<SubgraphType> {
+        self.columns.iter()
+            .find(|(_, cols)| cols.contains(column_name))
+            .map(|x| x.0.clone())
     }
 }

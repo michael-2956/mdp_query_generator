@@ -64,6 +64,7 @@ pub struct MarkovChainGenerator<StC: StateChooser> {
     dead_end_infos: HashMap<(CallParams, BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>), Arc<Mutex<HashMap<SmolStr, bool>>>>,
 }
 
+#[derive(Debug)]
 pub struct ChainStateMemory {
     call_stack: Vec<StackFrame>,
     pending_call: Option<CallParams>,
@@ -387,7 +388,7 @@ struct CallModifierStates {
     stateful_modifiers: HashMap<SmolStr, Box<dyn StatefulCallModifier>>,
 }
 
-trait DynClone {
+pub trait DynClone {
     fn dyn_clone(&self) -> Self;
 }
 
@@ -431,6 +432,15 @@ impl DynClone for StackFrame {
 impl DynClone for Vec<StackFrame> {
     fn dyn_clone(&self) -> Self {
         self.iter().map(|x| x.dyn_clone()).collect()
+    }
+}
+
+impl DynClone for ChainStateMemory {
+    fn dyn_clone(&self) -> Self {
+        Self {
+            call_stack: self.call_stack.dyn_clone(),
+            pending_call: self.pending_call.clone(),
+        }
     }
 }
 

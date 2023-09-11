@@ -11,7 +11,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
     Expr, Ident, Query, Select, SetExpr, TableFactor,
-    TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, SelectItem, WildcardAdditionalOptions, DataType,
+    TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, SelectItem, WildcardAdditionalOptions, DataType, ObjectName,
 };
 
 use crate::config::TomlReadable;
@@ -239,7 +239,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
                     let (alias, relation) = from_contents.get_random_relation(&mut self.rng);
                     column_idents_and_graph_types.extend(relation.get_columns_with_types().into_iter());
                     select_body.projection.push(SelectItem::QualifiedWildcard(
-                        alias.to_owned(),
+                        ObjectName(vec![alias.clone()]),
                         WildcardAdditionalOptions {
                             opt_exclude: None, opt_except: None, opt_rename: None,
                         }
@@ -756,7 +756,6 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
     /// subgraph def_column_spec
     fn handle_column_spec(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("column_spec");
-        /// TODO: add modifiers to check in GROUP BY, not in FROM
         let column_types = unwrap_variant_or_else!(
             self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList, || self.state_generator.print_stack()
         );

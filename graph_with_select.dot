@@ -584,7 +584,7 @@ digraph G {
         column_spec -> qualified_column_name
         qualified_column_name -> EXIT_column_spec
 
-        unqualified_column_name [label="Unqualified column name of type: type", call_modifier="has_unique_column_names_for_type"]
+        unqualified_column_name [label="Unqualified column name of type: type\ncall mod.: 'has_unique_column_names_for_type'", call_modifier="has_unique_column_names_for_type"]
         column_spec -> unqualified_column_name
         unqualified_column_name -> EXIT_column_spec
     }

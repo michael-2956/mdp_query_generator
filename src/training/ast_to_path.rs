@@ -3,9 +3,9 @@ use std::{path::PathBuf, str::FromStr, error::Error, fmt};
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
-use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query, ObjectName, Expr, SetExpr, SelectItem, Value, BinaryOperator, UnaryOperator}};
+use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query, ObjectName, Expr, SetExpr, SelectItem, Value, BinaryOperator, UnaryOperator, Ident}};
 
-use crate::{query_creation::{random_query_generator::query_info::{DatabaseSchema, ClauseContext}, state_generators::{subgraph_type::SubgraphType, state_choosers::MaxProbStateChooser, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::CallModifiers}, dynamic_models::{DeterministicModel, DynamicModel}}}, config::TomlReadable, unwrap_variant};
+use crate::{query_creation::{random_query_generator::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{ValueSetterValue, TypesTypeValue}, Unnested}, state_generators::{subgraph_type::SubgraphType, state_choosers::MaxProbStateChooser, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::CallModifiers, DynClone}, dynamic_models::{DeterministicModel, DynamicModel}, CallTypes}}, config::TomlReadable, unwrap_variant, unwrap_variant_or_else};
 
 pub struct SQLTrainer {
     query_asts: Vec<Box<Query>>,
@@ -67,7 +67,7 @@ impl fmt::Display for ConvertionError {
 }
 
 impl ConvertionError {
-    fn new(reason: String) -> Self {
+    pub fn new(reason: String) -> Self {
         Self { reason }
     }
 }
@@ -109,6 +109,12 @@ macro_rules! unexpected_expr {
     }};
 }
 
+macro_rules! unexpected_subgraph_type {
+    ($el: expr) => {{
+        return Err(ConvertionError::new(format!("Unexpected subgraph type: {:#?}", $el)))
+    }};
+}
+
 impl PathGenerator {
     fn expect_compat(&self, target: &SubgraphType, compat_with: &SubgraphType) {
         if !target.is_compat_with(compat_with) {
@@ -141,7 +147,7 @@ impl PathGenerator {
     }
 
     /// subgraph def_Query
-    fn handle_query(&mut self, query: &Box<Query>) -> Result<Vec<(Option<ObjectName>, SubgraphType)>, ConvertionError> {
+    fn handle_query(&mut self, query: &Box<Query>) -> Result<Vec<(Option<Ident>, SubgraphType)>, ConvertionError> {
         self.clause_context.on_query_begin();
         self.push_state("Query");
 
@@ -221,20 +227,28 @@ impl PathGenerator {
             match (select_item, single_column_mod) {
                 (SelectItem::UnnamedExpr(expr), _) => {
                     self.push_states(&["SELECT_unnamed_expr", "call54_types"]);
+                    let alias = match expr.unnested() {
+                        Expr::Identifier(ident) => Some(ident.clone()),
+                        Expr::CompoundIdentifier(idents) => Some(idents.last().unwrap().clone()),
+                        _ => None,
+                    };
                     column_idents_and_graph_types.push((
-                        None, self.handle_types(expr, None, None)?
+                        alias, self.handle_types(expr, None, None)?
                     ));
                 },
                 (SelectItem::ExprWithAlias { expr, alias }, _) => {
                     self.push_states(&["SELECT_expr_with_alias", "call54_types"]);
                     column_idents_and_graph_types.push((
-                        Some(ObjectName(vec![alias.clone()])),
+                        Some(alias.clone()),
                         self.handle_types(expr, None, None)?
                     ));
                 },
                 (SelectItem::QualifiedWildcard(alias, ..), false) => {
                     self.push_state("SELECT_qualified_wildcard");
-                    let relation = self.clause_context.from().get_relation_by_name(alias);
+                    let relation = match alias.0.as_slice() {
+                        [ident] => self.clause_context.from().get_relation_by_name(ident),
+                        any => panic!("schema.table alias is not supported: {}", ObjectName(any.to_vec())),
+                    };
                     column_idents_and_graph_types.extend(relation.get_columns_with_types().into_iter());
                 },
                 (SelectItem::Wildcard(..), false) => {
@@ -407,11 +421,119 @@ impl PathGenerator {
     /// subgraph def_types
     fn handle_types(
         &mut self,
-        _expr: &Expr,
+        expr: &Expr,
         check_generated_by_one_of: Option<&[SubgraphType]>,
         check_compatible_with: Option<SubgraphType>,
     ) -> Result<SubgraphType, ConvertionError> {
-        let selected_type = SubgraphType::Undetermined;
+        self.push_state("types");
+
+        let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
+        let modifiers = unwrap_variant!(self.state_generator.get_fn_modifiers().clone(), CallModifiers::StaticList);
+
+        let selected_type = match expr {
+            Expr::Value(Value::Null) => {
+                self.push_state("types_null");
+                SubgraphType::Undetermined
+            },
+            Expr::Cast { expr, data_type } if *expr == Box::new(Expr::Value(Value::Null)) => {
+                let null_type = SubgraphType::from_data_type(data_type);
+                if !selected_types.contains(&null_type) {
+                    unexpected_subgraph_type!(null_type)
+                }
+                self.push_state(match &null_type {
+                    SubgraphType::Integer => "types_select_type_integer",
+                    SubgraphType::Numeric => "types_select_type_numeric",
+                    SubgraphType::Val3 => "types_select_type_3vl",
+                    SubgraphType::Text => "types_select_type_text",
+                    SubgraphType::Date => "types_select_type_date",
+                    any => unexpected_subgraph_type!(any),
+                });
+                self.push_state("types_return_typed_null");
+                null_type
+            },
+            expr => {
+                let chain_state_memory = self.state_generator.remember_chain_state();
+                let mut selected_types_iter = selected_types.iter();
+                // try out different allowed types to find the actual one (or not)
+                loop {
+                    match selected_types_iter.next() {
+                        Some(subgraph_type) => {
+                            self.push_state(match subgraph_type {
+                                SubgraphType::Integer => "types_select_type_integer",
+                                SubgraphType::Numeric => "types_select_type_numeric",
+                                SubgraphType::Val3 => "types_select_type_3vl",
+                                SubgraphType::Text => "types_select_type_text",
+                                SubgraphType::Date => "types_select_type_date",
+                                any => unexpected_subgraph_type!(any),
+                            });
+                            let ValueSetterValue::TypesTypeValue(allowed_type_list) = self.state_generator.get_named_value::<TypesTypeValue>().unwrap();
+                            let allowed_type_list = allowed_type_list.selected_types.clone();
+                            match expr {
+                                Expr::Subquery(query) => {
+                                    if modifiers.contains(&SmolStr::new("no subquery")) {
+                                        unexpected_expr!(expr)
+                                    }
+                                    self.push_states(&["types_select_special_expression", "call1_Query"]);
+                                    self.state_generator.set_known_list(allowed_type_list);
+                                    match self.handle_query(query) {
+                                        Ok(col_type_list) => {
+                                            if matches!(col_type_list.as_slice(), [(.., query_subgraph_type)] if query_subgraph_type == subgraph_type) {
+                                                break subgraph_type.clone()
+                                            } else {
+                                                panic!("Query did not return the requested type. Requested: {:?} Got: {:?}", subgraph_type, col_type_list);
+                                            }
+                                        },
+                                        Err(..) => self.state_generator.set_chain_state(chain_state_memory.dyn_clone()),
+                                    }
+                                }
+                                expr => {
+                                    match {
+                                        if !modifiers.contains(&SmolStr::new("no column spec")) {
+                                            self.push_states(&["types_select_special_expression", "types_column_spec"]);
+                                            if modifiers.contains(&SmolStr::new("check group by")) {
+                                                self.push_state("call1_column_spec");
+                                            } else {
+                                                self.push_state("call0_column_spec");
+                                            }
+                                            self.state_generator.set_known_list(allowed_type_list);
+                                            self.handle_column_spec(expr)
+                                        } else {
+                                            Err(ConvertionError::new(format!("no column spec is ON")))
+                                        }
+                                    } {
+                                        Ok(subgraph_type) => break subgraph_type,
+                                        Err(..) => {
+                                            self.state_generator.set_chain_state(chain_state_memory.dyn_clone());
+                                            match match subgraph_type {
+                                                // SubgraphType::Integer => self.handle_number(expr),
+                                                // SubgraphType::Numeric => self.handle_number(expr),
+                                                SubgraphType::Val3 => self.handle_val_3(expr),
+                                                // SubgraphType::Text => self.handle_text(expr),
+                                                // SubgraphType::Date => self.handle_date(expr),
+                                                any => unexpected_subgraph_type!(any),
+                                            } {
+                                                Ok(actual_type) => {
+                                                    if actual_type == *subgraph_type {
+                                                        break subgraph_type.clone()
+                                                    } else {
+                                                        panic!("Subgraph did not return the requested type. Requested: {:?} Got: {:?}", subgraph_type, actual_type);
+                                                    }
+                                                },
+                                                Err(..) => self.state_generator.set_chain_state(chain_state_memory.dyn_clone()),
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        None => return Err(ConvertionError::new(
+                            format!("Types didn't find a suitable type for expressionn, among:\n{:#?}\nexpr:\n{:#?}\n", selected_types, expr)
+                        )),
+                    }
+                }
+            },
+        };
+        self.push_state("EXIT_types");
 
         // TODO: this code is repeated here and in random query generator.
         // NOTE: Will be solved after out_types are implemented, so that all of this is managed
@@ -426,7 +548,35 @@ impl PathGenerator {
             self.expect_compat(&selected_type, &with);
         }
 
-        return Err(ConvertionError::new(format!("subgraph def_types not yet implemented")))
+        return Ok(selected_type)
+    }
+
+    /// subgraph def_column_spec
+    fn handle_column_spec(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+        self.push_state("column_spec");
+        let column_types = unwrap_variant_or_else!(
+            self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList, || self.state_generator.print_stack()
+        );
+        let ident_components = match expr {
+            Expr::CompoundIdentifier(idents) if idents.len() == 2 => {
+                self.push_state("qualified_column_name");
+                idents.clone()
+            },
+            Expr::Identifier(ident) => {
+                self.push_state("unqualified_column_name");
+                vec![ident.clone()]
+            },
+            any => unexpected_expr!(any),
+        };
+        let selected_type = self.clause_context.from().get_column_type_by_ident_components(&ident_components);
+        if !column_types.contains(&selected_type) {
+            return Err(ConvertionError::new(format!(
+                "get_column_type_by_ident_components() selected a column ({}) with type {:?}, but expected one of {:?}",
+                ObjectName(ident_components), selected_type, column_types
+            )))
+        }
+        self.push_state("EXIT_column_spec");
+        Ok(selected_type)
     }
 
     /// subgraph def_list_expr
