@@ -5,7 +5,7 @@ pub mod subgraph_type;
 pub mod error;
 mod dot_parser;
 
-use std::{path::PathBuf, collections::{HashMap, HashSet, VecDeque, BTreeMap}, sync::{Arc, Mutex}};
+use std::{path::PathBuf, collections::{HashMap, HashSet, VecDeque, BTreeMap}, sync::{Arc, Mutex}, error::Error, fmt};
 
 use core::fmt::Debug;
 use rand::{seq::SliceRandom, SeedableRng};
@@ -663,7 +663,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 
     /// choose a new node among the available destibation nodes with the fynamic model
-    fn update_current_node(&mut self, rng: &mut ChaCha8Rng, clause_context: &ClauseContext, dynamic_model: &mut (impl DynamicModel + ?Sized)) {
+    fn update_current_node(&mut self, rng: &mut ChaCha8Rng, clause_context: &ClauseContext, dynamic_model: &mut (impl DynamicModel + ?Sized)) -> Result<(), StateGenerationError> {
         dynamic_model.notify_call_stack_length(self.call_stack.len());
 
         let stack_frame = self.call_stack.last_mut().unwrap();
@@ -687,7 +687,9 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
         if let Some(destination) = destination {
             if check_node_off_dfs(rng, function, function_modifier_info, clause_context, stack_frame, &destination) {
-                panic!("Chosen node is off: {} (after {})", destination.node_common.name, last_node.node_common.name);
+                return Err(StateGenerationError::new(format!(
+                    "Chosen node is off: {} (after {})", destination.node_common.name, last_node.node_common.name
+                )));
             }
             stack_frame.function_context.current_node = destination.clone();
         } else {
@@ -695,6 +697,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             self.print_stack();
             panic!("No destination found for {} in {:#?}.", last_node.node_common.name, function_context);
         }
+        Ok(())
     }
 
     /// get current function inputs list
@@ -752,19 +755,38 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 }
 
+#[derive(Debug)]
+pub struct StateGenerationError {
+    pub reason: String,
+}
+
+impl Error for StateGenerationError { }
+
+impl fmt::Display for StateGenerationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "State generation convertion error: {}", self.reason)
+    }
+}
+
+impl StateGenerationError {
+    pub fn new(reason: String) -> Self {
+        Self { reason }
+    }
+}
+
 impl<StC: StateChooser> MarkovChainGenerator<StC> {
-    pub fn next(&mut self, rng: &mut ChaCha8Rng, clause_context: &ClauseContext, dynamic_model: &mut (impl DynamicModel + ?Sized)) -> Option<<Self as Iterator>::Item> {
+    pub fn next(&mut self, rng: &mut ChaCha8Rng, clause_context: &ClauseContext, dynamic_model: &mut (impl DynamicModel + ?Sized)) -> Result<Option<<Self as Iterator>::Item>, StateGenerationError> {
         if let Some(call_params) = self.pending_call.take() {
-            return Some(self.start_function(call_params, clause_context));
+            return Ok(Some(self.start_function(call_params, clause_context)));
         }
 
         if self.call_stack.is_empty() {
             self.reset();
-            return None
+            return Ok(None)
         }
 
         let (is_an_exit, new_node_name) = {
-            self.update_current_node(rng, clause_context, dynamic_model);
+            self.update_current_node(rng, clause_context, dynamic_model)?;
 
             let stack_frame = self.call_stack.last_mut().unwrap();
 
@@ -784,7 +806,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             self.call_stack.pop();
         }
 
-        Some(new_node_name)
+        Ok(Some(new_node_name))
     }
 }
 
@@ -910,6 +932,6 @@ impl<StC: StateChooser> Iterator for MarkovChainGenerator<StC> {
     type Item = SmolStr;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.next(&mut ChaCha8Rng::seed_from_u64(1), &mut ClauseContext::new(), &mut MarkovModel::new())
+        self.next(&mut ChaCha8Rng::seed_from_u64(1), &mut ClauseContext::new(), &mut MarkovModel::new()).unwrap()
     }
 }
