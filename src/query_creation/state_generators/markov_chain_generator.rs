@@ -565,7 +565,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         });
     }
 
-    pub fn remember_chain_state(&self) -> ChainStateMemory {
+    pub fn get_chain_state(&self) -> ChainStateMemory {
         ChainStateMemory {
             call_stack: self.call_stack.dyn_clone(),
             pending_call: self.pending_call.clone(),

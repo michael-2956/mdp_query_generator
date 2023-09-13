@@ -3,9 +3,9 @@ use std::{path::PathBuf, str::FromStr, error::Error, fmt};
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
-use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query, ObjectName, Expr, SetExpr, SelectItem, Value, BinaryOperator, UnaryOperator, Ident}};
+use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query, ObjectName, Expr, SetExpr, SelectItem, Value, BinaryOperator, UnaryOperator, Ident, DataType, TrimWhereField}};
 
-use crate::{query_creation::{random_query_generator::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{ValueSetterValue, TypesTypeValue}, Unnested}, state_generators::{subgraph_type::SubgraphType, state_choosers::MaxProbStateChooser, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::CallModifiers, DynClone}, dynamic_models::{DeterministicModel, DynamicModel}, CallTypes}}, config::TomlReadable, unwrap_variant, unwrap_variant_or_else};
+use crate::{query_creation::{random_query_generator::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{ValueSetterValue, TypesTypeValue}, Unnested}, state_generators::{subgraph_type::SubgraphType, state_choosers::MaxProbStateChooser, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::CallModifiers, DynClone, ChainStateMemory}, dynamic_models::{DeterministicModel, DynamicModel}, CallTypes}}, config::TomlReadable, unwrap_variant, unwrap_variant_or_else};
 
 pub struct SQLTrainer {
     query_asts: Vec<Box<Query>>,
@@ -116,6 +116,11 @@ macro_rules! unexpected_subgraph_type {
     }};
 }
 
+struct Checkpoint {
+    clause_context: ClauseContext,
+    chain_state_memory: ChainStateMemory,
+}
+
 impl PathGenerator {
     fn expect_compat(&self, target: &SubgraphType, compat_with: &SubgraphType) {
         if !target.is_compat_with(compat_with) {
@@ -133,7 +138,8 @@ impl PathGenerator {
         }
     } 
 
-    fn push_state(&mut self, state: &str) -> Result<(), ConvertionError> {
+    fn try_push_state(&mut self, state: &str) -> Result<(), ConvertionError> {
+        // println!("pushing state: {state}");
         let state = SmolStr::new(state);
         self.state_selector.set_state(state.clone());
         if let Some(actual_state) = self.next_state_opt()? {
@@ -148,17 +154,29 @@ impl PathGenerator {
         Ok(())
     }
 
-    fn push_states(&mut self, state_names: &[&str]) -> Result<(), ConvertionError> {
+    fn try_push_states(&mut self, state_names: &[&str]) -> Result<(), ConvertionError> {
         for state_name in state_names {
-            self.push_state(state_name)?;
+            self.try_push_state(state_name)?;
         }
         Ok(())
+    }
+
+    fn get_checkpoint(&mut self) -> Checkpoint {
+        Checkpoint {
+            clause_context: self.clause_context.clone(),
+            chain_state_memory: self.state_generator.get_chain_state(),
+        }
+    }
+
+    fn restore_checkpoint(&mut self, checkpoint: &Checkpoint) {
+        self.clause_context = checkpoint.clause_context.clone();
+        self.state_generator.set_chain_state(checkpoint.chain_state_memory.dyn_clone());
     }
 
     /// subgraph def_Query
     fn handle_query(&mut self, query: &Box<Query>) -> Result<Vec<(Option<Ident>, SubgraphType)>, ConvertionError> {
         self.clause_context.on_query_begin();
-        self.push_state("Query")?;
+        self.try_push_state("Query")?;
 
         match self.state_generator.get_fn_modifiers() {
             CallModifiers::StaticList(list) if list.contains(&SmolStr::new("single row")) => {
@@ -167,54 +185,54 @@ impl PathGenerator {
                         "Expected query to have \"LIMIT 1\" because of \'single row\', got {:#?}", query.limit
                     )))
                 }
-                self.push_state("single_row_true")?;
+                self.try_push_state("single_row_true")?;
             }
             _ => {
-                self.push_state("single_row_false")?;
+                self.try_push_state("single_row_false")?;
                 if let Some(ref limit) = query.limit {
-                    self.push_states(&["limit", "call52_types"])?;
+                    self.try_push_states(&["limit", "call52_types"])?;
                     self.handle_types(limit, Some(&[SubgraphType::Numeric]), None)?;
                 }
             }
         }
-        self.push_state("FROM")?;
+        self.try_push_state("FROM")?;
 
         let select_body = unwrap_variant!(&*query.body, SetExpr::Select);
 
         for table_with_joins in select_body.from.iter() {
             match &table_with_joins.relation {
                 sqlparser::ast::TableFactor::Table { name, .. } => {
-                    self.push_state("Table")?;
+                    self.try_push_state("Table")?;
                     let create_table_st = self.database_schema.get_table_def_by_name(name);
                     self.clause_context.from_mut().append_table(create_table_st);
                 },
                 sqlparser::ast::TableFactor::Derived { subquery, .. } => {
-                    self.push_state("call0_Query")?;
+                    self.try_push_state("call0_Query")?;
                     let column_idents_and_graph_types = self.handle_query(&subquery)?;
                     self.clause_context.from_mut().append_query(column_idents_and_graph_types);
                 },
                 any => unexpected_expr!(any)
             }
-            self.push_state("FROM_multiple_relations")?;
+            self.try_push_state("FROM_multiple_relations")?;
         }
-        self.push_state("EXIT_FROM")?;
+        self.try_push_state("EXIT_FROM")?;
 
         if let Some(ref selection) = select_body.selection {
-            self.push_state("WHERE")?;
-            self.push_state("call53_types")?;
+            self.try_push_state("WHERE")?;
+            self.try_push_state("call53_types")?;
             self.handle_types(selection, Some(&[SubgraphType::Val3]), None)?;
         }
-        self.push_state("EXIT_WHERE")?;
+        self.try_push_state("EXIT_WHERE")?;
 
-        self.push_state("SELECT")?;
+        self.try_push_state("SELECT")?;
         if select_body.distinct {
-            self.push_state("SELECT_DISTINCT")?;
+            self.try_push_state("SELECT_DISTINCT")?;
         }
-        self.push_state("SELECT_distinct_end")?;
+        self.try_push_state("SELECT_distinct_end")?;
 
         let mut column_idents_and_graph_types = vec![];
 
-        self.push_state("SELECT_projection")?;
+        self.try_push_state("SELECT_projection")?;
 
         let single_column_mod = match self.state_generator.get_fn_modifiers() {
             CallModifiers::StaticList(list) if list.contains(&SmolStr::new("single column")) => true,
@@ -229,13 +247,13 @@ impl PathGenerator {
                         select_body.projection
                     )))
                 } else {
-                    self.push_state("SELECT_list_multiple_values")?;
+                    self.try_push_state("SELECT_list_multiple_values")?;
                 }
             }
-            self.push_state("SELECT_list")?;
+            self.try_push_state("SELECT_list")?;
             match (select_item, single_column_mod) {
                 (SelectItem::UnnamedExpr(expr), _) => {
-                    self.push_states(&["SELECT_unnamed_expr", "call54_types"])?;
+                    self.try_push_states(&["SELECT_unnamed_expr", "call54_types"])?;
                     let alias = match expr.unnested() {
                         Expr::Identifier(ident) => Some(ident.clone()),
                         Expr::CompoundIdentifier(idents) => Some(idents.last().unwrap().clone()),
@@ -246,14 +264,14 @@ impl PathGenerator {
                     ));
                 },
                 (SelectItem::ExprWithAlias { expr, alias }, _) => {
-                    self.push_states(&["SELECT_expr_with_alias", "call54_types"])?;
+                    self.try_push_states(&["SELECT_expr_with_alias", "call54_types"])?;
                     column_idents_and_graph_types.push((
                         Some(alias.clone()),
                         self.handle_types(expr, None, None)?
                     ));
                 },
                 (SelectItem::QualifiedWildcard(alias, ..), false) => {
-                    self.push_state("SELECT_qualified_wildcard")?;
+                    self.try_push_state("SELECT_qualified_wildcard")?;
                     let relation = match alias.0.as_slice() {
                         [ident] => self.clause_context.from().get_relation_by_name(ident),
                         any => panic!("schema.table alias is not supported: {}", ObjectName(any.to_vec())),
@@ -261,7 +279,7 @@ impl PathGenerator {
                     column_idents_and_graph_types.extend(relation.get_columns_with_types().into_iter());
                 },
                 (SelectItem::Wildcard(..), false) => {
-                    self.push_state("SELECT_wildcard")?;
+                    self.try_push_state("SELECT_wildcard")?;
                     column_idents_and_graph_types.extend(self.clause_context
                         .from().get_wildcard_columns().into_iter()
                     );
@@ -274,9 +292,9 @@ impl PathGenerator {
                 },
             }
         }
-        self.push_state("EXIT_SELECT")?;
+        self.try_push_state("EXIT_SELECT")?;
 
-        self.push_state("EXIT_Query")?;
+        self.try_push_state("EXIT_Query")?;
         self.clause_context.on_query_end();
 
         return Ok(column_idents_and_graph_types)
@@ -284,53 +302,53 @@ impl PathGenerator {
 
     /// subgraph def_VAL_3
     fn handle_val_3(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
-        self.push_state("VAL_3")?;
+        self.try_push_state("VAL_3")?;
 
         match expr {
             x @ (Expr::IsNull(expr) | Expr::IsNotNull(expr)) => {
-                self.push_state("IsNull")?;
-                if matches!(x, Expr::IsNotNull(..)) { self.push_state("IsNull_not")?; }
-                self.push_state("call55_types")?;
+                self.try_push_state("IsNull")?;
+                if matches!(x, Expr::IsNotNull(..)) { self.try_push_state("IsNull_not")?; }
+                self.try_push_state("call55_types")?;
                 self.handle_types(expr, None, None)?;
             },
             x @ (Expr::IsDistinctFrom(expr_1, expr_2) | Expr::IsNotDistinctFrom(expr_1, expr_2)) =>  {
-                self.push_states(&["IsDistinctFrom", "call56_types"])?;
+                self.try_push_states(&["IsDistinctFrom", "call56_types"])?;
                 let types_selected_type = self.handle_types(expr_1, None, None)?;
                 self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
-                if matches!(x, Expr::IsNotDistinctFrom(..)) { self.push_state("IsDistinctNOT")?; }
-                self.push_states(&["DISTINCT", "call21_types"])?;
+                if matches!(x, Expr::IsNotDistinctFrom(..)) { self.try_push_state("IsDistinctNOT")?; }
+                self.try_push_states(&["DISTINCT", "call21_types"])?;
                 self.handle_types(expr_2, None, Some(types_selected_type))?;
             },
             Expr::Exists { subquery, negated } => {
-                self.push_state("Exists")?;
-                if *negated { self.push_state("Exists_not")?; }
-                self.push_state("call2_Query")?;
+                self.try_push_state("Exists")?;
+                if *negated { self.try_push_state("Exists_not")?; }
+                self.try_push_state("call2_Query")?;
                 self.handle_query(subquery)?;
             },
             Expr::InList { expr, list, negated } => {
-                self.push_states(&["InList", "call57_types"])?;
+                self.try_push_states(&["InList", "call57_types"])?;
                 let types_selected_type = self.handle_types(expr, None, None)?;
                 self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
-                if *negated { self.push_state("InListNot")?; }
-                self.push_states(&["InListIn", "call1_list_expr"])?;
+                if *negated { self.try_push_state("InListNot")?; }
+                self.try_push_states(&["InListIn", "call1_list_expr"])?;
                 self.handle_list_expr(list)?;
             },
             Expr::InSubquery { expr, subquery, negated } => {
-                self.push_states(&["InSubquery", "call58_types"])?;
+                self.try_push_states(&["InSubquery", "call58_types"])?;
                 let types_selected_type = self.handle_types(expr, None, None)?;
                 self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
-                if *negated { self.push_state("InSubqueryNot")?; }
-                self.push_states(&["InSubqueryIn", "call3_Query"])?;
+                if *negated { self.try_push_state("InSubqueryNot")?; }
+                self.try_push_states(&["InSubqueryIn", "call3_Query"])?;
                 self.handle_query(subquery)?;
             },
             Expr::Between { expr, negated, low, high } => {
-                self.push_states(&["Between", "call59_types"])?;
+                self.try_push_states(&["Between", "call59_types"])?;
                 let types_selected_type = self.handle_types(expr, None, None)?;
                 self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
-                if *negated { self.push_state("BetweenBetweenNot")?; }
-                self.push_states(&["BetweenBetween", "call22_types"])?;
+                if *negated { self.try_push_state("BetweenBetweenNot")?; }
+                self.try_push_states(&["BetweenBetween", "call22_types"])?;
                 self.handle_types(low, None, Some(types_selected_type.clone()))?;
-                self.push_states(&["BetweenBetweenAnd", "call23_types"])?;
+                self.try_push_states(&["BetweenBetweenAnd", "call23_types"])?;
                 self.handle_types(high, None, Some(types_selected_type))?;
             },
             Expr::BinaryOp { left, op, right } => {
@@ -338,15 +356,15 @@ impl PathGenerator {
                     BinaryOperator::And |
                     BinaryOperator::Or |
                     BinaryOperator::Xor => {
-                        self.push_states(&["BinaryBooleanOpV3", "call27_types"])?;
+                        self.try_push_states(&["BinaryBooleanOpV3", "call27_types"])?;
                         self.handle_types(left, Some(&[SubgraphType::Val3]), None)?;
-                        self.push_state(match op {
+                        self.try_push_state(match op {
                             BinaryOperator::And => "BinaryBooleanOpV3AND",
                             BinaryOperator::Or => "BinaryBooleanOpV3OR",
                             BinaryOperator::Xor => "BinaryBooleanOpV3XOR",
                             any => unexpected_expr!(any),
                         })?;
-                        self.push_state("call28_types")?;
+                        self.try_push_state("call28_types")?;
                         self.handle_types(right, Some(&[SubgraphType::Val3]), None)?;
                     },
                     BinaryOperator::Eq |
@@ -355,44 +373,44 @@ impl PathGenerator {
                     BinaryOperator::NotEq => {
                         match &**right {
                             Expr::AnyOp(right_inner) | Expr::AllOp(right_inner) => {
-                                self.push_states(&["AnyAll", "call61_types"])?;
+                                self.try_push_states(&["AnyAll", "call61_types"])?;
                                 let types_selected_type = self.handle_types(left, None, None)?;
                                 self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
-                                self.push_state("AnyAllSelectOp")?;
-                                self.push_state(match op {
+                                self.try_push_state("AnyAllSelectOp")?;
+                                self.try_push_state(match op {
                                     BinaryOperator::Eq => "AnyAllEqual",
                                     BinaryOperator::Lt => "AnyAllLess",
                                     BinaryOperator::LtEq => "AnyAllLessEqual",
                                     BinaryOperator::NotEq => "AnyAllUnEqual",
                                     any => unexpected_expr!(any),
                                 })?;
-                                self.push_state("AnyAllSelectIter")?;
+                                self.try_push_state("AnyAllSelectIter")?;
                                 match &**right_inner {
                                     Expr::Subquery(query) => {
-                                        self.push_state("call4_Query")?;
+                                        self.try_push_state("call4_Query")?;
                                         self.handle_query(query)?;
                                     },
                                     any => unexpected_expr!(any),
                                 }
-                                self.push_state("AnyAllAnyAll")?;
-                                self.push_state(match &**right {
+                                self.try_push_state("AnyAllAnyAll")?;
+                                self.try_push_state(match &**right {
                                     Expr::AllOp(..) => "AnyAllAnyAllAll",
                                     Expr::AnyOp(..) => "AnyAllAnyAllAny",
                                     any => unexpected_expr!(any),
                                 })?;
                             },
                             _ => {
-                                self.push_states(&["BinaryComp", "call60_types"])?;
+                                self.try_push_states(&["BinaryComp", "call60_types"])?;
                                 let types_selected_type = self.handle_types(left, None, None)?;
                                 self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
-                                self.push_state(match op {
+                                self.try_push_state(match op {
                                     BinaryOperator::Eq => "BinaryCompEqual",
                                     BinaryOperator::Lt => "BinaryCompLess",
                                     BinaryOperator::LtEq => "BinaryCompLessEqual",
                                     BinaryOperator::NotEq => "BinaryCompUnEqual",
                                     any => unexpected_expr!(any),
                                 })?;
-                                self.push_state("call24_types")?;
+                                self.try_push_state("call24_types")?;
                                 self.handle_types(right, None, Some(types_selected_type))?;
                             }
                         }
@@ -401,20 +419,20 @@ impl PathGenerator {
                 }
             },
             Expr::Like { negated, expr, pattern, .. } => {
-                self.push_states(&["BinaryStringLike", "call25_types"])?;
+                self.try_push_states(&["BinaryStringLike", "call25_types"])?;
                 self.handle_types(expr, Some(&[SubgraphType::Text]), None)?;
-                if *negated { self.push_state("BinaryStringLikeNot")?; }
-                self.push_states(&["BinaryStringLikeIn", "call26_types"])?;
+                if *negated { self.try_push_state("BinaryStringLikeNot")?; }
+                self.try_push_states(&["BinaryStringLikeIn", "call26_types"])?;
                 self.handle_types(pattern, Some(&[SubgraphType::Text]), None)?;
             }
-            Expr::Value(Value::Boolean(true)) => self.push_state("true")?,
-            Expr::Value(Value::Boolean(false)) => self.push_state("false")?,
+            Expr::Value(Value::Boolean(true)) => self.try_push_state("true")?,
+            Expr::Value(Value::Boolean(false)) => self.try_push_state("false")?,
             Expr::Nested(expr) => {
-                self.push_states(&["Nested_VAL_3", "call29_types"])?;
+                self.try_push_states(&["Nested_VAL_3", "call29_types"])?;
                 self.handle_types(expr, Some(&[SubgraphType::Val3]), None)?;
             },
             Expr::UnaryOp { op, expr } if *op == UnaryOperator::Not => {
-                self.push_states(&["UnaryNot_VAL_3", "call30_types"])?;
+                self.try_push_states(&["UnaryNot_VAL_3", "call30_types"])?;
                 self.handle_types(
                     expr, Some(&[SubgraphType::Val3]), None
                 )?;
@@ -422,9 +440,141 @@ impl PathGenerator {
             any => unexpected_expr!(any),
         }
 
-        self.push_state("EXIT_VAL_3")?;
+        self.try_push_state("EXIT_VAL_3")?;
 
         Ok(SubgraphType::Val3)
+    }
+
+    /// subgraph def_numeric
+    fn handle_number(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+        self.try_push_state("number")?;
+        if unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList).len() == 2 {
+            todo!(
+                "The number subgraph cannot yet choose between types / perform mixed type \
+                operations / type casts. It only accepts either integer or numeric, but not both"
+            );
+        }
+        let number_type = match expr {
+            Expr::Value(Value::Number(number_str, false)) => {
+                self.try_push_state("number_literal")?;
+                if number_str.parse::<u64>().is_ok() {
+                    self.try_push_state("number_literal_integer")?;
+                    SubgraphType::Integer
+                } else {
+                    self.try_push_state("number_literal_numeric")?;
+                    SubgraphType::Numeric
+                }
+            },
+            Expr::BinaryOp { left, op, right } => {
+                self.try_push_states(&["BinaryNumberOp", "call48_types"])?;
+                let number_type = self.handle_types(left, None, None)?;
+                self.try_push_state(match op {
+                    BinaryOperator::BitwiseAnd => "binary_number_bin_and",
+                    BinaryOperator::BitwiseOr => "binary_number_bin_or",
+                    BinaryOperator::PGBitwiseXor => "binary_number_bin_xor",
+                    BinaryOperator::PGExp => "binary_number_exp",
+                    BinaryOperator::Divide => "binary_number_div",
+                    BinaryOperator::Minus => "binary_number_minus",
+                    BinaryOperator::Multiply => "binary_number_mul",
+                    BinaryOperator::Plus => "binary_number_plus",
+                    any => unexpected_expr!(any),
+                })?;
+                self.try_push_state("call47_types")?;
+                self.handle_types(right, None, None)?;
+                number_type
+            },
+            Expr::UnaryOp { op, expr } => {
+                self.try_push_state("UnaryNumberOp")?;
+                self.try_push_state(match op {
+                    UnaryOperator::PGAbs => "unary_number_abs",
+                    UnaryOperator::PGBitwiseNot => "unary_number_bin_not",
+                    UnaryOperator::PGCubeRoot => "unary_number_cub_root",
+                    UnaryOperator::Minus => "unary_number_minus",
+                    UnaryOperator::Plus => "unary_number_plus",
+                    UnaryOperator::PGSquareRoot => "unary_number_sq_root",
+                    any => unexpected_expr!(any),
+                })?;
+                self.try_push_state("call1_types")?;
+                self.handle_types(expr, None, None)?
+            },
+            Expr::Position { expr, r#in } => {
+                self.try_push_states(&["number_string_position", "call2_types"])?;
+                self.handle_types(expr, Some(&[SubgraphType::Text]), None)?;
+                self.try_push_states(&["string_position_in", "call3_types"])?;
+                self.handle_types(r#in, Some(&[SubgraphType::Text]), None)?;
+                SubgraphType::Integer
+            },
+            Expr::Nested(inner) => {
+                self.try_push_states(&["nested_number", "call4_types"])?;
+                self.handle_types(inner, Some(&[SubgraphType::Numeric, SubgraphType::Integer]), None)?
+            },
+            any => unexpected_expr!(any),
+        };
+        self.try_push_state("EXIT_number")?;
+        Ok(number_type)
+    }
+
+    /// subgraph def_text
+    fn handle_text(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+        self.try_push_state("text")?;
+        match expr {
+            Expr::Value(Value::SingleQuotedString(_)) => {
+                self.try_push_state("text_literal")?;
+            },
+            Expr::Trim { expr, trim_where, trim_what } => {
+                self.try_push_state("text_trim")?;
+                match (trim_where, trim_what) {
+                    (Some(trim_where), Some(trim_what)) => {
+                        self.try_push_state("call6_types")?;
+                        self.handle_types(trim_what, Some(&[SubgraphType::Text]), None)?;
+                        self.try_push_state(match trim_where {
+                            TrimWhereField::Both => "BOTH",
+                            TrimWhereField::Leading => "LEADING",
+                            TrimWhereField::Trailing => "TRAILING",
+                        })?;
+                    },
+                    (None, None) => {},
+                    any => unexpected_expr!(any),
+                };
+                self.try_push_state("call5_types")?;
+                self.handle_types(expr, Some(&[SubgraphType::Text]), None)?;
+            },
+            Expr::BinaryOp { left, op, right } if *op == BinaryOperator::StringConcat => {
+                self.try_push_states(&["text_concat", "call7_types"])?;
+                self.handle_types(left, Some(&[SubgraphType::Text]), None)?;
+                self.try_push_states(&["text_concat_concat", "call8_types"])?;
+                self.handle_types(right, Some(&[SubgraphType::Text]), None)?;
+            },
+            Expr::Substring { expr, substring_from, substring_for} => {
+                self.try_push_states(&["text_substring", "call9_types"])?;
+                self.handle_types(expr, Some(&[SubgraphType::Text]), None)?;
+                if let Some(substring_from) = substring_from {
+                    self.try_push_states(&["text_substring_from", "call10_types"])?;
+                    self.handle_types(substring_from, Some(&[SubgraphType::Integer]), None)?;
+                }
+                if let Some(substring_for) = substring_for {
+                    self.try_push_states(&["text_substring_for", "call11_types"])?;
+                    self.handle_types(substring_for, Some(&[SubgraphType::Integer]), None)?;
+                }
+                self.try_push_state("text_substring_end")?;
+            },
+            any => unexpected_expr!(any),
+        }
+        self.try_push_state("EXIT_text")?;
+        Ok(SubgraphType::Text)
+    }
+
+    /// subgarph def_date
+    fn handle_date(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+        self.try_push_state("date")?;
+        match expr {
+            Expr::TypedString { data_type, .. } if *data_type == DataType::Date => {
+                self.try_push_state("date_literal")?;
+            },
+            any => unexpected_expr!(any),
+        }
+        self.try_push_state("EXIT_date")?;
+        Ok(SubgraphType::Date)
     }
 
     /// subgraph def_types
@@ -434,14 +584,14 @@ impl PathGenerator {
         check_generated_by_one_of: Option<&[SubgraphType]>,
         check_compatible_with: Option<SubgraphType>,
     ) -> Result<SubgraphType, ConvertionError> {
-        self.push_state("types")?;
+        self.try_push_state("types")?;
 
         let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
         let modifiers = unwrap_variant!(self.state_generator.get_fn_modifiers().clone(), CallModifiers::StaticList);
 
         let selected_type = match expr {
             Expr::Value(Value::Null) => {
-                self.push_state("types_null")?;
+                self.try_push_state("types_null")?;
                 SubgraphType::Undetermined
             },
             Expr::Cast { expr, data_type } if *expr == Box::new(Expr::Value(Value::Null)) => {
@@ -449,7 +599,7 @@ impl PathGenerator {
                 if !selected_types.contains(&null_type) {
                     unexpected_subgraph_type!(null_type)
                 }
-                self.push_state(match &null_type {
+                self.try_push_state(match &null_type {
                     SubgraphType::Integer => "types_select_type_integer",
                     SubgraphType::Numeric => "types_select_type_numeric",
                     SubgraphType::Val3 => "types_select_type_3vl",
@@ -457,17 +607,17 @@ impl PathGenerator {
                     SubgraphType::Date => "types_select_type_date",
                     any => unexpected_subgraph_type!(any),
                 })?;
-                self.push_state("types_return_typed_null")?;
+                self.try_push_state("types_return_typed_null")?;
                 null_type
             },
             expr => {
-                let chain_state_memory = self.state_generator.remember_chain_state();
+                let types_before_state_selection = self.get_checkpoint();
                 let mut selected_types_iter = selected_types.iter();
                 // try out different allowed types to find the actual one (or not)
                 loop {
                     match selected_types_iter.next() {
                         Some(subgraph_type) => {
-                            self.push_state(match subgraph_type {
+                            self.try_push_state(match subgraph_type {
                                 SubgraphType::Integer => "types_select_type_integer",
                                 SubgraphType::Numeric => "types_select_type_numeric",
                                 SubgraphType::Val3 => "types_select_type_3vl",
@@ -475,6 +625,7 @@ impl PathGenerator {
                                 SubgraphType::Date => "types_select_type_date",
                                 any => unexpected_subgraph_type!(any),
                             })?;
+                            let types_after_state_selection = self.get_checkpoint();
                             let ValueSetterValue::TypesTypeValue(allowed_type_list) = self.state_generator.get_named_value::<TypesTypeValue>().unwrap();
                             let allowed_type_list = allowed_type_list.selected_types.clone();
                             match expr {
@@ -482,7 +633,7 @@ impl PathGenerator {
                                     if modifiers.contains(&SmolStr::new("no subquery")) {
                                         unexpected_expr!(expr)
                                     }
-                                    self.push_states(&["types_select_special_expression", "call1_Query"])?;
+                                    self.try_push_states(&["types_select_special_expression", "call1_Query"])?;
                                     self.state_generator.set_known_list(allowed_type_list);
                                     match self.handle_query(query) {
                                         Ok(col_type_list) => {
@@ -492,18 +643,18 @@ impl PathGenerator {
                                                 panic!("Query did not return the requested type. Requested: {:?} Got: {:?}", subgraph_type, col_type_list);
                                             }
                                         },
-                                        Err(..) => self.state_generator.set_chain_state(chain_state_memory.dyn_clone()),
+                                        Err(..) => self.restore_checkpoint(&types_before_state_selection),
                                     }
                                 }
                                 expr => {
                                     match {
                                         if !modifiers.contains(&SmolStr::new("no column spec")) {
-                                            match self.push_states(&["types_select_special_expression", "types_column_spec"]) {
+                                            match self.try_push_states(&["types_select_special_expression", "types_column_spec"]) {
                                                 Ok(..) => {
                                                     if modifiers.contains(&SmolStr::new("check group by")) {
-                                                        self.push_state("call1_column_spec")?;
+                                                        self.try_push_state("call1_column_spec")?;
                                                     } else {
-                                                        self.push_state("call0_column_spec")?;
+                                                        self.try_push_state("call0_column_spec")?;
                                                     }
                                                     self.state_generator.set_known_list(allowed_type_list);
                                                     self.handle_column_spec(expr)
@@ -514,15 +665,30 @@ impl PathGenerator {
                                             Err(ConvertionError::new(format!("no column spec is ON")))
                                         }
                                     } {
-                                        Ok(subgraph_type) => break subgraph_type,
+                                        Ok(col_subgraph_type) => break col_subgraph_type,
                                         Err(..) => {
-                                            self.state_generator.set_chain_state(chain_state_memory.dyn_clone());
+                                            self.restore_checkpoint(&types_after_state_selection);
                                             match match subgraph_type {
-                                                // SubgraphType::Integer => self.handle_number(expr),
-                                                // SubgraphType::Numeric => self.handle_number(expr),
-                                                SubgraphType::Val3 => self.handle_val_3(expr),
-                                                // SubgraphType::Text => self.handle_text(expr),
-                                                // SubgraphType::Date => self.handle_date(expr),
+                                                SubgraphType::Integer => {
+                                                    self.try_push_state("call1_number")?;
+                                                    self.handle_number(expr)
+                                                },
+                                                SubgraphType::Numeric => {
+                                                    self.try_push_state("call0_number")?;
+                                                    self.handle_number(expr)
+                                                },
+                                                SubgraphType::Val3 => {
+                                                    self.try_push_state("call1_VAL_3")?;
+                                                    self.handle_val_3(expr)
+                                                },
+                                                SubgraphType::Text => {
+                                                    self.try_push_state("call0_text")?;
+                                                    self.handle_text(expr)
+                                                },
+                                                SubgraphType::Date => {
+                                                    self.try_push_state("call0_date")?;
+                                                    self.handle_date(expr)
+                                                },
                                                 any => unexpected_subgraph_type!(any),
                                             } {
                                                 Ok(actual_type) => {
@@ -532,7 +698,7 @@ impl PathGenerator {
                                                         panic!("Subgraph did not return the requested type. Requested: {:?} Got: {:?}", subgraph_type, actual_type);
                                                     }
                                                 },
-                                                Err(..) => self.state_generator.set_chain_state(chain_state_memory.dyn_clone()),
+                                                Err(..) => self.restore_checkpoint(&types_before_state_selection),
                                             }
                                         }
                                     }
@@ -546,7 +712,7 @@ impl PathGenerator {
                 }
             },
         };
-        self.push_state("EXIT_types")?;
+        self.try_push_state("EXIT_types")?;
 
         // TODO: this code is repeated here and in random query generator.
         // NOTE: Will be solved after out_types are implemented, so that all of this is managed
@@ -566,17 +732,17 @@ impl PathGenerator {
 
     /// subgraph def_column_spec
     fn handle_column_spec(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
-        self.push_state("column_spec")?;
+        self.try_push_state("column_spec")?;
         let column_types = unwrap_variant_or_else!(
             self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList, || self.state_generator.print_stack()
         );
         let ident_components = match expr {
             Expr::CompoundIdentifier(idents) if idents.len() == 2 => {
-                self.push_state("qualified_column_name")?;
+                self.try_push_state("qualified_column_name")?;
                 idents.clone()
             },
             Expr::Identifier(ident) => {
-                self.push_state("unqualified_column_name")?;
+                self.try_push_state("unqualified_column_name")?;
                 vec![ident.clone()]
             },
             any => unexpected_expr!(any),
@@ -588,21 +754,21 @@ impl PathGenerator {
                 ObjectName(ident_components), selected_type, column_types
             )))
         }
-        self.push_state("EXIT_column_spec")?;
+        self.try_push_state("EXIT_column_spec")?;
         Ok(selected_type)
     }
 
     /// subgraph def_list_expr
     fn handle_list_expr(&mut self, list: &Vec<Expr>) -> Result<SubgraphType, ConvertionError> {
-        self.push_states(&["list_expr", "call16_types"])?;
+        self.try_push_states(&["list_expr", "call16_types"])?;
         let inner_type = self.handle_types(&list[0], None, None)?;
-        self.push_state("list_expr_multiple_values")?;
+        self.try_push_state("list_expr_multiple_values")?;
         self.state_generator.set_compatible_list(inner_type.get_compat_types());
         for expr in list.iter().skip(1) {
-            self.push_state("call49_types")?;
+            self.try_push_state("call49_types")?;
             self.handle_types(expr, None, Some(inner_type.clone()))?;
         }
-        self.push_state("EXIT_list_expr")?;
+        self.try_push_state("EXIT_list_expr")?;
         Ok(SubgraphType::ListExpr(Box::new(inner_type)))
     }
 }

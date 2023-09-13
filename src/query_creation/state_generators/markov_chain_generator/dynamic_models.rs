@@ -50,6 +50,9 @@ impl DynamicModel for DeterministicModel {
 
     fn assign_log_probabilities(&mut self, node_outgoing: Vec<(bool, f64, NodeParams)>) -> Vec::<(bool, f64, NodeParams)> {
         let node_name = self.state_to_choose.take().unwrap();
+        if node_outgoing.iter().find(|(.., node)| node.node_common.name == node_name).is_none() {
+            println!("Did not find {node_name} among {:?}", node_outgoing);
+        }
         node_outgoing.iter().map(
             |(on, _, node)| (
                 *on,
