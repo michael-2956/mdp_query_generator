@@ -2,7 +2,7 @@ use std::{path::PathBuf, str::FromStr};
 
 use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query}};
 
-use crate::{config::TomlReadable, query_creation::{state_generators::markov_chain_generator::{StateGeneratorConfig, error::SyntaxError}, query_generator::query_info::DatabaseSchema}};
+use crate::{config::TomlReadable, query_creation::{state_generator::markov_chain_generator::{StateGeneratorConfig, error::SyntaxError}, query_generator::query_info::DatabaseSchema}};
 
 use super::ast_to_path::{PathNode, ConvertionError, PathGenerator};
 

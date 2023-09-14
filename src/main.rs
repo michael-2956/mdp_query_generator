@@ -2,7 +2,7 @@ use std::{io::Write, time::Instant};
 
 use equivalence_testing::{query_creation::{
     query_generator::{QueryGenerator, QueryGeneratorConfig},
-    state_generators::{
+    state_generator::{
         MarkovChainGenerator,
         state_choosers::{ProbabilisticStateChooser, StateChooser},
         dynamic_models::{DynamicModel, MarkovModel, AntiCallModel},
