@@ -1,4 +1,4 @@
-use std::{error::Error, fmt, path::PathBuf, str::FromStr, io::Write};
+use std::{error::Error, fmt, path::PathBuf, str::FromStr, io::Write, collections::HashMap};
 
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -633,6 +633,7 @@ impl PathGenerator {
 
         let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
         let modifiers = unwrap_variant!(self.state_generator.get_fn_modifiers().clone(), CallModifiers::StaticList);
+        let mut error_mem = HashMap::new();
 
         let selected_type = match expr {
             Expr::Value(Value::Null) => {
@@ -688,7 +689,10 @@ impl PathGenerator {
                                                 panic!("Query did not return the requested type. Requested: {:?} Got: {:?}", subgraph_type, col_type_list);
                                             }
                                         },
-                                        Err(..) => self.restore_checkpoint(&types_before_state_selection),
+                                        Err(err) => {
+                                            error_mem.insert("Subquery".to_string(), (subgraph_type.clone(), err));
+                                            self.restore_checkpoint(&types_before_state_selection)
+                                        },
                                     }
                                 }
                                 expr => {
@@ -711,7 +715,8 @@ impl PathGenerator {
                                         }
                                     } {
                                         Ok(col_subgraph_type) => break col_subgraph_type,
-                                        Err(..) => {
+                                        Err(err) => {
+                                            error_mem.insert("column identifier".to_string(), (subgraph_type.clone(), err));
                                             self.restore_checkpoint(&types_after_state_selection);
                                             match match subgraph_type {
                                                 SubgraphType::Integer => {
@@ -743,7 +748,10 @@ impl PathGenerator {
                                                         panic!("Subgraph did not return the requested type. Requested: {:?} Got: {:?}", subgraph_type, actual_type);
                                                     }
                                                 },
-                                                Err(..) => self.restore_checkpoint(&types_before_state_selection),
+                                                Err(err) => {
+                                                    error_mem.insert("type expr.".to_string(), (subgraph_type.clone(), err));
+                                                    self.restore_checkpoint(&types_before_state_selection)
+                                                },
                                             }
                                         }
                                     }
@@ -751,7 +759,14 @@ impl PathGenerator {
                             }
                         },
                         None => return Err(ConvertionError::new(
-                            format!("Types didn't find a suitable type for expression, among:\n{:#?}\nExpression:\n{:#?}\nPrinted: {}\n", selected_types, expr, expr)
+                            format!(
+                                "Types didn't find a suitable type for expression, among:\n{:#?}\n\
+                                Expression:\n{:#?}\nPrinted: {}\nErrors: {}\n",
+                                selected_types, expr, expr, error_mem.iter().fold(String::new(), |mut acc, x| {
+                                    acc += format!("\n\"{}\" (type: {:?}): {}\n", x.0, x.1.0, x.1.1).as_str();
+                                    acc
+                                })
+                            )
                         )),
                     }
                 }
