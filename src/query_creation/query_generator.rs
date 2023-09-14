@@ -600,6 +600,12 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         self.expect_state("text");
         let string = match self.next_state().as_str() {
             "text_literal" => Expr::Value(Value::SingleQuotedString("HJeihfbwei".to_string())),  // TODO: hardcoded
+            "text_nested" => {
+                self.expect_state("call62_types");
+                Expr::Nested(Box::new(
+                    self.handle_types(Some(&[SubgraphType::Text]), None).1
+                ))
+            },
             "text_trim" => {
                 let (trim_where, trim_what) = match self.next_state().as_str() {
                     "call6_types" => {

@@ -582,6 +582,10 @@ impl PathGenerator {
             Expr::Value(Value::SingleQuotedString(_)) => {
                 self.try_push_state("text_literal")?;
             },
+            Expr::Nested(inner) => {
+                self.try_push_states(&["text_nested", "call62_types"])?;
+                self.handle_types(&inner, Some(&[SubgraphType::Text]), None)?;
+            },
             Expr::Trim { expr, trim_where, trim_what } => {
                 self.try_push_state("text_trim")?;
                 match (trim_where, trim_what) {
