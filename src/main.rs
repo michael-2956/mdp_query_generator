@@ -90,9 +90,8 @@ fn test_ast_to_path(config: Config) {
             return;
         },
     };
-    match tester.test() {
-        Ok(paths) => println!("{:#?}", paths),
-        Err(err) => println!("\n{err}"),
+    if let Err(err) = tester.test() {
+        println!("\n{err}");
     }
 }
 

@@ -771,14 +771,14 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         );
         let (selected_type, ident) = match self.next_state().as_str() {
             "unqualified_column_name" => {
-                let (selected_type, ident_components) = self.clause_context.from().get_random_column_with_type_of(
-                    &mut self.rng, &column_types, false
+                let (selected_type, ident_components) = self.value_chooser.choose_column(
+                    self.clause_context.from(), &column_types, false
                 );
                 (selected_type, Expr::Identifier(ident_components.last().unwrap().clone()))
             },
             "qualified_column_name" => {
-                let (selected_type, ident_components) = self.clause_context.from().get_random_column_with_type_of(
-                    &mut self.rng, &column_types, true
+                let (selected_type, ident_components) = self.value_chooser.choose_column(
+                    self.clause_context.from(), &column_types, true
                 );
                 (selected_type, Expr::CompoundIdentifier(ident_components))
             },

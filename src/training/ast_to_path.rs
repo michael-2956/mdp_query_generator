@@ -98,7 +98,7 @@ pub enum PathNode {
     State(SmolStr),
     NewFunction(SmolStr),
     SelectedTableName(ObjectName),
-    SelectedColumnName(Ident),
+    SelectedColumnName(Vec<Ident>),
     NumericValue(String),
     IntegerValue(String),
 }
@@ -831,7 +831,7 @@ impl PathGenerator {
                 ObjectName(ident_components), selected_type, column_types
             )))
         }
-        self.push_node(PathNode::SelectedColumnName(ident_components.last().unwrap().clone()));
+        self.push_node(PathNode::SelectedColumnName(ident_components));
         self.try_push_state("EXIT_column_spec")?;
         Ok(selected_type)
     }
