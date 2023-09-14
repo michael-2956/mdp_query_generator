@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use structopt::StructOpt;
 use toml::Value;
 
-use crate::{query_creation::{random_query_generator::QueryGeneratorConfig, state_generators::markov_chain_generator::StateGeneratorConfig}, training::ast_to_path::TrainingConfig};
+use crate::{query_creation::{random_query_generator::QueryGeneratorConfig, state_generators::markov_chain_generator::StateGeneratorConfig}, training::{trainer::TrainingConfig, ast_to_path::AST2PathTestingConfig}};
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "basic")]
@@ -53,6 +53,7 @@ pub struct Config {
     pub generator_config: QueryGeneratorConfig,
     pub chain_config: StateGeneratorConfig,
     pub training_config: TrainingConfig,
+    pub ast2path_testing_config: AST2PathTestingConfig,
 }
 
 fn read_toml_config(config_path: &PathBuf) -> Result<Value, Box<dyn std::error::Error>> {
@@ -68,6 +69,7 @@ impl Config {
             generator_config: QueryGeneratorConfig::from_toml(&toml_config),
             chain_config: StateGeneratorConfig::from_toml(&toml_config),
             training_config: TrainingConfig::from_toml(&toml_config),
+            ast2path_testing_config: AST2PathTestingConfig::from_toml(&toml_config),
         })
     }
 

@@ -1,80 +1,50 @@
-use std::{path::PathBuf, str::FromStr, error::Error, fmt};
+use std::{error::Error, fmt, path::PathBuf, str::FromStr, io::Write};
 
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
-use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query, ObjectName, Expr, SetExpr, SelectItem, Value, BinaryOperator, UnaryOperator, Ident, DataType, TrimWhereField}};
+use sqlparser::ast::{Query, ObjectName, Expr, SetExpr, SelectItem, Value, BinaryOperator, UnaryOperator, Ident, DataType, TrimWhereField};
 
-use crate::{query_creation::{random_query_generator::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{ValueSetterValue, TypesTypeValue}, Unnested, QueryGenerator}, state_generators::{subgraph_type::SubgraphType, state_choosers::MaxProbStateChooser, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::CallModifiers, DynClone, ChainStateMemory}, dynamic_models::{DeterministicModel, DynamicModel, PathModel}, CallTypes}}, config::{TomlReadable, Config}, unwrap_variant, unwrap_variant_or_else};
+use crate::{query_creation::{random_query_generator::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{ValueSetterValue, TypesTypeValue}, Unnested, QueryGenerator}, state_generators::{subgraph_type::SubgraphType, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::CallModifiers, DynClone, ChainStateMemory}, dynamic_models::{DeterministicModel, DynamicModel, PathModel, AntiCallModel}, CallTypes}}, config::{TomlReadable, Config, MainConfig}, unwrap_variant, unwrap_variant_or_else};
 
-pub struct SQLTrainer {
-    query_asts: Vec<Box<Query>>,
-    path_generator: PathGenerator,
+pub struct AST2PathTestingConfig {
+    pub schema: PathBuf,
+    pub n_tests: usize,
 }
 
-pub struct TrainingConfig {
-    pub training_db_path: PathBuf,
-    pub training_schema: PathBuf,
-}
-
-impl TomlReadable for TrainingConfig {
+impl TomlReadable for AST2PathTestingConfig {
     fn from_toml(toml_config: &toml::Value) -> Self {
-        let section = &toml_config["training"];
+        let section = &toml_config["ast_to_path_testing"];
         Self {
-            training_db_path: PathBuf::from_str(section["training_db_path"].as_str().unwrap()).unwrap(),
-            training_schema: PathBuf::from_str(section["training_schema"].as_str().unwrap()).unwrap(),
+            schema: PathBuf::from_str(section["testing_schema"].as_str().unwrap()).unwrap(),
+            n_tests: section["n_tests"].as_integer().unwrap() as usize,
         }
-    }
-}
-
-impl SQLTrainer {
-    pub fn with_config(config: TrainingConfig, chain_config: &StateGeneratorConfig) -> Result<Self, SyntaxError> {
-        let db = std::fs::read_to_string(config.training_db_path).unwrap();
-        Ok(SQLTrainer {
-            query_asts: Parser::parse_sql(&PostgreSqlDialect {}, &db).unwrap().into_iter()
-                .filter_map(|statement| if let Statement::Query(query) = statement {
-                    Some(query)
-                } else { None })
-                .collect(),
-            path_generator: PathGenerator::new(
-                DatabaseSchema::parse_schema(&config.training_schema),
-                chain_config,
-            )?,
-        })
-    }
-
-    pub fn train(&mut self) -> Result<Vec<Vec<PathNode>>, ConvertionError> {
-        let mut paths = Vec::<_>::new();
-        for query in self.query_asts.iter() {
-            // println!("Converting query {}", query);
-            paths.push(self.path_generator.get_query_path(query)?);
-            // println!("Path: {:?}\n", paths.last().unwrap());
-        }
-        Ok(paths)
     }
 }
 
 /// currently uses training DB to test (subject to change)
 pub struct TestAST2Path {
-    query_asts: Vec<Box<Query>>,
+    config: AST2PathTestingConfig,
+    main_config: MainConfig,
     path_generator: PathGenerator,
-    query_generator: QueryGenerator<PathModel, MaxProbStateChooser>,
+    random_query_generator: QueryGenerator<AntiCallModel, ProbabilisticStateChooser>,
+    path_query_generator: QueryGenerator<PathModel, MaxProbStateChooser>,
 }
 
 impl TestAST2Path {
     pub fn with_config(config: Config) -> Result<Self, SyntaxError> {
-        let db = std::fs::read_to_string(config.training_config.training_db_path).unwrap();
         Ok(Self {
-            query_asts: Parser::parse_sql(&PostgreSqlDialect {}, &db).unwrap().into_iter()
-                .filter_map(|statement| if let Statement::Query(query) = statement {
-                    Some(query)
-                } else { None })
-                .collect(),
             path_generator: PathGenerator::new(
-                DatabaseSchema::parse_schema(&config.training_config.training_schema),
+                DatabaseSchema::parse_schema(&config.ast2path_testing_config.schema),
                 &config.chain_config,
             )?,
-            query_generator: QueryGenerator::<PathModel, MaxProbStateChooser>::from_state_generator_and_schema(
+            config: config.ast2path_testing_config,
+            main_config: config.main_config,
+            random_query_generator: QueryGenerator::from_state_generator_and_schema(
+                MarkovChainGenerator::with_config(&config.chain_config).unwrap(),
+                config.generator_config.clone(),
+            ),
+            path_query_generator: QueryGenerator::<PathModel, MaxProbStateChooser>::from_state_generator_and_schema(
                 MarkovChainGenerator::<MaxProbStateChooser>::with_config(&config.chain_config).unwrap(),
                 config.generator_config,
             ),
@@ -82,16 +52,23 @@ impl TestAST2Path {
     }
 
     pub fn test(&mut self) -> Result<(), ConvertionError> {
-        for query in self.query_asts.iter() {
-            let path = self.path_generator.get_query_path(query)?;
-            let generated_query = self.query_generator.generate_with_dynamic_model(Box::new(PathModel::with_path(
+        for i in 0..self.config.n_tests {
+            let query = Box::new(self.random_query_generator.next().unwrap());
+            let path = self.path_generator.get_query_path(&query)?;
+            let generated_query = self.path_query_generator.generate_with_dynamic_model(Box::new(PathModel::with_path(
                 path.iter().cloned().filter_map(
                     |x| if let PathNode::State(state) = x { Some(state) } else { None }
                 ).collect()
             )));
-            if **query != generated_query {
+            if *query != generated_query {
                 println!("\nAST -> path -> AST mismatch!\nOriginal  query: {}\nGenerated query: {}", query, generated_query);
                 println!("Path: {:?}", path);
+            }
+            if i % 100 == 0 {
+                if self.main_config.print_progress {
+                    print!("{}/{}      \r", i, self.config.n_tests);
+                }
+                std::io::stdout().flush().unwrap();
             }
         }
         Ok(())
@@ -125,7 +102,7 @@ pub enum PathNode {
     SelectedColumnName(Ident),
 }
 
-struct PathGenerator {
+pub struct PathGenerator {
     current_path: Vec<PathNode>,
     database_schema: DatabaseSchema,
     state_generator: MarkovChainGenerator<MaxProbStateChooser>,
@@ -135,7 +112,7 @@ struct PathGenerator {
 }
 
 impl PathGenerator {
-    fn new(database_schema: DatabaseSchema, chain_config: &StateGeneratorConfig) -> Result<Self, SyntaxError> {
+    pub fn new(database_schema: DatabaseSchema, chain_config: &StateGeneratorConfig) -> Result<Self, SyntaxError> {
         Ok(Self {
             current_path: vec![],
             database_schema,
@@ -146,7 +123,7 @@ impl PathGenerator {
         })
     }
 
-    fn get_query_path(&mut self, query: &Box<Query>) -> Result<Vec<PathNode>, ConvertionError> {
+    pub fn get_query_path(&mut self, query: &Box<Query>) -> Result<Vec<PathNode>, ConvertionError> {
         self.handle_query(query)?;
         // reset the generator
         if let Some(state) = self.next_state_opt().unwrap() {

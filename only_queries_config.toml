@@ -16,6 +16,12 @@ assert_runs_on_schema=false
 # Pring how many queries were already generated
 print_progress=false
 
+[ast_to_path_testing]
+# schema for the testing queries generation
+testing_schema="schema/tpc-h_tables.sql"
+# number of tests
+n_tests=1000
+
 [training]
 # path to a file with all the training queries separated by ";\n"
 training_db_path="training_dbs/untrained_db.sql"

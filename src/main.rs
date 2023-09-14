@@ -9,7 +9,7 @@ use equivalence_testing::{query_creation::{
     },
 }, equivalence_testing_function::{
     check_query, string_to_query
-}, config::{Config, ProgramArgs, MainConfig}, training::ast_to_path::{SQLTrainer, TestAST2Path}};
+}, config::{Config, ProgramArgs, MainConfig}, training::{ast_to_path::TestAST2Path, trainer::SQLTrainer}};
 
 use structopt::StructOpt;
 

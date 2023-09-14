@@ -21,6 +21,7 @@ use self::{query_info::{DatabaseSchema, ClauseContext}, aggregate_function_setti
 
 use super::state_generators::{MarkovChainGenerator, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
+#[derive(Debug, Clone)]
 pub struct QueryGeneratorConfig {
     pub print_queries: bool,
     pub print_schema: bool,
