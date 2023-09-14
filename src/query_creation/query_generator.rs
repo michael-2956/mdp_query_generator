@@ -1,12 +1,13 @@
 #[macro_use]
 pub mod query_info;
 pub mod call_modifiers;
+pub mod value_choosers;
 pub mod expr_precedence;
 mod aggregate_function_settings;
 
 use std::path::PathBuf;
 
-use rand::{SeedableRng, Rng};
+use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
@@ -17,7 +18,7 @@ use sqlparser::ast::{
 use crate::config::TomlReadable;
 
 use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generator::{CallTypes, markov_chain_generator::subgraph_type::SubgraphType}};
-use self::{query_info::{DatabaseSchema, ClauseContext}, aggregate_function_settings::AggregateFunctionDistribution, expr_precedence::ExpressionPriority, call_modifiers::{TypesTypeValue, ValueSetterValue}};
+use self::{query_info::{DatabaseSchema, ClauseContext}, aggregate_function_settings::AggregateFunctionDistribution, expr_precedence::ExpressionPriority, call_modifiers::{TypesTypeValue, ValueSetterValue}, value_choosers::QueryValueChooser};
 
 use super::state_generator::{MarkovChainGenerator, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
@@ -45,10 +46,11 @@ impl TomlReadable for QueryGeneratorConfig {
     }
 }
 
-pub struct QueryGenerator<DynMod: DynamicModel, StC: StateChooser> {
+pub struct QueryGenerator<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> {
     config: QueryGeneratorConfig,
     state_generator: MarkovChainGenerator<StC>,
     dynamic_model: Box<DynMod>,
+    value_chooser: Box<QVC>,
     database_schema: DatabaseSchema,
     clause_context: ClauseContext,
     free_projection_alias_index: u32,
@@ -68,12 +70,13 @@ impl Unnested for Expr {
     }
 }
 
-impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
+impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGenerator<DynMod, StC, QVC> {
     pub fn from_state_generator_and_schema(state_generator: MarkovChainGenerator<StC>, config: QueryGeneratorConfig) -> Self {
-        let mut _self = QueryGenerator::<DynMod, StC> {
+        let mut _self = QueryGenerator::<DynMod, StC, QVC> {
             state_generator,
             dynamic_model: Box::new(DynMod::new()),
             database_schema: DatabaseSchema::parse_schema(&config.table_schema_path),
+            value_chooser: Box::new(QVC::new()),
             config,
             clause_context: ClauseContext::new(),
             free_projection_alias_index: 1,
@@ -168,7 +171,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         loop {
             select_body.from.push(TableWithJoins { relation: match self.next_state().as_str() {
                 "Table" => {
-                    let create_table_st = self.database_schema.get_random_table_def(&mut self.rng);
+                    let create_table_st = self.value_chooser.choose_table(&self.database_schema);
                     let alias = self.clause_context.from_mut().append_table(create_table_st);
                     TableFactor::Table {
                         name: create_table_st.name.clone(),
@@ -519,11 +522,11 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         let (number_type, number) = match self.next_state().as_str() {
             "number_literal" => {
                 let (number_type, number_str) = match self.next_state().as_str() {
-                    "number_literal_numeric" => {
-                        (SubgraphType::Numeric, (self.rng.gen_range(0f64..=10f64)).to_string())
-                    },
                     "number_literal_integer" => {
-                        (SubgraphType::Integer, self.rng.gen_range(0..=10).to_string())
+                        (SubgraphType::Integer, self.value_chooser.choose_integer())
+                    },
+                    "number_literal_numeric" => {
+                        (SubgraphType::Numeric, (self.value_chooser.choose_numeric()))
                     },
                     any => self.panic_unexpected(any)
                 };
@@ -818,13 +821,14 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         query
     }
 
-    pub fn generate_with_dynamic_model(&mut self, dynamic_model: Box<DynMod>) -> Query {
+    pub fn generate_with_dynamic_model_and_value_chooser(&mut self, dynamic_model: Box<DynMod>, value_chooser: Box<QVC>) -> Query {
         self.dynamic_model = dynamic_model;
+        self.value_chooser = value_chooser;
         self.generate()
     }
 }
 
-impl<DynMod: DynamicModel, StC: StateChooser> Iterator for QueryGenerator<DynMod, StC> {
+impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> Iterator for QueryGenerator<DynMod, StC, QVC> {
     type Item = Query;
 
     fn next(&mut self) -> Option<Self::Item> {

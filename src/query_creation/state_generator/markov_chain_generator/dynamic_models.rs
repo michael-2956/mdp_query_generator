@@ -1,5 +1,7 @@
 use smol_str::SmolStr;
 
+use crate::training::ast_to_path::PathNode;
+
 use super::markov_chain::NodeParams;
 
 
@@ -37,9 +39,11 @@ pub struct PathModel {
 }
 
 impl PathModel {
-    pub fn with_path(path: Vec<SmolStr>) -> Self {
+    pub fn from_path_nodes(path: &Vec<PathNode>) -> Self {
         Self {
-            path,
+            path: path.iter().cloned().filter_map(
+                |x| if let PathNode::State(state) = x { Some(state) } else { None }
+            ).collect(),
             index: 0,
         }
     }

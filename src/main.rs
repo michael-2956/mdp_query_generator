@@ -1,7 +1,7 @@
 use std::{io::Write, time::Instant};
 
 use equivalence_testing::{query_creation::{
-    query_generator::{QueryGenerator, QueryGeneratorConfig},
+    query_generator::{QueryGenerator, QueryGeneratorConfig, value_choosers::RandomValueChooser},
     state_generator::{
         MarkovChainGenerator,
         state_choosers::{ProbabilisticStateChooser, StateChooser},
@@ -14,7 +14,7 @@ use equivalence_testing::{query_creation::{
 use structopt::StructOpt;
 
 fn run_generation<DynMod: DynamicModel, StC: StateChooser>(markov_generator: MarkovChainGenerator<StC>, generator_config: QueryGeneratorConfig, main_config: MainConfig) {
-    let mut generator = QueryGenerator::<DynMod, StC>::from_state_generator_and_schema(markov_generator, generator_config);
+    let mut generator = QueryGenerator::<DynMod, StC, RandomValueChooser>::from_state_generator_and_schema(markov_generator, generator_config);
 
     let mut accumulated_time_ns = 0;
     let mut num_equivalent = 0;

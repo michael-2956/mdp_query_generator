@@ -5,7 +5,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{Query, ObjectName, Expr, SetExpr, SelectItem, Value, BinaryOperator, UnaryOperator, Ident, DataType, TrimWhereField};
 
-use crate::{query_creation::{query_generator::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{ValueSetterValue, TypesTypeValue}, Unnested, QueryGenerator}, state_generator::{subgraph_type::SubgraphType, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::CallModifiers, DynClone, ChainStateMemory}, dynamic_models::{DeterministicModel, DynamicModel, PathModel, AntiCallModel}, CallTypes}}, config::{TomlReadable, Config, MainConfig}, unwrap_variant, unwrap_variant_or_else};
+use crate::{query_creation::{query_generator::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{ValueSetterValue, TypesTypeValue}, Unnested, QueryGenerator, value_choosers::{RandomValueChooser, DeterministicValueChooser}}, state_generator::{subgraph_type::SubgraphType, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::CallModifiers, DynClone, ChainStateMemory}, dynamic_models::{DeterministicModel, DynamicModel, PathModel, AntiCallModel}, CallTypes}}, config::{TomlReadable, Config, MainConfig}, unwrap_variant, unwrap_variant_or_else};
 
 pub struct AST2PathTestingConfig {
     pub schema: PathBuf,
@@ -27,8 +27,8 @@ pub struct TestAST2Path {
     config: AST2PathTestingConfig,
     main_config: MainConfig,
     path_generator: PathGenerator,
-    random_query_generator: QueryGenerator<AntiCallModel, ProbabilisticStateChooser>,
-    path_query_generator: QueryGenerator<PathModel, MaxProbStateChooser>,
+    random_query_generator: QueryGenerator<AntiCallModel, ProbabilisticStateChooser, RandomValueChooser>,
+    path_query_generator: QueryGenerator<PathModel, MaxProbStateChooser, DeterministicValueChooser>,
 }
 
 impl TestAST2Path {
@@ -44,8 +44,8 @@ impl TestAST2Path {
                 MarkovChainGenerator::with_config(&config.chain_config).unwrap(),
                 config.generator_config.clone(),
             ),
-            path_query_generator: QueryGenerator::<PathModel, MaxProbStateChooser>::from_state_generator_and_schema(
-                MarkovChainGenerator::<MaxProbStateChooser>::with_config(&config.chain_config).unwrap(),
+            path_query_generator: QueryGenerator::from_state_generator_and_schema(
+                MarkovChainGenerator::with_config(&config.chain_config).unwrap(),
                 config.generator_config,
             ),
         })
@@ -55,16 +55,15 @@ impl TestAST2Path {
         for i in 0..self.config.n_tests {
             let query = Box::new(self.random_query_generator.next().unwrap());
             let path = self.path_generator.get_query_path(&query)?;
-            let generated_query = self.path_query_generator.generate_with_dynamic_model(Box::new(PathModel::with_path(
-                path.iter().cloned().filter_map(
-                    |x| if let PathNode::State(state) = x { Some(state) } else { None }
-                ).collect()
-            )));
+            let generated_query = self.path_query_generator.generate_with_dynamic_model_and_value_chooser(
+                Box::new(PathModel::from_path_nodes(&path)),
+                Box::new(DeterministicValueChooser::from_path_nodes(&path))
+            );
             if *query != generated_query {
                 println!("\nAST -> path -> AST mismatch!\nOriginal  query: {}\nGenerated query: {}", query, generated_query);
                 println!("Path: {:?}", path);
             }
-            if i % 100 == 0 {
+            if i % 1 == 0 {
                 if self.main_config.print_progress {
                     print!("{}/{}      \r", i, self.config.n_tests);
                 }
@@ -100,6 +99,8 @@ pub enum PathNode {
     NewFunction(SmolStr),
     SelectedTableName(ObjectName),
     SelectedColumnName(Ident),
+    NumericValue(String),
+    IntegerValue(String),
 }
 
 pub struct PathGenerator {
@@ -232,7 +233,7 @@ impl PathGenerator {
                 self.try_push_state("single_row_false")?;
                 if let Some(ref limit) = query.limit {
                     self.try_push_states(&["limit", "call52_types"])?;
-                    self.handle_types(limit, Some(&[SubgraphType::Numeric]), None)?;
+                    self.handle_types(limit, Some(&[SubgraphType::Numeric, SubgraphType::Integer]), None)?;
                 }
             }
         }
@@ -501,9 +502,11 @@ impl PathGenerator {
                 self.try_push_state("number_literal")?;
                 if number_str.parse::<u64>().is_ok() {
                     self.try_push_state("number_literal_integer")?;
+                    self.push_node(PathNode::IntegerValue(number_str.clone()));
                     SubgraphType::Integer
                 } else {
                     self.try_push_state("number_literal_numeric")?;
+                    self.push_node(PathNode::NumericValue(number_str.clone()));
                     SubgraphType::Numeric
                 }
             },
@@ -748,7 +751,7 @@ impl PathGenerator {
                             }
                         },
                         None => return Err(ConvertionError::new(
-                            format!("Types didn't find a suitable type for expressionn, among:\n{:#?}\nexpr:\n{:#?}\n", selected_types, expr)
+                            format!("Types didn't find a suitable type for expression, among:\n{:#?}\nExpression:\n{:#?}\nPrinted: {}\n", selected_types, expr, expr)
                         )),
                     }
                 }
