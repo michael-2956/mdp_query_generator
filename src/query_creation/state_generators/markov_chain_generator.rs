@@ -539,6 +539,10 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         }).collect();
     }
 
+    pub fn has_pending_call(&self) -> bool {
+        self.pending_call.is_some()
+    }
+
     pub fn get_named_value<T: NamedValue + 'static>(&self) -> Option<&ValueSetterValue> {
         self.call_stack.last().unwrap().call_modifier_info.values.get(&T::name())
     }

@@ -9,7 +9,7 @@ use equivalence_testing::{query_creation::{
     },
 }, equivalence_testing_function::{
     check_query, string_to_query
-}, config::{Config, ProgramArgs, MainConfig}, training::ast_to_path::SQLTrainer};
+}, config::{Config, ProgramArgs, MainConfig}, training::ast_to_path::{SQLTrainer, TestAST2Path}};
 
 use structopt::StructOpt;
 
@@ -82,14 +82,30 @@ fn run_training(config: Config) {
     }
 }
 
+fn test_ast_to_path(config: Config) {
+    let mut tester = match TestAST2Path::with_config(config) {
+        Ok(trainer) => trainer,
+        Err(err) => {
+            println!("{}", err);
+            return;
+        },
+    };
+    match tester.test() {
+        Ok(paths) => println!("{:#?}", paths),
+        Err(err) => println!("\n{err}"),
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let program_args = ProgramArgs::from_args();
     let mut config = Config::read_config(&program_args.config_path)?;
     config.update_from_args(&program_args);
-    if config.main_config.train {
+    if config.main_config.mode == "train" {
         run_training(config);
-    } else {
+    } else if config.main_config.mode == "generate" {
         select_model_and_run_generation::<ProbabilisticStateChooser>(config);
+    } else if config.main_config.mode == "test_ast_to_path" {
+        test_ast_to_path(config);
     }
     Ok(())
 }

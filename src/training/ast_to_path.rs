@@ -5,7 +5,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query, ObjectName, Expr, SetExpr, SelectItem, Value, BinaryOperator, UnaryOperator, Ident, DataType, TrimWhereField}};
 
-use crate::{query_creation::{random_query_generator::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{ValueSetterValue, TypesTypeValue}, Unnested}, state_generators::{subgraph_type::SubgraphType, state_choosers::MaxProbStateChooser, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::CallModifiers, DynClone, ChainStateMemory}, dynamic_models::{DeterministicModel, DynamicModel}, CallTypes}}, config::TomlReadable, unwrap_variant, unwrap_variant_or_else};
+use crate::{query_creation::{random_query_generator::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{ValueSetterValue, TypesTypeValue}, Unnested, QueryGenerator}, state_generators::{subgraph_type::SubgraphType, state_choosers::MaxProbStateChooser, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::CallModifiers, DynClone, ChainStateMemory}, dynamic_models::{DeterministicModel, DynamicModel, PathModel}, CallTypes}}, config::{TomlReadable, Config}, unwrap_variant, unwrap_variant_or_else};
 
 pub struct SQLTrainer {
     query_asts: Vec<Box<Query>>,
@@ -43,14 +43,58 @@ impl SQLTrainer {
         })
     }
 
-    pub fn train(&mut self) -> Result<Vec<Vec<SmolStr>>, ConvertionError> {
+    pub fn train(&mut self) -> Result<Vec<Vec<PathNode>>, ConvertionError> {
         let mut paths = Vec::<_>::new();
         for query in self.query_asts.iter() {
-            println!("Converting query {}", query);
+            // println!("Converting query {}", query);
             paths.push(self.path_generator.get_query_path(query)?);
-            println!("Path: {:?}\n", paths.last().unwrap());
+            // println!("Path: {:?}\n", paths.last().unwrap());
         }
         Ok(paths)
+    }
+}
+
+/// currently uses training DB to test (subject to change)
+pub struct TestAST2Path {
+    query_asts: Vec<Box<Query>>,
+    path_generator: PathGenerator,
+    query_generator: QueryGenerator<PathModel, MaxProbStateChooser>,
+}
+
+impl TestAST2Path {
+    pub fn with_config(config: Config) -> Result<Self, SyntaxError> {
+        let db = std::fs::read_to_string(config.training_config.training_db_path).unwrap();
+        Ok(Self {
+            query_asts: Parser::parse_sql(&PostgreSqlDialect {}, &db).unwrap().into_iter()
+                .filter_map(|statement| if let Statement::Query(query) = statement {
+                    Some(query)
+                } else { None })
+                .collect(),
+            path_generator: PathGenerator::new(
+                DatabaseSchema::parse_schema(&config.training_config.training_schema),
+                &config.chain_config,
+            )?,
+            query_generator: QueryGenerator::<PathModel, MaxProbStateChooser>::from_state_generator_and_schema(
+                MarkovChainGenerator::<MaxProbStateChooser>::with_config(&config.chain_config).unwrap(),
+                config.generator_config,
+            ),
+        })
+    }
+
+    pub fn test(&mut self) -> Result<(), ConvertionError> {
+        for query in self.query_asts.iter() {
+            let path = self.path_generator.get_query_path(query)?;
+            let generated_query = self.query_generator.generate_with_dynamic_model(Box::new(PathModel::with_path(
+                path.iter().cloned().filter_map(
+                    |x| if let PathNode::State(state) = x { Some(state) } else { None }
+                ).collect()
+            )));
+            if **query != generated_query {
+                println!("\nAST -> path -> AST mismatch!\nOriginal  query: {}\nGenerated query: {}", query, generated_query);
+                println!("Path: {:?}", path);
+            }
+        }
+        Ok(())
     }
 }
 
@@ -73,8 +117,16 @@ impl ConvertionError {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum PathNode {
+    State(SmolStr),
+    NewFunction(SmolStr),
+    SelectedTableName(ObjectName),
+    SelectedColumnName(Ident),
+}
+
 struct PathGenerator {
-    current_path: Vec<SmolStr>,
+    current_path: Vec<PathNode>,
     database_schema: DatabaseSchema,
     state_generator: MarkovChainGenerator<MaxProbStateChooser>,
     state_selector: DeterministicModel,
@@ -94,7 +146,7 @@ impl PathGenerator {
         })
     }
 
-    fn get_query_path(&mut self, query: &Box<Query>) -> Result<Vec<SmolStr>, ConvertionError> {
+    fn get_query_path(&mut self, query: &Box<Query>) -> Result<Vec<PathNode>, ConvertionError> {
         self.handle_query(query)?;
         // reset the generator
         if let Some(state) = self.next_state_opt().unwrap() {
@@ -119,6 +171,7 @@ macro_rules! unexpected_subgraph_type {
 struct Checkpoint {
     clause_context: ClauseContext,
     chain_state_memory: ChainStateMemory,
+    current_path: Vec<PathNode>,
 }
 
 impl PathGenerator {
@@ -140,6 +193,7 @@ impl PathGenerator {
 
     fn try_push_state(&mut self, state: &str) -> Result<(), ConvertionError> {
         // println!("pushing state: {state}");
+        let is_new_function_initial_state = self.state_generator.has_pending_call();
         let state = SmolStr::new(state);
         self.state_selector.set_state(state.clone());
         if let Some(actual_state) = self.next_state_opt()? {
@@ -150,7 +204,11 @@ impl PathGenerator {
         } else {
             panic!("State generator stopped prematurely");
         }
-        self.current_path.push(state);
+        if is_new_function_initial_state {
+            self.current_path.push(PathNode::NewFunction(state));
+        } else {
+            self.current_path.push(PathNode::State(state));
+        }
         Ok(())
     }
 
@@ -161,16 +219,22 @@ impl PathGenerator {
         Ok(())
     }
 
+    fn push_node(&mut self, path_node: PathNode) {
+        self.current_path.push(path_node);
+    }
+
     fn get_checkpoint(&mut self) -> Checkpoint {
         Checkpoint {
             clause_context: self.clause_context.clone(),
             chain_state_memory: self.state_generator.get_chain_state(),
+            current_path: self.current_path.clone(),
         }
     }
 
     fn restore_checkpoint(&mut self, checkpoint: &Checkpoint) {
         self.clause_context = checkpoint.clause_context.clone();
         self.state_generator.set_chain_state(checkpoint.chain_state_memory.dyn_clone());
+        self.current_path = checkpoint.current_path.clone();
     }
 
     /// subgraph def_Query
@@ -203,6 +267,7 @@ impl PathGenerator {
             match &table_with_joins.relation {
                 sqlparser::ast::TableFactor::Table { name, .. } => {
                     self.try_push_state("Table")?;
+                    self.push_node(PathNode::SelectedTableName(name.clone()));
                     let create_table_st = self.database_schema.get_table_def_by_name(name);
                     self.clause_context.from_mut().append_table(create_table_st);
                 },
@@ -754,6 +819,7 @@ impl PathGenerator {
                 ObjectName(ident_components), selected_type, column_types
             )))
         }
+        self.push_node(PathNode::SelectedColumnName(ident_components.last().unwrap().clone()));
         self.try_push_state("EXIT_column_spec")?;
         Ok(selected_type)
     }

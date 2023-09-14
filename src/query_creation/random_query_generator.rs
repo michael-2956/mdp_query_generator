@@ -114,7 +114,7 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         }
     }
 
-    pub fn gen_select_alias(&mut self) -> Ident {
+    fn gen_select_alias(&mut self) -> Ident {
         let name = format!("C{}", self.free_projection_alias_index);
         self.free_projection_alias_index += 1;
         Ident { value: name.clone(), quote_style: None }
@@ -815,6 +815,11 @@ impl<DynMod: DynamicModel, StC: StateChooser> QueryGenerator<DynMod, StC> {
         }
         self.dynamic_model = Box::new(DynMod::new());
         query
+    }
+
+    pub fn generate_with_dynamic_model(&mut self, dynamic_model: Box<DynMod>) -> Query {
+        self.dynamic_model = dynamic_model;
+        self.generate()
     }
 }
 

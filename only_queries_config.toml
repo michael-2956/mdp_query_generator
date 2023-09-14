@@ -1,6 +1,6 @@
 [main]
 # Whether training mode is on
-train=false
+mode="generate"
 # number of queries to generate
 num_generate=20
 # count the 2vl-3vl equivalent queries

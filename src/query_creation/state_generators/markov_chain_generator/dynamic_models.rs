@@ -31,6 +31,45 @@ impl DynamicModel for MarkovModel {
 }
 
 #[derive(Debug, Clone)]
+pub struct PathModel {
+    path: Vec<SmolStr>,
+    index: usize,
+}
+
+impl PathModel {
+    pub fn with_path(path: Vec<SmolStr>) -> Self {
+        Self {
+            path,
+            index: 0,
+        }
+    }
+}
+
+impl DynamicModel for PathModel {
+    fn new() -> Self {
+        Self {
+            path: vec![],
+            index: 0,
+        }
+    }
+
+    fn assign_log_probabilities(&mut self, node_outgoing: Vec<(bool, f64, NodeParams)>) -> Vec::<(bool, f64, NodeParams)> {
+        let node_name = &self.path[self.index];
+        self.index += 1;
+        if node_outgoing.iter().find(|(.., node)| node.node_common.name == *node_name).is_none() {
+            println!("Did not find {node_name} among {:?}", node_outgoing);
+        }
+        node_outgoing.iter().map(
+            |(on, _, node)| (
+                *on,
+                if node.node_common.name == *node_name { 1f64 } else { 0f64 },
+                node.clone(),
+            )
+        ).collect()
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct DeterministicModel {
     state_to_choose: Option<SmolStr>,
 }
