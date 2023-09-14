@@ -1,7 +1,7 @@
 use std::{io::Write, time::Instant};
 
 use equivalence_testing::{query_creation::{
-    random_query_generator::{QueryGenerator, QueryGeneratorConfig},
+    query_generator::{QueryGenerator, QueryGeneratorConfig},
     state_generators::{
         MarkovChainGenerator,
         state_choosers::{ProbabilisticStateChooser, StateChooser},

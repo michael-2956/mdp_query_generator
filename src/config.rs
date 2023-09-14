@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use structopt::StructOpt;
 use toml::Value;
 
-use crate::{query_creation::{random_query_generator::QueryGeneratorConfig, state_generators::markov_chain_generator::StateGeneratorConfig}, training::{trainer::TrainingConfig, ast_to_path::AST2PathTestingConfig}};
+use crate::{query_creation::{query_generator::QueryGeneratorConfig, state_generators::markov_chain_generator::StateGeneratorConfig}, training::{trainer::TrainingConfig, ast_to_path::AST2PathTestingConfig}};
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "basic")]
