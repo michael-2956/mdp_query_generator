@@ -89,23 +89,23 @@ digraph G {
         Query -> single_row_false
         single_row_false -> FROM
 
-        // limit [label="limit [num]"]
-        // single_row_false -> limit
-        // call52_types [TYPES="[integer, numeric]", MODS="[no column spec]", label="TYPES: [integer, numeric]\nMODS: [no column spec]", shape=rectangle, style=filled, color=lightblue]
-        // limit -> call52_types
-        // call52_types -> FROM
+        limit [label="limit [num]"]
+        single_row_false -> limit
+        call52_types [TYPES="[integer, numeric]", MODS="[no column spec]", label="TYPES: [integer, numeric]\nMODS: [no column spec]", shape=rectangle, style=filled, color=lightblue]
+        limit -> call52_types
+        call52_types -> FROM
 
         FROM_multiple_relations [label="multiple relations"]
 
         Table []
         FROM -> Table
         Table -> FROM_multiple_relations
-        // FROM_multiple_relations -> Table
+        FROM_multiple_relations -> Table
 
         call0_Query [label="Query", shape=rectangle, TYPES="[any]", MODS="[]", style=filled, color=green]
         FROM -> call0_Query
         call0_Query -> FROM_multiple_relations
-        // FROM_multiple_relations -> call0_Query
+        FROM_multiple_relations -> call0_Query
 
         EXIT_FROM [label="EXIT FROM"]
         FROM_multiple_relations -> EXIT_FROM
@@ -157,15 +157,15 @@ digraph G {
         // we can make a call trigger, moving this to a separate subgraph,
         // that would check whether there is a single column for a wildcard,
         // but let's keep it simple for now
-        // SELECT_wildcard[label="wildcard\nOFF: 'single column'", modifier="single column", modifier_mode="off"]
-        // SELECT_qualified_wildcard[label="qualified wildcard\nOFF: 'single column'", modifier="single column", modifier_mode="off"]
+        SELECT_wildcard[label="wildcard\nOFF: 'single column'", modifier="single column", modifier_mode="off"]
+        SELECT_qualified_wildcard[label="qualified wildcard\nOFF: 'single column'", modifier="single column", modifier_mode="off"]
         SELECT_unnamed_expr[label="unnamed expression"]
         SELECT_expr_with_alias[label="expression with alias"]
         SELECT_list_multiple_values[label="SELECT list multiple values\nOFF: 'single column'", modifier="single column", modifier_mode="off"]
 
         SELECT_projection -> SELECT_list
-        // SELECT_list -> SELECT_wildcard
-        // SELECT_list -> SELECT_qualified_wildcard
+        SELECT_list -> SELECT_wildcard
+        SELECT_list -> SELECT_qualified_wildcard
         SELECT_list -> SELECT_unnamed_expr
         SELECT_list -> SELECT_expr_with_alias
         call54_types [label="TYPES: [...types]", TYPES="[...]", shape=rectangle, style=filled, color=lightblue]
@@ -173,10 +173,10 @@ digraph G {
         SELECT_expr_with_alias -> call54_types
 
         // call0_aggregate_function [label="aggregate function*", TYPES="[known]", shape=rectangle, style=filled, color=peru]
-        // SELECT_wildcard -> SELECT_list_multiple_values
-        // SELECT_wildcard -> EXIT_SELECT
-        // SELECT_qualified_wildcard -> SELECT_list_multiple_values
-        // SELECT_qualified_wildcard -> EXIT_SELECT
+        SELECT_wildcard -> SELECT_list_multiple_values
+        SELECT_wildcard -> EXIT_SELECT
+        SELECT_qualified_wildcard -> SELECT_list_multiple_values
+        SELECT_qualified_wildcard -> EXIT_SELECT
         call54_types -> SELECT_list_multiple_values
         call54_types -> EXIT_SELECT
         SELECT_list_multiple_values -> SELECT_list

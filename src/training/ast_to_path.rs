@@ -54,6 +54,7 @@ impl TestAST2Path {
     pub fn test(&mut self) -> Result<(), ConvertionError> {
         for i in 0..self.config.n_tests {
             let query = Box::new(self.random_query_generator.next().unwrap());
+            // println!("\n\n\nQuery: {query}");
             let path = self.path_generator.get_query_path(&query)?;
             let generated_query = self.path_query_generator.generate_with_dynamic_model_and_value_chooser(
                 Box::new(PathModel::from_path_nodes(&path)),
@@ -63,7 +64,7 @@ impl TestAST2Path {
                 println!("\nAST -> path -> AST mismatch!\nOriginal  query: {}\nGenerated query: {}", query, generated_query);
                 println!("Path: {:?}", path);
             }
-            if i % 1 == 0 {
+            if i % 50 == 0 {
                 if self.main_config.print_progress {
                     print!("{}/{}      \r", i, self.config.n_tests);
                 }
@@ -101,6 +102,7 @@ pub enum PathNode {
     SelectedColumnName(Vec<Ident>),
     NumericValue(String),
     IntegerValue(String),
+    QualifiedWildcardSelectedRelation(Ident),
 }
 
 pub struct PathGenerator {
@@ -336,6 +338,7 @@ impl PathGenerator {
                         any => panic!("schema.table alias is not supported: {}", ObjectName(any.to_vec())),
                     };
                     column_idents_and_graph_types.extend(relation.get_columns_with_types().into_iter());
+                    self.push_node(PathNode::QualifiedWildcardSelectedRelation(alias.0.last().unwrap().clone()));
                 },
                 (SelectItem::Wildcard(..), false) => {
                     self.try_push_state("SELECT_wildcard")?;

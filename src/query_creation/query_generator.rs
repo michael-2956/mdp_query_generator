@@ -240,10 +240,10 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                 },
                 "SELECT_qualified_wildcard" => {
                     let from_contents = self.clause_context.from();
-                    let (alias, relation) = from_contents.get_random_relation(&mut self.rng);
+                    let (alias, relation) = self.value_chooser.choose_qualified_wildcard_relation(from_contents);
                     column_idents_and_graph_types.extend(relation.get_columns_with_types().into_iter());
                     select_body.projection.push(SelectItem::QualifiedWildcard(
-                        ObjectName(vec![alias.clone()]),
+                        ObjectName(vec![alias]),
                         WildcardAdditionalOptions {
                             opt_exclude: None, opt_except: None, opt_rename: None,
                         }

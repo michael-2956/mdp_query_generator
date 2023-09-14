@@ -1,5 +1,5 @@
 [main]
-# Whether training mode is on
+# Running mode. Either "test_ast_to_path", "generate", "train"
 mode="test_ast_to_path"
 # number of queries to generate
 num_generate=20

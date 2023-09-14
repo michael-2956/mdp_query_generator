@@ -262,7 +262,7 @@ impl FromContents {
         };
         match type_opt {
             Some(val) => val,
-            None => panic!("Couldn't find column named {}", ObjectName(ident_components.clone())),
+            None => panic!("Couldn't find column named {}.", ObjectName(ident_components.clone())),
         }
     }
 
