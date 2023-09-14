@@ -3,7 +3,7 @@ use std::{collections::{BTreeMap, HashMap, HashSet}, path::Path};
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
-use crate::query_creation::state_generators::subgraph_type::SubgraphType;
+use crate::query_creation::state_generator::subgraph_type::SubgraphType;
 
 use sqlparser::{ast::{Ident, ObjectName, Statement, ColumnDef, HiveDistributionStyle, TableConstraint, HiveFormat, SqlOption, FileFormat, Query, OnCommit, TableAlias}, dialect::PostgreSqlDialect, parser::Parser};
 
