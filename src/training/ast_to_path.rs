@@ -146,6 +146,22 @@ macro_rules! unexpected_subgraph_type {
     }};
 }
 
+fn add_error(error_mem: &mut HashMap<String, Vec<(SubgraphType, ConvertionError)>>, key: &str, graph_type: SubgraphType, error: ConvertionError) {
+    error_mem.entry(key.to_string()).or_insert(vec![]).push((graph_type, error));
+}
+
+fn get_errors_str(error_mem: &HashMap<String, Vec<(SubgraphType, ConvertionError)>>) -> String {
+    error_mem.iter().fold(String::new(), |mut acc, x| {
+        acc += format!(
+            "\n\"{}\" ======> {}\n", x.0, x.1.iter().fold(String::new(), |mut acc, y| {
+                acc += format!("{:?}: {}\n", y.0, y.1).as_str();
+                acc
+            })
+        ).as_str();
+        acc
+    })
+}
+
 struct Checkpoint {
     clause_context: ClauseContext,
     chain_state_memory: ChainStateMemory,
@@ -690,7 +706,7 @@ impl PathGenerator {
                                             }
                                         },
                                         Err(err) => {
-                                            error_mem.insert("Subquery".to_string(), (subgraph_type.clone(), err));
+                                            add_error(&mut error_mem, "Subquery", subgraph_type.clone(), err);
                                             self.restore_checkpoint(&types_before_state_selection)
                                         },
                                     }
@@ -716,7 +732,7 @@ impl PathGenerator {
                                     } {
                                         Ok(col_subgraph_type) => break col_subgraph_type,
                                         Err(err) => {
-                                            error_mem.insert("column identifier".to_string(), (subgraph_type.clone(), err));
+                                            add_error(&mut error_mem, "column identifier", subgraph_type.clone(), err);
                                             self.restore_checkpoint(&types_after_state_selection);
                                             match match subgraph_type {
                                                 SubgraphType::Integer => {
@@ -749,7 +765,7 @@ impl PathGenerator {
                                                     }
                                                 },
                                                 Err(err) => {
-                                                    error_mem.insert("type expr.".to_string(), (subgraph_type.clone(), err));
+                                                    add_error(&mut error_mem, "type expr.", subgraph_type.clone(), err);
                                                     self.restore_checkpoint(&types_before_state_selection)
                                                 },
                                             }
@@ -762,10 +778,7 @@ impl PathGenerator {
                             format!(
                                 "Types didn't find a suitable type for expression, among:\n{:#?}\n\
                                 Expression:\n{:#?}\nPrinted: {}\nErrors: {}\n",
-                                selected_types, expr, expr, error_mem.iter().fold(String::new(), |mut acc, x| {
-                                    acc += format!("\n\"{}\" (type: {:?}): {}\n", x.0, x.1.0, x.1.1).as_str();
-                                    acc
-                                })
+                                selected_types, expr, expr, get_errors_str(&error_mem)
                             )
                         )),
                     }
