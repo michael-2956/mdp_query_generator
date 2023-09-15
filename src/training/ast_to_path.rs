@@ -359,6 +359,13 @@ impl PathGenerator {
         self.try_push_state("EXIT_Query")?;
         self.clause_context.on_query_end();
 
+        for (_, column_type) in column_idents_and_graph_types.iter_mut() {
+            // select pg_typeof((select null)); -- returns text
+            if *column_type == SubgraphType::Undetermined {
+                *column_type = SubgraphType::Text;
+            }
+        }
+
         return Ok(column_idents_and_graph_types)
     }
 
@@ -660,7 +667,8 @@ impl PathGenerator {
 
         let selected_type = match expr {
             Expr::Value(Value::Null) => {
-                panic!("Untyped NULL literals in SELECT queries are not supported");
+                self.try_push_state("types_null")?;
+                SubgraphType::Undetermined
             },
             Expr::Cast { expr, data_type } if *expr == Box::new(Expr::Value(Value::Null)) => {
                 let null_type = SubgraphType::from_data_type(data_type);

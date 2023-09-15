@@ -515,7 +515,7 @@ digraph G {
     }
 
     subgraph def_types {
-        types [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no column spec, no subquery, check group by]", label="TYPE(S) (generic):\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[no column spec, no subquery, check group by]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no column spec, no subquery, check group by, enable untyped null]", label="TYPE(S) (generic):\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[no column spec, no subquery, check group by, enable untyped null]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
         types_select_type_integer[TYPE_NAME="integer", label="integer?", set_value="types_type"]
@@ -529,10 +529,9 @@ digraph G {
         types_select_type_date[TYPE_NAME="date", label="date?", set_value="types_type"]
         types -> types_select_type_date
 
-        // Untyped NULL literals in SELECT queries are not supported
-        // types_null [label="Untyped null"]
-        // types -> types_null
-        // types_null -> EXIT_types
+        types_null [label="Untyped null\nmod.: 'enable untyped null'", modifier="enable untyped null", modifier_mode="on"]
+        types -> types_null
+        types_null -> EXIT_types
 
         types_return_typed_null [label="Typed null"]
         types_select_type_integer -> types_return_typed_null
