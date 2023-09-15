@@ -696,6 +696,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             "types_select_type_text" |
             "types_select_type_date" => {},
             "types_null" => {
+                self.expect_state("EXIT_types");
                 return (SubgraphType::Undetermined, Expr::Value(Value::Null));
             },
             any => self.panic_unexpected(any),

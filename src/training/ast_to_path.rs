@@ -660,8 +660,7 @@ impl PathGenerator {
 
         let selected_type = match expr {
             Expr::Value(Value::Null) => {
-                self.try_push_state("types_null")?;
-                SubgraphType::Undetermined
+                panic!("Untyped NULL literals in SELECT queries are not supported");
             },
             Expr::Cast { expr, data_type } if *expr == Box::new(Expr::Value(Value::Null)) => {
                 let null_type = SubgraphType::from_data_type(data_type);
