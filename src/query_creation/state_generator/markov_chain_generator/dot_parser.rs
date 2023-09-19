@@ -528,7 +528,7 @@ fn parse_function_options(
             }
         } else {
             return Err(SyntaxError::new(format!(
-                "{node_name}[MODS=... should take bracketed form: MODS=\"[.., ]\""
+                "{node_name}[MODS=.. should take bracketed form: MODS=\"[.., ]\""
             )));
         }
     }

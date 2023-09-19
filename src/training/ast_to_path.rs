@@ -99,7 +99,8 @@ pub enum PathNode {
     State(SmolStr),
     NewFunction(SmolStr),
     SelectedTableName(ObjectName),
-    SelectedColumnName(Vec<Ident>),
+    SelectedColumnNameFROM(Vec<Ident>),
+    SelectedColumnNameGROUPBY(Vec<Ident>),
     NumericValue(String),
     IntegerValue(String),
     QualifiedWildcardSelectedRelation(Ident),
@@ -730,7 +731,7 @@ impl PathGenerator {
                                         if !modifiers.contains(&SmolStr::new("no column spec")) {
                                             match self.try_push_states(&["types_select_special_expression", "types_column_spec"]) {
                                                 Ok(..) => {
-                                                    if modifiers.contains(&SmolStr::new("check group by")) {
+                                                    if modifiers.contains(&SmolStr::new("having clause mode")) {
                                                         self.try_push_state("call1_column_spec")?;
                                                     } else {
                                                         self.try_push_state("call0_column_spec")?;
@@ -841,7 +842,7 @@ impl PathGenerator {
                 ObjectName(ident_components), selected_type, column_types
             )))
         }
-        self.push_node(PathNode::SelectedColumnName(ident_components));
+        self.push_node(PathNode::SelectedColumnNameFROM(ident_components));
         self.try_push_state("EXIT_column_spec")?;
         Ok(selected_type)
     }

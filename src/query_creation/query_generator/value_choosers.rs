@@ -4,14 +4,16 @@ use sqlparser::ast::{ObjectName, Ident};
 
 use crate::{training::ast_to_path::PathNode, query_creation::state_generator::subgraph_type::SubgraphType};
 
-use super::query_info::{DatabaseSchema, CreateTableSt, FromContents, Relation};
+use super::query_info::{DatabaseSchema, CreateTableSt, FromContents, Relation, GroupByContents};
 
 pub trait QueryValueChooser {
     fn new() -> Self;
 
     fn choose_table<'a>(&mut self, database_schema: &'a DatabaseSchema) -> &'a CreateTableSt;
 
-    fn choose_column(&mut self, from_contents: &FromContents, column_types: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>);
+    fn choose_column_from(&mut self, from_contents: &FromContents, column_types: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>);
+
+    fn choose_column_group_by(&mut self, group_by_contents: &GroupByContents, column_types: &Vec<SubgraphType>) -> (SubgraphType, Vec<Ident>);
 
     fn choose_integer(&mut self) -> String;
 
@@ -35,8 +37,12 @@ impl QueryValueChooser for RandomValueChooser {
         database_schema.get_random_table_def(&mut self.rng)
     }
 
-    fn choose_column(&mut self, from_contents: &FromContents, column_types: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>) {
+    fn choose_column_from(&mut self, from_contents: &FromContents, column_types: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>) {
         from_contents.get_random_column_with_type_of(&mut self.rng, column_types, qualified)
+    }
+
+    fn choose_column_group_by(&mut self, group_by_contents: &GroupByContents, column_types: &Vec<SubgraphType>) -> (SubgraphType, Vec<Ident>) {
+        group_by_contents.get_random_column_with_type_of(&mut self.rng, column_types)
     }
 
     fn choose_integer(&mut self) -> String {
@@ -57,7 +63,8 @@ pub struct DeterministicValueChooser {
     chosen_integers: (Vec<String>, usize),
     chosen_numerics: (Vec<String>, usize),
     chosen_tables: (Vec<ObjectName>, usize),
-    chosen_columns: (Vec<Vec<Ident>>, usize),
+    chosen_columns_from: (Vec<Vec<Ident>>, usize),
+    chosen_columns_group_by: (Vec<Vec<Ident>>, usize),
     chosen_qualified_wildcard_tables: (Vec<Ident>, usize),
 }
 
@@ -73,8 +80,11 @@ impl DeterministicValueChooser {
             chosen_tables: (path.iter().filter_map(
                 |x| if let PathNode::SelectedTableName(name) = x { Some(name) } else { None }
             ).cloned().collect(), 0),
-            chosen_columns: (path.iter().filter_map(
-                |x| if let PathNode::SelectedColumnName(ident_components) = x { Some(ident_components) } else { None }
+            chosen_columns_from: (path.iter().filter_map(
+                |x| if let PathNode::SelectedColumnNameFROM(ident_components) = x { Some(ident_components) } else { None }
+            ).cloned().collect(), 0),
+            chosen_columns_group_by: (path.iter().filter_map(
+                |x| if let PathNode::SelectedColumnNameGROUPBY(ident) = x { Some(ident) } else { None }
             ).cloned().collect(), 0),
             chosen_qualified_wildcard_tables: (path.iter().filter_map(
                 |x| if let PathNode::QualifiedWildcardSelectedRelation(ident) = x { Some(ident) } else { None }
@@ -89,7 +99,8 @@ impl QueryValueChooser for DeterministicValueChooser {
             chosen_integers: (vec![], 0),
             chosen_numerics: (vec![], 0),
             chosen_tables: (vec![], 0),
-            chosen_columns: (vec![], 0),
+            chosen_columns_from: (vec![], 0),
+            chosen_columns_group_by: (vec![], 0),
             chosen_qualified_wildcard_tables: (vec![], 0),
         }
     }
@@ -100,15 +111,25 @@ impl QueryValueChooser for DeterministicValueChooser {
         database_schema.get_table_def_by_name(new_table_name)
     }
 
-    fn choose_column(&mut self, from_contents: &FromContents, column_types: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>) {
-        let ident_components = &self.chosen_columns.0[self.chosen_columns.1];
-        self.chosen_columns.1 += 1;
+    fn choose_column_from(&mut self, from_contents: &FromContents, column_types: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>) {
+        let ident_components = &self.chosen_columns_from.0[self.chosen_columns_from.1];
+        self.chosen_columns_from.1 += 1;
         let col_type = from_contents.get_column_type_by_ident_components(ident_components);
         if !column_types.contains(&col_type) {
             panic!("column_types = {:?} does not contain col_type = {:?}", column_types, col_type)
         }
         if ident_components.len() != (if qualified { 2 } else { 1 }) {
             panic!("qualified is {qualified} but ident_components has {} elements: {:?}", ident_components.len(), ident_components)
+        }
+        (col_type, ident_components.clone())
+    }
+
+    fn choose_column_group_by(&mut self, group_by_contents: &GroupByContents, column_types: &Vec<SubgraphType>) -> (SubgraphType, Vec<Ident>) {
+        let ident_components = &self.chosen_columns_group_by.0[self.chosen_columns_group_by.1];
+        self.chosen_columns_group_by.1 += 1;
+        let col_type = group_by_contents.get_column_type_by_ident_components(ident_components).unwrap();
+        if !column_types.contains(&col_type) {
+            panic!("column_types = {:?} does not contain col_type = {:?}", column_types, col_type)
         }
         (col_type, ident_components.clone())
     }

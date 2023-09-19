@@ -606,15 +606,9 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
         // finally, deal with modifiers
         call_params.modifiers = match call_params.modifiers {
-            CallModifiers::StaticListWithParentMods(modifiers) => {
+            CallModifiers::PassThroughWithAddedMods(modifiers) => {
                 CallModifiers::StaticList([
-                    &{ match self.get_fn_modifiers().clone() {
-                        CallModifiers::None => vec![],
-                        CallModifiers::StaticListWithParentMods(_) => panic!(
-                            "CallModifiers::StaticListWithParentMods was not substituted with StaticList for parent function"
-                        ),
-                        CallModifiers::StaticList(list) => list,
-                    }}[..],
+                    &(self.get_fn_modifiers().clone().to_vec())[..],
                     &modifiers[..]
                 ].concat())
             },
@@ -916,13 +910,11 @@ fn check_node_off(
         };
     }
     if let Some((ref modifier_name, ref modifier_on)) = node_common.modifier {
-        off = off || match call_params.modifiers {
-            CallModifiers::None => *modifier_on,
-            CallModifiers::StaticListWithParentMods(..) => panic!("CallModifiers::StaticListWithParentArgs was not substituted for CallModifiers::StaticList!"),
-            CallModifiers::StaticList(ref modifiers) => {
-                if modifiers.contains(&modifier_name) { !modifier_on } else { *modifier_on }
-            },
-        };
+        off = off || if call_params.modifiers.contains(&modifier_name) {
+            !modifier_on
+        } else {
+            *modifier_on
+        }
     }
     if let Some(ref modifier_name) = node_common.call_modifier_name {
         off = off || !affected_node_states.get(&node_common.name).unwrap().unwrap_or_else(

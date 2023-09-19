@@ -509,7 +509,7 @@ digraph G {
     }
 
     subgraph def_types {
-        types [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no column spec, no subquery, check group by]", label="TYPE(S) (generic):\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[no column spec, no subquery, check group by]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no column spec, no subquery, having clause mode]", label="TYPE(S) (generic):\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[no column spec, no subquery, having clause mode]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
         types_select_type_integer[TYPE_NAME="integer", label="integer?", set_value="types_type"]
@@ -544,10 +544,10 @@ digraph G {
 
         types_column_spec [modifier="no column spec", modifier_mode="off", label="column specifier\nmod.: 'no column spec'"]
         types_select_special_expression -> types_column_spec
-        call0_column_spec [TYPES="[known]", call_modifier="is_column_type_available", modifier="check group by", modifier_mode="off", label="column specifier (src.: FROM)\nTYPE: known\ncall.mod.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
+        call0_column_spec [TYPES="[known]", call_modifier="is_column_type_available", modifier="having clause mode", modifier_mode="off", label="column specifier (src.: FROM)\nTYPE: known\ncall.mod.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
         types_column_spec -> call0_column_spec
         call0_column_spec -> EXIT_types
-        call1_column_spec [TYPES="[known]", call_modifier="is_column_type_available", modifier="check group by", modifier_mode="on", label="column specifier (src.: GROUP BY)\nTYPE: known\ncall.mod.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
+        call1_column_spec [TYPES="[known]", call_modifier="is_column_type_available", modifier="having clause mode", modifier_mode="on", label="column specifier (src.: GROUP BY)\nTYPE: known\ncall.mod.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
         types_column_spec -> call1_column_spec
         call1_column_spec -> EXIT_types
 

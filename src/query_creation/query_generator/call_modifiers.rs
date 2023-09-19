@@ -106,11 +106,7 @@ impl StatelessCallModifier for IsColumnTypeAvailableModifier {
     }
 
     fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
-        let check_group_by = match function_context.current_node.node_common.name.as_str() {
-            "call0_column_spec" => false,
-            "call1_column_spec" => true,
-            any => panic!("is_column_type_available call trigger unexpectedly called by {any}"),
-        };
+        let check_group_by = function_context.call_params.modifiers.contains(&SmolStr::new("having clause mode"));
         let ValueSetterValue::TypesTypeValue(associated_value) = associated_value.unwrap();
         associated_value.selected_types.iter()
             .any(|x|
@@ -139,6 +135,7 @@ impl StatelessCallModifier for HasUniqueColumnNamesForTypeModifier {
         let column_types = unwrap_variant!(
             &function_context.call_params.selected_types, CallTypes::TypeList
         );
+        // in any context the column ambiguity is determined by FROM
         clause_context.from().has_unique_columns_for_types(column_types)
     }
 }

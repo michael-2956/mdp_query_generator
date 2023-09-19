@@ -24,6 +24,12 @@ pub struct NodeParams {
     pub min_calls_until_function_exit: usize,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ModifierWithFields {
+    Modifier(SmolStr),
+    PassThrough(SmolStr),
+}
+
 /// represents modifiers passed in call parameters.
 /// Can be either None, list of static modifiers, or a
 /// pass-through (pass current funciton's arguments)
@@ -31,11 +37,46 @@ pub struct NodeParams {
 pub enum CallModifiers {
     /// none of the modifiers are activated
     None,
-    /// Used when we want to pass the function's modifiers further
-    /// Optionally, adds new modifiers
-    StaticListWithParentMods(Vec<SmolStr>),
-    /// USed to specify a static list of modifiers
+    /// Used to specify a static list of modifiers
     StaticList(Vec<SmolStr>),
+    /// Used when we want to pass the function's modifiers further
+    /// Optionally, adds new modifiers. ([..., added modifier])
+    PassThroughWithAddedMods(Vec<SmolStr>),
+    /// a list of modifiers with optional fields (?mod name)
+    StaticListWithFields(Vec<ModifierWithFields>)
+}
+
+impl CallModifiers {
+    fn panic_if_not_static_list(&self) {
+        match self {
+            CallModifiers::None |
+            CallModifiers::StaticList(..) => {},
+            CallModifiers::PassThroughWithAddedMods(_) => panic!(
+                "CallModifiers::StaticListWithParentMods was not substituted with CallModifiers::StaticList for parent function"
+            ),
+            CallModifiers::StaticListWithFields(_) => panic!(
+                "CallModifiers::StaticListWithFields was not substituted with CallModifiers::StaticList for parent function"
+            ),
+        }
+    }
+
+    pub fn to_vec(self) -> Vec<SmolStr> {
+        self.panic_if_not_static_list();
+        match self {
+            CallModifiers::None => vec![],
+            CallModifiers::StaticList(list) => list,
+            _ => panic!(),
+        }
+    }
+
+    pub fn contains(&self, modifier: &SmolStr) -> bool {
+        self.panic_if_not_static_list();
+        match self {
+            CallModifiers::None => false,
+            CallModifiers::StaticList(list) => list.contains(modifier),
+            _ => panic!(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -245,8 +286,16 @@ impl MarkovChain {
                         Some(mut modifiers) => {
                             if modifiers.contains(&SmolStr::new("...")) {
                                 modifiers.retain(|x| x != "...");
-                                CallModifiers::StaticListWithParentMods(modifiers)
-                            } else {
+                                CallModifiers::PassThroughWithAddedMods(modifiers)
+                            } else if modifiers.iter().any(|x| x.starts_with('?')) {
+                                CallModifiers::StaticListWithFields(modifiers.into_iter().map(|x|
+                                    if x.starts_with('?') {
+                                        ModifierWithFields::PassThrough(SmolStr::new(&x[1..x.len()]))
+                                    } else {
+                                        ModifierWithFields::Modifier(x)
+                                    }
+                                ).collect())
+                            } else  {
                                 CallModifiers::StaticList(modifiers)
                             }
                         },
@@ -344,18 +393,38 @@ impl MarkovChain {
 
                     if call_params.modifiers != CallModifiers::None {
                         if let Some(ref func_modifiers) = function.accepted_modifiers {
-                            match call_params.modifiers {
-                                CallModifiers::None => {},
-                                CallModifiers::StaticListWithParentMods(ref modifiers)
-                                | CallModifiers::StaticList(ref modifiers) => {
-                                    for c_mod in modifiers {
-                                        if !func_modifiers.contains(&c_mod) {
+                            let modifiers = match &call_params.modifiers {
+                                CallModifiers::None => vec![],
+                                CallModifiers::PassThroughWithAddedMods(modifiers)
+                                | CallModifiers::StaticList(modifiers) => modifiers.iter().collect(),
+                                CallModifiers::StaticListWithFields(ref modifiers) => {
+                                    let function = functions.iter().find(
+                                        |(_, function)| function.chain.contains_key(node_name)
+                                    ).unwrap().1;
+                                    for pass_through_mod in modifiers.iter().filter_map(|x| match x {
+                                        ModifierWithFields::Modifier(..) => None,
+                                        ModifierWithFields::PassThrough(mod_name) => Some(mod_name)
+                                    }) {
+                                        if !function.accepted_modifiers.as_ref().unwrap().contains(pass_through_mod) {
                                             return Err(SyntaxError::new(gen_type_error(format!(
-                                                "Modifier {} is not in {:?}", c_mod, func_modifiers
-                                            ))));
+                                                "the pass-through modifier '?{pass_through_mod}' is not present in the parent\
+                                                function's ({}) accepted modifiers list: {:?}", function.source_node_name, function.accepted_modifiers
+                                            ))))
                                         }
                                     }
+                                    modifiers.iter()
+                                        .map(|x| match x {
+                                            ModifierWithFields::Modifier(mod_name) |
+                                            ModifierWithFields::PassThrough(mod_name) => mod_name
+                                        }).collect()
                                 },
+                            };
+                            for c_mod in modifiers {
+                                if !func_modifiers.contains(&c_mod) {
+                                    return Err(SyntaxError::new(gen_type_error(format!(
+                                        "Modifier {} is not in {:?}", c_mod, func_modifiers
+                                    ))));
+                                }
                             }
                         } else {
                             return Err(SyntaxError::new(gen_type_error(format!(

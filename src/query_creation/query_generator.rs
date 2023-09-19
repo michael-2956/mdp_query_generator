@@ -770,20 +770,46 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         let column_types = unwrap_variant_or_else!(
             self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList, || self.state_generator.print_stack()
         );
+        self.expect_state("column_spec_choose_source");
         let (selected_type, ident) = match self.next_state().as_str() {
-            "unqualified_column_name" => {
-                let (selected_type, ident_components) = self.value_chooser.choose_column(
-                    self.clause_context.from(), &column_types, false
+            "get_column_spec_from_having" => {
+                self.expect_state("column_spec_choose_qualified");
+                let (selected_type, mut column_name) = self.value_chooser.choose_column_group_by(
+                    self.clause_context.group_by(), &column_types
                 );
-                (selected_type, Expr::Identifier(ident_components.last().unwrap().clone()))
+                match self.next_state().as_str() {
+                    "unqualified_column_name" => {
+                        (selected_type, Expr::Identifier(column_name.last().unwrap().clone()))
+                    },
+                    "qualified_column_name" => {
+                        if let &[ref col_ident] = column_name.as_slice() {
+                            let rel_ident = self.clause_context.from().get_relation_alias_by_column_name(col_ident);
+                            column_name = vec![rel_ident, col_ident.clone()];
+                        }
+                        (selected_type, Expr::CompoundIdentifier(column_name))
+                    },
+                    any => self.panic_unexpected(any)
+                }
             },
-            "qualified_column_name" => {
-                let (selected_type, ident_components) = self.value_chooser.choose_column(
-                    self.clause_context.from(), &column_types, true
-                );
-                (selected_type, Expr::CompoundIdentifier(ident_components))
+            "get_column_spec_from_from" => {
+                self.expect_state("column_spec_choose_qualified");
+                match self.next_state().as_str() {
+                    "unqualified_column_name" => {
+                        let (selected_type, ident_components) = self.value_chooser.choose_column_from(
+                            self.clause_context.from(), &column_types, false
+                        );
+                        (selected_type, Expr::Identifier(ident_components.last().unwrap().clone()))
+                    },
+                    "qualified_column_name" => {
+                        let (selected_type, ident_components) = self.value_chooser.choose_column_from(
+                            self.clause_context.from(), &column_types, true
+                        );
+                        (selected_type, Expr::CompoundIdentifier(ident_components))
+                    },
+                    any => self.panic_unexpected(any)
+                }
             },
-            any => self.panic_unexpected(any)
+            any => self.panic_unexpected(any),
         };
         self.expect_state("EXIT_column_spec");
         (selected_type, ident)
