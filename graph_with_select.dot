@@ -108,6 +108,7 @@ digraph G {
         FROM_multiple_relations -> call0_Query
 
         EXIT_FROM [label="EXIT FROM"]
+        FROM -> EXIT_FROM
         FROM_multiple_relations -> EXIT_FROM
 
         WHERE [label="WHERE"]

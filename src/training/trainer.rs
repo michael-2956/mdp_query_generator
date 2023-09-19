@@ -1,12 +1,14 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{path::PathBuf, str::FromStr, io::Write};
 
 use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query}};
 
-use crate::{config::TomlReadable, query_creation::{state_generator::markov_chain_generator::{StateGeneratorConfig, error::SyntaxError}, query_generator::query_info::DatabaseSchema}};
+use crate::{config::{TomlReadable, Config, MainConfig}, query_creation::{state_generator::markov_chain_generator::error::SyntaxError, query_generator::query_info::DatabaseSchema}};
 
 use super::ast_to_path::{PathNode, ConvertionError, PathGenerator};
 
 pub struct SQLTrainer {
+    _config: TrainingConfig,
+    main_config: MainConfig,
     query_asts: Vec<Box<Query>>,
     path_generator: PathGenerator,
 }
@@ -27,28 +29,36 @@ impl TomlReadable for TrainingConfig {
 }
 
 impl SQLTrainer {
-    pub fn with_config(config: TrainingConfig, chain_config: &StateGeneratorConfig) -> Result<Self, SyntaxError> {
-        let db = std::fs::read_to_string(config.training_db_path).unwrap();
+    pub fn with_config(config: Config) -> Result<Self, SyntaxError> {
+        let db = std::fs::read_to_string(config.training_config.training_db_path.clone()).unwrap();
         Ok(SQLTrainer {
             query_asts: Parser::parse_sql(&PostgreSqlDialect {}, &db).unwrap().into_iter()
-                .filter_map(|statement| if let Statement::Query(query) = statement {
-                    Some(query)
-                } else { None })
-                .collect(),
+            .filter_map(|statement| if let Statement::Query(query) = statement {
+                Some(query)
+            } else { None })
+            .collect(),
             path_generator: PathGenerator::new(
-                DatabaseSchema::parse_schema(&config.training_schema),
-                chain_config,
+                DatabaseSchema::parse_schema(&config.training_config.training_schema),
+                &config.chain_config,
             )?,
+            _config: config.training_config,
+            main_config: config.main_config,
         })
     }
 
     pub fn train(&mut self) -> Result<Vec<Vec<PathNode>>, ConvertionError> {
         let mut paths = Vec::<_>::new();
-        for query in self.query_asts.iter() {
-            // println!("Converting query {}", query);
+        println!("Obtaining paths... ");
+        for (i, query) in self.query_asts.iter().enumerate() {
             paths.push(self.path_generator.get_query_path(query)?);
-            // println!("Path: {:?}\n", paths.last().unwrap());
+            if i % 50 == 0 {
+                if self.main_config.print_progress {
+                    print!("{}/{}      \r", i, self.query_asts.len());
+                }
+                std::io::stdout().flush().unwrap();
+            }
         }
+        println!();
         Ok(paths)
     }
 }

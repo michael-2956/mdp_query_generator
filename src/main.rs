@@ -69,7 +69,7 @@ fn select_model_and_run_generation<StC: StateChooser>(config: Config) {
 }
 
 fn run_training(config: Config) {
-    let mut sql_trainer = match SQLTrainer::with_config(config.training_config, &config.chain_config) {
+    let mut sql_trainer = match SQLTrainer::with_config(config) {
         Ok(trainer) => trainer,
         Err(err) => {
             println!("{}", err);
