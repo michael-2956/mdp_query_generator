@@ -253,8 +253,11 @@ impl GroupByContents {
         self.columns.get_random_column_with_type(rng, graph_type)
     }
 
-    pub fn get_column_type_by_ident_components(&self, ident_components: &Vec<Ident>) -> Option<SubgraphType> {
-        self.columns.try_get_column_type_by_name(ident_components)
+    pub fn get_column_type_by_ident_components(&self, ident_components: &Vec<Ident>) -> SubgraphType {
+        match self.columns.try_get_column_type_by_name(ident_components) {
+            Some(column_type) => column_type,
+            None => panic!("Couldn't find column named {}.", ObjectName(ident_components.clone())),
+        }
     }
 
     pub fn get_column_names_iter(&self) -> impl Iterator<Item = &Vec<Ident>> {

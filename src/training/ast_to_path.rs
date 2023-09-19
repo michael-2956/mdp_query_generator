@@ -728,21 +728,15 @@ impl PathGenerator {
                                 }
                                 expr => {
                                     match {
-                                        if !modifiers.contains(&SmolStr::new("no column spec")) {
-                                            match self.try_push_states(&["types_select_special_expression", "types_column_spec"]) {
-                                                Ok(..) => {
-                                                    if modifiers.contains(&SmolStr::new("having clause mode")) {
-                                                        self.try_push_state("call1_column_spec")?;
-                                                    } else {
-                                                        self.try_push_state("call0_column_spec")?;
-                                                    }
-                                                    self.state_generator.set_known_list(allowed_type_list);
-                                                    self.handle_column_spec(expr)
-                                                },
-                                                Err(err) => Err(err),
-                                            }
-                                        } else {
-                                            Err(ConvertionError::new(format!("no column spec is ON")))
+                                        match self.try_push_states(&["types_select_special_expression", "call0_column_spec"]) {
+                                            Ok(..) => {
+                                                if modifiers.contains(&SmolStr::new("no column spec")) {
+                                                    panic!("'no column spec' modifier is present, but call0_column_spec was successfully selected");
+                                                }
+                                                self.state_generator.set_known_list(allowed_type_list);
+                                                self.handle_column_spec(expr)
+                                            },
+                                            Err(err) => Err(err),
                                         }
                                     } {
                                         Ok(col_subgraph_type) => break col_subgraph_type,
@@ -824,6 +818,15 @@ impl PathGenerator {
         let column_types = unwrap_variant_or_else!(
             self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList, || self.state_generator.print_stack()
         );
+        self.try_push_state("column_spec_choose_source")?;
+        let check_group_by = if self.state_generator.get_fn_modifiers().contains(&SmolStr::new("having clause mode")) {
+            self.try_push_state("get_column_spec_from_having")?;
+            true
+        } else {
+            self.try_push_state("get_column_spec_from_from")?;
+            false
+        };
+        self.try_push_state("column_spec_choose_qualified")?;
         let ident_components = match expr {
             Expr::CompoundIdentifier(idents) if idents.len() == 2 => {
                 self.try_push_state("qualified_column_name")?;
@@ -835,14 +838,22 @@ impl PathGenerator {
             },
             any => unexpected_expr!(any),
         };
-        let selected_type = self.clause_context.from().get_column_type_by_ident_components(&ident_components);
+        let selected_type = if check_group_by {
+            self.clause_context.group_by().get_column_type_by_ident_components(&ident_components)
+        } else {
+            self.clause_context.from().get_column_type_by_ident_components(&ident_components)
+        };
         if !column_types.contains(&selected_type) {
             return Err(ConvertionError::new(format!(
                 "get_column_type_by_ident_components() selected a column ({}) with type {:?}, but expected one of {:?}",
                 ObjectName(ident_components), selected_type, column_types
             )))
         }
-        self.push_node(PathNode::SelectedColumnNameFROM(ident_components));
+        if check_group_by {
+            self.push_node(PathNode::SelectedColumnNameGROUPBY(ident_components));
+        } else {
+            self.push_node(PathNode::SelectedColumnNameFROM(ident_components));
+        }
         self.try_push_state("EXIT_column_spec")?;
         Ok(selected_type)
     }
