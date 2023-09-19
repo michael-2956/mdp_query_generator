@@ -17,7 +17,7 @@ use crate::{unwrap_variant, query_creation::{state_generator::markov_chain_gener
 
 use self::{
     markov_chain::{
-        MarkovChain, NodeParams, CallParams, CallModifiers, Function
+        MarkovChain, NodeParams, CallParams, CallModifiers, Function, ModifierWithFields
     }, error::SyntaxError, dot_parser::{NodeCommon, TypeWithFields}, subgraph_type::SubgraphType
 };
 
@@ -612,6 +612,17 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
                     &modifiers[..]
                 ].concat())
             },
+            CallModifiers::StaticListWithFields(modifiers) => {
+                let parent_mods = self.get_fn_modifiers();
+                CallModifiers::StaticList(modifiers.into_iter().filter_map(|x| match x {
+                    ModifierWithFields::Modifier(modifier_name) => Some(modifier_name),
+                    ModifierWithFields::PassThrough(modifier_name) => {
+                        if parent_mods.contains(&modifier_name) {
+                            Some(modifier_name)
+                        } else { None }
+                    },
+                }).collect())
+            },
             CallModifiers::None => {
                 if called_function.accepted_modifiers.is_some() {
                     CallModifiers::StaticList(vec![])
@@ -619,7 +630,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
                     CallModifiers::None
                 }
             },
-            any => any,
+            any @ CallModifiers::StaticList(..) => any,
         };
 
         call_params

@@ -453,6 +453,12 @@ digraph G {
         text -> text_literal
         text_literal -> EXIT_text
 
+        text_nested [label="(text)", literal="t"]
+        text -> text_nested
+        call62_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        text_nested -> call62_types
+        call62_types -> EXIT_text
+
         text_trim[label="TRIM"]
         text -> text_trim
         call5_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
@@ -509,7 +515,7 @@ digraph G {
     }
 
     subgraph def_types {
-        types [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no column spec, no subquery, having clause mode]", label="TYPE(S) (generic):\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[no column spec, no subquery, having clause mode]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no column spec, no subquery, having clause mode, enable untyped null]", label="TYPE(S) (generic):\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[no column spec, no subquery, having clause mode, enable untyped null]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
         types_select_type_integer[TYPE_NAME="integer", label="integer?", set_value="types_type"]
@@ -523,9 +529,9 @@ digraph G {
         types_select_type_date[TYPE_NAME="date", label="date?", set_value="types_type"]
         types -> types_select_type_date
 
-        // types_null [label="Untyped null"]
-        // types -> types_null
-        // types_null -> EXIT_types
+        types_null [label="Untyped null\nmod.: 'enable untyped null'", modifier="enable untyped null", modifier_mode="on"]
+        types -> types_null
+        types_null -> EXIT_types
 
         // types_return_typed_null [label="Typed null"]
         // types_select_type_integer -> types_return_typed_null
@@ -542,14 +548,9 @@ digraph G {
         types_select_type_text -> types_select_special_expression
         types_select_type_date -> types_select_special_expression
 
-        types_column_spec [modifier="no column spec", modifier_mode="off", label="column specifier\nmod.: 'no column spec'"]
-        types_select_special_expression -> types_column_spec
-        call0_column_spec [TYPES="[known]", call_modifier="is_column_type_available", modifier="having clause mode", modifier_mode="off", label="column specifier (src.: FROM)\nTYPE: known\ncall.mod.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
-        types_column_spec -> call0_column_spec
+        call0_column_spec [TYPES="[known]", MODS="[?having clause mode]", modifier="no column spec", modifier_mode="off", call_modifier="is_column_type_available", label="column specifier\nTYPE: known\nMODS: [?having clause mode]\nmod.: 'no column spec' -> OFF\ncall.mod.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
+        types_select_special_expression -> call0_column_spec
         call0_column_spec -> EXIT_types
-        call1_column_spec [TYPES="[known]", call_modifier="is_column_type_available", modifier="having clause mode", modifier_mode="on", label="column specifier (src.: GROUP BY)\nTYPE: known\ncall.mod.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
-        types_column_spec -> call1_column_spec
-        call1_column_spec -> EXIT_types
 
         call1_Query [TYPES="[known]", MODS="[single row, single column]", label="Query\nMODS: [single row, single column]\nTYPE: known\nmod.: 'no subquery'", modifier="no subquery", modifier_mode="off", shape=rectangle, style=filled, color=green]
         types_select_special_expression -> call1_Query
@@ -577,15 +578,28 @@ digraph G {
     }
 
     subgraph def_column_spec {
-        column_spec [TYPES="[numeric, integer, 3VL Value, text, date]", label="column specifier\ntypes=[numeric, integer, 3VL Value, text, date]", shape=octagon, style=filled, color=gold]
+        column_spec [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[having clause mode]", label="column specifier\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[having clause mode]", shape=octagon, style=filled, color=gold]
         EXIT_column_spec [label="EXIT column specifier", shape=rectangle]
 
-        qualified_column_name [label="Qualified column name of type: type"]
-        column_spec -> qualified_column_name
+        column_spec_choose_source [label="Choose column spec relation source"]
+        column_spec -> column_spec_choose_source
+
+        column_spec_choose_qualified [label="Choose if qualified (R.COL/COL)"]
+
+        get_column_spec_from_having [label="HAVING", modifier="having clause mode", modifier_mode="on"]
+        column_spec_choose_source -> get_column_spec_from_having
+        get_column_spec_from_having -> column_spec_choose_qualified
+
+        get_column_spec_from_from [label="FROM", modifier="having clause mode", modifier_mode="off"]
+        column_spec_choose_source -> get_column_spec_from_from
+        get_column_spec_from_from -> column_spec_choose_qualified
+
+        qualified_column_name [label="Qualified"]
+        column_spec_choose_qualified -> qualified_column_name
         qualified_column_name -> EXIT_column_spec
 
-        unqualified_column_name [label="Unqualified column name of type: type\ncall mod.: 'has_unique_column_names_for_type'", call_modifier="has_unique_column_names_for_type"]
-        column_spec -> unqualified_column_name
+        unqualified_column_name [label="Unqualified\ncall mod.: 'has_unique_column_names_for_type'", call_modifier="has_unique_column_names_for_type"]
+        column_spec_choose_qualified -> unqualified_column_name
         unqualified_column_name -> EXIT_column_spec
     }
 
