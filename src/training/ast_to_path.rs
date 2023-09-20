@@ -703,7 +703,10 @@ impl PathGenerator {
                                 any => unexpected_subgraph_type!(any),
                             })?;
                             let types_after_state_selection = self.get_checkpoint();
-                            let ValueSetterValue::TypesTypeValue(allowed_type_list) = self.state_generator.get_named_value::<TypesTypeValue>().unwrap();
+                            let allowed_type_list = unwrap_variant!(
+                                self.state_generator.get_named_value::<TypesTypeValue>().unwrap(),
+                                ValueSetterValue::TypesType
+                            );
                             let allowed_type_list = allowed_type_list.selected_types.clone();
                             match expr {
                                 Expr::Subquery(query) => {

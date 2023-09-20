@@ -1,10 +1,10 @@
-use rand::{SeedableRng, Rng};
+use rand::{SeedableRng, Rng, seq::SliceRandom};
 use rand_chacha::ChaCha8Rng;
 use sqlparser::ast::{ObjectName, Ident};
 
 use crate::{training::ast_to_path::PathNode, query_creation::state_generator::subgraph_type::SubgraphType};
 
-use super::query_info::{DatabaseSchema, CreateTableSt, FromContents, Relation, GroupByContents};
+use super::{query_info::{DatabaseSchema, CreateTableSt, FromContents, Relation, GroupByContents}, call_modifiers::WildcardRelationsValue};
 
 pub trait QueryValueChooser {
     fn new() -> Self;
@@ -19,7 +19,7 @@ pub trait QueryValueChooser {
 
     fn choose_numeric(&mut self) -> String;
 
-    fn choose_qualified_wildcard_relation<'a>(&mut self, from_contents: &'a FromContents) -> (Ident, &'a Relation);
+    fn choose_qualified_wildcard_relation<'a>(&mut self, from_contents: &'a FromContents, wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation);
 }
 
 pub struct RandomValueChooser {
@@ -53,8 +53,9 @@ impl QueryValueChooser for RandomValueChooser {
         self.rng.gen_range(0f64..=10f64).to_string()
     }
 
-    fn choose_qualified_wildcard_relation<'a>(&mut self, from_contents: &'a FromContents) -> (Ident, &'a Relation) {
-        let (alias, relation) = from_contents.get_random_relation(&mut self.rng);
+    fn choose_qualified_wildcard_relation<'a>(&mut self, from_contents: &'a FromContents, wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation) {
+        let alias = wildcard_relations.wildcard_selectable_relations.choose(&mut self.rng).unwrap();
+        let relation = from_contents.get_relation_by_name(alias);
         (alias.clone(), relation)
     }
 }
@@ -146,8 +147,11 @@ impl QueryValueChooser for DeterministicValueChooser {
         value.clone()
     }
 
-    fn choose_qualified_wildcard_relation<'a>(&mut self, from_contents: &'a FromContents) -> (Ident, &'a Relation) {
+    fn choose_qualified_wildcard_relation<'a>(&mut self, from_contents: &'a FromContents, wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation) {
         let alias = &self.chosen_qualified_wildcard_tables.0[self.chosen_qualified_wildcard_tables.1];
+        if !wildcard_relations.wildcard_selectable_relations.contains(alias) {
+            panic!("Relation cannot be selected by wildcard in this context: wildcard_relations = {:?}, rel. alias: {alias}", wildcard_relations)
+        }
         self.chosen_qualified_wildcard_tables.1 += 1;
         let relation = from_contents.get_relation_by_name(alias);
         (alias.clone(), relation)

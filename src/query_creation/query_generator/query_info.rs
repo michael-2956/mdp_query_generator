@@ -388,6 +388,14 @@ impl FromContents {
             .concat()
     }
 
+    pub fn relations_num(&self) -> usize {
+        self.relations.len()
+    }
+
+    pub fn relations_iter(&self) -> impl Iterator<Item = (&Ident, &Relation)> {
+        self.relations.iter()
+    }
+
     pub fn append_table(&mut self, create_table_st: &CreateTableSt) -> TableAlias {
         let alias = self.create_alias();
         let relation = Relation::from_table(alias.clone(), create_table_st);
@@ -461,17 +469,25 @@ impl Relation {
         _self
     }
 
+    pub fn get_columns_with_types_iter(&self) -> impl Iterator<Item = (Option<&Ident>, &SubgraphType)> {
+        self.accessible_columns.columns.iter()
+            .flat_map(|(graph_type, column_names)| column_names.iter().map(
+                move |column_name| (Some(column_name), graph_type)
+            ))
+            .chain(self.unnamed_columns.iter().map(|x| (None, x)))
+            .chain(self.ambiguous_columns.iter().map(|(column_name, graph_type)| (
+                Some(column_name), graph_type
+            )))
+    }
+
+    /// get all columns with their types, including the unnamed ones and ambiguous ones, by reference
+    pub fn get_column_types(&self) -> Vec<SubgraphType> {
+        self.get_columns_with_types_iter().map(|(_, col_type)| col_type.clone()).collect()
+    }
+
     /// get all columns with their types, including the unnamed ones and ambiguous ones
     pub fn get_columns_with_types(&self) -> Vec<(Option<Ident>, SubgraphType)> {
-        self.accessible_columns.columns.iter()
-        .flat_map(|(graph_type, column_names)| column_names.iter().map(
-            |column_name| (Some(column_name.clone()), graph_type.clone())
-        ))
-        .chain(self.unnamed_columns.iter().map(|x| (None, x.to_owned())))
-        .chain(self.ambiguous_columns.iter().map(|(column_name, graph_type)| (
-            Some(column_name.clone()), graph_type.clone()
-        )))
-        .collect()
+        self.get_columns_with_types_iter().map(|(x, y)| (x.cloned(), y.clone())).collect()
     }
     
     pub fn is_type_accessible(&self, graph_type: &SubgraphType, allowed_columns_opt: Option<&HashSet<Ident>>) -> bool {

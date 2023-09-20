@@ -18,7 +18,7 @@ use sqlparser::ast::{
 use crate::config::TomlReadable;
 
 use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generator::{CallTypes, markov_chain_generator::subgraph_type::SubgraphType}};
-use self::{query_info::{DatabaseSchema, ClauseContext}, aggregate_function_settings::AggregateFunctionDistribution, expr_precedence::ExpressionPriority, call_modifiers::{TypesTypeValue, ValueSetterValue}, value_choosers::QueryValueChooser};
+use self::{query_info::{DatabaseSchema, ClauseContext}, aggregate_function_settings::AggregateFunctionDistribution, expr_precedence::ExpressionPriority, call_modifiers::{TypesTypeValue, ValueSetterValue, WildcardRelationsValue}, value_choosers::QueryValueChooser};
 
 use super::state_generator::{MarkovChainGenerator, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
@@ -206,8 +206,29 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             any => self.panic_unexpected(any)
         }
 
+        self.expect_state("call0_SELECT");
+        let (column_idents_and_graph_types, (distinct, mut projection)) = self.handle_select();
+        select_body.distinct = distinct;
+        std::mem::swap(&mut select_body.projection, &mut projection);
+
+        self.expect_state("EXIT_Query");
+        self.dynamic_model.notify_subquery_creation_end();
+        self.clause_context.on_query_end();
+        (Query {
+            with: None,
+            body: Box::new(SetExpr::Select(Box::new(select_body))),
+            order_by: vec![],
+            limit: select_limit,
+            offset: None,
+            fetch: None,
+            locks: vec![],
+        }, column_idents_and_graph_types)
+    }
+
+    /// subgraph def_SELECT
+    fn handle_select(&mut self) -> (Vec<(Option<Ident>, SubgraphType)>, (bool, Vec<SelectItem>)) {
         self.expect_state("SELECT");
-        select_body.distinct = match self.next_state().as_str() {
+        let distinct = match self.next_state().as_str() {
             "SELECT_DISTINCT" => {
                 self.expect_state("SELECT_distinct_end");
                 true
@@ -217,6 +238,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         };
 
         let mut column_idents_and_graph_types = vec![];
+        let mut projection = vec![];
 
         self.expect_state("SELECT_projection");
         while match self.next_state().as_str() {
@@ -229,25 +251,33 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             any => self.panic_unexpected(any)
         } {
             match self.next_state().as_str() {
-                "SELECT_wildcard" => {
-                    column_idents_and_graph_types.extend(self.clause_context
-                        .from().get_wildcard_columns().into_iter()
-                    );
-                    select_body.projection.push(SelectItem::Wildcard(WildcardAdditionalOptions {
-                        opt_exclude: None, opt_except: None, opt_rename: None,
-                    }));
-                    continue;
-                },
-                "SELECT_qualified_wildcard" => {
-                    let from_contents = self.clause_context.from();
-                    let (alias, relation) = self.value_chooser.choose_qualified_wildcard_relation(from_contents);
-                    column_idents_and_graph_types.extend(relation.get_columns_with_types().into_iter());
-                    select_body.projection.push(SelectItem::QualifiedWildcard(
-                        ObjectName(vec![alias]),
-                        WildcardAdditionalOptions {
-                            opt_exclude: None, opt_except: None, opt_rename: None,
-                        }
-                    ));
+                "SELECT_tables_eligible_for_wildcard" => {
+                    match self.next_state().as_str() {
+                        "SELECT_wildcard" => {
+                            column_idents_and_graph_types.extend(self.clause_context
+                                .from().get_wildcard_columns().into_iter()
+                            );
+                            projection.push(SelectItem::Wildcard(WildcardAdditionalOptions {
+                                opt_exclude: None, opt_except: None, opt_rename: None,
+                            }));
+                            continue;
+                        },
+                        "SELECT_qualified_wildcard" => {
+                            let from_contents = self.clause_context.from();
+                            let wildcard_relations = unwrap_variant!(self.state_generator.get_named_value::<WildcardRelationsValue>().unwrap(), ValueSetterValue::WildcardRelations);
+                            let (alias, relation) = self.value_chooser.choose_qualified_wildcard_relation(
+                                from_contents, wildcard_relations
+                            );
+                            column_idents_and_graph_types.extend(relation.get_columns_with_types().into_iter());
+                            projection.push(SelectItem::QualifiedWildcard(
+                                ObjectName(vec![alias]),
+                                WildcardAdditionalOptions {
+                                    opt_exclude: None, opt_except: None, opt_rename: None,
+                                }
+                            ));
+                        },
+                        any => self.panic_unexpected(any)
+                    }
                 },
                 arm @ ("SELECT_unnamed_expr" | "SELECT_expr_with_alias") => {
                     self.expect_state("call54_types");
@@ -269,25 +299,14 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                         },
                         any => self.panic_unexpected(any)
                     };
-                    select_body.projection.push(select_item);
+                    projection.push(select_item);
                     column_idents_and_graph_types.push((alias, subgraph_type));
                 },
                 any => self.panic_unexpected(any)
             };
         }
 
-        self.expect_state("EXIT_Query");
-        self.dynamic_model.notify_subquery_creation_end();
-        self.clause_context.on_query_end();
-        (Query {
-            with: None,
-            body: Box::new(SetExpr::Select(Box::new(select_body))),
-            order_by: vec![],
-            limit: select_limit,
-            offset: None,
-            fetch: None,
-            locks: vec![],
-        }, column_idents_and_graph_types)
+        (column_idents_and_graph_types, (distinct, projection))
     }
 
     /// subgraph def_VAL_3
@@ -702,7 +721,10 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             any => self.panic_unexpected(any),
         };
 
-        let ValueSetterValue::TypesTypeValue(allowed_type_list) = self.state_generator.get_named_value::<TypesTypeValue>().unwrap();
+        let allowed_type_list = unwrap_variant!(
+            self.state_generator.get_named_value::<TypesTypeValue>().unwrap(),
+            ValueSetterValue::TypesType
+        );
         let allowed_type_list = allowed_type_list.selected_types.clone();
 
         let (selected_type, types_value) = match self.next_state().as_str() {
@@ -731,7 +753,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                         let (subquery, column_types) = self.handle_query();
                         let selected_type = match column_types.len() {
                             1 => column_types[0].1.clone(),
-                            any => panic!("Subquery should have selected a single column, but selected {any}"),
+                            any => panic!("Subquery should have selected a single column, but selected {any}. Subquery: {subquery}"),
                         };
                         (selected_type, Expr::Subquery(Box::new(subquery)))
                     },
