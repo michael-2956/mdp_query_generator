@@ -1,6 +1,6 @@
 [main]
 # Running mode. Either "test_ast_to_path", "generate", "train"
-mode="generate"
+mode="test_ast_to_path"
 # number of queries to generate
 num_generate=20
 # count the 2vl-3vl equivalent queries

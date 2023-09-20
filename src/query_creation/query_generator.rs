@@ -150,16 +150,14 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         select_body.from = self.handle_from();
 
         match self.next_state().as_str() {
-            "WHERE" => {
-                self.expect_state("call53_types");
-                select_body.selection = Some(self.handle_types(Some(&[SubgraphType::Val3]), None).1);
-                self.expect_state("EXIT_WHERE");
+            "call0_WHERE" => {
+                select_body.selection = Some(self.handle_where().1);
+                self.expect_state("call0_SELECT");
             },
-            "EXIT_WHERE" => {},
-            any => self.panic_unexpected(any)
+            "call0_SELECT" => {},
+            any => self.panic_unexpected(any),
         }
 
-        self.expect_state("call0_SELECT");
         let (mut column_idents_and_graph_types, (distinct, mut projection)) = self.handle_select();
         select_body.distinct = distinct;
         std::mem::swap(&mut select_body.projection, &mut projection);
@@ -226,6 +224,14 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         }
 
         from
+    }
+
+    fn handle_where(&mut self) -> (SubgraphType, Expr) {
+        self.expect_state("WHERE");
+        self.expect_state("call53_types");
+        let (selection_type, selection) = self.handle_types(Some(&[SubgraphType::Val3]), None);
+        self.expect_state("EXIT_WHERE");
+        (selection_type, selection)
     }
 
     /// subgraph def_SELECT

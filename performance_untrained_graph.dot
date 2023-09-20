@@ -82,21 +82,15 @@ digraph G {
         call0_FROM [label="FROM", shape=rectangle, color=cornflowerblue, style=filled]
         Query -> call0_FROM
 
-        WHERE [label="WHERE"]
-        call0_FROM -> WHERE
-
-        call53_types [TYPES="[3VL Value]", label="TYPES: 3VL Value", shape=rectangle, style=filled, color=lightblue]
-        WHERE -> call53_types
-
-        EXIT_WHERE [label="EXIT WHERE"]
-        call53_types -> EXIT_WHERE
-        call0_FROM -> EXIT_WHERE
+        call0_WHERE [label="WHERE", shape=rectangle, style=filled, color=darkgoldenrod1]
+        call0_FROM -> call0_WHERE
 
         call0_SELECT [label="SELECT\nTYPES: [...types]\nMODS: [?single column]", TYPES="[...]", MODS="[?single column]", shape=rectangle, style=filled, color=bisque]
-        EXIT_WHERE -> call0_SELECT
+        call0_WHERE -> call0_SELECT
+        call0_FROM -> call0_SELECT
 
         // call0_group_by [label="GROUP BY Statement", TYPES="[known]", shape=rectangle, style=filled, color=gray]
-        // EXIT_WHERE -> call0_group_by
+        // call0_WHERE -> call0_group_by
         // call0_group_by -> call0_SELECT
 
         // call0_having [label="HAVING", TYPES="[known]", MODS="[]", shape=rectangle, style=filled, color=mediumvioletred]
@@ -130,6 +124,15 @@ digraph G {
 
         FROM -> EXIT_FROM
         FROM_multiple_relations -> EXIT_FROM
+    }
+
+    subgraph def_WHERE {
+        WHERE [label="WHERE", shape=rectangle, style=filled, color=darkgoldenrod1]
+        EXIT_WHERE [label="EXIT WHERE"]
+
+        call53_types [TYPES="[3VL Value]", label="TYPES: 3VL Value", shape=rectangle, style=filled, color=lightblue]
+        WHERE -> call53_types
+        call53_types -> EXIT_WHERE
     }
 
     subgraph def_SELECT {
@@ -801,13 +804,14 @@ digraph G {
 
     # cosmetic
     subgraph ignore {
-        EXIT_FROM -> SELECT [color=none]
+        EXIT_FROM -> WHERE [color=none]
+        EXIT_WHERE -> SELECT [color=none]
         EXIT_SELECT -> LIMIT [color=none]
         EXIT_VAL_3 -> number [color=none]
         EXIT_number -> text [color=none]
         EXIT_types -> column_spec [color=none]
         EXIT_column_spec -> list_expr[color=none]
-        EXIT_Query -> group_by [color=none]
+        EXIT_LIMIT -> group_by [color=none]
         EXIT_aggregate_function -> having [color=none]
     }
 }

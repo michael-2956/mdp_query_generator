@@ -246,11 +246,9 @@ impl PathGenerator {
         self.handle_from(&select_body.from)?;
 
         if let Some(ref selection) = select_body.selection {
-            self.try_push_state("WHERE")?;
-            self.try_push_state("call53_types")?;
-            self.handle_types(selection, Some(&[SubgraphType::Val3]), None)?;
+            self.try_push_state("call0_WHERE")?;
+            self.handle_where(selection)?;
         }
-        self.try_push_state("EXIT_WHERE")?;
 
         self.try_push_state("call0_SELECT")?;
         let mut column_idents_and_graph_types = self.handle_select(select_body.distinct, &select_body.projection)?;
@@ -297,6 +295,14 @@ impl PathGenerator {
         self.try_push_state("EXIT_FROM")?;
 
         Ok(())
+    }
+
+    fn handle_where(&mut self, selection: &Expr) -> Result<SubgraphType, ConvertionError> {
+        self.try_push_state("WHERE")?;
+        self.try_push_state("call53_types")?;
+        let tp = self.handle_types(selection, Some(&[SubgraphType::Val3]), None)?;
+        self.try_push_state("EXIT_WHERE")?;
+        Ok(tp)
     }
 
     /// subgraph def_SELECT
