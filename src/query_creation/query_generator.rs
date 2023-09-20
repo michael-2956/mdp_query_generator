@@ -130,28 +130,6 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         self.clause_context.on_query_begin();
         self.expect_state("Query");
 
-        let select_limit = match self.next_state().as_str() {
-            "single_row_true" => {
-                self.expect_state("FROM");
-                Some(Expr::Value(Value::Number("1".to_string(), false)))
-            },
-            "single_row_false" => {
-                match self.next_state().as_str() {
-                    "limit" => {
-                        self.expect_state("call52_types");
-                        let num = self.handle_types(
-                            Some(&[SubgraphType::Numeric, SubgraphType::Integer]), None
-                        ).1;
-                        self.expect_state("FROM");
-                        Some(num)
-                    },
-                    "FROM" => None,
-                    any => self.panic_unexpected(any)
-                }
-            },
-            any => self.panic_unexpected(any)
-        };
-
         let mut select_body = Select {
             distinct: false,
             top: None,
@@ -167,6 +145,8 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             having: None,
             qualify: None,
         };
+
+        self.expect_state("FROM");
 
         loop {
             select_body.from.push(TableWithJoins { relation: match self.next_state().as_str() {
@@ -210,6 +190,12 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         let (mut column_idents_and_graph_types, (distinct, mut projection)) = self.handle_select();
         select_body.distinct = distinct;
         std::mem::swap(&mut select_body.projection, &mut projection);
+
+        let select_limit = match self.next_state().as_str() {
+            "query_can_skip_limit" => None,
+            "call0_LIMIT" => Some(self.handle_limit().1),
+            any => self.panic_unexpected(any),
+        };
 
         self.expect_state("EXIT_Query");
         self.dynamic_model.notify_subquery_creation_end();
@@ -315,6 +301,25 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         }
 
         (column_idents_and_graph_types, (distinct, projection))
+    }
+
+    /// subgraph def_LIMIT
+    fn handle_limit(&mut self) -> (SubgraphType, Expr) {
+        self.expect_state("LIMIT");
+
+        let (limit_type, limit) = match self.next_state().as_str() {
+            "single_row_true" => {
+                (SubgraphType::Integer, Expr::Value(Value::Number("1".to_string(), false)))
+            },
+            "limit_num" => {
+                self.expect_state("call52_types");
+                self.handle_types(Some(&[SubgraphType::Numeric, SubgraphType::Integer]), None)
+            },
+            any => self.panic_unexpected(any)
+        };
+        self.expect_state("EXIT_LIMIT");
+
+        (limit_type, limit)
     }
 
     /// subgraph def_VAL_3

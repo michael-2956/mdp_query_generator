@@ -80,21 +80,7 @@ digraph G {
         EXIT_Query [label="EXIT Query"]
 
         FROM []
-
-        single_row_true [label="limit 1 (ON: 'single row')", modifier="single row", modifier_mode="on"]
-        Query -> single_row_true
-        single_row_true -> FROM
-
-        single_row_false [label="OFF: 'single row'", modifier="single row", modifier_mode="off"]
-        Query -> single_row_false
-        single_row_false -> FROM
-
-        // limit [label="limit [num]"]
-        // single_row_false -> limit
-        // call52_types [TYPES="[integer, numeric]", MODS="[no column spec]", label="TYPES: [integer, numeric]\nMODS: [no column spec]", shape=rectangle, style=filled, color=lightblue]
-        // limit -> call52_types
-        // call52_types -> FROM
-
+        Query -> FROM
         FROM_multiple_relations [label="multiple relations"]
 
         Table []
@@ -132,7 +118,13 @@ digraph G {
         // call0_SELECT -> call0_having
         // call0_having -> EXIT_Query
 
-        call0_SELECT -> EXIT_Query
+        // modifier="single row", modifier_mode="on" is here to turn off all LIMIT other than LIMIT 1 
+        call0_LIMIT [label="LIMIT\nMODS: [?single row]", MODS="[?single row]", modifier="single row", modifier_mode="on", shape=rectangle, style=filled, color=brown]
+        query_can_skip_limit [label="skip LIMIT allowed\nmod: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
+        call0_SELECT -> call0_LIMIT
+        call0_SELECT -> query_can_skip_limit
+        call0_LIMIT -> EXIT_Query
+        query_can_skip_limit -> EXIT_Query
     }
 
     subgraph def_SELECT {
@@ -197,6 +189,21 @@ digraph G {
         call54_types -> SELECT_list_multiple_values
         call54_types -> EXIT_SELECT
         SELECT_list_multiple_values -> SELECT_list
+    }
+
+    subgraph def_LIMIT {
+        LIMIT [MODS="[single row]", label="LIMIT\nmods=[single row]", shape=rectangle, style=filled, color=brown]
+        EXIT_LIMIT [label="EXIT LIMIT", shape=rectangle]
+
+        single_row_true [label="limit 1\nmod: 'single row' -> ON", modifier="single row", modifier_mode="on"]
+        LIMIT -> single_row_true
+        single_row_true -> EXIT_LIMIT
+
+        limit_num [label="limit [num]\nmod: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
+        LIMIT -> limit_num
+        call52_types [TYPES="[integer, numeric]", MODS="[no column spec]", label="TYPES: [integer, numeric]\nMODS: [no column spec]", shape=rectangle, style=filled, color=lightblue]
+        limit_num -> call52_types
+        call52_types -> EXIT_LIMIT
     }
 
     subgraph def_VAL_3 {
@@ -789,6 +796,7 @@ digraph G {
 
     # cosmetic
     subgraph ignore {
+        EXIT_SELECT -> LIMIT [color=none]
         EXIT_VAL_3 -> number [color=none]
         EXIT_number -> text [color=none]
         EXIT_types -> column_spec [color=none]
