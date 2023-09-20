@@ -207,13 +207,21 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         }
 
         self.expect_state("call0_SELECT");
-        let (column_idents_and_graph_types, (distinct, mut projection)) = self.handle_select();
+        let (mut column_idents_and_graph_types, (distinct, mut projection)) = self.handle_select();
         select_body.distinct = distinct;
         std::mem::swap(&mut select_body.projection, &mut projection);
 
         self.expect_state("EXIT_Query");
         self.dynamic_model.notify_subquery_creation_end();
         self.clause_context.on_query_end();
+
+        for (_, column_type) in column_idents_and_graph_types.iter_mut() {
+            // select pg_typeof((select null)); -- returns text
+            if *column_type == SubgraphType::Undetermined {
+                *column_type = SubgraphType::Text;
+            }
+        }
+
         (Query {
             with: None,
             body: Box::new(SetExpr::Select(Box::new(select_body))),

@@ -5,7 +5,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{Query, ObjectName, Expr, SetExpr, SelectItem, Value, BinaryOperator, UnaryOperator, Ident, DataType, TrimWhereField};
 
-use crate::{query_creation::{query_generator::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{ValueSetterValue, TypesTypeValue}, Unnested, QueryGenerator, value_choosers::{RandomValueChooser, DeterministicValueChooser}}, state_generator::{subgraph_type::SubgraphType, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::CallModifiers, DynClone, ChainStateMemory}, dynamic_models::{DeterministicModel, DynamicModel, PathModel, AntiCallModel}, CallTypes}}, config::{TomlReadable, Config, MainConfig}, unwrap_variant, unwrap_variant_or_else};
+use crate::{query_creation::{query_generator::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{ValueSetterValue, TypesTypeValue, WildcardRelationsValue}, Unnested, QueryGenerator, value_choosers::{RandomValueChooser, DeterministicValueChooser}}, state_generator::{subgraph_type::SubgraphType, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::CallModifiers, DynClone, ChainStateMemory}, dynamic_models::{DeterministicModel, DynamicModel, PathModel, AntiCallModel}, CallTypes}}, config::{TomlReadable, Config, MainConfig}, unwrap_variant, unwrap_variant_or_else};
 
 pub struct AST2PathTestingConfig {
     pub schema: PathBuf,
@@ -53,6 +53,7 @@ impl TestAST2Path {
 
     pub fn test(&mut self) -> Result<(), ConvertionError> {
         for i in 0..self.config.n_tests {
+            // println!("\n\n\n ================== Beggining GENERATION ================== \n\n\n");
             let query = Box::new(self.random_query_generator.next().unwrap());
             // println!("\n\n\nQuery: {query}");
             let path = self.path_generator.get_query_path(&query)?;
@@ -286,8 +287,26 @@ impl PathGenerator {
         }
         self.try_push_state("EXIT_WHERE")?;
 
+        self.try_push_state("call0_SELECT")?;
+        let mut column_idents_and_graph_types = self.handle_select(select_body.distinct, &select_body.projection)?;
+
+        self.try_push_state("EXIT_Query")?;
+        self.clause_context.on_query_end();
+
+        for (_, column_type) in column_idents_and_graph_types.iter_mut() {
+            // select pg_typeof((select null)); -- returns text
+            if *column_type == SubgraphType::Undetermined {
+                *column_type = SubgraphType::Text;
+            }
+        }
+
+        return Ok(column_idents_and_graph_types)
+    }
+
+    /// subgraph def_SELECT
+    fn handle_select(&mut self, distinct: bool, projection: &Vec<SelectItem>) -> Result<Vec<(Option<Ident>, SubgraphType)>, ConvertionError> {
         self.try_push_state("SELECT")?;
-        if select_body.distinct {
+        if distinct {
             self.try_push_state("SELECT_DISTINCT")?;
         }
         self.try_push_state("SELECT_distinct_end")?;
@@ -301,20 +320,20 @@ impl PathGenerator {
             _ => false,
         };
 
-        for (i, select_item) in select_body.projection.iter().enumerate() {
+        for (i, select_item) in projection.iter().enumerate() {
             if i > 0 {
                 if single_column_mod {
                     return Err(ConvertionError::new(format!(
                         "single column modifier is ON but the projection contains multiple columns: {:#?}",
-                        select_body.projection
+                        projection
                     )))
                 } else {
                     self.try_push_state("SELECT_list_multiple_values")?;
                 }
             }
             self.try_push_state("SELECT_list")?;
-            match (select_item, single_column_mod) {
-                (SelectItem::UnnamedExpr(expr), _) => {
+            match select_item {
+                SelectItem::UnnamedExpr(expr) => {
                     self.try_push_states(&["SELECT_unnamed_expr", "call54_types"])?;
                     let alias = match expr.unnested() {
                         Expr::Identifier(ident) => Some(ident.clone()),
@@ -325,49 +344,42 @@ impl PathGenerator {
                         alias, self.handle_types(expr, None, None)?
                     ));
                 },
-                (SelectItem::ExprWithAlias { expr, alias }, _) => {
+                SelectItem::ExprWithAlias { expr, alias } => {
                     self.try_push_states(&["SELECT_expr_with_alias", "call54_types"])?;
                     column_idents_and_graph_types.push((
                         Some(alias.clone()),
                         self.handle_types(expr, None, None)?
                     ));
                 },
-                (SelectItem::QualifiedWildcard(alias, ..), false) => {
-                    self.try_push_state("SELECT_qualified_wildcard")?;
+                SelectItem::QualifiedWildcard(alias, ..) => {
+                    self.try_push_states(&["SELECT_tables_eligible_for_wildcard", "SELECT_qualified_wildcard"])?;
                     let relation = match alias.0.as_slice() {
-                        [ident] => self.clause_context.from().get_relation_by_name(ident),
+                        [ident] => {
+                            let wildcard_relations = unwrap_variant!(self.state_generator.get_named_value::<WildcardRelationsValue>().unwrap(), ValueSetterValue::WildcardRelations);
+                            if !wildcard_relations.wildcard_selectable_relations.contains(ident) {
+                                return Err(ConvertionError::new(format!(
+                                    "{ident}.* is not available: wildcard_selectable_relations = {:?}",
+                                    wildcard_relations.wildcard_selectable_relations
+                                )))
+                            }
+                            self.clause_context.from().get_relation_by_name(ident)
+                        },
                         any => panic!("schema.table alias is not supported: {}", ObjectName(any.to_vec())),
                     };
                     column_idents_and_graph_types.extend(relation.get_columns_with_types().into_iter());
                     self.push_node(PathNode::QualifiedWildcardSelectedRelation(alias.0.last().unwrap().clone()));
                 },
-                (SelectItem::Wildcard(..), false) => {
-                    self.try_push_state("SELECT_wildcard")?;
+                SelectItem::Wildcard(..) => {
+                    self.try_push_states(&["SELECT_tables_eligible_for_wildcard", "SELECT_wildcard"])?;
                     column_idents_and_graph_types.extend(self.clause_context
                         .from().get_wildcard_columns().into_iter()
                     );
-                },
-                _x @ (SelectItem::QualifiedWildcard(..) | SelectItem::Wildcard(..), true) => {
-                    return Err(ConvertionError::new(format!(
-                        "Wildcards are currently not allowed where single column is required: {:#?}",
-                        select_body.projection
-                    )))
                 },
             }
         }
         self.try_push_state("EXIT_SELECT")?;
 
-        self.try_push_state("EXIT_Query")?;
-        self.clause_context.on_query_end();
-
-        for (_, column_type) in column_idents_and_graph_types.iter_mut() {
-            // select pg_typeof((select null)); -- returns text
-            if *column_type == SubgraphType::Undetermined {
-                *column_type = SubgraphType::Text;
-            }
-        }
-
-        return Ok(column_idents_and_graph_types)
+        Ok(column_idents_and_graph_types)
     }
 
     /// subgraph def_VAL_3
@@ -709,18 +721,18 @@ impl PathGenerator {
                             );
                             let allowed_type_list = allowed_type_list.selected_types.clone();
                             match expr {
-                                Expr::Subquery(query) => {
+                                Expr::Subquery(subquery) => {
                                     if modifiers.contains(&SmolStr::new("no subquery")) {
                                         unexpected_expr!(expr)
                                     }
                                     self.try_push_states(&["types_select_special_expression", "call1_Query"])?;
                                     self.state_generator.set_known_list(allowed_type_list);
-                                    match self.handle_query(query) {
+                                    match self.handle_query(subquery) {
                                         Ok(col_type_list) => {
                                             if matches!(col_type_list.as_slice(), [(.., query_subgraph_type)] if query_subgraph_type == subgraph_type) {
                                                 break subgraph_type.clone()
                                             } else {
-                                                panic!("Query did not return the requested type. Requested: {:?} Got: {:?}", subgraph_type, col_type_list);
+                                                panic!("Query did not return the requested type. Requested: {:?} Got: {:?}\nQuery: {subquery}", subgraph_type, col_type_list);
                                             }
                                         },
                                         Err(err) => {

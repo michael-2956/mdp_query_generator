@@ -178,7 +178,7 @@ impl ValueSetter for WildcardRelationsValueSetter {
                 if single_column && column_types.len() != 1 {
                     None
                 } else {
-                    if column_types.into_iter().all(|col_type| allowed_types.contains(&col_type)) {
+                    if column_types.iter().all(|col_type| allowed_types.contains(col_type)) {
                         Some(alias.clone())
                     } else {
                         None
