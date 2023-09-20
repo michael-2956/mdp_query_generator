@@ -146,35 +146,8 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             qualify: None,
         };
 
-        self.expect_state("FROM");
-
-        loop {
-            select_body.from.push(TableWithJoins { relation: match self.next_state().as_str() {
-                "Table" => {
-                    let create_table_st = self.value_chooser.choose_table(&self.database_schema);
-                    let alias = self.clause_context.from_mut().append_table(create_table_st);
-                    TableFactor::Table {
-                        name: create_table_st.name.clone(),
-                        alias: Some(alias),
-                        args: None,
-                        with_hints: vec![],
-                        columns_definition: None,
-                    }
-                },
-                "call0_Query" => {
-                    let (query, column_idents_and_graph_types) = self.handle_query();
-                    let alias = self.clause_context.from_mut().append_query(column_idents_and_graph_types);
-                    TableFactor::Derived {
-                        lateral: false,
-                        subquery: Box::new(query),
-                        alias: Some(alias)
-                    }
-                },
-                "EXIT_FROM" => break,
-                any => self.panic_unexpected(any)
-            }, joins: vec![] });
-            self.expect_state("FROM_multiple_relations");
-        }
+        self.expect_state("call0_FROM");
+        select_body.from = self.handle_from();
 
         match self.next_state().as_str() {
             "WHERE" => {
@@ -217,6 +190,42 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             fetch: None,
             locks: vec![],
         }, column_idents_and_graph_types)
+    }
+
+    fn handle_from(&mut self) -> Vec<TableWithJoins> {
+        self.expect_state("FROM");
+
+        let mut from = vec![];
+
+        loop {
+            from.push(TableWithJoins { relation: match self.next_state().as_str() {
+                "Table" => {
+                    let create_table_st = self.value_chooser.choose_table(&self.database_schema);
+                    let alias = self.clause_context.from_mut().append_table(create_table_st);
+                    TableFactor::Table {
+                        name: create_table_st.name.clone(),
+                        alias: Some(alias),
+                        args: None,
+                        with_hints: vec![],
+                        columns_definition: None,
+                    }
+                },
+                "call0_Query" => {
+                    let (query, column_idents_and_graph_types) = self.handle_query();
+                    let alias = self.clause_context.from_mut().append_query(column_idents_and_graph_types);
+                    TableFactor::Derived {
+                        lateral: false,
+                        subquery: Box::new(query),
+                        alias: Some(alias)
+                    }
+                },
+                "EXIT_FROM" => break,
+                any => self.panic_unexpected(any)
+            }, joins: vec![] });
+            self.expect_state("FROM_multiple_relations");
+        }
+
+        from
     }
 
     /// subgraph def_SELECT

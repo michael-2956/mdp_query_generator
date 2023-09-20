@@ -3,7 +3,7 @@ use std::{error::Error, fmt, path::PathBuf, str::FromStr, io::Write, collections
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
-use sqlparser::ast::{Query, ObjectName, Expr, SetExpr, SelectItem, Value, BinaryOperator, UnaryOperator, Ident, DataType, TrimWhereField};
+use sqlparser::ast::{Query, ObjectName, Expr, SetExpr, SelectItem, Value, BinaryOperator, UnaryOperator, Ident, DataType, TrimWhereField, TableWithJoins};
 
 use crate::{query_creation::{query_generator::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{ValueSetterValue, TypesTypeValue, WildcardRelationsValue}, Unnested, QueryGenerator, value_choosers::{RandomValueChooser, DeterministicValueChooser}}, state_generator::{subgraph_type::SubgraphType, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::CallModifiers, DynClone, ChainStateMemory}, dynamic_models::{DeterministicModel, DynamicModel, PathModel, AntiCallModel}, CallTypes}}, config::{TomlReadable, Config, MainConfig}, unwrap_variant, unwrap_variant_or_else};
 
@@ -240,28 +240,10 @@ impl PathGenerator {
         self.clause_context.on_query_begin();
         self.try_push_state("Query")?;
 
-        self.try_push_state("FROM")?;
-
         let select_body = unwrap_variant!(&*query.body, SetExpr::Select);
-
-        for table_with_joins in select_body.from.iter() {
-            match &table_with_joins.relation {
-                sqlparser::ast::TableFactor::Table { name, .. } => {
-                    self.try_push_state("Table")?;
-                    self.push_node(PathNode::SelectedTableName(name.clone()));
-                    let create_table_st = self.database_schema.get_table_def_by_name(name);
-                    self.clause_context.from_mut().append_table(create_table_st);
-                },
-                sqlparser::ast::TableFactor::Derived { subquery, .. } => {
-                    self.try_push_state("call0_Query")?;
-                    let column_idents_and_graph_types = self.handle_query(&subquery)?;
-                    self.clause_context.from_mut().append_query(column_idents_and_graph_types);
-                },
-                any => unexpected_expr!(any)
-            }
-            self.try_push_state("FROM_multiple_relations")?;
-        }
-        self.try_push_state("EXIT_FROM")?;
+        
+        self.try_push_state("call0_FROM")?;
+        self.handle_from(&select_body.from)?;
 
         if let Some(ref selection) = select_body.selection {
             self.try_push_state("WHERE")?;
@@ -291,6 +273,30 @@ impl PathGenerator {
         }
 
         return Ok(column_idents_and_graph_types)
+    }
+
+    fn handle_from(&mut self, from: &Vec<TableWithJoins>) -> Result<(), ConvertionError> {
+        self.try_push_state("FROM")?;
+        for table_with_joins in from.iter() {
+            match &table_with_joins.relation {
+                sqlparser::ast::TableFactor::Table { name, .. } => {
+                    self.try_push_state("Table")?;
+                    self.push_node(PathNode::SelectedTableName(name.clone()));
+                    let create_table_st = self.database_schema.get_table_def_by_name(name);
+                    self.clause_context.from_mut().append_table(create_table_st);
+                },
+                sqlparser::ast::TableFactor::Derived { subquery, .. } => {
+                    self.try_push_state("call0_Query")?;
+                    let column_idents_and_graph_types = self.handle_query(&subquery)?;
+                    self.clause_context.from_mut().append_query(column_idents_and_graph_types);
+                },
+                any => unexpected_expr!(any)
+            }
+            self.try_push_state("FROM_multiple_relations")?;
+        }
+        self.try_push_state("EXIT_FROM")?;
+
+        Ok(())
     }
 
     /// subgraph def_SELECT

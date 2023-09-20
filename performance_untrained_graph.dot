@@ -79,33 +79,18 @@ digraph G {
         Query [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[single column, single row]", label="Query\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[single column, single row]", shape=octagon, style=filled, color=green]
         EXIT_Query [label="EXIT Query"]
 
-        FROM []
-        Query -> FROM
-        FROM_multiple_relations [label="multiple relations"]
-
-        Table []
-        FROM -> Table
-        Table -> FROM_multiple_relations
-        // FROM_multiple_relations -> Table
-
-        call0_Query [label="Query", shape=rectangle, TYPES="[any]", MODS="[]", style=filled, color=green]
-        FROM -> call0_Query
-        call0_Query -> FROM_multiple_relations
-        // FROM_multiple_relations -> call0_Query
-
-        EXIT_FROM [label="EXIT FROM"]
-        FROM -> EXIT_FROM
-        FROM_multiple_relations -> EXIT_FROM
+        call0_FROM [label="FROM", shape=rectangle, color=cornflowerblue, style=filled]
+        Query -> call0_FROM
 
         WHERE [label="WHERE"]
-        EXIT_FROM -> WHERE
+        call0_FROM -> WHERE
 
         call53_types [TYPES="[3VL Value]", label="TYPES: 3VL Value", shape=rectangle, style=filled, color=lightblue]
         WHERE -> call53_types
 
         EXIT_WHERE [label="EXIT WHERE"]
         call53_types -> EXIT_WHERE
-        EXIT_FROM -> EXIT_WHERE
+        call0_FROM -> EXIT_WHERE
 
         call0_SELECT [label="SELECT\nTYPES: [...types]\nMODS: [?single column]", TYPES="[...]", MODS="[?single column]", shape=rectangle, style=filled, color=bisque]
         EXIT_WHERE -> call0_SELECT
@@ -125,6 +110,26 @@ digraph G {
         call0_SELECT -> query_can_skip_limit
         call0_LIMIT -> EXIT_Query
         query_can_skip_limit -> EXIT_Query
+    }
+
+    subgraph def_FROM {
+        FROM [shape=rectangle, color=cornflowerblue, style=filled]
+        EXIT_FROM [label="EXIT FROM", shape=rectangle]
+
+        FROM_multiple_relations [label="multiple relations"]
+
+        Table []
+        FROM -> Table
+        Table -> FROM_multiple_relations
+        // FROM_multiple_relations -> Table
+
+        call0_Query [label="Query", shape=rectangle, TYPES="[any]", MODS="[]", style=filled, color=green]
+        FROM -> call0_Query
+        call0_Query -> FROM_multiple_relations
+        // FROM_multiple_relations -> call0_Query
+
+        FROM -> EXIT_FROM
+        FROM_multiple_relations -> EXIT_FROM
     }
 
     subgraph def_SELECT {
@@ -796,6 +801,7 @@ digraph G {
 
     # cosmetic
     subgraph ignore {
+        EXIT_FROM -> SELECT [color=none]
         EXIT_SELECT -> LIMIT [color=none]
         EXIT_VAL_3 -> number [color=none]
         EXIT_number -> text [color=none]
