@@ -15,6 +15,7 @@ pub trait NamedValue: Debug {
 pub enum ValueSetterValue {
     TypesType(TypesTypeValue),
     WildcardRelations(WildcardRelationsValue),
+    HasUniqueColumnNamesForType(HasUniqueColumnNamesForTypeValue),
 }
 
 pub trait ValueSetter: Debug {
@@ -28,6 +29,7 @@ pub trait ValueSetter: Debug {
 #[derive(Debug, Clone)]
 pub struct TypesTypeValue {
     pub selected_types: Vec<SubgraphType>,
+    pub type_is_available_in_clause: bool,
 }
 
 impl NamedValue for TypesTypeValue {
@@ -44,7 +46,7 @@ impl ValueSetter for TypesTypeValueSetter {
         TypesTypeValue::name()
     }
 
-    fn get_value(&self, _clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
+    fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
         let selected_type = match function_context.current_node.node_common.name.as_str() {
             "types_select_type_integer" => SubgraphType::Integer,
             "types_select_type_numeric" => SubgraphType::Numeric,
@@ -65,8 +67,17 @@ impl ValueSetter for TypesTypeValueSetter {
             any => vec![any]
         };
 
+        let check_group_by = function_context.call_params.modifiers.contains(&SmolStr::new("having clause mode"));
+
         ValueSetterValue::TypesType(TypesTypeValue {
-            selected_types: allowed_type_list
+            type_is_available_in_clause: allowed_type_list.iter().any(|x|
+                if check_group_by {
+                    clause_context.group_by().is_type_available(x)
+                } else {
+                    clause_context.from().is_type_available(x, None)
+                }
+            ),
+            selected_types: allowed_type_list,
         })
     }
 }
@@ -80,7 +91,7 @@ pub trait StatelessCallModifier: Debug {
     fn get_associated_value_name(&self) -> Option<SmolStr>;
 
     /// Runs the modifier value based on the current value
-    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool;
+    fn run(&self, function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool;
 }
 
 pub trait StatefulCallModifier: Debug {
@@ -107,17 +118,38 @@ impl StatelessCallModifier for IsColumnTypeAvailableModifier {
         Some(TypesTypeValue::name())
     }
 
-    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
-        let check_group_by = function_context.call_params.modifiers.contains(&SmolStr::new("having clause mode"));
-        unwrap_variant!(
-            associated_value.unwrap(), ValueSetterValue::TypesType
-        ).selected_types.iter().any(|x|
-            if check_group_by {
-                clause_context.group_by().is_type_available(x)
-            } else {
-                clause_context.from().is_type_available(x, None)
-            }
-        )
+    fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
+        unwrap_variant!(associated_value.unwrap(), ValueSetterValue::TypesType).type_is_available_in_clause
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HasUniqueColumnNamesForTypeValue {
+    value: bool,
+}
+
+impl NamedValue for HasUniqueColumnNamesForTypeValue {
+    fn name() -> SmolStr {
+        SmolStr::new("has_unique_column_names_for_type_val")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HasUniqueColumnNamesForTypeValueSetter { }
+
+impl ValueSetter for HasUniqueColumnNamesForTypeValueSetter {
+    fn get_value_name(&self) -> SmolStr {
+        HasUniqueColumnNamesForTypeValue::name()
+    }
+
+    fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
+        let column_types = unwrap_variant!(
+            &function_context.call_params.selected_types, CallTypes::TypeList
+        );
+        // in any clause context the column ambiguity is determined by FROM
+        ValueSetterValue::HasUniqueColumnNamesForType(HasUniqueColumnNamesForTypeValue {
+            value: clause_context.from().has_unique_columns_for_types(column_types)
+        })
     }
 }
 
@@ -130,15 +162,11 @@ impl StatelessCallModifier for HasUniqueColumnNamesForTypeModifier {
     }
 
     fn get_associated_value_name(&self) -> Option<SmolStr> {
-        None
+        Some(HasUniqueColumnNamesForTypeValue::name())
     }
 
-    fn run(&self, clause_context: &ClauseContext, function_context: &FunctionContext, _associated_value: Option<&ValueSetterValue>) -> bool {
-        let column_types = unwrap_variant!(
-            &function_context.call_params.selected_types, CallTypes::TypeList
-        );
-        // in any context the column ambiguity is determined by FROM
-        clause_context.from().has_unique_columns_for_types(column_types)
+    fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
+        unwrap_variant!(associated_value.unwrap(), ValueSetterValue::HasUniqueColumnNamesForType).value
     }
 }
 
@@ -202,7 +230,7 @@ impl StatelessCallModifier for IsWildcardAvailableModifier {
         Some(WildcardRelationsValue::name())
     }
 
-    fn run(&self, _clause_context: &ClauseContext, function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
+    fn run(&self, function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
         let wildcard_relations = unwrap_variant!(associated_value.unwrap(), ValueSetterValue::WildcardRelations);
         let single_column = function_context.call_params.modifiers.contains(&SmolStr::new("single column"));
         // 3. if no relations are available at all, the wildcards should be off.
