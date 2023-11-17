@@ -546,7 +546,7 @@ digraph G {
     }
 
     subgraph def_types {
-        types [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no column spec, no subquery, having clause mode, enable untyped null]", label="TYPE(S) (generic):\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[no column spec, no subquery, having clause mode, enable untyped null]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no literals, no typed nulls, no column spec, no subquery, having clause mode, enable untyped null]", label="TYPE(S) (generic):\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[no literals, no typed nulls, no column spec, no subquery, having clause mode, enable untyped null]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
         types_select_type_integer[TYPE_NAME="integer", label="integer?", set_value="types_type"]
@@ -564,7 +564,7 @@ digraph G {
         types -> types_null
         types_null -> EXIT_types
 
-        types_return_typed_null [label="Typed null"]
+        types_return_typed_null [label="Typed null", modifier="no typed nulls", modifier_mode="off"]
         types_select_type_integer -> types_return_typed_null
         types_select_type_numeric -> types_return_typed_null
         types_select_type_3vl -> types_return_typed_null
@@ -587,30 +587,25 @@ digraph G {
         types_select_special_expression -> call1_Query
         call1_Query -> EXIT_types
 
-        call1_number [label="number\nTYPES: [integer]\nMODS: [...mods]", TYPES="[integer]", MODS="[...]", shape=rectangle, style=filled, color=chocolate]
+        call1_number [label="number\nTYPES: [integer]\nMODS: [...mods]", TYPES="[integer]", MODS="[...]", modifier="no literals", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
         types_select_type_integer -> call1_number
         call1_number -> EXIT_types
 
-        call0_number [label="number\nTYPES: [numeric]\nMODS: [...mods]", TYPES="[numeric]", MODS="[...]", shape=rectangle, style=filled, color=chocolate]
+        call0_number [label="number\nTYPES: [numeric]\nMODS: [...mods]", TYPES="[numeric]", MODS="[...]", modifier="no literals", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
         types_select_type_numeric -> call0_number
         call0_number -> EXIT_types
 
-        call1_VAL_3 [label="3VL Value\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=red]
+        call1_VAL_3 [label="3VL Value\nMODS: [...mods]", MODS="[...]", modifier="no literals", modifier_mode="off", shape=rectangle, style=filled, color=red]
         types_select_type_3vl -> call1_VAL_3
         call1_VAL_3 -> EXIT_types
 
-        call0_text [label="text\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=pink]
+        call0_text [label="text\nMODS: [...mods]", MODS="[...]", modifier="no literals", modifier_mode="off", shape=rectangle, style=filled, color=pink]
         types_select_type_text -> call0_text
         call0_text -> EXIT_types
 
-        call0_date [label="date\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=cadetblue4]
+        call0_date [label="date\nMODS: [...mods]", MODS="[...]", modifier="no literals", modifier_mode="off", shape=rectangle, style=filled, color=cadetblue4]
         types_select_type_date -> call0_date
         call0_date -> EXIT_types
-        
-        call0_aggregate_function [label="aggregate function\nTYPE: known", TYPES="[known]", shape=rectangle, style=filled, color=peru]
-        types_select_special_expression -> call0_aggregate_function
-        call0_aggregate_function -> EXIT_types
-        
     }
 
     subgraph def_column_spec {
@@ -680,20 +675,20 @@ digraph G {
         set_list -> new_set
         new_set -> set_list
         
-        call3_column_spec[TYPES="[any]", MODS="[having clause mode]",  label="column specifier\nTYPE: known\nMODS: [?having clause mode]\nmod.: 'no column spec' -> OFF\ncall.mod.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
-        new_set -> call3_column_spec
-        call3_column_spec -> new_set
-        call3_column_spec -> EXIT_group_by
+        call69_types[TYPES="[any]", MODS="[having clause mode, no literals, no typed nulls, no subquery]", shape=rectangle, style=filled, color=lightblue]
+        new_set -> call69_types
+        call69_types -> new_set
+        call69_types -> EXIT_group_by
         
         list_of_relations[label="list"]
         grouping_relations_list -> list_of_relations
         grouping_cube -> set_list
         grouping_rollup -> set_list
-        
-        call2_column_spec [TYPES="[any]", MODS="[having clause mode]", label="column specifier\nTYPE: known\nMODS: [?having clause mode]\nmod.: 'no column spec' -> OFF\ncall.mod.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
-        list_of_relations -> call2_column_spec
-        call2_column_spec -> list_of_relations
-        call2_column_spec -> EXIT_group_by
+
+        call70_types[TYPES="[any]", MODS="[having clause mode, no literals, no typed nulls, no subquery]", shape=rectangle, style=filled, color=lightblue]
+        list_of_relations -> call70_types
+        call70_types -> list_of_relations
+        call70_types -> EXIT_group_by
     }
 
 

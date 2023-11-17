@@ -1108,8 +1108,10 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                         "list_of_relations" => {
 
                         },
-                        "call2_column_spec" => {
-                            list.push(self.handle_column_spec().1);
+                        "call69_types" => {
+                            list.push(self.handle_types(
+                                None, None
+                            ).1);
                         },
                         "EXIT_group_by" => {
                             result = vec![Expr::Tuple(list)];
@@ -1133,8 +1135,10 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                         "new_set" => {
 
                         },
-                        "call3_column_spec" => {
-                            current_set.push(self.handle_column_spec().1);
+                        "call70_types" => {
+                            current_set.push(self.handle_types(
+                                None, None
+                            ).1);
                         },
                         "EXIT_group_by" => {
                             result = match arm {
