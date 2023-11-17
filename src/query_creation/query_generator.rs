@@ -13,6 +13,7 @@ use smol_str::SmolStr;
 use sqlparser::ast::{
     Expr, Ident, Query, Select, SetExpr, TableFactor,
     TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, SelectItem, WildcardAdditionalOptions, DataType, ObjectName,
+    FunctionArg,
 };
 
 use crate::config::TomlReadable;
@@ -148,13 +149,27 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
 
         self.expect_state("call0_FROM");
         select_body.from = self.handle_from();
-
         match self.next_state().as_str() {
             "call0_WHERE" => {
                 select_body.selection = Some(self.handle_where().1);
-                self.expect_state("call0_SELECT");
+                match self.next_state().as_str() {
+                    "call0_SELECT" => {},
+                    "call0_group_by" => {
+                        select_body.group_by = self.handle_group_by(); 
+                        self.expect_state("call0_SELECT");
+                    },
+                    any => self.panic_unexpected(any),  
+                }
+
             },
             "call0_SELECT" => {},
+            "call0_group_by" => {
+                select_body.group_by = self.handle_group_by();
+                println!("flag 4");
+
+                self.expect_state("call0_SELECT");
+
+            }
             any => self.panic_unexpected(any),
         }
 
@@ -785,6 +800,12 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                         };
                         (selected_type, Expr::Subquery(Box::new(subquery)))
                     },
+                    "call0_aggregate_function" => {
+                        self.state_generator.set_known_list(allowed_type_list);
+                        // ===========================================================================================
+                        // how do i pick randomly specific type from list?
+                        (SubgraphType::Undetermined, self.handle_aggregate_function(None, None).1)
+                    }
                     any => self.panic_unexpected(any)
                 }
             },
@@ -883,6 +904,257 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             any => self.panic_unexpected(any)
         }
     }
+
+    /// subgraph def_aggregate_function
+    fn handle_aggregate_function(
+        &mut self,
+        equal_to: Option<SubgraphType>,
+        compatible_with: Option<SubgraphType>,
+    ) -> (Vec<(Option<ObjectName>, SubgraphType)>, Expr) {
+        self.expect_state("aggregate_function");
+        let distinct;
+        match self.next_state().as_str() {
+            "aggregate_select_return_type" => {distinct = false},
+            "aggregate_distinct" => {
+                distinct = true;
+                self.expect_state("aggregate_select_return_type");
+            },
+            "aggregate_alias" => {
+                match self.next_state().as_str() {
+                    "aggregate_distinct" => {
+                        distinct = true;
+                        self.expect_state("aggregate_select_return_type");
+                    },
+                    "aggregate_select_return_type" => {
+                        distinct = false;
+                    },
+                    any => self.panic_unexpected(any),
+                }
+            }
+            any => self.panic_unexpected(any),  
+        }
+        // self.expect_state("aggregate_select_return_type");
+        let result;
+        let mut column_idents_and_graph_types : Vec<(Option<ObjectName>, SubgraphType)> = vec![];
+        let chosen_return_type : SubgraphType;
+        match self.next_state().as_str() {
+            "aggregate_select_type_numeric" => {
+                chosen_return_type = SubgraphType::Numeric;
+                match self.next_state().as_str() {
+                    arm @ "COUNT" => match self.next_state().as_str() {
+                        "COUNT_wildcard" => {
+                            result = Expr::Function(sqlparser::ast::Function {
+                                name: ObjectName(vec![Ident {
+                                    value: arm.to_string(),
+                                    quote_style: (None),
+                                }]),
+                                args: vec![FunctionArg::Unnamed(
+                                    sqlparser::ast::FunctionArgExpr::Wildcard,
+                                )],
+                                over: None,
+                                distinct: distinct,
+                                special: false,
+                            });
+                            //return result;
+                        }
+                        "call65_types" => {
+                            result = Expr::Function(sqlparser::ast::Function {
+                                name: ObjectName(vec![Ident {
+                                    value: arm.to_string(),
+                                    quote_style: (None),
+                                }]),
+                                args: vec![FunctionArg::Unnamed(
+                                    sqlparser::ast::FunctionArgExpr::Expr(self.handle_types(None, None).1),
+                                )],
+                                over: None,
+                                distinct: distinct,
+                                special: false,
+                            });
+                        }
+                        any => self.panic_unexpected(any),
+                    },
+                    "arg_double_numeric" => {
+                        let chosen_type = &(
+                            vec![SubgraphType::Numeric, SubgraphType::Numeric],
+                            vec![SubgraphType::Numeric],
+                        );
+                        let fun_name = self.config.aggregate_functions_distribution.get_fun_name(chosen_type.0.to_owned(), chosen_type.1.to_owned());
+                        self.expect_state("call68_types");
+                        let first_arg = self.handle_types(Some(&[SubgraphType::Numeric]), None).1;
+                        self.expect_state("call66_types");
+                        result = Expr::Function(sqlparser::ast::Function {
+                            name: fun_name,
+                            args: vec![
+                                FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(
+                                    first_arg,
+                                )),
+                                FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(
+                                    self.handle_types(Some(&[SubgraphType::Numeric]), None).1,
+                                )),
+                            ],
+                            over: None,
+                            distinct: false,
+                            special: false,
+                        });
+                    }
+                    "arg_single_numeric" => {
+                        let chosen_type = &(
+                            vec![SubgraphType::Numeric],
+                            vec![SubgraphType::Numeric],
+                        );
+                        let fun_name = self.config.aggregate_functions_distribution.get_fun_name(chosen_type.0.to_owned(), chosen_type.1.to_owned());
+                        self.expect_state("call66_types");
+                        result = Expr::Function(sqlparser::ast::Function {
+                            name: fun_name,
+                            args: vec![
+                                FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(
+                                    self.handle_types(Some(&[SubgraphType::Numeric]), None).1,
+                                )),
+                            ],
+                            over: None,
+                            distinct: false,
+                            special: false,
+                        });
+                    },
+                    any => self.panic_unexpected(any),
+                }
+            },
+            arm @ ("aggregate_select_type_string" | "aggregate_select_type_bool") => {
+                self.expect_state(match arm {
+                    "aggregate_select_type_string" => "arg_string", 
+                    "aggregate_select_type_bool" => "arg_single_vl3", 
+                    any => self.panic_unexpected(any),
+                });
+                chosen_return_type = match arm {
+                    "aggregate_select_type_string" => SubgraphType::Text, 
+                    "aggregate_select_type_bool" => SubgraphType::Val3, 
+                    any => self.panic_unexpected(any),
+                };
+                let chosen_type = &(
+                    vec![
+                        match arm {
+                            "aggregate_select_type_string" => SubgraphType::Text, 
+                            "aggregate_select_type_bool" => SubgraphType::Val3, 
+                            any => self.panic_unexpected(any),
+                        }],
+                        vec![
+                            match arm {
+                                "aggregate_select_type_string" => SubgraphType::Text, 
+                                "aggregate_select_type_bool" => SubgraphType::Val3, 
+                                any => self.panic_unexpected(any),
+                            }],
+                );
+                let fun_name = self.config.aggregate_functions_distribution.get_fun_name(chosen_type.0.to_owned(), chosen_type.1.to_owned());
+                self.expect_state(match arm {
+                    "aggregate_select_type_string" => "call63_types", 
+                    "aggregate_select_type_bool" => "call64_types", 
+                    any => self.panic_unexpected(any),
+                });
+                result = Expr::Function(sqlparser::ast::Function {
+                    name: fun_name,
+                    args: vec![
+                        FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(
+                            self.handle_types(Some(
+                                match arm {
+                                    "aggregate_select_type_string" => &[SubgraphType::Text], 
+                                    "aggregate_select_type_bool" => &[SubgraphType::Val3], 
+                                    any => self.panic_unexpected(any),
+                            }), None).1,
+                        )),
+                    ],
+                    over: None,
+                    distinct: false,
+                    special: false,
+                });
+            },
+            "aggregate_select_type_array" => {
+                chosen_return_type = SubgraphType::ListExpr(Box::new(SubgraphType::Numeric));
+                self.expect_state("array_arg");
+                let fun_name = ObjectName(vec![Ident {
+                    value: "ARRAY_AGG".to_string(),
+                    quote_style: None,
+                }]);
+                self.expect_state("call50_types");
+                result = Expr::Function(sqlparser::ast::Function {
+                    name: fun_name,
+                    args: vec![
+                        FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(
+                            self.handle_types(None, None).1,
+                        )),
+                    ],
+                    over: None,
+                    distinct: false,
+                    special: false,
+                });
+            },
+            any => self.panic_unexpected(any),
+        }
+        self.expect_state("EXIT_aggregate_function");
+        column_idents_and_graph_types.push((None, chosen_return_type));
+        (column_idents_and_graph_types,  result)
+    }
+
+    /// subgraph def_group_by
+    /// TODO add grouping function
+    fn handle_group_by(&mut self) -> Vec<Expr> {
+        self.expect_state("group_by");
+        let result;
+        let mut arg: Vec<Vec<Expr>> = Vec::new();
+        match self.next_state().as_str() {
+            "grouping_relations_list" => {
+                let mut list : Vec<Expr> = Vec::new();
+                loop {
+                    match self.next_state().as_str() {
+                        "list_of_relations" => {
+
+                        },
+                        "call2_column_spec" => {
+                            list.push(self.handle_column_spec().1);
+                        },
+                        "EXIT_group_by" => {
+                            result = vec![Expr::Tuple(list)];
+                            return result;
+                        },
+                        any => self.panic_unexpected(any),
+                    }
+                }
+            },
+            arm @ ("grouping_set" | "grouping_rollup" | "grouping_cube") => {
+                //let mut arg: Vec<Vec<Expr>> = Vec::new();
+                let mut current_set : Vec<Expr> = Vec::new();
+                loop {
+                    match self.next_state().as_str() {
+                        "set_list" => {
+                            if current_set.is_empty() == false {
+                                arg.push(current_set);
+                            }
+                            current_set = Vec::new();
+                        },
+                        "new_set" => {
+
+                        },
+                        "call3_column_spec" => {
+                            current_set.push(self.handle_column_spec().1);
+                        },
+                        "EXIT_group_by" => {
+                            result = match arm {
+                                "grouping_set" => vec![Expr::GroupingSets(arg)],
+                                "grouping_rollup" => vec![Expr::Rollup(arg)],
+                                "grouping_cube" => vec![Expr::Cube(arg)],
+                                any => self.panic_unexpected(any),
+                            };
+                            return result;
+                        }
+                        any => self.panic_unexpected(any),
+                    }
+                }
+            },
+            any => self.panic_unexpected(any)
+        }
+        // self.expect_state("EXIT_group_by");
+        // result
+    }
+
 
     /// starting point; calls handle_query for the first time
     fn generate(&mut self) -> Query {

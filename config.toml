@@ -1,6 +1,6 @@
 [main]
 # Running mode. Either "test_ast_to_path", "generate", "train"
-mode="test_ast_to_path"
+mode="generate"
 # number of queries to generate
 num_generate=20
 # count the 2vl-3vl equivalent queries
@@ -20,7 +20,7 @@ print_progress=true
 # schema for the testing queries generation
 testing_schema="schema/tpc-h_tables.sql"
 # number of tests
-n_tests=10000
+n_tests=100
 
 [training]
 # path to a file with all the training queries separated by ";\n"
@@ -42,7 +42,7 @@ aggregate_functions_distribution_map_file="aggregate_functions_distribution_map.
 
 [state_generator]
 # Path to graph source for a markov chain
-graph_file_path="graph_with_select.dot"
+graph_file_path="tmp_graph.dot"
 
 [dynmod_anticall]
 # TODO: anticall dynamic model settings
