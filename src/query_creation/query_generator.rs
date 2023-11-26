@@ -155,6 +155,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                 match self.next_state().as_str() {
                     "call0_SELECT" => {},
                     "call0_group_by" => {
+                        println!("222222222============ WILDCARD: {:?}", self.clause_context.from().get_wildcard_columns());
                         select_body.group_by = self.handle_group_by(); 
                         self.expect_state("call0_SELECT");
                     },
@@ -164,9 +165,9 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             },
             "call0_SELECT" => {},
             "call0_group_by" => {
+                println!("333333333============ WILDCARD: {:?}", self.clause_context.from().get_wildcard_columns());
+                println!("FROM: {:?}", select_body.from);
                 select_body.group_by = self.handle_group_by();
-                println!("flag 4");
-
                 self.expect_state("call0_SELECT");
 
             }
@@ -208,7 +209,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
     fn handle_from(&mut self) -> Vec<TableWithJoins> {
         self.expect_state("FROM");
 
-        let mut from = vec![];
+        let mut from: Vec<TableWithJoins> = vec![];
 
         loop {
             from.push(TableWithJoins { relation: match self.next_state().as_str() {
@@ -1096,6 +1097,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
     /// subgraph def_group_by
     /// TODO add grouping function
     fn handle_group_by(&mut self) -> Vec<Expr> {
+        println!("============ WILDCARD: {:?}", self.clause_context.from().get_wildcard_columns());
         self.expect_state("group_by");
         let result;
         let mut arg: Vec<Vec<Expr>> = Vec::new();

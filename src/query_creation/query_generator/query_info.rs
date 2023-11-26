@@ -173,7 +173,7 @@ struct ColumnContainer<ColumnNameType: Ord + Clone + Hash> {
     pub columns: BTreeMap<SubgraphType, BTreeSet<ColumnNameType>>,
 }
 
-impl<ColumnNameType: Ord + Clone + Hash> ColumnContainer<ColumnNameType> {
+impl<ColumnNameType: Ord + Clone + Hash + std::fmt::Debug> ColumnContainer<ColumnNameType> {
     fn new() -> Self {
         Self {
             columns: BTreeMap::new(),
@@ -187,6 +187,14 @@ impl<ColumnNameType: Ord + Clone + Hash> ColumnContainer<ColumnNameType> {
     }
 
     fn is_type_available(&self, graph_type: &SubgraphType, allowed_columns_opt: Option<&HashSet<ColumnNameType>>) -> bool {
+        if graph_type == &SubgraphType::Integer {
+            println!("!!!!!!!!!!!!!!!! is_type_available: {:?}", graph_type);
+        }
+        if let Some(ref x) = allowed_columns_opt {
+            for xx in x.iter() {
+                println!("{:#?}", xx);
+            }
+        }
         self.columns.iter()
             .filter(|(_, cols)| if let Some(allowed_columns) = allowed_columns_opt {
                 cols.iter().any(|x| allowed_columns.contains(x))

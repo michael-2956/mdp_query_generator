@@ -115,7 +115,14 @@ impl StatelessCallModifier for IsColumnTypeAvailableModifier {
             if check_group_by {
                 clause_context.group_by().is_type_available(x)
             } else {
-                clause_context.from().is_type_available(x, None)
+                println!("\n\nCURRENT TYPE: {x}");
+                let x = clause_context.from().is_type_available(x, None);
+                println!("x is {x}");
+                if !x {
+                    println!("NODE: {:?}", function_context.current_node.node_common.name);
+                    println!("WILDCARD: {:?}", clause_context.from().get_wildcard_columns());
+                }
+                x
             }
         )
     }
