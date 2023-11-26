@@ -680,7 +680,7 @@ digraph G {
         set_list -> new_set
         new_set -> set_list
         
-        call69_types[TYPES="[any]", label="TYPES: [any]\n MODS: [having clause mode, no literals, no typed nulls, no subquery, no function]", MODS="[having clause mode, no literals, no typed nulls, no subquery, no function]", shape=rectangle, style=filled, color=lightblue]
+        call69_types[TYPES="[any]", label="TYPES: [any]\n MODS: [no literals, no typed nulls, no subquery, no function]", MODS="[no literals, no typed nulls, no subquery, no function]", shape=rectangle, style=filled, color=lightblue]
         new_set -> call69_types
         call69_types -> new_set
         call69_types -> EXIT_group_by
@@ -690,7 +690,7 @@ digraph G {
         grouping_cube -> set_list
         grouping_rollup -> set_list
 
-        call70_types[TYPES="[any]", label="TYPES: [any]\nMODS: [having clause mode, no literals, no typed nulls, no subquery, no function]", MODS="[having clause mode, no literals, no typed nulls, no subquery, no function]", shape=rectangle, style=filled, color=lightblue]
+        call70_types[TYPES="[any]", label="TYPES: [any]\nMODS: [no literals, no typed nulls, no subquery, no function]", MODS="[no literals, no typed nulls, no subquery, no function]", shape=rectangle, style=filled, color=lightblue]
         list_of_relations -> call70_types
         call70_types -> list_of_relations
         call70_types -> EXIT_group_by
