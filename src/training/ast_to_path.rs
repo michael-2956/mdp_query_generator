@@ -297,6 +297,7 @@ impl PathGenerator {
         Ok(())
     }
 
+    /// subgraph def_WHERE
     fn handle_where(&mut self, selection: &Expr) -> Result<SubgraphType, ConvertionError> {
         self.try_push_state("WHERE")?;
         self.try_push_state("call53_types")?;
@@ -913,4 +914,30 @@ impl PathGenerator {
         self.try_push_state("EXIT_list_expr")?;
         Ok(SubgraphType::ListExpr(Box::new(inner_type)))
     }
+
+    /// subgraph def_having
+    fn handle_having(&mut self, selection: &Expr) -> Result<SubgraphType, ConvertionError> {
+        self.try_push_state("having")?;
+        self.try_push_state("call45_types")?;
+        let tp = self.handle_types(selection, Some(&[SubgraphType::Val3]), None)?;
+        self.try_push_state("EXIT_having")?;
+        Ok(tp)
+    }
+
+    // subgraph def_group_by
+    // fn handle_group_by(&mut self, grouping: &Expr) -> Result<SubgraphType, ConvertionError> {
+    //     self.try_push_state("group_by")?;
+        
+    //     let grouping_elements = match grouping {
+
+    //         // 
+    //         Expr::GroupingSets(arg) => {
+    //             arg
+    //         },
+    //         any => unexpected_expr!(any),
+    //     };
+    //     self.try_push_state("EXIT_group_by")?;
+    // }
+
+
 }

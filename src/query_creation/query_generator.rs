@@ -802,9 +802,8 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                     },
                     "call0_aggregate_function" => {
                         self.state_generator.set_known_list(allowed_type_list);
-                        // ===========================================================================================
-                        // how do i pick randomly specific type from list?
-                        (SubgraphType::Undetermined, self.handle_aggregate_function(None, None).1)
+                        let return_val = self.handle_aggregate_function();
+                        (return_val.0, return_val.1)
                     }
                     any => self.panic_unexpected(any)
                 }
@@ -907,10 +906,10 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
 
     /// subgraph def_aggregate_function
     fn handle_aggregate_function(
-        &mut self,
-        equal_to: Option<SubgraphType>,
-        compatible_with: Option<SubgraphType>,
-    ) -> (Vec<(Option<ObjectName>, SubgraphType)>, Expr) {
+        &mut self
+        // equal_to: Option<SubgraphType>,
+        // compatible_with: Option<SubgraphType>,
+    ) -> (SubgraphType, Expr) {
         self.expect_state("aggregate_function");
         let distinct;
         match self.next_state().as_str() {
@@ -1090,8 +1089,8 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             any => self.panic_unexpected(any),
         }
         self.expect_state("EXIT_aggregate_function");
-        column_idents_and_graph_types.push((None, chosen_return_type));
-        (column_idents_and_graph_types,  result)
+        // column_idents_and_graph_types.push((None, chosen_return_type));
+        (chosen_return_type,  result)
     }
 
     /// subgraph def_group_by
@@ -1108,7 +1107,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                         "list_of_relations" => {
 
                         },
-                        "call69_types" => {
+                        "call70_types" => {
                             list.push(self.handle_types(
                                 None, None
                             ).1);
@@ -1135,7 +1134,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                         "new_set" => {
 
                         },
-                        "call70_types" => {
+                        "call69_types" => {
                             current_set.push(self.handle_types(
                                 None, None
                             ).1);

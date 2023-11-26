@@ -135,7 +135,8 @@ digraph G {
         WHERE [label="WHERE", shape=rectangle, style=filled, color=darkgoldenrod1]
         EXIT_WHERE [label="EXIT WHERE"]
 
-        call53_types [TYPES="[3VL Value]", label="TYPES: 3VL Value", shape=rectangle, style=filled, color=lightblue]
+        call53_types [TYPES="[3VL Value]", MODS = "[no function]", label="TYPES: 3VL Value\nMODS: 
+        ", shape=rectangle, style=filled, color=lightblue]
         WHERE -> call53_types
         call53_types -> EXIT_WHERE
     }
@@ -546,7 +547,7 @@ digraph G {
     }
 
     subgraph def_types {
-        types [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no literals, no typed nulls, no column spec, no subquery, having clause mode, enable untyped null]", label="TYPE(S) (generic):\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[no literals, no typed nulls, no column spec, no subquery, having clause mode, enable untyped null]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no literals, no typed nulls, no column spec, no subquery, having clause mode, enable untyped null, no function]", label="TYPE(S) (generic):\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[no literals, no typed nulls, no column spec, no subquery, having clause mode, enable untyped null]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
         types_select_type_integer[TYPE_NAME="integer", label="integer?", set_value="types_type"]
@@ -586,6 +587,10 @@ digraph G {
         call1_Query [TYPES="[known]", MODS="[single row, single column]", label="Query\nMODS: [single row, single column]\nTYPE: known\nmod.: 'no subquery'", modifier="no subquery", modifier_mode="off", shape=rectangle, style=filled, color=green]
         types_select_special_expression -> call1_Query
         call1_Query -> EXIT_types
+
+        call0_aggregate_function [TYPES="[known]", modifier="no function", label="Aggregate function\nTYPE: known\nmod.: 'no function'", modifier_mode="off", shape=rectangle, style=filled, color=peru]
+        types_select_special_expression -> call0_aggregate_function
+        call0_aggregate_function -> EXIT_types
 
         call1_number [label="number\nTYPES: [integer]\nMODS: [...mods]", TYPES="[integer]", MODS="[...]", modifier="no literals", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
         types_select_type_integer -> call1_number
@@ -675,7 +680,7 @@ digraph G {
         set_list -> new_set
         new_set -> set_list
         
-        call69_types[TYPES="[any]", MODS="[having clause mode, no literals, no typed nulls, no subquery]", shape=rectangle, style=filled, color=lightblue]
+        call69_types[TYPES="[any]", label="TYPES: [any]\n MODS: [having clause mode, no literals, no typed nulls, no subquery, no function]", MODS="[having clause mode, no literals, no typed nulls, no subquery, no function]", shape=rectangle, style=filled, color=lightblue]
         new_set -> call69_types
         call69_types -> new_set
         call69_types -> EXIT_group_by
@@ -685,7 +690,7 @@ digraph G {
         grouping_cube -> set_list
         grouping_rollup -> set_list
 
-        call70_types[TYPES="[any]", MODS="[having clause mode, no literals, no typed nulls, no subquery]", shape=rectangle, style=filled, color=lightblue]
+        call70_types[TYPES="[any]", label="TYPES: [any]\nMODS: [having clause mode, no literals, no typed nulls, no subquery, no function]", MODS="[having clause mode, no literals, no typed nulls, no subquery, no function]", shape=rectangle, style=filled, color=lightblue]
         list_of_relations -> call70_types
         call70_types -> list_of_relations
         call70_types -> EXIT_group_by
@@ -724,13 +729,6 @@ digraph G {
         call66_types -> EXIT_aggregate_function
         call63_types -> EXIT_aggregate_function
 
-        // call50_types [TYPES="[any]", label="TYPES: [any]\nmodif.: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
-        
-        // array_arg[label="[all]"]
-        // aggregate_select_type_array -> array_arg 
-        // array_arg -> call50_types
-        // call50_types -> EXIT_aggregate_function       
-
         arg_single_vl3 [label="[3vl]"]
         aggregate_select_type_bool -> arg_single_vl3
         arg_single_vl3 -> call64_types
@@ -743,8 +741,6 @@ digraph G {
         COUNT[]
         aggregate_select_type_numeric -> COUNT
         COUNT_wildcard[label="*"]
-        // COUNT_distinct[label="DISTINCT"]
-        // COUNT_distinct_wildcard[label="DISTINCT"]
         call65_types [TYPES="[any]", label="TYPES: [any]\nmodif.: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         
         COUNT -> COUNT_wildcard
@@ -753,9 +749,7 @@ digraph G {
         // COUNT_distinct -> call65_types
         call65_types -> EXIT_aggregate_function
         COUNT_wildcard -> EXIT_aggregate_function
-        // COUNT_wildcard -> COUNT_distinct_wildcard
-        // COUNT_distinct_wildcard -> EXIT_aggregate_function
-        
+
         arg_double_numeric [label="[numberic, numeric]"]
         aggregate_select_type_numeric -> arg_double_numeric   
 
@@ -773,29 +767,9 @@ digraph G {
     subgraph def_having {
         having [label="HAVING", shape=rectangle, style=filled, color=mediumvioletred]
         EXIT_having [label="EXIT HAVING"]
-
-        // having_condition [label="HAVING condition"]
-        // having -> having_condition
-
-        // having_not [label="NOT"]
         call45_types [TYPES="[3VL Value]", label="TYPE: [3VL]", shape=rectangle, style=filled, color=lightblue]
-        // call46_types [TYPES="[3VL Value]", label="TYPE: [3VL]", shape=rectangle, style=filled, color=lightblue]
-        // having_logical_expr [label="AND | OR ?"]
-
-        // having_condition -> having_not
-        // having_condition -> call45_types
         having -> call45_types
-
-        // call45_types -> having_logical_expr
-        // having_not -> call45_types
-
-        // having_not_optional [label="NOT"]
-        // having_logical_expr -> having_not_optional
-        // having_not_optional -> call46_types
-        // having_logical_expr -> call46_types
-
         call45_types -> EXIT_having
-        // call46_types -> EXIT_having
     }
 
     # cosmetic
