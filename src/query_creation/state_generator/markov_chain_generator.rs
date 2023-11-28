@@ -706,7 +706,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         } else {
             let function_context = stack_frame.function_context.clone();
             self.print_stack();
-            panic!("No destination found for {} in {:#?}.", last_node.node_common.name, function_context);
+            panic!("No destination found for {} in {:#?}.\n\nCLAUSE CONTEXT: {:#?}", last_node.node_common.name, function_context, clause_context);
         }
         Ok(())
     }
