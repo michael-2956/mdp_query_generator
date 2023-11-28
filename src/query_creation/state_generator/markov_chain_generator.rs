@@ -245,7 +245,10 @@ impl FunctionModifierInfo {
                 .map(|(affector_node, affected_mods)|
                     (affector_node.node_common.name.clone(), affected_mods.into_iter().flat_map(|(modifier_name, affected_nodes)| {
                         let stateless_modifier = stateless_call_modifiers.get(modifier_name).unwrap();
-                        let value_setter = value_setters.get(affector_node.node_common.sets_value_name.as_ref().unwrap()).unwrap();
+                        let value_name = affector_node.node_common.sets_value_name.as_ref().unwrap();
+                        let value_setter = value_setters.get(value_name).unwrap_or_else(
+                            || panic!("Didn't find {value_name} in the value setters (available value setters: {:?})", value_setters)
+                        );
                         let new_state = value_setter.get_value(
                             clause_context, &function_context.with_node(affector_node.clone())
                         );
