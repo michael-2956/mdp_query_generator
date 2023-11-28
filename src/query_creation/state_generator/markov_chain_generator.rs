@@ -13,7 +13,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use take_until::TakeUntilExt;
 
-use crate::{unwrap_variant, query_creation::{state_generator::markov_chain_generator::markov_chain::FunctionTypes, query_generator::{query_info::ClauseContext, call_modifiers::{StatelessCallModifier, StatefulCallModifier, IsColumnTypeAvailableModifier, TypesTypeValueSetter, ValueSetter, NamedValue, ValueSetterValue, HasUniqueColumnNamesForTypeModifier, WildcardRelationsValueSetter, IsWildcardAvailableModifier}}}, config::TomlReadable};
+use crate::{unwrap_variant, query_creation::{state_generator::markov_chain_generator::markov_chain::FunctionTypes, query_generator::{query_info::ClauseContext, call_modifiers::{StatelessCallModifier, StatefulCallModifier, IsColumnTypeAvailableModifier, TypesTypeValueSetter, ValueSetter, NamedValue, ValueSetterValue, HasUniqueColumnNamesForTypeModifier, WildcardRelationsValueSetter, IsWildcardAvailableModifier, HasUniqueColumnNamesForTypeValueSetter}}}, config::TomlReadable};
 
 use self::{
     markov_chain::{
@@ -245,7 +245,10 @@ impl FunctionModifierInfo {
                 .map(|(affector_node, affected_mods)|
                     (affector_node.node_common.name.clone(), affected_mods.into_iter().flat_map(|(modifier_name, affected_nodes)| {
                         let stateless_modifier = stateless_call_modifiers.get(modifier_name).unwrap();
-                        let value_setter = value_setters.get(affector_node.node_common.sets_value_name.as_ref().unwrap()).unwrap();
+                        let value_name = affector_node.node_common.sets_value_name.as_ref().unwrap();
+                        let value_setter = value_setters.get(value_name).unwrap_or_else(
+                            || panic!("Didn't find {value_name} in the value setters (available value setters: {:?})", value_setters)
+                        );
                         let new_state = value_setter.get_value(
                             clause_context, &function_context.with_node(affector_node.clone())
                         );
@@ -507,6 +510,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         };
         _self.register_value_setter(TypesTypeValueSetter {});
         _self.register_stateless_call_modifier(IsColumnTypeAvailableModifier {});
+        _self.register_value_setter(HasUniqueColumnNamesForTypeValueSetter {});
         _self.register_stateless_call_modifier(HasUniqueColumnNamesForTypeModifier {});
         _self.register_value_setter(WildcardRelationsValueSetter {});
         _self.register_stateless_call_modifier(IsWildcardAvailableModifier {});
@@ -928,7 +932,9 @@ fn check_node_off(
         }
     }
     if let Some(ref modifier_name) = node_common.call_modifier_name {
-        off = off || !affected_node_states.get(&node_common.name).unwrap().unwrap_or_else(
+        off = off || !affected_node_states.get(&node_common.name).unwrap_or_else(
+            || panic!("Didn't find {} in affected_node_states", node_common.name)
+        ).unwrap_or_else(
             || panic!("State of call modifier {modifier_name} was not set (node {})", node_common.name)
         )
     }

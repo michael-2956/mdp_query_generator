@@ -264,7 +264,11 @@ impl StatelessCallModifier for FromHasAccessibleColumnsModifier {
         None
     }
 
-    fn run(&self, clause_context: &ClauseContext, _function_context: &FunctionContext, _associated_value: Option<&ValueSetterValue>) -> bool {
-        clause_context.from().relations_iter().any(|(_, relation)| relation.has_accessible_columns())
+    fn run(&self, _function_context: &FunctionContext, _associated_value: Option<&ValueSetterValue>) -> bool {
+        true
     }
+
+    // fn run(&self, clause_context: &ClauseContext, _function_context: &FunctionContext, _associated_value: Option<&ValueSetterValue>) -> bool {
+    //     clause_context.from().relations_iter().any(|(_, relation)| relation.has_accessible_columns())
+    // }
 }
