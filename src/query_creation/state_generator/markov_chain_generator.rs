@@ -233,7 +233,6 @@ impl FunctionModifierInfo {
                 |node| (
                     node.node_common.name.clone(),
                     Some(x.run(
-                        clause_context,
                         &function_context.with_node(node.clone()),
                         None
                     ))
@@ -251,7 +250,6 @@ impl FunctionModifierInfo {
                             clause_context, &function_context.with_node(affector_node.clone())
                         );
                         affected_nodes.into_iter().map(|affected_node| (affected_node.node_common.name.clone(), stateless_modifier.run(
-                            clause_context,
                             &function_context.with_node(affected_node.clone()),
                             Some(&new_state),
                         ))).collect::<Vec<_>>().into_iter()
