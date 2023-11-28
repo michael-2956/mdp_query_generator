@@ -93,7 +93,6 @@ digraph G {
         call0_WHERE -> call0_group_by
         call0_FROM -> call0_group_by
         call0_group_by -> call0_SELECT
-        
 
         // call0_group_by [label="GROUP BY Statement", TYPES="[known]", shape=rectangle, style=filled, color=gray]
         // call0_WHERE -> call0_group_by
@@ -135,8 +134,7 @@ digraph G {
         WHERE [label="WHERE", shape=rectangle, style=filled, color=darkgoldenrod1]
         EXIT_WHERE [label="EXIT WHERE"]
 
-        call53_types [TYPES="[3VL Value]", MODS = "[no function]", label="TYPES: 3VL Value\nMODS: 
-        ", shape=rectangle, style=filled, color=lightblue]
+        call53_types [TYPES="[3VL Value]", MODS="[no function]", label="TYPES: 3VL Value\nMODS: no function", shape=rectangle, style=filled, color=lightblue]
         WHERE -> call53_types
         call53_types -> EXIT_WHERE
     }
