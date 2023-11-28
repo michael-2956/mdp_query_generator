@@ -223,3 +223,20 @@ impl StatelessCallModifier for IsWildcardAvailableModifier {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct FromHasAccessibleColumnsModifier {}
+
+impl StatelessCallModifier for FromHasAccessibleColumnsModifier {
+    fn get_name(&self) -> SmolStr {
+        SmolStr::new("from_has_accessible_columns")
+    }
+
+    fn get_associated_value_name(&self) -> Option<SmolStr> {
+        None
+    }
+
+    fn run(&self, clause_context: &ClauseContext, _function_context: &FunctionContext, _associated_value: Option<&ValueSetterValue>) -> bool {
+        clause_context.from().relations_iter().any(|(_, relation)| relation.has_accessible_columns())
+    }
+}

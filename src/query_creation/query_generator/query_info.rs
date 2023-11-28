@@ -478,6 +478,10 @@ impl Relation {
         _self
     }
 
+    pub fn has_accessible_columns(&self) -> bool {
+        !self.accessible_columns.columns.is_empty()
+    }
+
     pub fn get_columns_with_types_iter(&self) -> impl Iterator<Item = (Option<&Ident>, &SubgraphType)> {
         self.accessible_columns.columns.iter()
             .flat_map(|(graph_type, column_names)| column_names.iter().map(
