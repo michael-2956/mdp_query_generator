@@ -5,7 +5,9 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{Query, ObjectName, Expr, SetExpr, SelectItem, Value, BinaryOperator, UnaryOperator, Ident, DataType, TrimWhereField, TableWithJoins};
 
-use crate::{query_creation::{query_generator::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{ValueSetterValue, TypesTypeValue, WildcardRelationsValue}, Unnested, QueryGenerator, value_choosers::{RandomValueChooser, DeterministicValueChooser}}, state_generator::{subgraph_type::SubgraphType, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::CallModifiers, DynClone, ChainStateMemory}, dynamic_models::{DeterministicModel, DynamicModel, PathModel, AntiCallModel}, CallTypes}}, config::{TomlReadable, Config, MainConfig}, unwrap_variant, unwrap_variant_or_else};
+use crate::{query_creation::{query_generator::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{ValueSetterValue, TypesTypeValue, WildcardRelationsValue}, Unnested, QueryGenerator, value_choosers::{RandomValueChooser, DeterministicValueChooser}}, state_generator::{subgraph_type::SubgraphType, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::{CallModifiers, MarkovChain}, DynClone, ChainStateMemory}, dynamic_models::{DeterministicModel, DynamicModel, PathModel, AntiCallModel}, CallTypes}}, config::{TomlReadable, Config, MainConfig}, unwrap_variant, unwrap_variant_or_else};
+
+use super::trainer::PathwayGraphModel;
 
 pub struct AST2PathTestingConfig {
     pub schema: PathBuf,
@@ -113,6 +115,7 @@ pub struct PathGenerator {
     state_generator: MarkovChainGenerator<MaxProbStateChooser>,
     state_selector: DeterministicModel,
     clause_context: ClauseContext,
+    train_model: Option<Box<dyn PathwayGraphModel>>,
     rng: ChaCha8Rng,
 }
 
@@ -124,17 +127,36 @@ impl PathGenerator {
             state_generator: MarkovChainGenerator::<MaxProbStateChooser>::with_config(chain_config)?,
             state_selector: DeterministicModel::new(),
             clause_context: ClauseContext::new(),
+            train_model: None,
             rng: ChaCha8Rng::seed_from_u64(1),
         })
     }
 
-    pub fn get_query_path(&mut self, query: &Box<Query>) -> Result<Vec<PathNode>, ConvertionError> {
+    fn process_query(&mut self, query: &Box<Query>) -> Result<(), ConvertionError> {
         self.handle_query(query)?;
         // reset the generator
         if let Some(state) = self.next_state_opt().unwrap() {
             panic!("Couldn't reset state generator: Received {state}");
         }
+        Ok(())
+    }
+
+    pub fn get_query_path(&mut self, query: &Box<Query>) -> Result<Vec<PathNode>, ConvertionError> {
+        self.process_query(query)?;
         Ok(std::mem::replace(&mut self.current_path, vec![]))
+    }
+
+    pub fn markov_chain_ref(&self) -> &MarkovChain {
+        self.state_generator.markov_chain_ref()
+    }
+
+    pub fn feed_query_to_model(&mut self, query: &Box<Query>, mut model: Box<dyn PathwayGraphModel>) -> Result<Box<dyn PathwayGraphModel>, ConvertionError> {
+        model.start_episode();
+        self.train_model = Some(model);
+        self.process_query(query)?;
+        self.train_model.as_mut().unwrap().end_episode();
+        self.current_path.clear();
+        Ok(self.train_model.take().unwrap())
     }
 }
 
@@ -206,6 +228,9 @@ impl PathGenerator {
             self.current_path.push(PathNode::NewFunction(state));
         } else {
             self.current_path.push(PathNode::State(state));
+        }
+        if let Some(ref mut model) = self.train_model {
+            model.process_state(&self.current_path, self.state_generator.call_stack_ref());
         }
         Ok(())
     }

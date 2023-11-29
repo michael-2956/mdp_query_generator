@@ -519,6 +519,14 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         Ok(_self)
     }
 
+    pub fn markov_chain_ref(&self) -> &MarkovChain {
+        &self.markov_chain
+    }
+
+    pub fn call_stack_ref(&self) -> &Vec<StackFrame> {
+        &self.call_stack
+    }
+
     fn register_value_setter<T: ValueSetter + 'static>(&mut self, value_setter: T) {
         self.value_setters.insert(value_setter.get_value_name(), Box::new(value_setter));
     }

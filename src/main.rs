@@ -9,7 +9,7 @@ use equivalence_testing::{query_creation::{
     },
 }, equivalence_testing_function::{
     check_query, string_to_query
-}, config::{Config, ProgramArgs, MainConfig}, training::{ast_to_path::TestAST2Path, trainer::SQLTrainer}};
+}, config::{Config, ProgramArgs, MainConfig}, training::{ast_to_path::TestAST2Path, trainer::{SQLTrainer, SubgraphMarkovModel}}};
 
 use structopt::StructOpt;
 
@@ -76,10 +76,14 @@ fn run_training(config: Config) {
             return;
         },
     };
-    match sql_trainer.train() {
-        Ok(paths) => println!("{:#?}", paths),
-        Err(err) => println!("\n{err}"),
-    }
+    let model = SubgraphMarkovModel::new(sql_trainer.markov_chain_ref());
+    let _model = match sql_trainer.train(Box::new(model)) {
+        Ok(model) => model,
+        Err(err) => {
+            println!("Training error!\n{}", err);
+            return;
+        },
+    };
 }
 
 fn test_ast_to_path(config: Config) {

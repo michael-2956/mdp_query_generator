@@ -2,14 +2,14 @@ use std::{path::PathBuf, str::FromStr, io::Write};
 
 use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query}};
 
-use crate::{config::{TomlReadable, Config, MainConfig}, query_creation::{state_generator::markov_chain_generator::error::SyntaxError, query_generator::query_info::DatabaseSchema}};
+use crate::{config::{TomlReadable, Config, MainConfig}, query_creation::{state_generator::markov_chain_generator::{error::SyntaxError, markov_chain::MarkovChain, StackFrame}, query_generator::query_info::DatabaseSchema}};
 
-use super::ast_to_path::{PathNode, ConvertionError, PathGenerator};
+use super::{ast_to_path::{PathNode, ConvertionError, PathGenerator}, markov_weights::MarkovWeights};
 
 pub struct SQLTrainer {
     _config: TrainingConfig,
     main_config: MainConfig,
-    query_asts: Vec<Box<Query>>,
+    dataset_queries: Vec<Box<Query>>,
     path_generator: PathGenerator,
 }
 
@@ -30,13 +30,13 @@ impl TomlReadable for TrainingConfig {
 
 impl SQLTrainer {
     pub fn with_config(config: Config) -> Result<Self, SyntaxError> {
-        let db = std::fs::read_to_string(config.training_config.training_db_path.clone()).unwrap();
+        let dataset = std::fs::read_to_string(config.training_config.training_db_path.clone()).unwrap();
         Ok(SQLTrainer {
-            query_asts: Parser::parse_sql(&PostgreSqlDialect {}, &db).unwrap().into_iter()
-            .filter_map(|statement| if let Statement::Query(query) = statement {
-                Some(query)
-            } else { None })
-            .collect(),
+            dataset_queries: Parser::parse_sql(&PostgreSqlDialect {}, &dataset).unwrap().into_iter()
+                .filter_map(|statement| if let Statement::Query(query) = statement {
+                    Some(query)
+                } else { None })
+                .collect(),
             path_generator: PathGenerator::new(
                 DatabaseSchema::parse_schema(&config.training_config.training_schema),
                 &config.chain_config,
@@ -46,19 +46,92 @@ impl SQLTrainer {
         })
     }
 
-    pub fn train(&mut self) -> Result<Vec<Vec<PathNode>>, ConvertionError> {
-        let mut paths = Vec::<_>::new();
-        println!("Obtaining paths... ");
-        for (i, query) in self.query_asts.iter().enumerate() {
-            paths.push(self.path_generator.get_query_path(query)?);
-            if i % 50 == 0 {
-                if self.main_config.print_progress {
-                    print!("{}/{}      \r", i, self.query_asts.len());
+    pub fn markov_chain_ref(&self) -> &MarkovChain {
+        self.path_generator.markov_chain_ref()
+    }
+
+    /// Currently performs full-batch training (the whole dataset is a single batch)
+    /// TODO: add setting for mini-batch training (not needed as of now)
+    pub fn train(&mut self, mut model: Box<dyn PathwayGraphModel>) -> Result<Box<dyn PathwayGraphModel>, ConvertionError> {
+        println!("Training model... ");
+        model.start_epoch();
+        model.start_batch();
+        for (i, query) in self.dataset_queries.iter().enumerate() {
+            model = self.path_generator.feed_query_to_model(query, model)?;
+            if self.main_config.print_progress {
+                if i % 50 == 0 {
+                    print!("{}/{}      \r", i, self.dataset_queries.len());
+                    std::io::stdout().flush().unwrap();
                 }
-                std::io::stdout().flush().unwrap();
             }
         }
+        model.end_batch();
+        model.update_weights();
+        model.end_epoch();
         println!();
-        Ok(paths)
+        Ok(model)
+    }
+}
+
+pub trait PathwayGraphModel {
+    /// initialize the model weights
+    fn init_weights(&mut self) { }
+
+    /// prepare model for the new epoch
+    fn start_epoch(&mut self) { }
+
+    /// prepare model for the start of an epoch
+    fn start_batch(&mut self) { }
+
+    /// prepare model for a training episode
+    fn start_episode(&mut self) { }
+
+    /// feed the new state and context (in the form of current call stack and current path) to the model
+    fn process_state(&mut self, current_path: &Vec<PathNode>, call_stack: &Vec<StackFrame>);
+
+    /// end the training episode and accumulate the update/gradient
+    fn end_episode(&mut self) { }
+
+    /// end the current batch
+    fn end_batch(&mut self) { }
+
+    /// update the weights with the accumulated update/gradient
+    fn update_weights(&mut self) { }
+
+    /// end the current epoch
+    fn end_epoch(&mut self) { }
+}
+
+pub struct SubgraphMarkovModel {
+    weights: MarkovWeights,
+    weights_ready: bool,
+}
+
+impl SubgraphMarkovModel {
+    /// create model from with the given graph structure
+    pub fn new(markov_chain: &MarkovChain) -> Self {
+        Self {
+            weights: MarkovWeights::new(markov_chain),
+            weights_ready: false,
+        }
+    }
+}
+
+impl PathwayGraphModel for SubgraphMarkovModel {
+    fn start_epoch(&mut self) {
+        if self.weights_ready == true {
+            panic!("SubgraphMarkovModel does not allow multiple epochs.")
+        }
+        self.weights.fill_probs_zero();
+        self.weights_ready = false;
+    }
+
+    fn process_state(&mut self, _current_path: &Vec<PathNode>, _call_stack: &Vec<StackFrame>) {
+        todo!()
+    }
+
+    fn update_weights(&mut self) {
+        self.weights_ready = true;
+        self.weights.normalize();
     }
 }
