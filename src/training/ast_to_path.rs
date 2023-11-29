@@ -139,6 +139,7 @@ impl PathGenerator {
 
     pub fn get_query_path(&mut self, query: &Box<Query>) -> Result<Vec<PathNode>, ConvertionError> {
         self.process_query(query)?;
+        /// TODO: add aliases to PathNode
         Ok(std::mem::replace(&mut self.current_path, vec![]))
     }
 

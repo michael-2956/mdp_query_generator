@@ -173,7 +173,7 @@ struct ColumnContainer<ColumnNameType: Ord + Clone + Hash> {
     pub columns: BTreeMap<SubgraphType, BTreeSet<ColumnNameType>>,
 }
 
-impl<ColumnNameType: Ord + Clone + Hash> ColumnContainer<ColumnNameType> {
+impl<ColumnNameType: Ord + Clone + Hash + core::fmt::Debug> ColumnContainer<ColumnNameType> {
     fn new() -> Self {
         Self {
             columns: BTreeMap::new(),
@@ -365,7 +365,7 @@ impl FromContents {
         };
         match type_opt {
             Some(val) => val,
-            None => panic!("Couldn't find column named {}.", ObjectName(ident_components.clone())),
+            None => panic!("Couldn't find column named {}. FromContents: {:#?}", ObjectName(ident_components.clone()), self),
         }
     }
 

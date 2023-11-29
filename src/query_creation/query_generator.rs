@@ -81,7 +81,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             config,
             clause_context: ClauseContext::new(),
             train_model: None,
-            free_projection_alias_index: 1,
+            free_projection_alias_index: 0,
             rng: ChaCha8Rng::seed_from_u64(1),
         };
 

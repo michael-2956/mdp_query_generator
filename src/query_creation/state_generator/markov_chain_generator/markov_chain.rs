@@ -224,6 +224,8 @@ impl MarkovChain {
             node_params
         ) = MarkovChain::parse_functions_and_params(&source)?;
         MarkovChain::perform_type_checks(&functions, &node_params)?;
+        /// TODO: Fill probabilities using MarkovWeights
+        /// We can do this by creating a method load_weights()
         MarkovChain::fill_probs_uniform(&mut functions);
         MarkovChain::fill_paths_to_exit_with_call_nums(&mut functions, &node_params);
         Ok(MarkovChain { functions })
@@ -453,10 +455,6 @@ impl MarkovChain {
                 }
             }
         }
-    }
-
-    fn fill_probs_with() {
-        
     }
 
     fn fill_paths_to_exit_with_call_nums(functions: &mut HashMap<SmolStr, Function>, node_params: &HashMap<SmolStr, NodeParams>) {
