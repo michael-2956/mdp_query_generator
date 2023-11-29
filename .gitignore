@@ -1,4 +1,5 @@
 *generated_queries.sql
+weights/
 .vscode
 .DS_Store
 /target

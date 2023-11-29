@@ -52,6 +52,9 @@ pub struct MarkovChainGenerator<StC: StateChooser> {
     markov_chain: MarkovChain,
     call_stack: Vec<StackFrame>,
     pending_call: Option<CallParams>,
+    /// needed if we want to know the function that we just received
+    /// an exit node from
+    popped_stack_frame: Option<StackFrame>,
     state_chooser: Box<StC>,
     value_setters: HashMap<SmolStr, Box<dyn ValueSetter>>,
     stateless_call_modifiers: HashMap<SmolStr, Box<dyn StatelessCallModifier>>,
@@ -501,6 +504,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             markov_chain: chain,
             call_stack: vec![],
             pending_call: None,
+            popped_stack_frame: None,
             state_chooser: Box::new(StC::new()),
             value_setters: HashMap::new(),
             stateless_call_modifiers: HashMap::new(),
@@ -517,6 +521,10 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         _self.fill_function_modifier_info();
         _self.reset();
         Ok(_self)
+    }
+
+    pub fn get_last_popped_stack_frame(&self) -> Option<&StackFrame> {
+        self.popped_stack_frame.as_ref()
     }
 
     pub fn markov_chain_ref(&self) -> &MarkovChain {
@@ -824,7 +832,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         };
 
         if is_an_exit {
-            self.call_stack.pop();
+            self.popped_stack_frame = self.call_stack.pop();
         }
 
         Ok(Some(new_node_name))

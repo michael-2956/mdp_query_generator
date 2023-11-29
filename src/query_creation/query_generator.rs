@@ -15,7 +15,7 @@ use sqlparser::ast::{
     TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, SelectItem, WildcardAdditionalOptions, DataType, ObjectName,
 };
 
-use crate::config::TomlReadable;
+use crate::{config::TomlReadable, training::trainer::PathwayGraphModel};
 
 use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generator::{CallTypes, markov_chain_generator::subgraph_type::SubgraphType}};
 use self::{query_info::{DatabaseSchema, ClauseContext}, aggregate_function_settings::AggregateFunctionDistribution, expr_precedence::ExpressionPriority, call_modifiers::{TypesTypeValue, ValueSetterValue, WildcardRelationsValue}, value_choosers::QueryValueChooser};
@@ -53,6 +53,7 @@ pub struct QueryGenerator<DynMod: DynamicModel, StC: StateChooser, QVC: QueryVal
     value_chooser: Box<QVC>,
     database_schema: DatabaseSchema,
     clause_context: ClauseContext,
+    train_model: Option<Box<dyn PathwayGraphModel>>,
     free_projection_alias_index: u32,
     rng: ChaCha8Rng,
 }
@@ -79,6 +80,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             value_chooser: Box::new(QVC::new()),
             config,
             clause_context: ClauseContext::new(),
+            train_model: None,
             free_projection_alias_index: 1,
             rng: ChaCha8Rng::seed_from_u64(1),
         };
@@ -95,7 +97,14 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
     }
 
     fn next_state(&mut self) -> SmolStr {
-        self.next_state_opt().unwrap()
+        let next_state = self.next_state_opt().unwrap();
+        if let Some(ref mut model) = self.train_model {
+            model.process_state(
+                self.state_generator.call_stack_ref(),
+                self.state_generator.get_last_popped_stack_frame(),
+            );
+        }
+        next_state
     }
 
     fn panic_unexpected(&mut self, state: &str) -> ! {
@@ -903,6 +912,14 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         self.dynamic_model = dynamic_model;
         self.value_chooser = value_chooser;
         self.generate()
+    }
+
+    pub fn generate_and_feed_to_model(
+            &mut self, dynamic_model: Box<DynMod>, value_chooser: Box<QVC>, model: Box<dyn PathwayGraphModel>
+        ) -> Box<dyn PathwayGraphModel> {
+        self.train_model = Some(model);
+        self.generate_with_dynamic_model_and_value_chooser(dynamic_model, value_chooser);
+        self.train_model.take().unwrap()
     }
 }
 

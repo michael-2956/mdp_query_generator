@@ -1,8 +1,9 @@
-use std::{path::PathBuf, str::FromStr, io::Write};
+use std::{path::PathBuf, str::FromStr, io::{Write, self}};
 
+use smol_str::SmolStr;
 use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query}};
 
-use crate::{config::{TomlReadable, Config, MainConfig}, query_creation::{state_generator::markov_chain_generator::{error::SyntaxError, markov_chain::MarkovChain, StackFrame}, query_generator::query_info::DatabaseSchema}};
+use crate::{config::{TomlReadable, Config, MainConfig}, query_creation::{state_generator::{markov_chain_generator::{error::SyntaxError, markov_chain::MarkovChain, StackFrame}, dynamic_models::PathModel, state_choosers::MaxProbStateChooser, MarkovChainGenerator}, query_generator::{query_info::DatabaseSchema, QueryGenerator, value_choosers::DeterministicValueChooser}}};
 
 use super::{ast_to_path::{PathNode, ConvertionError, PathGenerator}, markov_weights::MarkovWeights};
 
@@ -11,6 +12,7 @@ pub struct SQLTrainer {
     main_config: MainConfig,
     dataset_queries: Vec<Box<Query>>,
     path_generator: PathGenerator,
+    path_query_generator: QueryGenerator<PathModel, MaxProbStateChooser, DeterministicValueChooser>,
 }
 
 pub struct TrainingConfig {
@@ -41,6 +43,10 @@ impl SQLTrainer {
                 DatabaseSchema::parse_schema(&config.training_config.training_schema),
                 &config.chain_config,
             )?,
+            path_query_generator: QueryGenerator::from_state_generator_and_schema(
+                MarkovChainGenerator::with_config(&config.chain_config).unwrap(),
+                config.generator_config,
+            ),
             _config: config.training_config,
             main_config: config.main_config,
         })
@@ -57,7 +63,14 @@ impl SQLTrainer {
         model.start_epoch();
         model.start_batch();
         for (i, query) in self.dataset_queries.iter().enumerate() {
-            model = self.path_generator.feed_query_to_model(query, model)?;
+            let path = self.path_generator.get_query_path(query)?;
+            model.start_episode(&path);
+            model = self.path_query_generator.generate_and_feed_to_model(
+                Box::new(PathModel::from_path_nodes(&path)),
+                Box::new(DeterministicValueChooser::from_path_nodes(&path)),
+                model
+            );
+            model.end_episode();
             if self.main_config.print_progress {
                 if i % 50 == 0 {
                     print!("{}/{}      \r", i, self.dataset_queries.len());
@@ -83,11 +96,18 @@ pub trait PathwayGraphModel {
     /// prepare model for the start of an epoch
     fn start_batch(&mut self) { }
 
-    /// prepare model for a training episode
-    fn start_episode(&mut self) { }
+    /// Prepare model for a training episode.
+    /// - Provide full episode path beforehand, so that literal values\
+    ///   can be obtained if and when that's needed.
+    /// - It's not recommended to use that path for training,\
+    ///   instead the process_state method should be used for that\
+    ///   purpose, since it provides wider context.
+    /// - The provided path is intended to only be used for obtaining the\
+    ///   inserted literals.
+    fn start_episode(&mut self, _path: &Vec<PathNode>) { }
 
     /// feed the new state and context (in the form of current call stack and current path) to the model
-    fn process_state(&mut self, current_path: &Vec<PathNode>, call_stack: &Vec<StackFrame>);
+    fn process_state(&mut self, call_stack: &Vec<StackFrame>, popped_stack_frame: Option<&StackFrame>);
 
     /// end the training episode and accumulate the update/gradient
     fn end_episode(&mut self) { }
@@ -100,11 +120,19 @@ pub trait PathwayGraphModel {
 
     /// end the current epoch
     fn end_epoch(&mut self) { }
+
+    /// write weights to file
+    fn write_to_file(&self, file_path: &str) -> io::Result<()>;
+
+    /// read weights from file
+    fn read_from_file(&mut self, file_path: &str) -> io::Result<()>;
 }
 
+#[derive(Debug)]
 pub struct SubgraphMarkovModel {
     weights: MarkovWeights,
     weights_ready: bool,
+    last_state_stack: Vec<SmolStr>,
 }
 
 impl SubgraphMarkovModel {
@@ -113,6 +141,7 @@ impl SubgraphMarkovModel {
         Self {
             weights: MarkovWeights::new(markov_chain),
             weights_ready: false,
+            last_state_stack: vec![],
         }
     }
 }
@@ -126,12 +155,49 @@ impl PathwayGraphModel for SubgraphMarkovModel {
         self.weights_ready = false;
     }
 
-    fn process_state(&mut self, _current_path: &Vec<PathNode>, _call_stack: &Vec<StackFrame>) {
-        todo!()
+    fn process_state(&mut self, call_stack: &Vec<StackFrame>, popped_stack_frame: Option<&StackFrame>) {
+        if self.last_state_stack.len() < call_stack.len() {
+            let func_name = call_stack.last().unwrap().function_context.call_params.func_name.clone();
+            self.last_state_stack.push(func_name);
+            // println!("FUNCTION {func_name}");
+        } else {
+            let is_exit_node = self.last_state_stack.len() > call_stack.len();
+            if let Some(last_state) = self.last_state_stack.last_mut() {
+                let stack_frame = if is_exit_node {
+                    popped_stack_frame.unwrap()
+                } else {
+                    call_stack.last().unwrap()
+                };
+                let current_state = stack_frame.function_context.current_node.node_common.name.clone();
+                // println!("NODE {current_state}");
+                let func_name = &stack_frame.function_context.call_params.func_name;
+                self.weights.add_edge(func_name, last_state, &current_state);
+                // println!("EDGE {last_state} -> {current_state}");
+                *last_state = current_state;
+            } else {
+                panic!("No last state available, but received call stack: {:?}", call_stack)
+            }
+            if is_exit_node {
+                // println!("POPPING...");
+                self.last_state_stack.pop();
+            }
+        }
+        // println!("SELF.last_state_stack: {:#?}", self.last_state_stack);
     }
 
     fn update_weights(&mut self) {
         self.weights_ready = true;
         self.weights.normalize();
+        self.weights.print_outgoing_weights(&SmolStr::new("Query"), &SmolStr::new("call0_FROM"));
+        println!("{:?}", 3);
+    }
+
+    fn write_to_file(&self, file_path: &str) -> io::Result<()> {
+        self.weights.write_to_file(file_path)
+    }
+
+    fn read_from_file(&mut self, file_path: &str) -> io::Result<()> {
+        self.weights = MarkovWeights::read_from_file(file_path)?;
+        Ok(())
     }
 }
