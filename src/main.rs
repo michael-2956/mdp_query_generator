@@ -77,13 +77,20 @@ fn run_training(config: Config) {
         },
     };
     let model = SubgraphMarkovModel::new(sql_trainer.markov_chain_ref());
-    let _model = match sql_trainer.train(Box::new(model)) {
+    let model = match sql_trainer.train(Box::new(model)) {
         Ok(model) => model,
         Err(err) => {
             println!("Training error!\n{}", err);
             return;
         },
     };
+    match model.write_to_file("weights/untrained_db.mw") {
+        Ok(_) => {},
+        Err(err) => {
+            println!("Failed writing model!\n{}", err);
+            return;
+        },
+    }
 }
 
 fn test_ast_to_path(config: Config) {
