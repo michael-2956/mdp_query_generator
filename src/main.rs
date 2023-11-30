@@ -76,7 +76,9 @@ fn run_training(config: Config) {
             return;
         },
     };
-    let model = SubgraphMarkovModel::new(sql_trainer.markov_chain_ref());
+    let model = SubgraphMarkovModel::new(
+        &sql_trainer.markov_chain_ref().functions
+    );
     let model = match sql_trainer.train(Box::new(model)) {
         Ok(model) => model,
         Err(err) => {

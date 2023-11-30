@@ -5,27 +5,27 @@ use std::io::{self, Write, Read};
 use smol_str::SmolStr;
 use serde::{Deserialize, Serialize};
 
-use crate::query_creation::state_generator::markov_chain_generator::markov_chain::MarkovChain;
+use crate::query_creation::state_generator::markov_chain_generator::markov_chain::Function;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MarkovWeights {
     /// function name -> from -> [(to, weight), ...]
     pub weights: HashMap<SmolStr, HashMap<SmolStr, HashMap<SmolStr, f64>>>,
 }
 
 impl MarkovWeights {
-    pub fn new(markov_chain: &MarkovChain) -> Self {
+    pub fn new(chain_functions: &HashMap<SmolStr, Function>) -> Self {
         let mut _self = Self {
             weights: HashMap::new(),
         };
-        _self.initialize_keys(markov_chain);
+        _self.initialize_keys(chain_functions);
         _self
     }
 
     /// initialize all of tha map keys using the
     /// parsed MarkovChain class
-    fn initialize_keys(&mut self, markov_chain: &MarkovChain) {
-        for (func_name, function) in markov_chain.functions.iter() {
+    fn initialize_keys(&mut self, chain_functions: &HashMap<SmolStr, Function>) {
+        for (func_name, function) in chain_functions.iter() {
             let func_weights = self.weights
                 .entry(func_name.clone())
                 .or_insert(HashMap::new());

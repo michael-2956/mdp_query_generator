@@ -1,9 +1,9 @@
-use std::{path::PathBuf, str::FromStr, io::{Write, self}};
+use std::{path::PathBuf, str::FromStr, io::{Write, self}, collections::HashMap};
 
 use smol_str::SmolStr;
 use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query}};
 
-use crate::{config::{TomlReadable, Config, MainConfig}, query_creation::{state_generator::{markov_chain_generator::{error::SyntaxError, markov_chain::MarkovChain, StackFrame}, dynamic_models::PathModel, state_choosers::MaxProbStateChooser, MarkovChainGenerator}, query_generator::{query_info::DatabaseSchema, QueryGenerator, value_choosers::DeterministicValueChooser}}};
+use crate::{config::{TomlReadable, Config, MainConfig}, query_creation::{state_generator::{markov_chain_generator::{error::SyntaxError, markov_chain::{MarkovChain, Function}, StackFrame}, dynamic_models::PathModel, state_choosers::MaxProbStateChooser, MarkovChainGenerator}, query_generator::{query_info::DatabaseSchema, QueryGenerator, value_choosers::DeterministicValueChooser}}};
 
 use super::{ast_to_path::{PathNode, ConvertionError, PathGenerator}, markov_weights::MarkovWeights};
 
@@ -140,9 +140,9 @@ pub struct SubgraphMarkovModel {
 
 impl SubgraphMarkovModel {
     /// create model from with the given graph structure
-    pub fn new(markov_chain: &MarkovChain) -> Self {
+    pub fn new(chain_functions: &HashMap<SmolStr, Function>) -> Self {
         Self {
-            weights: MarkovWeights::new(markov_chain),
+            weights: MarkovWeights::new(chain_functions),
             weights_ready: false,
             last_state_stack: vec![],
         }
