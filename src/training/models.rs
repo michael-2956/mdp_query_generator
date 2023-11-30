@@ -2,7 +2,7 @@ use std::{io, collections::HashMap};
 
 use smol_str::SmolStr;
 
-use crate::query_creation::state_generator::markov_chain_generator::{StackFrame, markov_chain::Function};
+use crate::query_creation::state_generator::markov_chain_generator::{StackFrame, markov_chain::{Function, NodeParams}};
 
 use super::{ast_to_path::PathNode, markov_weights::MarkovWeights};
 
@@ -48,8 +48,17 @@ pub trait PathwayGraphModel {
     /// read weights from file
     fn load_weights(&mut self, file_path: &str) -> io::Result<()>;
 
-    /// print weights
+    /// print weights to stdout
     fn print_weights(&self) { todo!() }
+
+    /// initiate the inference process
+    fn start_inference(&mut self) { }
+
+    /// predict the probability distribution over the outgoing nodes that are available
+    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>) -> Vec<(f64, NodeParams)>;
+
+    /// end the inference process
+    fn end_inference(&mut self) { }
 }
 
 #[derive(Debug)]
@@ -119,12 +128,27 @@ impl PathwayGraphModel for SubgraphMarkovModel {
     }
 
     fn load_weights(&mut self, file_path: &str) -> io::Result<()> {
-        self.weights = MarkovWeights::read_from_file(file_path)?;
+        self.weights = MarkovWeights::load(file_path)?;
         self.weights_ready = true;
         Ok(())
     }
 
     fn print_weights(&self) {
         self.weights.print();
+    }
+
+    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>) -> Vec<(f64, NodeParams)> {
+        let context = &call_stack.last().unwrap().function_context;
+        let func_name = &context.call_params.func_name;
+        let current_node = &context.current_node.node_common.name;
+        let outgoing_weights = self.weights.get_outgoing_weights(func_name, current_node);
+        // obtain weights
+        let mut output: Vec<_> = node_outgoing.into_iter().map(|node| (
+            *outgoing_weights.get(&node.node_common.name).unwrap(), node
+        )).collect();
+        // normalize them
+        let weight_sum: f64 = output.iter().map(|(w, _)| *w).sum();
+        for (w, _) in output.iter_mut() { *w /= weight_sum; }
+        output
     }
 }

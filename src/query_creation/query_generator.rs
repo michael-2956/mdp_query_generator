@@ -50,6 +50,7 @@ pub struct QueryGenerator<DynMod: DynamicModel, StC: StateChooser, QVC: QueryVal
     config: QueryGeneratorConfig,
     state_generator: MarkovChainGenerator<StC>,
     dynamic_model: Box<DynMod>,
+    predictor_model: Option<Box<dyn PathwayGraphModel>>,
     value_chooser: Box<QVC>,
     database_schema: DatabaseSchema,
     clause_context: ClauseContext,
@@ -74,6 +75,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
     pub fn from_state_generator_and_schema(state_generator: MarkovChainGenerator<StC>, config: QueryGeneratorConfig) -> Self {
         let mut _self = QueryGenerator::<DynMod, StC, QVC> {
             state_generator,
+            predictor_model: None,
             dynamic_model: Box::new(DynMod::new()),
             database_schema: DatabaseSchema::parse_schema(&config.table_schema_path),
             value_chooser: Box::new(QVC::new()),
@@ -91,7 +93,12 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
     }
 
     fn next_state_opt(&mut self) -> Option<SmolStr> {
-        self.state_generator.next(&mut self.rng, &mut self.clause_context, &mut *self.dynamic_model).unwrap()
+        self.state_generator.next_node_name(
+            &mut self.rng,
+            &mut self.clause_context,
+            &mut *self.dynamic_model,
+            self.predictor_model.as_mut()
+        ).unwrap()
     }
 
     fn next_state(&mut self) -> SmolStr {
@@ -885,8 +892,13 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         }
     }
 
-    /// starting point; calls handle_query for the first time
+    /// starting point; calls handle_query for the first time.\
+    /// NOTE: If you use this function without a predictor model,\
+    /// it will use uniform distributions 
     fn generate(&mut self) -> Query {
+        if let Some(model) = self.predictor_model.as_mut() {
+            model.start_inference();
+        }
         let query = self.handle_query().0;
         if self.config.print_queries {
             println!("\n{};\n", query);
@@ -897,15 +909,26 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             panic!("Couldn't reset state_generator: Received {state}");
         }
         self.dynamic_model = Box::new(DynMod::new());
+        if let Some(model) = self.predictor_model.as_mut() {
+            model.end_inference();
+        }
         query
     }
 
+    /// generate the next query with the provided model generating the probabilities
+    pub fn generate_with_model(&mut self, model: Box<dyn PathwayGraphModel>) -> (Box<dyn PathwayGraphModel>, Query) {
+        self.predictor_model = Some(model);
+        (self.predictor_model.take().unwrap(), self.generate())
+    }
+
+    /// generate the next query with the provided dynamic model and value choosers
     pub fn generate_with_dynamic_model_and_value_chooser(&mut self, dynamic_model: Box<DynMod>, value_chooser: Box<QVC>) -> Query {
         self.dynamic_model = dynamic_model;
         self.value_chooser = value_chooser;
         self.generate()
     }
 
+    /// generate the query and feed it to the model. Useful for training.
     pub fn generate_and_feed_to_model(
             &mut self, dynamic_model: Box<DynMod>, value_chooser: Box<QVC>, model: Box<dyn PathwayGraphModel>
         ) -> Box<dyn PathwayGraphModel> {

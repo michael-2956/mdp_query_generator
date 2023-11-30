@@ -237,7 +237,7 @@ impl MarkovChain {
 
     /// Load weights from file
     pub fn load_weights(&mut self, weights_path: &str) -> io::Result<()> {
-        self.weights = MarkovWeights::read_from_file(weights_path)?;
+        self.weights = MarkovWeights::load(weights_path)?;
         self.apply_weights();
         Ok(())
     }

@@ -8,12 +8,12 @@ mod dot_parser;
 use std::{path::PathBuf, collections::{HashMap, HashSet, VecDeque, BTreeMap}, sync::{Arc, Mutex}, error::Error, fmt};
 
 use core::fmt::Debug;
-use rand::{seq::SliceRandom, SeedableRng};
+use rand::seq::SliceRandom;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use take_until::TakeUntilExt;
 
-use crate::{unwrap_variant, query_creation::{state_generator::markov_chain_generator::markov_chain::FunctionTypes, query_generator::{query_info::ClauseContext, call_modifiers::{StatelessCallModifier, StatefulCallModifier, IsColumnTypeAvailableModifier, TypesTypeValueSetter, ValueSetter, NamedValue, ValueSetterValue, HasUniqueColumnNamesForTypeModifier, WildcardRelationsValueSetter, IsWildcardAvailableModifier, HasUniqueColumnNamesForTypeValueSetter}}}, config::TomlReadable};
+use crate::{unwrap_variant, query_creation::{state_generator::markov_chain_generator::markov_chain::FunctionTypes, query_generator::{query_info::ClauseContext, call_modifiers::{StatelessCallModifier, StatefulCallModifier, IsColumnTypeAvailableModifier, TypesTypeValueSetter, ValueSetter, NamedValue, ValueSetterValue, HasUniqueColumnNamesForTypeModifier, WildcardRelationsValueSetter, IsWildcardAvailableModifier, HasUniqueColumnNamesForTypeValueSetter}}}, config::TomlReadable, training::models::PathwayGraphModel};
 
 use self::{
     markov_chain::{
@@ -22,7 +22,7 @@ use self::{
 };
 
 use state_choosers::StateChooser;
-use dynamic_models::{MarkovModel, DynamicModel};
+use dynamic_models::DynamicModel;
 
 pub use self::markov_chain::CallTypes;
 
@@ -692,34 +692,50 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 
     /// choose a new node among the available destibation nodes with the fynamic model
-    fn update_current_node(&mut self, rng: &mut ChaCha8Rng, clause_context: &ClauseContext, dynamic_model: &mut (impl DynamicModel + ?Sized)) -> Result<(), StateGenerationError> {
+    fn update_current_node(
+            &mut self,
+            rng: &mut ChaCha8Rng,
+            clause_context: &ClauseContext,
+            dynamic_model: &mut (impl DynamicModel + ?Sized),
+            predictor_model_opt: Option<&mut Box<dyn PathwayGraphModel>>,
+        ) -> Result<(), StateGenerationError> {
         dynamic_model.notify_call_stack_length(self.call_stack.len());
 
-        let stack_frame = self.call_stack.last_mut().unwrap();
-        // last_node guaranteed not to be an exit node
-        let last_node = stack_frame.function_context.current_node.clone();
-        let function = self.markov_chain.functions.get(&stack_frame.function_context.call_params.func_name).unwrap();
-        let function_modifier_info = self.function_modifier_info.get(
-            &stack_frame.function_context.call_params.func_name
-        ).unwrap();
+        let (last_node, last_node_outgoing) = {
+            let stack_frame = self.call_stack.last().unwrap();
+            // last_node guaranteed not to be an exit node
+            let last_node = stack_frame.function_context.current_node.clone();
+            let function = self.markov_chain.functions.get(&stack_frame.function_context.call_params.func_name).unwrap();
+            let function_modifier_info = self.function_modifier_info.get(
+                &stack_frame.function_context.call_params.func_name
+            ).unwrap();
 
-        let last_node_outgoing = function.chain.get(&last_node.node_common.name).unwrap();
+            let last_node_outgoing = function.chain.get(&last_node.node_common.name).unwrap();
 
-        let last_node_outgoing = last_node_outgoing.iter().map(|el| {
-            (check_node_off_dfs(rng, function, function_modifier_info, clause_context, stack_frame, &el.1), el.0, el.1.clone())
-        }).collect::<Vec<_>>();
+            let last_node_outgoing = last_node_outgoing.iter().filter_map(|el| {
+                if check_node_off_dfs(rng, function, function_modifier_info, clause_context, stack_frame, &el.1) {
+                    None
+                } else { Some(el.1.clone()) }
+            }).collect::<Vec<_>>();
 
-        dynamic_model.update_current_state(&last_node.node_common.name);
+            dynamic_model.update_current_state(&last_node.node_common.name);
+
+            (last_node, last_node_outgoing)
+        };
+
+        let last_node_outgoing = if let Some(predictor_model) = predictor_model_opt {
+            predictor_model.predict(&self.call_stack, last_node_outgoing)
+        } else {
+            last_node_outgoing.into_iter().map(|node| (1f64, node)).collect()
+        };
+
         let last_node_outgoing = dynamic_model.assign_log_probabilities(last_node_outgoing);
 
         let destination = self.state_chooser.choose_destination(rng, last_node_outgoing);
 
+        let stack_frame = self.call_stack.last_mut().unwrap();
+
         if let Some(destination) = destination {
-            if check_node_off_dfs(rng, function, function_modifier_info, clause_context, stack_frame, &destination) {
-                return Err(StateGenerationError::new(format!(
-                    "Chosen node is off: {} (after {})", destination.node_common.name, last_node.node_common.name
-                )));
-            }
             stack_frame.function_context.current_node = destination.clone();
         } else {
             let function_context = stack_frame.function_context.clone();
@@ -804,7 +820,12 @@ impl StateGenerationError {
 }
 
 impl<StC: StateChooser> MarkovChainGenerator<StC> {
-    pub fn next(&mut self, rng: &mut ChaCha8Rng, clause_context: &ClauseContext, dynamic_model: &mut (impl DynamicModel + ?Sized)) -> Result<Option<<Self as Iterator>::Item>, StateGenerationError> {
+    pub fn next_node_name(
+            &mut self, rng: &mut ChaCha8Rng,
+            clause_context: &ClauseContext,
+            dynamic_model: &mut (impl DynamicModel + ?Sized),
+            predictor_model_opt: Option<&mut Box<dyn PathwayGraphModel>>,
+        ) -> Result<Option<SmolStr>, StateGenerationError> {
         if let Some(call_params) = self.pending_call.take() {
             return Ok(Some(self.start_function(call_params, clause_context)));
         }
@@ -815,7 +836,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         }
 
         let (is_an_exit, new_node_name) = {
-            self.update_current_node(rng, clause_context, dynamic_model)?;
+            self.update_current_node(rng, clause_context, dynamic_model, predictor_model_opt)?;
 
             let stack_frame = self.call_stack.last_mut().unwrap();
 
@@ -953,12 +974,4 @@ fn check_node_off(
         )
     }
     return off;
-}
-
-impl<StC: StateChooser> Iterator for MarkovChainGenerator<StC> {
-    type Item = SmolStr;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.next(&mut ChaCha8Rng::seed_from_u64(1), &mut ClauseContext::new(), &mut MarkovModel::new()).unwrap()
-    }
 }

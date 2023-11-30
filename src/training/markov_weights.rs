@@ -85,6 +85,12 @@ impl MarkovWeights {
         *assign_to += 1f64;
     }
 
+    pub fn get_outgoing_weights(&self, func_name: &SmolStr, from: &SmolStr) -> &HashMap<SmolStr, f64> {
+        self.weights
+            .get(func_name).unwrap()
+            .get(from).unwrap()
+    }
+
     pub fn write_to_file(&self, file_path: &str) -> io::Result<()> {
         let encoded: Vec<u8> = bincode::serialize(&self).unwrap();
         let mut file = File::create(file_path)?;
@@ -92,7 +98,7 @@ impl MarkovWeights {
         Ok(())
     }
 
-    pub fn read_from_file(file_path: &str) -> io::Result<Self> {
+    pub fn load(file_path: &str) -> io::Result<Self> {
         let mut file = File::open(file_path)?;
         let mut encoded = Vec::new();
         file.read_to_end(&mut encoded)?;
