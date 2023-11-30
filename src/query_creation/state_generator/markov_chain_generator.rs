@@ -729,7 +729,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             last_node_outgoing.into_iter().map(|node| (1f64, node)).collect()
         };
 
-        let last_node_outgoing = dynamic_model.assign_log_probabilities(last_node_outgoing);
+        let last_node_outgoing = dynamic_model.assign_log_probabilities(last_node_outgoing)?;
 
         let destination = self.state_chooser.choose_destination(rng, last_node_outgoing);
 
