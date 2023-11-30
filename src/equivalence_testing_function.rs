@@ -14,15 +14,25 @@ pub fn string_to_query(input: &str) -> Option<Box<Query>> {
         },
         Err(err) => {
             if err != ParserError::RecursionLimitExceeded {
-                println!("Query: {}", input);
-                println!("Parsing error! {}", err);
+                // compensating for the fact that the parser does not
+                // always produce RecursionLimitExceeded when it is what
+                // actually happens
+                if input.len() < 1000 {
+                    eprintln!("Query: {}", input);
+                    eprintln!("Parsing error! {}", err);
+                    eprintln!("Query length: {}", input.len());
+                } else {
+                    eprintln!("Skipped a query of length {} (parser bug)", input.len());
+                }
+            } else {
+                eprintln!("Skipped a query of length {} (parser recursion limit)", input.len());
             }
             None
         },
     }
 }
 
-pub fn check_query (query: Box<Query>) -> bool {
+pub fn check_query(query: Box<Query>) -> bool {
     let body = query.body;
     let select = match *body {
         SetExpr::Select(select) => select,

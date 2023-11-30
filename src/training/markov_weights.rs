@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::collections::HashMap;
 use std::io::{self, Write, Read};
+use std::path::PathBuf;
 
 use smol_str::SmolStr;
 use serde::{Deserialize, Serialize};
@@ -91,14 +92,14 @@ impl MarkovWeights {
             .get(from).unwrap()
     }
 
-    pub fn write_to_file(&self, file_path: &str) -> io::Result<()> {
+    pub fn write_to_file(&self, file_path: &PathBuf) -> io::Result<()> {
         let encoded: Vec<u8> = bincode::serialize(&self).unwrap();
         let mut file = File::create(file_path)?;
         file.write_all(&encoded)?;
         Ok(())
     }
 
-    pub fn load(file_path: &str) -> io::Result<Self> {
+    pub fn load(file_path: &PathBuf) -> io::Result<Self> {
         let mut file = File::open(file_path)?;
         let mut encoded = Vec::new();
         file.read_to_end(&mut encoded)?;

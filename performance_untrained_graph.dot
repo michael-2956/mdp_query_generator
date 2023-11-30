@@ -389,7 +389,7 @@ digraph G {
 
     subgraph def_number {
         number [shape=rectangle, label="number\nmods: [no column spec]", TYPES="[integer, numeric]", MODS="[no column spec]", style=filled, color=chocolate]
-        EXIT_number [label="EXIT numeric"]
+        EXIT_number [label="EXIT number"]
 
         number_literal[label="literal", literal="t"]
         number -> number_literal
@@ -610,7 +610,7 @@ digraph G {
         column_spec_choose_source [label="Choose column spec relation source"]
         column_spec -> column_spec_choose_source
 
-        column_spec_choose_qualified [label="Choose if qualified (R.COL/COL)"]
+        column_spec_choose_qualified [label="Choose if qualified (R.COL/COL)\nset value: 'has_unique_column_names_for_type_val'", set_value="has_unique_column_names_for_type_val"]
 
         get_column_spec_from_having [label="HAVING", modifier="having clause mode", modifier_mode="on"]
         column_spec_choose_source -> get_column_spec_from_having

@@ -1,7 +1,7 @@
 use std::{io::Write, time::Instant};
 
 use equivalence_testing::{query_creation::{
-    query_generator::{QueryGenerator, QueryGeneratorConfig, value_choosers::RandomValueChooser},
+    query_generator::{QueryGenerator, value_choosers::RandomValueChooser},
     state_generator::{
         MarkovChainGenerator,
         state_choosers::{ProbabilisticStateChooser, StateChooser},
@@ -9,90 +9,90 @@ use equivalence_testing::{query_creation::{
     },
 }, equivalence_testing_function::{
     check_query, string_to_query
-}, config::{Config, ProgramArgs, MainConfig}, training::{ast_to_path::TestAST2Path, trainer::SQLTrainer, models::SubgraphMarkovModel}};
+}, config::{Config, ProgramArgs}, training::{ast_to_path::TestAST2Path, trainer::SQLTrainer}};
 
 use structopt::StructOpt;
 
-fn run_generation<DynMod: DynamicModel, StC: StateChooser>(markov_generator: MarkovChainGenerator<StC>, generator_config: QueryGeneratorConfig, main_config: MainConfig) {
-    let mut generator = QueryGenerator::<DynMod, StC, RandomValueChooser>::from_state_generator_and_schema(markov_generator, generator_config);
+fn run_generation<DynMod: DynamicModel, StC: StateChooser>(
+        markov_generator: MarkovChainGenerator<StC>, config: Config,
+    ) {
+
+    let mut predictor_model = if config.generator_config.use_model {
+        Some(config.model_config.create_model(
+            &markov_generator.markov_chain_ref().functions
+        ).expect("Error creating model for inference"))
+    } else { None };
+
+    let print_queries = config.generator_config.print_queries;
+
+    let mut generator = QueryGenerator::<DynMod, StC, RandomValueChooser>::from_state_generator_and_schema(markov_generator, config.generator_config);
 
     let mut accumulated_time_ns = 0;
     let mut num_equivalent = 0;
-    for i in 0..main_config.num_generate {
+    for i in 0..config.main_config.num_generate {
         let start_time = Instant::now();
-        let query_ast = Box::new(generator.next().unwrap());
+        let query_ast;
+        (predictor_model, query_ast) = if let Some(model) = predictor_model {
+            let (model, query) = generator.generate_with_model(model);
+            (Some(model), query)
+        } else {
+            (None, generator.generate())
+        };
         accumulated_time_ns += (Instant::now() - start_time).as_nanos();
-        if main_config.assert_parcing_equivalence {
+        if config.main_config.assert_parcing_equivalence || print_queries {
             let query_string = query_ast.to_string();
             if let Some(parsed_ast) = string_to_query(&query_string) {
-                if parsed_ast != query_ast {
-                    println!("AST mismatch! For query: {query_string}");
-                    let mut f_g = std::fs::File::create(format!("{i}-g")).unwrap();
-                    write!(f_g, "{:#?}", query_ast).unwrap();
-                    let mut f_p = std::fs::File::create(format!("{i}-p")).unwrap();
-                    write!(f_p, "{:#?}", parsed_ast).unwrap();
+                if config.main_config.assert_parcing_equivalence {
+                    if *parsed_ast != query_ast {
+                        println!("AST mismatch! For query: {query_string}");
+                        let mut f_g = std::fs::File::create(format!("{i}-g")).unwrap();
+                        write!(f_g, "{:#?}", query_ast).unwrap();
+                        let mut f_p = std::fs::File::create(format!("{i}-p")).unwrap();
+                        write!(f_p, "{:#?}", parsed_ast).unwrap();
+                    }
+                }
+
+                // only print parceable queries
+                if print_queries {
+                    println!("\n{};\n", query_string);
                 }
             }
         }
-        if main_config.count_equivalence {
-            num_equivalent += check_query(query_ast) as usize;
+        if config.main_config.count_equivalence {
+            num_equivalent += check_query(Box::new(query_ast)) as usize;
         }
         if i % 100 == 0 {
-            if main_config.print_progress {
-                print!("{}/{}      \r", i, main_config.num_generate);
+            if config.main_config.print_progress {
+                print!("{}/{}      \r", i, config.main_config.num_generate);
             }
             std::io::stdout().flush().unwrap();
         }
     }
-    if main_config.measure_generation_time {
-        println!("Average generation time: {} secs", accumulated_time_ns as f64 / 1_000_000_000f64 / main_config.num_generate as f64);
+    if config.main_config.measure_generation_time {
+        println!("Average generation time: {} secs", accumulated_time_ns as f64 / 1_000_000_000f64 / config.main_config.num_generate as f64);
     }
-    if main_config.count_equivalence {
-        println!("Equivalence: {} / {}", num_equivalent, main_config.num_generate);
+    if config.main_config.count_equivalence {
+        println!("Equivalence: {} / {}", num_equivalent, config.main_config.num_generate);
     }
 }
 
 fn select_model_and_run_generation<StC: StateChooser>(config: Config) {
-    let markov_generator = match MarkovChainGenerator::<StC>::with_config(&config.chain_config) {
-        Ok(generator) => generator,
-        Err(err) => {
-            println!("{}", err);
-            return;
-        }
-    };
+    let markov_generator = MarkovChainGenerator::<StC>::with_config(&config.chain_config).expect("Could not create generator!");
 
-    if config.generator_config.dynamic_model_name == "anticall" {
-        run_generation::<AntiCallModel, _>(markov_generator, config.generator_config, config.main_config);
-    } else {
-        run_generation::<MarkovModel, _>(markov_generator, config.generator_config, config.main_config);
-    };
+    match config.generator_config.dynamic_model_name.as_str() {
+        "anticall" => run_generation::<AntiCallModel, _>(markov_generator, config),
+        "markov" => run_generation::<MarkovModel, _>(markov_generator, config),
+        any => panic!("Unexpected dynamic model name in config: {any}"),
+    }
 }
 
 fn run_training(config: Config) {
-    let mut sql_trainer = match SQLTrainer::with_config(config) {
-        Ok(trainer) => trainer,
-        Err(err) => {
-            println!("{}", err);
-            return;
-        },
-    };
-    let model = SubgraphMarkovModel::new(
+    let mut sql_trainer = SQLTrainer::with_config(&config).expect("Could not create trainer!");
+    let model = config.model_config.create_model(
         &sql_trainer.markov_chain_ref().functions
-    );
-    let model = match sql_trainer.train(Box::new(model)) {
-        Ok(model) => model,
-        Err(err) => {
-            println!("Training error!\n{}", err);
-            return;
-        },
-    };
-    match model.write_weights("weights/untrained_db.mw") {
-        Ok(_) => {},
-        Err(err) => {
-            println!("Failed writing model!\n{}", err);
-            return;
-        },
-    }
+    ).expect("Coudn't create model!");
+    let model = sql_trainer.train(model).expect("Training error!");
+    model.write_weights(&sql_trainer.config.save_weights_to).expect("Failed writing model!");
     model.print_weights();
 }
 

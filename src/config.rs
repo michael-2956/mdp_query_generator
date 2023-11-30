@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use structopt::StructOpt;
 use toml::Value;
 
-use crate::{query_creation::{query_generator::QueryGeneratorConfig, state_generator::markov_chain_generator::StateGeneratorConfig}, training::{trainer::TrainingConfig, ast_to_path::AST2PathTestingConfig}};
+use crate::{query_creation::{query_generator::QueryGeneratorConfig, state_generator::markov_chain_generator::StateGeneratorConfig}, training::{trainer::TrainingConfig, ast_to_path::AST2PathTestingConfig, models::ModelConfig}};
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "basic")]
@@ -23,6 +23,7 @@ pub trait TomlReadable {
     fn from_toml(toml_config: &Value) -> Self;
 }
 
+#[derive(Debug, Clone)]
 pub struct MainConfig {
     pub mode: String,
     pub num_generate: usize,
@@ -54,6 +55,7 @@ pub struct Config {
     pub chain_config: StateGeneratorConfig,
     pub training_config: TrainingConfig,
     pub ast2path_testing_config: AST2PathTestingConfig,
+    pub model_config: ModelConfig,
 }
 
 fn read_toml_config(config_path: &PathBuf) -> Result<Value, Box<dyn std::error::Error>> {
@@ -70,6 +72,7 @@ impl Config {
             chain_config: StateGeneratorConfig::from_toml(&toml_config),
             training_config: TrainingConfig::from_toml(&toml_config),
             ast2path_testing_config: AST2PathTestingConfig::from_toml(&toml_config),
+            model_config: ModelConfig::from_toml(&toml_config),
         })
     }
 

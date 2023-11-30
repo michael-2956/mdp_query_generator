@@ -10,11 +10,18 @@ measure_generation_time=true
 # assert parcing the printed AST gives the
 # same result (checks validity of AST usage)
 assert_parcing_equivalence=true
-# check the queries run without errors on the
-# schema (TODO)
+# (TODO): check the queries run without errors on the schema
 assert_runs_on_schema=false
 # Pring how many queries were already generated
 print_progress=true
+
+[model]
+# which model to use. Can be: "subgraph"
+model_name="subgraph"
+# whether to use pretrained model weights
+load_weights=false
+# where to load the weights from
+load_weights_from="weights/subgraph/untrained_db_2_performance_graph_debug.mw"
 
 [ast_to_path_testing]
 # schema for the testing queries generation
@@ -24,27 +31,33 @@ n_tests=10000
 
 [training]
 # path to a file with all the training queries separated by ";\n"
-training_db_path="training_dbs/untrained_db.sql"
+# training_db_path="training_dbs/untrained_db.sql"
+training_db_path="training_dbs/untrained_db_2_performance_graph_debug.sql"
 # schema of the training queries
 training_schema="schema/tpc-h_tables.sql"
-# where to save mdel weights to
-save_weights_to="weights/untrained_db.mw"
+# where to save model weights to
+save_weights_to="weights/subgraph/untrained_db_2_performance_graph_debug.mw"
 
 [query_generator]
-# print the queries on generation
+# Whether to use the predictor model for query generation
+use_model=true
+# print the queries in "generate" mode
 print_queries=false
 # print the table schema after parcing
 print_schema=false
 # Path to the file with the database schema
 table_schema_path="schema/tpc-h_tables.sql"
-# Which dynamic model to use as a state selector
+# Which dynamic model to use as a state selector. Can be: "anticall", "markov"
+# Use "markov" when you want to give all control to the predictor model.
+# Use "anticall" when you want to use no model/constrain the model.
 dynamic_model="anticall"
 # aggregate functions settings
 aggregate_functions_distribution_map_file="aggregate_functions_distribution_map.json"
 
 [state_generator]
 # Path to graph source for a markov chain
-graph_file_path="graph_with_select.dot"
+# graph_file_path="graph_with_select.dot"
+graph_file_path="performance_untrained_graph.dot"
 
 [dynmod_anticall]
 # TODO: anticall dynamic model settings

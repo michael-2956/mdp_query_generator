@@ -54,7 +54,7 @@ impl TestAST2Path {
     pub fn test(&mut self) -> Result<(), ConvertionError> {
         for i in 0..self.config.n_tests {
             // println!("\n\n\n ================== Beggining GENERATION ================== \n\n\n");
-            let query = Box::new(self.random_query_generator.next().unwrap());
+            let query = Box::new(self.random_query_generator.generate());
             // println!("\n\n\nQuery: {query}");
             let path = self.path_generator.get_query_path(&query)?;
             let generated_query = self.path_query_generator.generate_with_dynamic_model_and_value_chooser(

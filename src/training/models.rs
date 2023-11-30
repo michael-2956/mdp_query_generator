@@ -1,11 +1,44 @@
-use std::{io, collections::HashMap};
+use std::{io, collections::HashMap, path::PathBuf, str::FromStr};
 
 use smol_str::SmolStr;
 
-use crate::query_creation::state_generator::markov_chain_generator::{StackFrame, markov_chain::{Function, NodeParams}};
+use crate::{query_creation::state_generator::markov_chain_generator::{StackFrame, markov_chain::{Function, NodeParams}}, config::TomlReadable};
 
 use super::{ast_to_path::PathNode, markov_weights::MarkovWeights};
 
+pub struct ModelConfig {
+    // Which model to use. Can be: "subgraph"
+    pub model_name: String,
+    // whether to use pretrained model weights
+    pub load_weights: bool,
+    // where to load the weights from
+    pub load_weights_from: PathBuf,
+}
+
+impl TomlReadable for ModelConfig {
+    fn from_toml(toml_config: &toml::Value) -> Self {
+        let section = &toml_config["model"];
+        Self {
+            model_name: section["model_name"].as_str().unwrap().to_string(),
+            load_weights: section["load_weights"].as_bool().unwrap(),
+            load_weights_from: PathBuf::from_str(section["load_weights_from"].as_str().unwrap()).unwrap(),
+        }
+    }
+}
+
+impl ModelConfig {
+    pub fn create_model(&self, chain_functions: &HashMap<SmolStr, Function>) -> io::Result<Box<dyn PathwayGraphModel>> {
+        if self.model_name == "subgraph" {
+            let mut model = Box::new(SubgraphMarkovModel::new(chain_functions));
+            if self.load_weights {
+                model.load_weights(&self.load_weights_from)?;
+            }
+            Ok(model)
+        } else {
+            panic!("No such model name: {}", self.model_name);
+        }
+    }
+}
 
 pub trait PathwayGraphModel {
     /// initialize the model weights
@@ -43,10 +76,10 @@ pub trait PathwayGraphModel {
     fn end_epoch(&mut self) { }
 
     /// write weights to file
-    fn write_weights(&self, file_path: &str) -> io::Result<()>;
+    fn write_weights(&self, file_path: &PathBuf) -> io::Result<()>;
 
     /// read weights from file
-    fn load_weights(&mut self, file_path: &str) -> io::Result<()>;
+    fn load_weights(&mut self, file_path: &PathBuf) -> io::Result<()>;
 
     /// print weights to stdout
     fn print_weights(&self) { todo!() }
@@ -123,11 +156,11 @@ impl PathwayGraphModel for SubgraphMarkovModel {
         self.weights.normalize();
     }
 
-    fn write_weights(&self, file_path: &str) -> io::Result<()> {
+    fn write_weights(&self, file_path: &PathBuf) -> io::Result<()> {
         self.weights.write_to_file(file_path)
     }
 
-    fn load_weights(&mut self, file_path: &str) -> io::Result<()> {
+    fn load_weights(&mut self, file_path: &PathBuf) -> io::Result<()> {
         self.weights = MarkovWeights::load(file_path)?;
         self.weights_ready = true;
         Ok(())
@@ -148,7 +181,15 @@ impl PathwayGraphModel for SubgraphMarkovModel {
         )).collect();
         // normalize them
         let weight_sum: f64 = output.iter().map(|(w, _)| *w).sum();
-        for (w, _) in output.iter_mut() { *w /= weight_sum; }
+        if weight_sum != 0f64 && !weight_sum.is_nan() {
+            for (w, _) in output.iter_mut() { *w /= weight_sum; }
+        } else {
+            // If the weights happpen to sum up to 0 or are NaN, the model is undertrained.
+            // Basically, we're in a place we've never been to during training.
+            // We then set weights uniformly.
+            let fill_with = 1f64 / (output.len() as f64);
+            for (w, _) in output.iter_mut() { *w = fill_with; }
+        }
         output
     }
 }

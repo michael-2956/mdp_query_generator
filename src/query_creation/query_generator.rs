@@ -24,6 +24,7 @@ use super::state_generator::{MarkovChainGenerator, dynamic_models::DynamicModel,
 
 #[derive(Debug, Clone)]
 pub struct QueryGeneratorConfig {
+    pub use_model: bool,
     pub print_queries: bool,
     pub print_schema: bool,
     pub table_schema_path: PathBuf,
@@ -35,6 +36,7 @@ impl TomlReadable for QueryGeneratorConfig {
     fn from_toml(toml_config: &toml::Value) -> Self {
         let section = &toml_config["query_generator"];
         Self {
+            use_model: section["use_model"].as_bool().unwrap(),
             print_queries: section["print_queries"].as_bool().unwrap(),
             print_schema: section["print_schema"].as_bool().unwrap(),
             table_schema_path: PathBuf::from(section["table_schema_path"].as_str().unwrap()),
@@ -895,14 +897,11 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
     /// starting point; calls handle_query for the first time.\
     /// NOTE: If you use this function without a predictor model,\
     /// it will use uniform distributions 
-    fn generate(&mut self) -> Query {
+    pub fn generate(&mut self) -> Query {
         if let Some(model) = self.predictor_model.as_mut() {
             model.start_inference();
         }
         let query = self.handle_query().0;
-        if self.config.print_queries {
-            println!("\n{};\n", query);
-        }
         self.value_chooser.reset();
         // reset the generator
         if let Some(state) = self.next_state_opt() {
@@ -918,7 +917,8 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
     /// generate the next query with the provided model generating the probabilities
     pub fn generate_with_model(&mut self, model: Box<dyn PathwayGraphModel>) -> (Box<dyn PathwayGraphModel>, Query) {
         self.predictor_model = Some(model);
-        (self.predictor_model.take().unwrap(), self.generate())
+        let query = self.generate();
+        (self.predictor_model.take().unwrap(), query)
     }
 
     /// generate the next query with the provided dynamic model and value choosers
@@ -935,13 +935,5 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         self.train_model = Some(model);
         self.generate_with_dynamic_model_and_value_chooser(dynamic_model, value_chooser);
         self.train_model.take().unwrap()
-    }
-}
-
-impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> Iterator for QueryGenerator<DynMod, StC, QVC> {
-    type Item = Query;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        Some(self.generate())
     }
 }

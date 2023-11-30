@@ -1,10 +1,8 @@
-use std::{collections::{HashMap, BinaryHeap}, path::Path, cmp::Ordering, io};
+use std::{collections::{HashMap, BinaryHeap}, path::Path, cmp::Ordering};
 
 use regex::Regex;
 use core::fmt::Debug;
 use smol_str::SmolStr;
-
-use crate::training::markov_weights::MarkovWeights;
 
 use super::{
     dot_parser, dot_parser::{DotTokenizer, FunctionInputsType, CodeUnit, NodeCommon, FunctionDeclaration, TypeWithFields}, error::SyntaxError, subgraph_type::SubgraphType,
@@ -14,7 +12,6 @@ use super::{
 #[derive(Clone, Debug)]
 pub struct MarkovChain {
     pub functions: HashMap<SmolStr, Function>,
-    weights: MarkovWeights,
 }
 
 /// this structure represents a single node with all of
@@ -228,32 +225,7 @@ impl MarkovChain {
         ) = MarkovChain::parse_functions_and_params(&source)?;
         MarkovChain::perform_type_checks(&functions, &node_params)?;
         MarkovChain::fill_paths_to_exit_with_call_nums(&mut functions, &node_params);
-        let mut _self = MarkovChain {
-            weights: MarkovWeights::new(&functions), functions
-        };
-        _self.apply_weights();
-        Ok(_self)
-    }
-
-    /// Load weights from file
-    pub fn load_weights(&mut self, weights_path: &str) -> io::Result<()> {
-        self.weights = MarkovWeights::load(weights_path)?;
-        self.apply_weights();
-        Ok(())
-    }
-
-    /// Apply the current MarkovWeights to the graph
-    fn apply_weights(&mut self) {
-        for (func_name, function) in self.functions.iter_mut() {
-            for (from, out) in function.chain.iter_mut() {
-                for (weight, to) in out {
-                    *weight = *self.weights.weights
-                        .get(func_name).unwrap()
-                        .get(from).unwrap()
-                        .get(&to.node_common.name).unwrap();
-                }
-            }
-        }
+        Ok(MarkovChain { functions })
     }
 
     /// manually removes all the [color=none] edges. Works breaking the lexer paradigm because of a bug.

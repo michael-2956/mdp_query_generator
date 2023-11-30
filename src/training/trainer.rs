@@ -7,13 +7,14 @@ use crate::{config::{TomlReadable, Config, MainConfig}, query_creation::{state_g
 use super::{ast_to_path::{ConvertionError, PathGenerator}, models::PathwayGraphModel};
 
 pub struct SQLTrainer {
-    _config: TrainingConfig,
+    pub config: TrainingConfig,
     main_config: MainConfig,
     dataset_queries: Vec<Box<Query>>,
     path_generator: PathGenerator,
     path_query_generator: QueryGenerator<PathModel, MaxProbStateChooser, DeterministicValueChooser>,
 }
 
+#[derive(Debug, Clone)]
 pub struct TrainingConfig {
     pub training_db_path: PathBuf,
     pub training_schema: PathBuf,
@@ -32,7 +33,7 @@ impl TomlReadable for TrainingConfig {
 }
 
 impl SQLTrainer {
-    pub fn with_config(config: Config) -> Result<Self, SyntaxError> {
+    pub fn with_config(config: &Config) -> Result<Self, SyntaxError> {
         let dataset = std::fs::read_to_string(config.training_config.training_db_path.clone()).unwrap();
         Ok(SQLTrainer {
             dataset_queries: Parser::parse_sql(&PostgreSqlDialect {}, &dataset).unwrap().into_iter()
@@ -46,10 +47,10 @@ impl SQLTrainer {
             )?,
             path_query_generator: QueryGenerator::from_state_generator_and_schema(
                 MarkovChainGenerator::with_config(&config.chain_config).unwrap(),
-                config.generator_config,
+                config.generator_config.clone(),
             ),
-            _config: config.training_config,
-            main_config: config.main_config,
+            config: config.training_config.clone(),
+            main_config: config.main_config.clone(),
         })
     }
 
