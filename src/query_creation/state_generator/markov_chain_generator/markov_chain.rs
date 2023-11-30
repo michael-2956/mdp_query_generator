@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, BinaryHeap}, path::Path, cmp::Ordering, arch::x86_64::_SIDD_SWORD_OPS, io};
+use std::{collections::{HashMap, BinaryHeap}, path::Path, cmp::Ordering, io};
 
 use regex::Regex;
 use core::fmt::Debug;
