@@ -1,6 +1,6 @@
 [main]
 # Running mode. Either "test_ast_to_path", "generate", "train"
-mode="generate"
+mode="train"
 # number of queries to generate
 num_generate=20
 # count the 2vl-3vl equivalent queries
@@ -19,7 +19,7 @@ print_progress=true
 # which model to use. Can be: "subgraph"
 model_name="subgraph"
 # whether to use pretrained model weights
-load_weights=true
+load_weights=false
 # where to load the weights from
 load_weights_from="weights/subgraph/untrained_db_2_performance_graph_100K.mw"
 
