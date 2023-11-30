@@ -21,7 +21,7 @@ model_name="subgraph"
 # whether to use pretrained model weights
 load_weights=false
 # where to load the weights from
-load_weights_from="weights/subgraph/untrained_db_2_performance_graph_debug.mw"
+load_weights_from="weights/subgraph/untrained_db_2_performance_graph_100K.mw"
 
 [ast_to_path_testing]
 # schema for the testing queries generation
@@ -32,11 +32,11 @@ n_tests=10000
 [training]
 # path to a file with all the training queries separated by ";\n"
 # training_db_path="training_dbs/untrained_db.sql"
-training_db_path="training_dbs/untrained_db_2_performance_graph_debug.sql"
+training_db_path="training_dbs/untrained_db_2_performance_graph_100K.sql"
 # schema of the training queries
 training_schema="schema/tpc-h_tables.sql"
 # where to save model weights to
-save_weights_to="weights/subgraph/untrained_db_2_performance_graph_debug.mw"
+save_weights_to="weights/subgraph/untrained_db_2_performance_graph_100K.mw"
 
 [query_generator]
 # Whether to use the predictor model for query generation
