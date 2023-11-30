@@ -126,6 +126,9 @@ pub trait PathwayGraphModel {
 
     /// read weights from file
     fn read_from_file(&mut self, file_path: &str) -> io::Result<()>;
+
+    /// print weights
+    fn print_weights(&self) { todo!() }
 }
 
 #[derive(Debug)]
@@ -188,8 +191,6 @@ impl PathwayGraphModel for SubgraphMarkovModel {
     fn update_weights(&mut self) {
         self.weights_ready = true;
         self.weights.normalize();
-        self.weights.print_outgoing_weights(&SmolStr::new("Query"), &SmolStr::new("call0_FROM"));
-        println!("{:?}", 3);
     }
 
     fn write_to_file(&self, file_path: &str) -> io::Result<()> {
@@ -199,5 +200,9 @@ impl PathwayGraphModel for SubgraphMarkovModel {
     fn read_from_file(&mut self, file_path: &str) -> io::Result<()> {
         self.weights = MarkovWeights::read_from_file(file_path)?;
         Ok(())
+    }
+
+    fn print_weights(&self) {
+        self.weights.print();
     }
 }

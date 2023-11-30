@@ -91,6 +91,7 @@ fn run_training(config: Config) {
             return;
         },
     }
+    model.print_weights();
 }
 
 fn test_ast_to_path(config: Config) {

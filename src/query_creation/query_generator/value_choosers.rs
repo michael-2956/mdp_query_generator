@@ -20,16 +20,22 @@ pub trait QueryValueChooser {
     fn choose_numeric(&mut self) -> String;
 
     fn choose_qualified_wildcard_relation<'a>(&mut self, from_contents: &'a FromContents, wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation);
+
+    fn choose_select_alias(&mut self) -> Ident;
+
+    fn reset(&mut self);
 }
 
 pub struct RandomValueChooser {
     rng: ChaCha8Rng,
+    free_projection_alias_index: u32,
 }
 
 impl QueryValueChooser for RandomValueChooser {
     fn new() -> Self {
         Self {
             rng: ChaCha8Rng::seed_from_u64(1),
+            free_projection_alias_index: 0,
         }
     }
 
@@ -58,12 +64,23 @@ impl QueryValueChooser for RandomValueChooser {
         let relation = from_contents.get_relation_by_name(alias);
         (alias.clone(), relation)
     }
+
+    fn choose_select_alias(&mut self) -> Ident {
+        let name = format!("C{}", self.free_projection_alias_index);
+        self.free_projection_alias_index += 1;
+        Ident { value: name.clone(), quote_style: None }
+    }
+
+    fn reset(&mut self) {
+        self.free_projection_alias_index = 0;
+    }
 }
 
 pub struct DeterministicValueChooser {
     chosen_integers: (Vec<String>, usize),
     chosen_numerics: (Vec<String>, usize),
     chosen_tables: (Vec<ObjectName>, usize),
+    chosen_select_aliases: (Vec<Ident>, usize),
     chosen_columns_from: (Vec<Vec<Ident>>, usize),
     chosen_columns_group_by: (Vec<Vec<Ident>>, usize),
     chosen_qualified_wildcard_tables: (Vec<Ident>, usize),
@@ -80,6 +97,9 @@ impl DeterministicValueChooser {
             ).cloned().collect(), 0),
             chosen_tables: (path.iter().filter_map(
                 |x| if let PathNode::SelectedTableName(name) = x { Some(name) } else { None }
+            ).cloned().collect(), 0),
+            chosen_select_aliases: (path.iter().filter_map(
+                |x| if let PathNode::SelectAlias(value) = x { Some(value) } else { None }
             ).cloned().collect(), 0),
             chosen_columns_from: (path.iter().filter_map(
                 |x| if let PathNode::SelectedColumnNameFROM(ident_components) = x { Some(ident_components) } else { None }
@@ -100,6 +120,7 @@ impl QueryValueChooser for DeterministicValueChooser {
             chosen_integers: (vec![], 0),
             chosen_numerics: (vec![], 0),
             chosen_tables: (vec![], 0),
+            chosen_select_aliases: (vec![], 0),
             chosen_columns_from: (vec![], 0),
             chosen_columns_group_by: (vec![], 0),
             chosen_qualified_wildcard_tables: (vec![], 0),
@@ -155,5 +176,21 @@ impl QueryValueChooser for DeterministicValueChooser {
         self.chosen_qualified_wildcard_tables.1 += 1;
         let relation = from_contents.get_relation_by_name(alias);
         (alias.clone(), relation)
+    }
+
+    fn choose_select_alias(&mut self) -> Ident {
+        let value = &self.chosen_select_aliases.0[self.chosen_select_aliases.1];
+        self.chosen_select_aliases.1 += 1;
+        value.clone()
+    }
+
+    fn reset(&mut self) {
+        self.chosen_integers.1 = 0;
+        self.chosen_numerics.1 = 0;
+        self.chosen_tables.1 = 0;
+        self.chosen_select_aliases.1 = 0;
+        self.chosen_columns_from.1 = 0;
+        self.chosen_columns_group_by.1 = 0;
+        self.chosen_qualified_wildcard_tables.1 = 0;
     }
 }

@@ -109,4 +109,27 @@ impl MarkovWeights {
             println!("{to} -> {weight}");
         }
     }
+
+    pub fn print_function_weights(&self, func_name: &SmolStr) {
+        for (from, out) in self.weights
+            .get(func_name).unwrap()
+        {
+            println!("{from}: ");
+            for (to, weight) in out {
+                println!("    {weight} -> {to}");
+            }
+        }
+    }
+
+    pub fn print(&self) {
+        for (func_name, chain) in self.weights.iter() {
+            println!("\n=====================================================\n{func_name}: ");
+            for (from, out) in chain {
+                println!("    {from}: ");
+                for (to, weight) in out {
+                    println!("        {weight} -> {to}");
+                }
+            }
+        }
+    }
 }

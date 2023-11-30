@@ -105,6 +105,7 @@ pub enum PathNode {
     NumericValue(String),
     IntegerValue(String),
     QualifiedWildcardSelectedRelation(Ident),
+    SelectAlias(Ident),
 }
 
 pub struct PathGenerator {
@@ -139,7 +140,6 @@ impl PathGenerator {
 
     pub fn get_query_path(&mut self, query: &Box<Query>) -> Result<Vec<PathNode>, ConvertionError> {
         self.process_query(query)?;
-        /// TODO: add aliases to PathNode
         Ok(std::mem::replace(&mut self.current_path, vec![]))
     }
 
@@ -358,10 +358,9 @@ impl PathGenerator {
                 },
                 SelectItem::ExprWithAlias { expr, alias } => {
                     self.try_push_states(&["SELECT_expr_with_alias", "call54_types"])?;
-                    column_idents_and_graph_types.push((
-                        Some(alias.clone()),
-                        self.handle_types(expr, None, None)?
-                    ));
+                    let expr = self.handle_types(expr, None, None)?;
+                    self.push_node(PathNode::SelectAlias(alias.clone()));  // the order is important
+                    column_idents_and_graph_types.push((Some(alias.clone()), expr));
                 },
                 SelectItem::QualifiedWildcard(alias, ..) => {
                     self.try_push_states(&["SELECT_tables_eligible_for_wildcard", "SELECT_qualified_wildcard"])?;

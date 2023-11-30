@@ -54,7 +54,6 @@ pub struct QueryGenerator<DynMod: DynamicModel, StC: StateChooser, QVC: QueryVal
     database_schema: DatabaseSchema,
     clause_context: ClauseContext,
     train_model: Option<Box<dyn PathwayGraphModel>>,
-    free_projection_alias_index: u32,
     rng: ChaCha8Rng,
 }
 
@@ -81,7 +80,6 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             config,
             clause_context: ClauseContext::new(),
             train_model: None,
-            free_projection_alias_index: 0,
             rng: ChaCha8Rng::seed_from_u64(1),
         };
 
@@ -125,12 +123,6 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             self.state_generator.print_stack();
             panic!("Incompatible types: expected compatible with {:?}, got {:?}", compat_with, target);
         }
-    }
-
-    fn gen_select_alias(&mut self) -> Ident {
-        let name = format!("C{}", self.free_projection_alias_index);
-        self.free_projection_alias_index += 1;
-        Ident { value: name.clone(), quote_style: None }
     }
 
     /// subgraph def_Query
@@ -310,9 +302,9 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                             (alias, SelectItem::UnnamedExpr(expr))
                         },
                         "SELECT_expr_with_alias" => {
-                            let select_alias = self.gen_select_alias();
+                            let select_alias = self.value_chooser.choose_select_alias();
                             (Some(select_alias.clone()), SelectItem::ExprWithAlias {
-                                expr, alias: select_alias.clone(),
+                                expr, alias: select_alias,
                             })
                         },
                         any => self.panic_unexpected(any)
@@ -899,7 +891,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         if self.config.print_queries {
             println!("\n{};\n", query);
         }
-        self.free_projection_alias_index = 1;
+        self.value_chooser.reset();
         // reset the generator
         if let Some(state) = self.next_state_opt() {
             panic!("Couldn't reset state_generator: Received {state}");
