@@ -9,7 +9,7 @@ use equivalence_testing::{query_creation::{
     },
 }, equivalence_testing_function::{
     check_query, string_to_query
-}, config::{Config, ProgramArgs, MainConfig}, training::{ast_to_path::TestAST2Path, trainer::{SQLTrainer, SubgraphMarkovModel}}};
+}, config::{Config, ProgramArgs, MainConfig}, training::{ast_to_path::TestAST2Path, trainer::SQLTrainer, models::SubgraphMarkovModel}};
 
 use structopt::StructOpt;
 
@@ -86,7 +86,7 @@ fn run_training(config: Config) {
             return;
         },
     };
-    match model.write_to_file("weights/untrained_db.mw") {
+    match model.write_weights("weights/untrained_db.mw") {
         Ok(_) => {},
         Err(err) => {
             println!("Failed writing model!\n{}", err);

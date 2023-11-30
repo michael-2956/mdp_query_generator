@@ -15,7 +15,7 @@ use sqlparser::ast::{
     TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, SelectItem, WildcardAdditionalOptions, DataType, ObjectName,
 };
 
-use crate::{config::TomlReadable, training::trainer::PathwayGraphModel};
+use crate::{config::TomlReadable, training::models::PathwayGraphModel};
 
 use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generator::{CallTypes, markov_chain_generator::subgraph_type::SubgraphType}};
 use self::{query_info::{DatabaseSchema, ClauseContext}, aggregate_function_settings::AggregateFunctionDistribution, expr_precedence::ExpressionPriority, call_modifiers::{TypesTypeValue, ValueSetterValue, WildcardRelationsValue}, value_choosers::QueryValueChooser};
