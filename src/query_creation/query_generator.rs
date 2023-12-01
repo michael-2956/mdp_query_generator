@@ -818,7 +818,8 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         if let Some(generators) = check_generated_by_one_of {
             if !generators.iter().any(|as_what| selected_type.is_same_or_more_determined_or_undetermined(&as_what)) {
                 self.state_generator.print_stack();
-                panic!("Unexpected type: expected one of {:?}, got {:?}", generators, selected_type);
+                // panic!("Unexpected type: expected one of {:?}, got {:?}", generators, selected_type);
+                panic!("Unexpected type: expected one of {:?}, got {:?}, {:?}", generators, selected_type, types_value);
             }
         }
         if let Some(with) = check_compatible_with {
@@ -930,9 +931,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             }
             any => self.panic_unexpected(any),  
         }
-        // self.expect_state("aggregate_select_return_type");
         let result;
-        let mut column_idents_and_graph_types : Vec<(Option<ObjectName>, SubgraphType)> = vec![];
         let chosen_return_type : SubgraphType;
         match self.next_state().as_str() {
             "aggregate_select_type_numeric" => {
@@ -1111,7 +1110,8 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                             ).1);
                         },
                         "EXIT_group_by" => {
-                            result = vec![Expr::Tuple(list)];
+                            // result = vec![Expr::Tuple(list)];
+                            result = vec![Expr::Nested(list.clone().into_iter().nth(0).map(|v| Box::new(v)).unwrap_or_else(|| panic!("empty grouping list")))];
                             return result;
                         },
                         any => self.panic_unexpected(any),
@@ -1138,6 +1138,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                             ).1);
                         },
                         "EXIT_group_by" => {
+                            arg.push(current_set);
                             result = match arm {
                                 "grouping_set" => vec![Expr::GroupingSets(arg)],
                                 "grouping_rollup" => vec![Expr::Rollup(arg)],

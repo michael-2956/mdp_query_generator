@@ -213,7 +213,7 @@ digraph G {
 
         limit_num [label="limit [num]\nmod: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
         LIMIT -> limit_num
-        call52_types [TYPES="[integer, numeric]", MODS="[no column spec]", label="TYPES: [integer, numeric]\nMODS: [no column spec]", shape=rectangle, style=filled, color=lightblue]
+        call52_types [TYPES="[integer, numeric]", MODS="[no column spec, no function]", label="TYPES: [integer, numeric]\nMODS: [no column spec]", shape=rectangle, style=filled, color=lightblue]
         limit_num -> call52_types
         call52_types -> EXIT_LIMIT
     }
@@ -710,10 +710,15 @@ digraph G {
         aggregate_distinct -> aggregate_select_return_type
         
         aggregate_function -> aggregate_select_return_type
+        
         aggregate_select_type_numeric[OPTIONAL="numeric", label="numeric?"]
         // aggregate_select_type_array[OPTIONAL="array", label="array?"]
         aggregate_select_type_string[OPTIONAL="text", label="text?"]
         aggregate_select_type_bool[OPTIONAL="3VL Value", label="3VL Value?"]
+        
+        // aggregate_select_type_numeric[OPTIONAL="numeric", label="numeric?", set_value="types_type"]
+        // aggregate_select_type_string[OPTIONAL="text", label="text?", set_value="types_type"]
+        // aggregate_select_type_bool[OPTIONAL="3VL Value", label="3VL Value?", set_value="types_type"]
 
         aggregate_select_return_type -> aggregate_select_type_numeric
         // aggregate_select_return_type -> aggregate_select_type_array
