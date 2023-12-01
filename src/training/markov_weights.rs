@@ -139,4 +139,20 @@ impl MarkovWeights {
             }
         }
     }
+
+    pub fn write_to_dot(&self, dot_file_path: &PathBuf) -> io::Result<()> {
+        let mut file = File::create(dot_file_path)?;
+        writeln!(file, "digraph G {{")?;
+        for (func_name, chain) in self.weights.iter() {
+            writeln!(file, "    subgraph {func_name} {{")?;
+            for (from, out) in chain {
+                for (to, weight) in out {
+                    writeln!(file, "        {from} -> {to} [label=\"  {weight:.4}\"]")?;
+                }
+            }
+            writeln!(file, "    }}")?;
+        }
+        writeln!(file, "}}")?;
+        Ok(())
+    }
 }

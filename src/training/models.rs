@@ -13,6 +13,9 @@ pub struct ModelConfig {
     pub load_weights: bool,
     // where to load the weights from
     pub load_weights_from: PathBuf,
+    // where to save a dot file with graph representation.
+    // type save_dot_file=false in config to turn off
+    pub save_dot_file: Option<PathBuf>,
 }
 
 impl TomlReadable for ModelConfig {
@@ -22,6 +25,10 @@ impl TomlReadable for ModelConfig {
             model_name: section["model_name"].as_str().unwrap().to_string(),
             load_weights: section["load_weights"].as_bool().unwrap(),
             load_weights_from: PathBuf::from_str(section["load_weights_from"].as_str().unwrap()).unwrap(),
+            save_dot_file: section["save_dot_file"].as_bool().map_or_else(
+                || Some(PathBuf::from_str(section["save_dot_file"].as_str().unwrap()).unwrap()),
+                |x| if !x { None } else { panic!("save_dot_file can't be 'true'") },
+            )
         }
     }
 }
@@ -31,7 +38,12 @@ impl ModelConfig {
         if self.model_name == "subgraph" {
             let mut model = Box::new(SubgraphMarkovModel::new(chain_functions));
             if self.load_weights {
+                println!("Loading weights from {}...", self.load_weights_from.display());
                 model.load_weights(&self.load_weights_from)?;
+            }
+            if let Some(ref dot_file_path) = self.save_dot_file {
+                println!("Saving .dot file to {}...", dot_file_path.display());
+                model.write_weights_to_dot(dot_file_path)?;
             }
             Ok(model)
         } else {
@@ -92,6 +104,8 @@ pub trait PathwayGraphModel {
 
     /// end the inference process
     fn end_inference(&mut self) { }
+
+    fn write_weights_to_dot(&self, _dot_file_path: &PathBuf) -> io::Result<()> { todo!() }
 }
 
 #[derive(Debug)]
@@ -187,9 +201,14 @@ impl PathwayGraphModel for SubgraphMarkovModel {
             // If the weights happpen to sum up to 0 or are NaN, the model is undertrained.
             // Basically, we're in a place we've never been to during training.
             // We then set weights uniformly.
+            eprintln!("The model was not trained in this context:\ncurrent_node = {current_node}\noutput = {:?}", output);
             let fill_with = 1f64 / (output.len() as f64);
             for (w, _) in output.iter_mut() { *w = fill_with; }
         }
         output
+    }
+
+    fn write_weights_to_dot(&self, dot_file_path: &PathBuf) -> io::Result<()> {
+        self.weights.write_to_dot(dot_file_path)
     }
 }

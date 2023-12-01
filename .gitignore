@@ -1,4 +1,5 @@
 *generated_queries.sql
+weights_in_dot/
 weights/
 training_dbs/untrained_db_2_performance_graph_100K.sql
 .vscode
