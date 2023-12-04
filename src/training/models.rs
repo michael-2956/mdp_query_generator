@@ -1,10 +1,10 @@
-use std::{io, collections::HashMap, path::PathBuf, str::FromStr};
+use std::{io, path::PathBuf, str::FromStr, collections::HashMap};
 
 use smol_str::SmolStr;
 
-use crate::{query_creation::state_generator::markov_chain_generator::{StackFrame, markov_chain::{Function, NodeParams}}, config::TomlReadable};
+use crate::{query_creation::state_generator::markov_chain_generator::{StackFrame, markov_chain::NodeParams}, config::TomlReadable};
 
-use super::{ast_to_path::PathNode, markov_weights::MarkovWeights};
+use super::{ast_to_path::PathNode, markov_weights::{MarkovWeights, DotDisplayable}};
 
 pub struct ModelConfig {
     // Which model to use. Can be: "subgraph"
@@ -34,9 +34,9 @@ impl TomlReadable for ModelConfig {
 }
 
 impl ModelConfig {
-    pub fn create_model(&self, chain_functions: &HashMap<SmolStr, Function>) -> io::Result<Box<dyn PathwayGraphModel>> {
+    pub fn create_model(&self) -> io::Result<Box<dyn PathwayGraphModel>> {
         if self.model_name == "subgraph" {
-            let mut model = Box::new(SubgraphMarkovModel::new(chain_functions));
+            let mut model = Box::new(SubgraphMarkovModel::new());
             if self.load_weights {
                 println!("Loading weights from {}...", self.load_weights_from.display());
                 model.load_weights(&self.load_weights_from)?;
@@ -110,16 +110,16 @@ pub trait PathwayGraphModel {
 
 #[derive(Debug)]
 pub struct SubgraphMarkovModel {
-    weights: MarkovWeights,
+    weights: MarkovWeights<HashMap<SmolStr, HashMap<SmolStr, HashMap<SmolStr, f64>>>>,
     weights_ready: bool,
     last_state_stack: Vec<SmolStr>,
 }
 
 impl SubgraphMarkovModel {
     /// create model from with the given graph structure
-    pub fn new(chain_functions: &HashMap<SmolStr, Function>) -> Self {
+    pub fn new() -> Self {
         Self {
-            weights: MarkovWeights::new(chain_functions),
+            weights: MarkovWeights::new(),
             weights_ready: false,
             last_state_stack: vec![],
         }
@@ -151,7 +151,7 @@ impl PathwayGraphModel for SubgraphMarkovModel {
                 let current_state = stack_frame.function_context.current_node.node_common.name.clone();
                 // println!("NODE {current_state}");
                 let func_name = &stack_frame.function_context.call_params.func_name;
-                self.weights.add_edge(func_name, last_state, &current_state);
+                self.weights.insert_edge(func_name, last_state, &current_state);
                 // println!("EDGE {last_state} -> {current_state}");
                 *last_state = current_state;
             } else {

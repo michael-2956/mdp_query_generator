@@ -18,9 +18,7 @@ fn run_generation<DynMod: DynamicModel, StC: StateChooser>(
     ) {
 
     let mut predictor_model = if config.generator_config.use_model {
-        Some(config.model_config.create_model(
-            &markov_generator.markov_chain_ref().functions
-        ).expect("Error creating model for inference"))
+        Some(config.model_config.create_model().expect("Error creating model for inference"))
     } else { None };
 
     let print_queries = config.generator_config.print_queries;
@@ -88,9 +86,7 @@ fn select_model_and_run_generation<StC: StateChooser>(config: Config) {
 
 fn run_training(config: Config) {
     let mut sql_trainer = SQLTrainer::with_config(&config).expect("Could not create trainer!");
-    let model = config.model_config.create_model(
-        &sql_trainer.markov_chain_ref().functions
-    ).expect("Coudn't create model!");
+    let model = config.model_config.create_model().expect("Coudn't create model!");
     let model = sql_trainer.train(model).expect("Training error!");
     model.write_weights(&sql_trainer.config.save_weights_to).expect("Failed writing model!");
     model.print_weights();

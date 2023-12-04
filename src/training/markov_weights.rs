@@ -1,3 +1,4 @@
+use std::fmt::{Debug, Display};
 use std::fs::File;
 use std::collections::HashMap;
 use std::io::{self, Write, Read};
@@ -6,38 +7,49 @@ use std::path::PathBuf;
 use smol_str::SmolStr;
 use serde::{Deserialize, Serialize};
 
-use crate::query_creation::state_generator::markov_chain_generator::markov_chain::Function;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MarkovWeights {
-    /// function name -> from -> [(to, weight), ...]
-    pub weights: HashMap<SmolStr, HashMap<SmolStr, HashMap<SmolStr, f64>>>,
+pub struct MarkovWeights<WeightsType> {
+    /// function name [+ params] -> from -> [(to, weight), ...]
+    pub weights: WeightsType,
 }
 
-impl MarkovWeights {
-    pub fn new(chain_functions: &HashMap<SmolStr, Function>) -> Self {
-        let mut _self = Self {
-            weights: HashMap::new(),
-        };
-        _self.initialize_keys(chain_functions);
-        _self
-    }
+pub trait DotDisplayable {
+    type FuncType: Display;
 
-    /// initialize all of tha map keys using the
-    /// parsed MarkovChain class
-    fn initialize_keys(&mut self, chain_functions: &HashMap<SmolStr, Function>) {
-        for (func_name, function) in chain_functions.iter() {
-            let func_weights = self.weights
-                .entry(func_name.clone())
-                .or_insert(HashMap::new());
-            for (from_node_name, to_vec) in function.chain.iter() {
-                let w_outgoing = func_weights
-                    .entry(from_node_name.clone())
-                    .or_insert(HashMap::new());
-                for (_, to_node) in to_vec.iter() {
-                    w_outgoing.insert(to_node.node_common.name.clone(), 0f64);
+    fn get_weights_ref(&self) -> &HashMap<Self::FuncType, HashMap<SmolStr, HashMap<SmolStr, f64>>>;
+
+    fn write_to_dot(&self, dot_file_path: &PathBuf) -> io::Result<()> {
+        let mut file = File::create(dot_file_path)?;
+        writeln!(file, "digraph G {{")?;
+        for (func_name, chain) in self.get_weights_ref().iter() {
+            writeln!(file, "    subgraph {func_name} {{")?;
+            for (from, out) in chain {
+                for (to, weight) in out {
+                    writeln!(file, "        {from} -> {to} [label=\"  {weight:.4}\"]")?;
                 }
             }
+            writeln!(file, "    }}")?;
+        }
+        writeln!(file, "}}")?;
+        Ok(())
+    }
+}
+
+impl DotDisplayable for MarkovWeights<HashMap<SmolStr, HashMap<SmolStr, HashMap<SmolStr, f64>>>> {
+    type FuncType=SmolStr;
+
+    fn get_weights_ref(&self) -> &HashMap<Self::FuncType, HashMap<SmolStr, HashMap<SmolStr, f64>>> {
+        todo!()
+    }
+}
+
+impl<FuncType> MarkovWeights<HashMap<FuncType, HashMap<SmolStr, HashMap<SmolStr, f64>>>>
+where
+    FuncType: Debug + Eq + std::hash::Hash + Clone + Serialize + for<'a> Deserialize<'a>
+{
+    pub fn new() -> Self {
+        Self {
+            weights: HashMap::new(),
         }
     }
 
@@ -78,15 +90,15 @@ impl MarkovWeights {
     }
 
     /// adds 1 to the specified edge
-    pub fn add_edge(&mut self, func_name: &SmolStr, from: &SmolStr, to: &SmolStr) {
+    pub fn insert_edge(&mut self, func_name: &FuncType, from: &SmolStr, to: &SmolStr) {
         let assign_to = self.weights
-            .get_mut(func_name).unwrap_or_else(|| panic!("Error obtaining weights: subgraph {func_name} not found."))
-            .get_mut(from).unwrap_or_else(|| panic!("Error obtaining weights: node {from} in subgraph {func_name} not found."))
-            .get_mut(to).unwrap_or_else(|| panic!("Error obtaining weights: node {to} is not outgoing from node {from} in subgraph {func_name}."));
+            .entry(func_name.clone()).or_insert(HashMap::new())
+            .get_mut(from).unwrap_or_else(|| panic!("Error obtaining weights: node {from} in subgraph {:?} not found.", func_name))
+            .get_mut(to).unwrap_or_else(|| panic!("Error obtaining weights: node {to} is not outgoing from node {from} in subgraph {:?}.", func_name));
         *assign_to += 1f64;
     }
 
-    pub fn get_outgoing_weights(&self, func_name: &SmolStr, from: &SmolStr) -> &HashMap<SmolStr, f64> {
+    pub fn get_outgoing_weights(&self, func_name: &FuncType, from: &SmolStr) -> &HashMap<SmolStr, f64> {
         self.weights
             .get(func_name).unwrap()
             .get(from).unwrap()
@@ -103,11 +115,11 @@ impl MarkovWeights {
         let mut file = File::open(file_path)?;
         let mut encoded = Vec::new();
         file.read_to_end(&mut encoded)?;
-        let decoded: MarkovWeights = bincode::deserialize(&encoded[..]).unwrap();
+        let decoded: MarkovWeights<HashMap<FuncType, HashMap<SmolStr, HashMap<SmolStr, f64>>>> = bincode::deserialize(&encoded[..]).unwrap();
         Ok(decoded)
     }
 
-    pub fn print_outgoing_weights(&self, func_name: &SmolStr, from: &SmolStr) {
+    pub fn print_outgoing_weights(&self, func_name: &FuncType, from: &SmolStr) {
         for (to, weight) in self.weights
             .get(func_name).unwrap()
             .get(from).unwrap()
@@ -117,7 +129,7 @@ impl MarkovWeights {
         }
     }
 
-    pub fn print_function_weights(&self, func_name: &SmolStr) {
+    pub fn print_function_weights(&self, func_name: &FuncType) {
         for (from, out) in self.weights
             .get(func_name).unwrap()
         {
@@ -130,7 +142,7 @@ impl MarkovWeights {
 
     pub fn print(&self) {
         for (func_name, chain) in self.weights.iter() {
-            println!("\n=====================================================\n{func_name}: ");
+            println!("\n=====================================================\n{:?}: ", func_name);
             for (from, out) in chain {
                 println!("    {from}: ");
                 for (to, weight) in out {
@@ -138,21 +150,5 @@ impl MarkovWeights {
                 }
             }
         }
-    }
-
-    pub fn write_to_dot(&self, dot_file_path: &PathBuf) -> io::Result<()> {
-        let mut file = File::create(dot_file_path)?;
-        writeln!(file, "digraph G {{")?;
-        for (func_name, chain) in self.weights.iter() {
-            writeln!(file, "    subgraph {func_name} {{")?;
-            for (from, out) in chain {
-                for (to, weight) in out {
-                    writeln!(file, "        {from} -> {to} [label=\"  {weight:.4}\"]")?;
-                }
-            }
-            writeln!(file, "    }}")?;
-        }
-        writeln!(file, "}}")?;
-        Ok(())
     }
 }
