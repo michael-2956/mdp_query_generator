@@ -3,7 +3,7 @@ use std::{io, path::PathBuf, str::FromStr, collections::HashMap, fmt::Display};
 use serde::{Serialize, Deserialize};
 use smol_str::SmolStr;
 
-use crate::{query_creation::state_generator::markov_chain_generator::{StackFrame, markov_chain::NodeParams, FunctionContext}, config::TomlReadable};
+use crate::{query_creation::state_generator::markov_chain_generator::{StackFrame, markov_chain::NodeParams}, config::TomlReadable};
 
 use super::{ast_to_path::PathNode, markov_weights::MarkovWeights};
 
@@ -74,6 +74,8 @@ pub trait PathwayGraphModel {
     fn start_episode(&mut self, _path: &Vec<PathNode>) { }
 
     /// feed the new state and context (in the form of current call stack and current path) to the model
+    /// popped_stack_frame is the last stack frame popped. It can be used after an exit node
+    /// is emitted, as the call_stack will miss it.
     fn process_state(&mut self, call_stack: &Vec<StackFrame>, popped_stack_frame: Option<&StackFrame>);
 
     /// end the training episode and accumulate the update/gradient
@@ -120,7 +122,8 @@ pub trait ModelWithMarkovWeights {
 
     fn get_last_state_stack_mut_ref(&mut self) -> &mut Vec<SmolStr>;
 
-    fn get_function_name<'a>(&self, function_context: &'a FunctionContext) -> &'a Self::FuncType;
+    /// the exit_stack_frame_opt is Some only after an exit node was emitted,
+    fn get_function_name<'a>(&self, call_stack: &'a Vec<StackFrame>, exit_stack_frame_opt: Option<&StackFrame>) -> &'a Self::FuncType;
 }
 
 impl<T> PathwayGraphModel for T
@@ -152,7 +155,8 @@ where
             } else {
                 panic!("No last state available, but received call stack: {:?}", call_stack)
             };
-            let func_name = self.get_function_name(&stack_frame.function_context);
+            // let (a, b) = (call_stack, if is_exit_node { Some(stack_frame) } else { None });
+            let func_name = self.get_function_name(call_stack, if is_exit_node { Some(stack_frame) } else { None });
             self.get_weights_mut_ref().insert_edge(func_name, &last_state, &current_state);
             if is_exit_node {
                 self.get_last_state_stack_mut_ref().pop();
@@ -182,7 +186,7 @@ where
 
     fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>) -> Vec<(f64, NodeParams)> {
         let context = &call_stack.last().unwrap().function_context;
-        let func_name = self.get_function_name(&context);
+        let func_name = self.get_function_name(call_stack, None);
         let current_node = &context.current_node.node_common.name;
         let outgoing_weights = self.get_weights_mut_ref().get_outgoing_weights(func_name, current_node);
         // obtain weights
@@ -235,8 +239,8 @@ impl ModelWithMarkovWeights for SubgraphMarkovModel {
         &mut self.last_state_stack
     }
 
-    fn get_function_name<'a>(&self, function_context: &'a FunctionContext) -> &'a Self::FuncType {
-        &function_context.call_params.func_name
+    fn get_function_name<'a>(&self, call_stack: &'a Vec<StackFrame>, _exit_stack_frame_opt: Option<&StackFrame>) -> &'a Self::FuncType {
+        &call_stack.last().unwrap().function_context.call_params.func_name
     }
 }
 
