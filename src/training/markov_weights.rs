@@ -13,66 +13,13 @@ pub struct MarkovWeights<WeightsType> {
     pub weights: WeightsType,
 }
 
-pub trait DotDisplayable {
-    type FuncType: Display;
-
-    fn get_weights_ref(&self) -> &HashMap<Self::FuncType, HashMap<SmolStr, HashMap<SmolStr, f64>>>;
-
-    fn write_to_dot(&self, dot_file_path: &PathBuf) -> io::Result<()> {
-        let mut file = File::create(dot_file_path)?;
-        writeln!(file, "digraph G {{")?;
-        for (func_name, chain) in self.get_weights_ref().iter() {
-            writeln!(file, "    subgraph {func_name} {{")?;
-            for (from, out) in chain {
-                for (to, weight) in out {
-                    writeln!(file, "        {from} -> {to} [label=\"  {weight:.4}\"]")?;
-                }
-            }
-            writeln!(file, "    }}")?;
-        }
-        writeln!(file, "}}")?;
-        Ok(())
-    }
-}
-
-impl DotDisplayable for MarkovWeights<HashMap<SmolStr, HashMap<SmolStr, HashMap<SmolStr, f64>>>> {
-    type FuncType=SmolStr;
-
-    fn get_weights_ref(&self) -> &HashMap<Self::FuncType, HashMap<SmolStr, HashMap<SmolStr, f64>>> {
-        todo!()
-    }
-}
-
 impl<FuncType> MarkovWeights<HashMap<FuncType, HashMap<SmolStr, HashMap<SmolStr, f64>>>>
 where
-    FuncType: Debug + Eq + std::hash::Hash + Clone + Serialize + for<'a> Deserialize<'a>
+    FuncType: Debug + Eq + std::hash::Hash + Clone + Serialize + for<'a> Deserialize<'a> + Display
 {
     pub fn new() -> Self {
         Self {
             weights: HashMap::new(),
-        }
-    }
-
-    /// Fills all the weights with zeroes (useful before accumilation)
-    pub fn fill_probs_zero(&mut self) {
-        for (_, chain) in self.weights.iter_mut() {
-            for (_, out) in chain {
-                for (_, weight) in out {
-                    *weight = 0f64;
-                }
-            }
-        }
-    }
-
-    /// Fills all the weights with uniform probabilities
-    pub fn fill_probs_uniform(&mut self) {
-        for (_, chain) in self.weights.iter_mut() {
-            for (_, out) in chain {
-                let fill_with = 1f64 / (out.len() as f64);
-                for (_, weight) in out {
-                    *weight = fill_with;
-                }
-            }
         }
     }
 
@@ -89,12 +36,12 @@ where
         }
     }
 
-    /// adds 1 to the specified edge
+    /// adds 1 to the specified edge, creates it if it is absent
     pub fn insert_edge(&mut self, func_name: &FuncType, from: &SmolStr, to: &SmolStr) {
         let assign_to = self.weights
             .entry(func_name.clone()).or_insert(HashMap::new())
-            .get_mut(from).unwrap_or_else(|| panic!("Error obtaining weights: node {from} in subgraph {:?} not found.", func_name))
-            .get_mut(to).unwrap_or_else(|| panic!("Error obtaining weights: node {to} is not outgoing from node {from} in subgraph {:?}.", func_name));
+            .entry(from.clone()).or_insert(HashMap::new())
+            .entry(to.clone()).or_insert(0f64);
         *assign_to += 1f64;
     }
 
@@ -140,9 +87,25 @@ where
         }
     }
 
+    pub fn write_to_dot(&self, dot_file_path: &PathBuf) -> io::Result<()> {
+        let mut file = File::create(dot_file_path)?;
+        writeln!(file, "digraph G {{")?;
+        for (func_name, chain) in self.weights.iter() {
+            writeln!(file, "    subgraph {func_name} {{")?;
+            for (from, out) in chain {
+                for (to, weight) in out {
+                    writeln!(file, "        {from} -> {to} [label=\"  {weight:.4}\"]")?;
+                }
+            }
+            writeln!(file, "    }}")?;
+        }
+        writeln!(file, "}}")?;
+        Ok(())
+    }
+
     pub fn print(&self) {
         for (func_name, chain) in self.weights.iter() {
-            println!("\n=====================================================\n{:?}: ", func_name);
+            println!("\n=====================================================\n{func_name}: ");
             for (from, out) in chain {
                 println!("    {from}: ");
                 for (to, weight) in out {
@@ -151,4 +114,5 @@ where
             }
         }
     }
+
 }
