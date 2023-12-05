@@ -45,10 +45,17 @@ where
         *assign_to += 1f64;
     }
 
-    pub fn get_outgoing_weights(&self, func_name: &FuncType, from: &SmolStr) -> &HashMap<SmolStr, f64> {
+    pub fn get_outgoing_weights_opt(&self, func_name: &FuncType, from: &SmolStr) -> Option<&HashMap<SmolStr, f64>> {
         self.weights
-            .get(func_name).unwrap()
-            .get(from).unwrap()
+            .get(func_name).map(
+                |f_w| f_w.get(from)
+            )
+            .filter(
+                |o_w| o_w.is_some()
+            )
+            .map(
+                |o_w| o_w.unwrap()
+            )
     }
 
     pub fn write_to_file(&self, file_path: &PathBuf) -> io::Result<()> {

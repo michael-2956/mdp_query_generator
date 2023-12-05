@@ -79,7 +79,7 @@ pub struct StackFrame {
     /// current function arguments (call params)
     pub function_context: FunctionContext,
     /// various call modifier info
-    call_modifier_info: CallModifierInfo,
+    pub call_modifier_info: CallModifierInfo,
     /// Cached version of all the dead ends
     /// in the current function
     dead_end_info: Arc<Mutex<HashMap<SmolStr, bool>>>,
@@ -213,7 +213,7 @@ impl FunctionModifierInfo {
         clause_context: &ClauseContext,
         value_setters: &HashMap<SmolStr, Box<dyn ValueSetter>>,
         stateless_call_modifiers: &HashMap<SmolStr, Box<dyn StatelessCallModifier>>,
-    ) -> (BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>, Vec<(SmolStr, Option<bool>)>) {
+    ) -> (BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>, BTreeMap<SmolStr, bool>) {
         let stateless_call_modifiers: HashMap<_, _> = stateless_call_modifiers.iter().filter(
             |(modifier_name, _)| self.stateless_modifier_names.contains(*modifier_name)
         ).collect();
@@ -231,14 +231,14 @@ impl FunctionModifierInfo {
 
         let valueless_modifier_node_states = stateless_call_modifiers.iter().filter(
             |(_, x)| x.get_associated_value_name().is_none()
-        ).flat_map(|(mod_name, x)| (
+        ).flat_map(|(mod_name, modifier)| (
             self.modified_nodes_map.get(*mod_name).unwrap().iter().map(
                 |node| (
                     node.node_common.name.clone(),
-                    Some(x.run(
+                    modifier.run(
                         &function_context.with_node(node.clone()),
                         None
-                    ))
+                    )
                 )
             ).collect::<Vec<_>>().into_iter()
         )).collect();
@@ -337,13 +337,15 @@ impl FunctionContext {
 /// This structure stores all the info about
 /// call modifiers in the current function
 #[derive(Debug)]
-struct CallModifierInfo {
+pub struct CallModifierInfo {
     call_modifier_states: CallModifierStates,
     /// the call modifier inner state memory
     values: HashMap<SmolStr, ValueSetterValue>,
     /// call modifier configuration: How each STATELESS call modifier
     /// affector node affects every node with a call modifier (STATELESS)
     stateless_node_relations: BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>,
+    /// this is kept for the models so that we can retrieve the entire context
+    valueless_modifier_node_states: BTreeMap<SmolStr, bool>,
 }
 
 impl CallModifierInfo {
@@ -351,13 +353,27 @@ impl CallModifierInfo {
         function_modifier_info: &FunctionModifierInfo,
         stateful_call_modifier_creators: &HashMap<SmolStr, StatefulCallModifierCreator>,
         stateless_node_relations: BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>,
-        valueless_modifier_node_states: Vec<(SmolStr, Option<bool>)>,
+        valueless_modifier_node_states: BTreeMap<SmolStr, bool>,
     ) -> Self {
         Self {
-            call_modifier_states: CallModifierStates::new(function_modifier_info, stateful_call_modifier_creators, valueless_modifier_node_states),
+            call_modifier_states: CallModifierStates::new(
+                function_modifier_info, stateful_call_modifier_creators, valueless_modifier_node_states.clone()
+            ),
             values: HashMap::new(),
-            stateless_node_relations
+            stateless_node_relations,
+            valueless_modifier_node_states,
         }
+    }
+
+    /// useful for the models to get info about the
+    /// function's call modifier context
+    pub fn get_context(&self) -> (
+        BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>, BTreeMap<SmolStr, bool>,
+    ) {
+        (
+            self.stateless_node_relations.clone(),
+            self.valueless_modifier_node_states.clone(),
+        )
     }
 
     fn update_modifier_states(
@@ -417,6 +433,7 @@ impl DynClone for CallModifierInfo {
             call_modifier_states: self.call_modifier_states.dyn_clone(),
             values: self.values.clone(),
             stateless_node_relations: self.stateless_node_relations.clone(),
+            valueless_modifier_node_states: self.valueless_modifier_node_states.clone(),
         }
     }
 }
@@ -452,13 +469,15 @@ impl CallModifierStates {
     fn new(
         function_modifier_info: &FunctionModifierInfo,
         stateful_call_modifier_creators: &HashMap<SmolStr, StatefulCallModifierCreator>,
-        valueless_modifier_node_states: Vec<(SmolStr, Option<bool>)>,
+        valueless_modifier_node_states: BTreeMap<SmolStr, bool>,
     ) -> Self {
         let mut _self = Self {
             affected_node_states: function_modifier_info.get_initial_affected_node_states(),
             stateful_modifiers: function_modifier_info.create_stateful_modifiers(stateful_call_modifier_creators)
         };
-        _self.affected_node_states.extend(valueless_modifier_node_states.into_iter());
+        _self.affected_node_states.extend(valueless_modifier_node_states.into_iter().map(
+            |(node_name, state)| (node_name, Some(state))
+        ));
         _self
     }
 
@@ -523,7 +542,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         Ok(_self)
     }
 
-    pub fn get_last_popped_stack_frame(&self) -> Option<&StackFrame> {
+    pub fn get_last_popped_stack_frame_ref(&self) -> Option<&StackFrame> {
         self.popped_stack_frame.as_ref()
     }
 
@@ -543,10 +562,29 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         self.stateless_call_modifiers.insert(modifier.get_name(), Box::new(modifier));
     }
 
+    /// Do not use.\
+    /// Unstable feature, left so that we can re-implement it\
+    /// once and if it is actually ever needed
     fn _register_stateful_call_modifier<T: StatefulCallModifier + 'static>(&mut self) {
         self.stateful_call_modifier_creators.insert(T::new().get_name(), StatefulCallModifierCreator(
             T::new
         ));
+        todo!("
+            Unstable feature, left so that we can re-implement it once and if
+            it is actually ever needed.
+            This may work fine, but has not been tested to do so in a while
+
+            The problem is that the models won't be able to get the full function
+            characteristic with call modifiers in place, since they can be called
+            unlimited number of times, unlike stateless modifiers that depend on
+            a limited number of value setters.
+
+            This can be solved if we add 'characteristic' that the stateful modifiers
+            would produce for themselves, so that models would be able to differentiate
+            between different contexts.
+            
+            Until then, this function should not be used
+        ");
     }
 
     fn fill_function_modifier_info(&mut self) {
@@ -662,7 +700,10 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         let function_modifier_info = self.function_modifier_info.get(&call_params.func_name).unwrap();
         let function_context = FunctionContext::new(call_params);
 
-        let (stateless_node_relations, valueless_modifier_node_states) = function_modifier_info.get_stateless_node_relations(
+        let (
+            stateless_node_relations,
+            valueless_modifier_node_states
+        ) = function_modifier_info.get_stateless_node_relations(
             &function_context, clause_context, &self.value_setters, &self.stateless_call_modifiers
         );
 

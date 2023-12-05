@@ -188,24 +188,30 @@ where
         let context = &call_stack.last().unwrap().function_context;
         let func_name = self.get_function_name(call_stack, None);
         let current_node = &context.current_node.node_common.name;
-        let outgoing_weights = self.get_weights_mut_ref().get_outgoing_weights(func_name, current_node);
-        // obtain weights
-        let mut output: Vec<_> = node_outgoing.into_iter().map(|node| (
-            *outgoing_weights.get(&node.node_common.name).unwrap(), node
-        )).collect();
-        // normalize them
-        let weight_sum: f64 = output.iter().map(|(w, _)| *w).sum();
-        if weight_sum != 0f64 && !weight_sum.is_nan() {
-            for (w, _) in output.iter_mut() { *w /= weight_sum; }
-        } else {
-            // If the weights happpen to sum up to 0 or are NaN, the model is undertrained.
+        let outgoing_weights = self.get_weights_mut_ref().get_outgoing_weights_opt(func_name, current_node);
+        let output = if let Some(outgoing_weights) = outgoing_weights {
+            // obtain weights
+            let mut output: Vec<_> = node_outgoing.iter().map(|node| (
+                *outgoing_weights.get(&node.node_common.name).unwrap(), node
+            )).collect();
+            // normalize them
+            let weight_sum: f64 = output.iter().map(|(w, _)| *w).sum();
+            // if the weight sum is 0, the model was not trained in this context
+            if weight_sum != 0f64 {
+                for (w, _) in output.iter_mut() { *w /= weight_sum; }
+                Some(output.into_iter().map(|(w, node)| (
+                    w, node.clone()
+                )).collect())
+            } else { None }
+        } else { None };
+        output.unwrap_or_else(|| {
+            // The model is undertrained for this context and cannot decide.
             // Basically, we're in a place we've never been to during training.
             // We then set weights uniformly.
-            eprintln!("The model was not trained in this context:\ncurrent_node = {current_node}\noutput = {:?}", output);
-            let fill_with = 1f64 / (output.len() as f64);
-            for (w, _) in output.iter_mut() { *w = fill_with; }
-        }
-        output
+            eprintln!("The model was not trained in this context:\ncurrent_node = {current_node}\nfunc_name = {func_name}");
+            let fill_with = 1f64 / (node_outgoing.len() as f64);
+            node_outgoing.into_iter().map(|node| (fill_with, node)).collect()
+        })
     }
 
     fn write_weights_to_dot(&self, dot_file_path: &PathBuf) -> io::Result<()> {
@@ -213,6 +219,7 @@ where
     }
 }
 
+/// This model is the minimal one. It differentiates only between different edges and subgraphs
 #[derive(Debug)]
 pub struct SubgraphMarkovModel {
     weights: MarkovWeights<HashMap<SmolStr, HashMap<SmolStr, HashMap<SmolStr, f64>>>>,
@@ -240,6 +247,15 @@ impl ModelWithMarkovWeights for SubgraphMarkovModel {
     }
 
     fn get_function_name<'a>(&self, call_stack: &'a Vec<StackFrame>, _exit_stack_frame_opt: Option<&StackFrame>) -> &'a Self::FuncType {
+        /// TODO: other models:
+        // - Call node + func name
+        // - Func name + func params
+        // - Call node + func name + func params
+        // func params can be further divided into:
+        // - func params with call modifier states and relations on entry
+        // - func params without call modifier states and relations on entry
+        // This is how you call call modifier context:
+        // call_stack.last().unwrap().call_modifier_info.get_context()
         &call_stack.last().unwrap().function_context.call_params.func_name
     }
 }

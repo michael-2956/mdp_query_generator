@@ -108,7 +108,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         if let Some(ref mut model) = self.train_model {
             model.process_state(
                 self.state_generator.call_stack_ref(),
-                self.state_generator.get_last_popped_stack_frame(),
+                self.state_generator.get_last_popped_stack_frame_ref(),
             );
         }
         next_state
