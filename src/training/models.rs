@@ -1,9 +1,9 @@
-use std::{io, path::PathBuf, str::FromStr, collections::HashMap, fmt::Display};
+use std::{io, path::PathBuf, str::FromStr, collections::{HashMap, BTreeMap}, fmt::Display};
 
 use serde::{Serialize, Deserialize};
 use smol_str::SmolStr;
 
-use crate::{query_creation::state_generator::markov_chain_generator::{StackFrame, markov_chain::NodeParams}, config::TomlReadable};
+use crate::{query_creation::state_generator::markov_chain_generator::{StackFrame, markov_chain::{NodeParams, CallParams}}, config::TomlReadable};
 
 use super::{ast_to_path::PathNode, markov_weights::MarkovWeights};
 
@@ -36,20 +36,20 @@ impl TomlReadable for ModelConfig {
 
 impl ModelConfig {
     pub fn create_model(&self) -> io::Result<Box<dyn PathwayGraphModel>> {
-        if self.model_name == "subgraph" {
-            let mut model = Box::new(SubgraphMarkovModel::new());
-            if self.load_weights {
-                println!("Loading weights from {}...", self.load_weights_from.display());
-                model.load_weights(&self.load_weights_from)?;
-            }
-            if let Some(ref dot_file_path) = self.save_dot_file {
-                println!("Saving .dot file to {}...", dot_file_path.display());
-                model.write_weights_to_dot(dot_file_path)?;
-            }
-            Ok(model)
-        } else {
-            panic!("No such model name: {}", self.model_name);
+        let mut model: Box<dyn PathwayGraphModel> = match self.model_name.as_str() {
+            "subgraph" => Box::new(SubgraphMarkovModel::new()),
+            "full_function_context" => Box::new(FullFunctionContextMarkovModel::new()),
+            any => panic!("No such model name: {any}"),
+        };
+        if self.load_weights {
+            println!("Loading weights from {}...", self.load_weights_from.display());
+            model.load_weights(&self.load_weights_from)?;
         }
+        if let Some(ref dot_file_path) = self.save_dot_file {
+            println!("Saving .dot file to {}...", dot_file_path.display());
+            model.write_weights_to_dot(dot_file_path)?;
+        }
+        Ok(model)
     }
 }
 
@@ -123,7 +123,7 @@ pub trait ModelWithMarkovWeights {
     fn get_last_state_stack_mut_ref(&mut self) -> &mut Vec<SmolStr>;
 
     /// the exit_stack_frame_opt is Some only after an exit node was emitted,
-    fn get_function_name<'a>(&self, call_stack: &'a Vec<StackFrame>, exit_stack_frame_opt: Option<&StackFrame>) -> &'a Self::FuncType;
+    fn get_function_name(&self, call_stack: &Vec<StackFrame>, exit_stack_frame_opt: Option<&StackFrame>) -> Self::FuncType;
 }
 
 impl<T> PathwayGraphModel for T
@@ -155,14 +155,15 @@ where
             } else {
                 panic!("No last state available, but received call stack: {:?}", call_stack)
             };
-            // let (a, b) = (call_stack, if is_exit_node { Some(stack_frame) } else { None });
-            let func_name = self.get_function_name(call_stack, if is_exit_node { Some(stack_frame) } else { None });
+            let func_name = self.get_function_name(
+                call_stack,
+                if is_exit_node { Some(stack_frame) } else { None }
+            );
             self.get_weights_mut_ref().insert_edge(func_name, &last_state, &current_state);
             if is_exit_node {
                 self.get_last_state_stack_mut_ref().pop();
             }
         }
-        // println!("SELF.last_state_stack: {:#?}", self.last_state_stack);
     }
 
     fn update_weights(&mut self) {
@@ -188,11 +189,13 @@ where
         let context = &call_stack.last().unwrap().function_context;
         let func_name = self.get_function_name(call_stack, None);
         let current_node = &context.current_node.node_common.name;
-        let outgoing_weights = self.get_weights_mut_ref().get_outgoing_weights_opt(func_name, current_node);
+        let outgoing_weights = self.get_weights_mut_ref().get_outgoing_weights_opt(&func_name, current_node);
         let output = if let Some(outgoing_weights) = outgoing_weights {
             // obtain weights
             let mut output: Vec<_> = node_outgoing.iter().map(|node| (
-                *outgoing_weights.get(&node.node_common.name).unwrap(), node
+                outgoing_weights.get(&node.node_common.name)
+                    .map(|w| (*w, node))
+                    .unwrap_or((0f64, node))
             )).collect();
             // normalize them
             let weight_sum: f64 = output.iter().map(|(w, _)| *w).sum();
@@ -246,21 +249,96 @@ impl ModelWithMarkovWeights for SubgraphMarkovModel {
         &mut self.last_state_stack
     }
 
-    fn get_function_name<'a>(&self, call_stack: &'a Vec<StackFrame>, _exit_stack_frame_opt: Option<&StackFrame>) -> &'a Self::FuncType {
+    fn get_function_name(&self, call_stack: &Vec<StackFrame>, exit_stack_frame_opt: Option<&StackFrame>) -> Self::FuncType {
         /// TODO: other models:
-        // - Call node + func name
-        // - Func name + func params
-        // - Call node + func name + func params
-        // func params can be further divided into:
-        // - func params with call modifier states and relations on entry
-        // - func params without call modifier states and relations on entry
-        // This is how you call call modifier context:
+        // - (1) Call node + func name
+        // - DONE: (2) Func name + func params
+        // - (3) Call node + func name + func params
+        // Func params should include call modifier context
+        // This is how you get call modifier context:
         // call_stack.last().unwrap().call_modifier_info.get_context()
-        &call_stack.last().unwrap().function_context.call_params.func_name
+        let stack_frame = if let Some(stack_frame) = exit_stack_frame_opt {
+            stack_frame
+        } else {
+            call_stack.last().unwrap()
+        };
+        stack_frame.function_context.call_params.func_name.clone()
     }
 }
 
 impl SubgraphMarkovModel {
+    /// create model from with the given graph structure
+    pub fn new() -> Self {
+        Self {
+            weights: MarkovWeights::new(),
+            weights_ready: false,
+            last_state_stack: vec![],
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, std::hash::Hash, Clone, Serialize, Deserialize)]
+pub struct FullFunctionContext {
+    call_params: CallParams,
+    call_modifier_context: (BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>, BTreeMap<SmolStr, bool>),
+}
+
+impl FullFunctionContext {
+    fn from_call_stack_and_exit_frame(
+        call_stack: &Vec<StackFrame>,
+        exit_stack_frame_opt: Option<&StackFrame>
+    ) -> Self {
+        let stack_frame = if let Some(stack_frame) = exit_stack_frame_opt {
+            stack_frame
+        } else {
+            call_stack.last().unwrap()
+        };
+        Self {
+            call_params: stack_frame.function_context.call_params.clone(),
+            call_modifier_context: stack_frame.call_modifier_info.get_context(),
+        }
+    }
+}
+
+impl std::fmt::Display for FullFunctionContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.call_params.func_name)
+    }
+}
+
+// This model is the minimal one. It differentiates only between different edges and subgraphs
+#[derive(Debug)]
+pub struct FullFunctionContextMarkovModel {
+    weights: MarkovWeights<HashMap<FullFunctionContext, HashMap<SmolStr, HashMap<SmolStr, f64>>>>,
+    weights_ready: bool,
+    last_state_stack: Vec<SmolStr>,
+}
+
+impl ModelWithMarkovWeights for FullFunctionContextMarkovModel {
+    type FuncType=FullFunctionContext;
+
+    fn get_weights_ref(&self) -> &MarkovWeights<HashMap<Self::FuncType, HashMap<SmolStr, HashMap<SmolStr, f64>>>> {
+        &self.weights
+    }
+
+    fn get_weights_mut_ref(&mut self) -> &mut MarkovWeights<HashMap<Self::FuncType, HashMap<SmolStr, HashMap<SmolStr, f64>>>> {
+        &mut self.weights
+    }
+
+    fn get_weights_ready_mut_ref(&mut self) -> &mut bool {
+        &mut self.weights_ready
+    }
+
+    fn get_last_state_stack_mut_ref(&mut self) -> &mut Vec<SmolStr> {
+        &mut self.last_state_stack
+    }
+
+    fn get_function_name(&self, call_stack: &Vec<StackFrame>, exit_stack_frame_opt: Option<&StackFrame>) -> Self::FuncType {
+        FullFunctionContext::from_call_stack_and_exit_frame(call_stack, exit_stack_frame_opt)
+    }
+}
+
+impl FullFunctionContextMarkovModel {
     /// create model from with the given graph structure
     pub fn new() -> Self {
         Self {

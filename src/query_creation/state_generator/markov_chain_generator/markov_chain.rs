@@ -1,6 +1,7 @@
 use std::{collections::{HashMap, BinaryHeap}, path::Path, cmp::Ordering};
 
 use regex::Regex;
+use serde::{Serialize, Deserialize};
 use core::fmt::Debug;
 use smol_str::SmolStr;
 
@@ -24,7 +25,7 @@ pub struct NodeParams {
     pub min_calls_until_function_exit: usize,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ModifierWithFields {
     Modifier(SmolStr),
     PassThrough(SmolStr),
@@ -33,7 +34,7 @@ pub enum ModifierWithFields {
 /// represents modifiers passed in call parameters.
 /// Can be either None, list of static modifiers, or a
 /// pass-through (pass current funciton's arguments)
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CallModifiers {
     /// none of the modifiers are activated
     None,
@@ -79,7 +80,7 @@ impl CallModifiers {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CallTypes {
     /// Сhoose none of the types out of the allowed type list
     None,
@@ -118,7 +119,7 @@ impl CallTypes {
 
 /// represents the call parameters passed to a function
 /// called with a call node
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CallParams {
     /// which function this call node calls
     pub func_name: SmolStr,

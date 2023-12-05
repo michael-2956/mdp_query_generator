@@ -15,18 +15,26 @@ assert_runs_on_schema=false
 # Pring how many queries were already generated
 print_progress=true
 
+
+
 [model]
-# which model to use. Can be: "subgraph"
-model_name="subgraph"
+# which model to use. Can be: "subgraph", "full_function_context"
+model_name="full_function_context"
+
 # whether to use pretrained model weights
 # TODO: apply the same logic as in save_dot_file?
 load_weights=true
+
 # where to load the weights from
-load_weights_from="weights/subgraph/untrained_db_2_performance_graph_100K.mw"
+load_weights_from="weights/fullcontext/untrained_db.mw"
+# load_weights_from="weights/subgraph/untrained_db_2_performance_graph_100K.mw"
+
 # where to save a dot file with graph representation.
 # Type save_dot_file=false to turn off
 # save_dot_file="weights_in_dot/subgraph/untrained_db_2_performance_graph_100K.dot"
 save_dot_file=false
+
+
 
 [ast_to_path_testing]
 # schema for the testing queries generation

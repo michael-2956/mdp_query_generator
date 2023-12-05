@@ -37,9 +37,9 @@ where
     }
 
     /// adds 1 to the specified edge, creates it if it is absent
-    pub fn insert_edge(&mut self, func_name: &FuncType, from: &SmolStr, to: &SmolStr) {
+    pub fn insert_edge(&mut self, func_name: FuncType, from: &SmolStr, to: &SmolStr) {
         let assign_to = self.weights
-            .entry(func_name.clone()).or_insert(HashMap::new())
+            .entry(func_name).or_insert(HashMap::new())
             .entry(from.clone()).or_insert(HashMap::new())
             .entry(to.clone()).or_insert(0f64);
         *assign_to += 1f64;
