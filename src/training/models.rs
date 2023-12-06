@@ -17,6 +17,8 @@ pub struct ModelConfig {
     // where to save a dot file with graph representation.
     // type save_dot_file=false in config to turn off
     pub save_dot_file: Option<PathBuf>,
+    // whether to use the stacked version of the model
+    pub stacked_version: bool,
 }
 
 impl TomlReadable for ModelConfig {
@@ -29,17 +31,20 @@ impl TomlReadable for ModelConfig {
             save_dot_file: section["save_dot_file"].as_bool().map_or_else(
                 || Some(PathBuf::from_str(section["save_dot_file"].as_str().unwrap()).unwrap()),
                 |x| if !x { None } else { panic!("save_dot_file can't be 'true'") },
-            )
+            ),
+            stacked_version: section["stacked_version"].as_bool().unwrap()
         }
     }
 }
 
 impl ModelConfig {
     pub fn create_model(&self) -> io::Result<Box<dyn PathwayGraphModel>> {
-        let mut model: Box<dyn PathwayGraphModel> = match self.model_name.as_str() {
-            "subgraph" => Box::new(SubgraphMarkovModel::new()),
-            "full_function_context" => Box::new(FullFunctionContextMarkovModel::new()),
-            any => panic!("No such model name: {any}"),
+        let mut model: Box<dyn PathwayGraphModel> = match (self.model_name.as_str(), self.stacked_version) {
+            ("subgraph", false) => Box::new(ModelWithMarkovWeights::<FunctionNameContext>::new()),
+            ("subgraph", true) => Box::new(ModelWithMarkovWeights::<StackedFunctionNamesContext>::new()),
+            ("full_function_context", false) => Box::new(ModelWithMarkovWeights::<FullFunctionContext>::new()),
+            ("full_function_context", true) => Box::new(ModelWithMarkovWeights::<StackedFullFunctionContext>::new()),
+            (any, st) => panic!("No such model: name: {any} stacked: {st}"),
         };
         if self.load_weights {
             println!("Loading weights from {}...", self.load_weights_from.display());
@@ -111,43 +116,51 @@ pub trait PathwayGraphModel {
     fn write_weights_to_dot(&self, _dot_file_path: &PathBuf) -> io::Result<()> { todo!() }
 }
 
-pub trait ModelWithMarkovWeights {
-    type FuncType: std::fmt::Debug + Eq + std::hash::Hash + Clone + Serialize + for<'a> Deserialize<'a> + Display;
-
-    fn get_weights_ref(&self) -> &MarkovWeights<HashMap<Self::FuncType, HashMap<SmolStr, HashMap<SmolStr, f64>>>>;
-
-    fn get_weights_mut_ref(&mut self) -> &mut MarkovWeights<HashMap<Self::FuncType, HashMap<SmolStr, HashMap<SmolStr, f64>>>>;
-
-    fn get_weights_ready_mut_ref(&mut self) -> &mut bool;
-
-    fn get_last_state_stack_mut_ref(&mut self) -> &mut Vec<SmolStr>;
-
-    /// the exit_stack_frame_opt is Some only after an exit node was emitted,
-    fn get_function_name(&self, call_stack: &Vec<StackFrame>, exit_stack_frame_opt: Option<&StackFrame>) -> Self::FuncType;
+#[derive(Debug)]
+pub struct ModelWithMarkovWeights<FnCntxt>
+where
+    FnCntxt: ModelFunctionContext
+{
+    weights: MarkovWeights<HashMap<FnCntxt, HashMap<SmolStr, HashMap<SmolStr, f64>>>>,
+    weights_ready: bool,
+    last_state_stack: Vec<SmolStr>,
 }
 
-impl<T> PathwayGraphModel for T
+impl<FnCntxt> ModelWithMarkovWeights<FnCntxt>
 where
-    T: ModelWithMarkovWeights
+    FnCntxt: ModelFunctionContext
+{
+    pub fn new() -> Self {
+        Self {
+            weights: MarkovWeights::new(),
+            weights_ready: false,
+            last_state_stack: vec![],
+        }
+    }
+}
+
+impl<FnCntxt> PathwayGraphModel for ModelWithMarkovWeights<FnCntxt>
+where
+    FnCntxt: ModelFunctionContext
 {
     fn start_epoch(&mut self) {
-        if *self.get_weights_ready_mut_ref() {
+        if self.weights_ready {
             panic!("SubgraphMarkovModel does not allow multiple epochs.")
         }
     }
 
     fn process_state(&mut self, call_stack: &Vec<StackFrame>, popped_stack_frame: Option<&StackFrame>) {
-        if self.get_last_state_stack_mut_ref().len() < call_stack.len() {
+        if self.last_state_stack.len() < call_stack.len() {
             let func_name = call_stack.last().unwrap().function_context.call_params.func_name.clone();
-            self.get_last_state_stack_mut_ref().push(func_name);
+            self.last_state_stack.push(func_name);
         } else {
-            let is_exit_node = self.get_last_state_stack_mut_ref().len() > call_stack.len();
+            let is_exit_node = self.last_state_stack.len() > call_stack.len();
             let stack_frame = if is_exit_node {
                 popped_stack_frame.unwrap()
             } else {
                 call_stack.last().unwrap()
             };
-            let (last_state, current_state) = if let Some(last_state) = self.get_last_state_stack_mut_ref().last_mut() {
+            let (last_state, current_state) = if let Some(last_state) = self.last_state_stack.last_mut() {
                 let current_state = stack_frame.function_context.current_node.node_common.name.clone();
                 let c = last_state.clone();
                 *last_state = current_state;
@@ -155,41 +168,41 @@ where
             } else {
                 panic!("No last state available, but received call stack: {:?}", call_stack)
             };
-            let func_name = self.get_function_name(
+            let func_name = FnCntxt::from_call_stack_and_exit_frame(
                 call_stack,
                 if is_exit_node { Some(stack_frame) } else { None }
             );
-            self.get_weights_mut_ref().insert_edge(func_name, &last_state, &current_state);
+            self.weights.insert_edge(func_name, &last_state, &current_state);
             if is_exit_node {
-                self.get_last_state_stack_mut_ref().pop();
+                self.last_state_stack.pop();
             }
         }
     }
 
     fn update_weights(&mut self) {
-        *self.get_weights_ready_mut_ref() = true;
-        self.get_weights_mut_ref().normalize();
+        self.weights_ready = true;
+        self.weights.normalize();
     }
 
     fn write_weights(&self, file_path: &PathBuf) -> io::Result<()> {
-        self.get_weights_ref().write_to_file(file_path)
+        self.weights.write_to_file(file_path)
     }
 
     fn load_weights(&mut self, file_path: &PathBuf) -> io::Result<()> {
-        *self.get_weights_mut_ref() = MarkovWeights::load(file_path)?;
-        *self.get_weights_ready_mut_ref() = true;
+        self.weights = MarkovWeights::load(file_path)?;
+        self.weights_ready = true;
         Ok(())
     }
 
     fn print_weights(&self) {
-        self.get_weights_ref().print();
+        self.weights.print();
     }
 
     fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>) -> Vec<(f64, NodeParams)> {
         let context = &call_stack.last().unwrap().function_context;
-        let func_name = self.get_function_name(call_stack, None);
+        let func_name = FnCntxt::from_call_stack_and_exit_frame(call_stack, None);
         let current_node = &context.current_node.node_common.name;
-        let outgoing_weights = self.get_weights_mut_ref().get_outgoing_weights_opt(&func_name, current_node);
+        let outgoing_weights = self.weights.get_outgoing_weights_opt(&func_name, current_node);
         let output = if let Some(outgoing_weights) = outgoing_weights {
             // obtain weights
             let mut output: Vec<_> = node_outgoing.iter().map(|node| (
@@ -218,62 +231,82 @@ where
     }
 
     fn write_weights_to_dot(&self, dot_file_path: &PathBuf) -> io::Result<()> {
-        self.get_weights_ref().write_to_dot(dot_file_path)
+        self.weights.write_to_dot(dot_file_path)
     }
 }
 
-/// This model is the minimal one. It differentiates only between different edges and subgraphs
-#[derive(Debug)]
-pub struct SubgraphMarkovModel {
-    weights: MarkovWeights<HashMap<SmolStr, HashMap<SmolStr, HashMap<SmolStr, f64>>>>,
-    weights_ready: bool,
-    last_state_stack: Vec<SmolStr>,
+/// Trait for implementing diffrent Function contexts for Models with Markov Weights\
+/// TODO: other models:\
+/// - DONE (UNSTACKED): (1) func name\
+/// - (2) Call node + func name\
+/// - DONE (UNSTACKED): (3) Func name + func params\
+/// - (4) Call node + func name + func params\
+/// Func params should include call modifier context\
+/// This is how you get call modifier context:\
+/// call_stack.last().unwrap().call_modifier_info.get_context()
+pub trait ModelFunctionContext: std::fmt::Debug + Eq + std::hash::Hash + Clone + Serialize + for<'a> Deserialize<'a> + Display {
+    fn from_call_stack_and_exit_frame(
+        call_stack: &Vec<StackFrame>,
+        exit_stack_frame_opt: Option<&StackFrame>
+    ) -> Self;
 }
 
-impl ModelWithMarkovWeights for SubgraphMarkovModel {
-    type FuncType=SmolStr;
+#[derive(Debug, PartialEq, Eq, std::hash::Hash, Clone, Serialize, Deserialize)]
+pub struct FunctionNameContext {
+    func_name: SmolStr,
+}
 
-    fn get_weights_ref(&self) -> &MarkovWeights<HashMap<Self::FuncType, HashMap<SmolStr, HashMap<SmolStr, f64>>>> {
-        &self.weights
-    }
-
-    fn get_weights_mut_ref(&mut self) -> &mut MarkovWeights<HashMap<Self::FuncType, HashMap<SmolStr, HashMap<SmolStr, f64>>>> {
-        &mut self.weights
-    }
-
-    fn get_weights_ready_mut_ref(&mut self) -> &mut bool {
-        &mut self.weights_ready
-    }
-
-    fn get_last_state_stack_mut_ref(&mut self) -> &mut Vec<SmolStr> {
-        &mut self.last_state_stack
-    }
-
-    fn get_function_name(&self, call_stack: &Vec<StackFrame>, exit_stack_frame_opt: Option<&StackFrame>) -> Self::FuncType {
-        /// TODO: other models:
-        // - (1) Call node + func name
-        // - DONE: (2) Func name + func params
-        // - (3) Call node + func name + func params
-        // Func params should include call modifier context
-        // This is how you get call modifier context:
-        // call_stack.last().unwrap().call_modifier_info.get_context()
+impl ModelFunctionContext for FunctionNameContext {
+    fn from_call_stack_and_exit_frame(
+        call_stack: &Vec<StackFrame>,
+        exit_stack_frame_opt: Option<&StackFrame>
+    ) -> Self {
         let stack_frame = if let Some(stack_frame) = exit_stack_frame_opt {
             stack_frame
         } else {
             call_stack.last().unwrap()
         };
-        stack_frame.function_context.call_params.func_name.clone()
+        FunctionNameContext {
+            func_name: stack_frame.function_context.call_params.func_name.clone()
+        }
     }
 }
 
-impl SubgraphMarkovModel {
-    /// create model from with the given graph structure
-    pub fn new() -> Self {
-        Self {
-            weights: MarkovWeights::new(),
-            weights_ready: false,
-            last_state_stack: vec![],
+impl std::fmt::Display for FunctionNameContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.func_name)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, std::hash::Hash, Clone, Serialize, Deserialize)]
+pub struct StackedFunctionNamesContext {
+    func_names: Vec<SmolStr>,
+}
+
+impl ModelFunctionContext for StackedFunctionNamesContext {
+    fn from_call_stack_and_exit_frame(
+        call_stack: &Vec<StackFrame>,
+        exit_stack_frame_opt: Option<&StackFrame>
+    ) -> Self {
+        let mut func_names: Vec<_> = call_stack.iter().map(
+            |frame| frame.function_context.call_params.func_name.clone()
+        ).collect();
+        if let Some(frame) = exit_stack_frame_opt {
+            func_names.push(frame.function_context.call_params.func_name.clone());
         }
+        Self {
+            func_names,
+        }
+    }
+}
+
+impl std::fmt::Display for StackedFunctionNamesContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.func_names.first().unwrap())?;
+        for func_name in self.func_names.iter().skip(1) {
+            write!(f, "_{func_name}")?;
+        }
+        Ok(())
     }
 }
 
@@ -284,6 +317,15 @@ pub struct FullFunctionContext {
 }
 
 impl FullFunctionContext {
+    fn from_stack_frame(frame: &StackFrame) -> Self {
+        Self {
+            call_params: frame.function_context.call_params.clone(),
+            call_modifier_context: frame.call_modifier_info.get_context(),
+        }
+    }
+}
+
+impl ModelFunctionContext for FullFunctionContext {
     fn from_call_stack_and_exit_frame(
         call_stack: &Vec<StackFrame>,
         exit_stack_frame_opt: Option<&StackFrame>
@@ -293,10 +335,7 @@ impl FullFunctionContext {
         } else {
             call_stack.last().unwrap()
         };
-        Self {
-            call_params: stack_frame.function_context.call_params.clone(),
-            call_modifier_context: stack_frame.call_modifier_info.get_context(),
-        }
+        Self::from_stack_frame(stack_frame)
     }
 }
 
@@ -306,45 +345,34 @@ impl std::fmt::Display for FullFunctionContext {
     }
 }
 
-// This model is the minimal one. It differentiates only between different edges and subgraphs
-#[derive(Debug)]
-pub struct FullFunctionContextMarkovModel {
-    weights: MarkovWeights<HashMap<FullFunctionContext, HashMap<SmolStr, HashMap<SmolStr, f64>>>>,
-    weights_ready: bool,
-    last_state_stack: Vec<SmolStr>,
+#[derive(Debug, PartialEq, Eq, std::hash::Hash, Clone, Serialize, Deserialize)]
+pub struct StackedFullFunctionContext {
+    contexts: Vec<FullFunctionContext>,
 }
 
-impl ModelWithMarkovWeights for FullFunctionContextMarkovModel {
-    type FuncType=FullFunctionContext;
-
-    fn get_weights_ref(&self) -> &MarkovWeights<HashMap<Self::FuncType, HashMap<SmolStr, HashMap<SmolStr, f64>>>> {
-        &self.weights
-    }
-
-    fn get_weights_mut_ref(&mut self) -> &mut MarkovWeights<HashMap<Self::FuncType, HashMap<SmolStr, HashMap<SmolStr, f64>>>> {
-        &mut self.weights
-    }
-
-    fn get_weights_ready_mut_ref(&mut self) -> &mut bool {
-        &mut self.weights_ready
-    }
-
-    fn get_last_state_stack_mut_ref(&mut self) -> &mut Vec<SmolStr> {
-        &mut self.last_state_stack
-    }
-
-    fn get_function_name(&self, call_stack: &Vec<StackFrame>, exit_stack_frame_opt: Option<&StackFrame>) -> Self::FuncType {
-        FullFunctionContext::from_call_stack_and_exit_frame(call_stack, exit_stack_frame_opt)
-    }
-}
-
-impl FullFunctionContextMarkovModel {
-    /// create model from with the given graph structure
-    pub fn new() -> Self {
-        Self {
-            weights: MarkovWeights::new(),
-            weights_ready: false,
-            last_state_stack: vec![],
+impl ModelFunctionContext for StackedFullFunctionContext {
+    fn from_call_stack_and_exit_frame(
+        call_stack: &Vec<StackFrame>,
+        exit_stack_frame_opt: Option<&StackFrame>
+    ) -> Self {
+        let mut contexts: Vec<_> = call_stack.iter().map(
+            |frame| FullFunctionContext::from_stack_frame(frame)
+        ).collect();
+        if let Some(frame) = exit_stack_frame_opt {
+            contexts.push(FullFunctionContext::from_stack_frame(frame));
         }
+        Self {
+            contexts
+        }
+    }
+}
+
+impl std::fmt::Display for StackedFullFunctionContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.contexts.first().unwrap())?;
+        for context in self.contexts.iter().skip(1) {
+            write!(f, "_{context}")?;
+        }
+        Ok(())
     }
 }

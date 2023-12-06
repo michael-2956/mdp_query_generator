@@ -16,7 +16,6 @@ assert_runs_on_schema=false
 print_progress=true
 
 
-
 [model]
 # which model to use. Can be: "subgraph", "full_function_context"
 model_name="full_function_context"
@@ -26,14 +25,15 @@ model_name="full_function_context"
 load_weights=true
 
 # where to load the weights from
-load_weights_from="weights/fullcontext/untrained_db.mw"
-# load_weights_from="weights/subgraph/untrained_db_2_performance_graph_100K.mw"
+load_weights_from="weights/fullcontext/unstacked/untrained_db_2_performance_graph_100K.mw"
+
+# whether to use the stacked version of the model
+stacked_version=false
 
 # where to save a dot file with graph representation.
 # Type save_dot_file=false to turn off
 # save_dot_file="weights_in_dot/subgraph/untrained_db_2_performance_graph_100K.dot"
 save_dot_file=false
-
 
 
 [ast_to_path_testing]
@@ -49,7 +49,7 @@ training_db_path="training_dbs/untrained_db_2_performance_graph_100K.sql"
 # schema of the training queries
 training_schema="schema/tpc-h_tables.sql"
 # where to save model weights to
-save_weights_to="weights/subgraph/untrained_db_2_performance_graph_100K.mw"
+save_weights_to="weights/fullcontext/unstacked/untrained_db_2_performance_graph_100K.mw"
 
 [query_generator]
 # Whether to use the predictor model for query generation

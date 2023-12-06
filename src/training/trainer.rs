@@ -74,7 +74,7 @@ impl SQLTrainer {
             );
             model.end_episode();
             if self.main_config.print_progress {
-                if i % 50 == 0 {
+                if i % 1 == 0 {
                     print!("{}/{}      \r", i, self.dataset_queries.len());
                     std::io::stdout().flush().unwrap();
                 }
