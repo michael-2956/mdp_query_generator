@@ -47,5 +47,14 @@
             "MIN": 1.0, 
             "EVERY": 1.0
         }
+    },
+    "[integer]": {
+        "[integer]": {
+            "MIN": 3.0,
+            "MAX": 3.0,
+            "BIT_AND": 1.0, 
+            "BIT_OR": 1.0, 
+            "BIT_XOR": 1.0
+        }
     }
 }

@@ -916,6 +916,7 @@ impl PathGenerator {
     }
 
     /// subgraph def_having
+    // like WHERE?
     fn handle_having(&mut self, selection: &Expr) -> Result<SubgraphType, ConvertionError> {
         self.try_push_state("having")?;
         self.try_push_state("call45_types")?;
@@ -925,14 +926,29 @@ impl PathGenerator {
     }
 
     // subgraph def_group_by
+    // by checking datatype?
     // fn handle_group_by(&mut self, grouping: &Expr) -> Result<SubgraphType, ConvertionError> {
     //     self.try_push_state("group_by")?;
-        
-    //     let grouping_elements = match grouping {
 
-    //         // 
+    //     let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
+    //     let selected_types_iter = selected_types.iter();
+    //     let grouping_elements = match grouping {
     //         Expr::GroupingSets(arg) => {
-    //             arg
+    //             self.try_push_state("grouping_set")?;
+    //         },
+    //         Expr::Rollup(arg) => {
+    //             self.try_push_state("grouping_rollup")?;
+    //         },
+    //         Expr::Cube(arg) => {
+    //             self.try_push_state("grouping_cube")?;
+    //         },
+    //         Expr::Nested(arg) => {
+    //             self.try_push_state("grouping_relations_list")?;
+    //             // self.try_push_state("list_of_relations")?;
+    //             for relation in arg.iter() {
+    //                 self.try_push_state("list_of_relations")?;
+    //                 self.handle_types(relation, selected_types_iter.next(), None)?;
+    //             }
     //         },
     //         any => unexpected_expr!(any),
     //     };

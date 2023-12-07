@@ -934,6 +934,61 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         let result;
         let chosen_return_type : SubgraphType;
         match self.next_state().as_str() {
+            "aggregate_select_type_integer" => {
+                chosen_return_type = SubgraphType::Integer;
+                let chosen_type = SubgraphType::Integer;
+                match self.next_state().as_str() {
+                    arm @ "COUNT" => match self.next_state().as_str() {
+                        "COUNT_wildcard" => {
+                            result = Expr::Function(sqlparser::ast::Function {
+                                name: ObjectName(vec![Ident {
+                                    value: arm.to_string(),
+                                    quote_style: (None),
+                                }]),
+                                args: vec![FunctionArg::Unnamed(
+                                    sqlparser::ast::FunctionArgExpr::Wildcard,
+                                )],
+                                over: None,
+                                distinct: distinct,
+                                special: false,
+                            });
+                            //return result;
+                        }
+                        "call65_types" => {
+                            result = Expr::Function(sqlparser::ast::Function {
+                                name: ObjectName(vec![Ident {
+                                    value: arm.to_string(),
+                                    quote_style: (None),
+                                }]),
+                                args: vec![FunctionArg::Unnamed(
+                                    sqlparser::ast::FunctionArgExpr::Expr(self.handle_types(None, None).1),
+                                )],
+                                over: None,
+                                distinct: distinct,
+                                special: false,
+                            });
+                        }
+                        any => self.panic_unexpected(any),
+                    },
+                    "arg_integer" => {                
+                        let fun_name = self.config.aggregate_functions_distribution.get_fun_name(vec![chosen_type], (vec![chosen_return_type.clone()]));
+                        // let fun_name = "TMP_NAME";
+                        // println!("{}, {}",chosen_type.0.to_owned(), chosen_return_type.1.to_owned()); 
+                        self.expect_state("call71_types");
+                        result = Expr::Function(sqlparser::ast::Function {
+                            name: fun_name,
+                            args: vec![FunctionArg::Unnamed(
+                                sqlparser::ast::FunctionArgExpr::Expr(self.handle_types(Some(&[SubgraphType::Integer]), None).1),
+                            )],
+                            over: None,
+                            distinct: distinct,
+                            special: false,
+                        });
+                    },
+                    any => self.panic_unexpected(any),
+                }
+            },
+
             "aggregate_select_type_numeric" => {
                 chosen_return_type = SubgraphType::Numeric;
                 match self.next_state().as_str() {

@@ -93,7 +93,6 @@ digraph G {
         call0_WHERE -> call0_group_by
         call0_FROM -> call0_group_by
         call0_group_by -> call0_SELECT
-        
 
         // call0_group_by [label="GROUP BY Statement", TYPES="[known]", shape=rectangle, style=filled, color=gray]
         // call0_WHERE -> call0_group_by
@@ -127,7 +126,7 @@ digraph G {
         call0_Query -> FROM_multiple_relations
         FROM_multiple_relations -> call0_Query
 
-        FROM -> EXIT_FROM
+        // FROM -> EXIT_FROM
         FROM_multiple_relations -> EXIT_FROM
     }
 
@@ -135,7 +134,7 @@ digraph G {
         WHERE [label="WHERE", shape=rectangle, style=filled, color=darkgoldenrod1]
         EXIT_WHERE [label="EXIT WHERE"]
 
-        call53_types [TYPES="[3VL Value]", label="TYPES: 3VL Value", shape=rectangle, style=filled, color=lightblue]
+        call53_types [TYPES="[3VL Value]", MODS="[no function]", label="TYPES: 3VL Value\nMODS: no function", shape=rectangle, style=filled, color=lightblue]
         WHERE -> call53_types
         call53_types -> EXIT_WHERE
     }
@@ -176,32 +175,32 @@ digraph G {
         // we can make a call trigger, moving this to a separate subgraph,
         // that would check whether there is a single column for a wildcard,
         // but let's keep it simple for now
-        SELECT_wildcard[label="wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
-        SELECT_qualified_wildcard[label="qualified wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
-        SELECT_tables_eligible_for_wildcard[label="Set Relations for wildcards\nset_value='wildcard_relations'", set_value="wildcard_relations"]
-        SELECT_tables_eligible_for_wildcard -> SELECT_wildcard
-        SELECT_tables_eligible_for_wildcard -> SELECT_qualified_wildcard
+        // SELECT_wildcard[label="wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
+        // SELECT_qualified_wildcard[label="qualified wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
+        // SELECT_tables_eligible_for_wildcard[label="Set Relations for wildcards\nset_value='wildcard_relations'", set_value="wildcard_relations"]
+        // SELECT_tables_eligible_for_wildcard -> SELECT_wildcard
+        // SELECT_tables_eligible_for_wildcard -> SELECT_qualified_wildcard
 
-        SELECT_unnamed_expr[label="unnamed expression"]
+        // SELECT_unnamed_expr[label="unnamed expression"]
         SELECT_expr_with_alias[label="expression with alias"]
-        SELECT_list_multiple_values[label="SELECT list multiple values\nOFF: 'single column'", modifier="single column", modifier_mode="off"]
+        // SELECT_list_multiple_values[label="SELECT list multiple values\nOFF: 'single column'", modifier="single column", modifier_mode="off"]
 
         SELECT_projection -> SELECT_list
-        SELECT_list -> SELECT_tables_eligible_for_wildcard
-        SELECT_list -> SELECT_unnamed_expr
+        // SELECT_list -> SELECT_tables_eligible_for_wildcard
+        // SELECT_list -> SELECT_unnamed_expr
         SELECT_list -> SELECT_expr_with_alias
         call54_types [label="TYPES: [...types]", TYPES="[...]", shape=rectangle, style=filled, color=lightblue]
-        SELECT_unnamed_expr -> call54_types
+        // SELECT_unnamed_expr -> call54_types
         SELECT_expr_with_alias -> call54_types
 
         // call0_aggregate_function [label="aggregate function*", TYPES="[known]", shape=rectangle, style=filled, color=peru]
-        SELECT_wildcard -> SELECT_list_multiple_values
-        SELECT_wildcard -> EXIT_SELECT
-        SELECT_qualified_wildcard -> SELECT_list_multiple_values
-        SELECT_qualified_wildcard -> EXIT_SELECT
-        call54_types -> SELECT_list_multiple_values
+        // SELECT_wildcard -> SELECT_list_multiple_values
+        // SELECT_wildcard -> EXIT_SELECT
+        // SELECT_qualified_wildcard -> SELECT_list_multiple_values
+        // SELECT_qualified_wildcard -> EXIT_SELECT
+        // call54_types -> SELECT_list_multiple_values
         call54_types -> EXIT_SELECT
-        SELECT_list_multiple_values -> SELECT_list
+        // SELECT_list_multiple_values -> SELECT_list
     }
 
     subgraph def_LIMIT {
@@ -214,7 +213,7 @@ digraph G {
 
         limit_num [label="limit [num]\nmod: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
         LIMIT -> limit_num
-        call52_types [TYPES="[integer, numeric]", MODS="[no column spec]", label="TYPES: [integer, numeric]\nMODS: [no column spec]", shape=rectangle, style=filled, color=lightblue]
+        call52_types [TYPES="[integer, numeric]", MODS="[no column spec, no function]", label="TYPES: [integer, numeric]\nMODS: [no column spec]", shape=rectangle, style=filled, color=lightblue]
         limit_num -> call52_types
         call52_types -> EXIT_LIMIT
     }
@@ -546,7 +545,7 @@ digraph G {
     }
 
     subgraph def_types {
-        types [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no column spec, no subquery, having clause mode, enable untyped null]", label="TYPE(S) (generic):\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[no column spec, no subquery, having clause mode, enable untyped null]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no literals, no typed nulls, no column spec, no subquery, having clause mode, enable untyped null, no function]", label="TYPE(S) (generic):\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[no literals, no typed nulls, no column spec, no subquery, having clause mode, enable untyped null]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
         types_select_type_integer[TYPE_NAME="integer", label="integer?", set_value="types_type"]
@@ -564,7 +563,7 @@ digraph G {
         types -> types_null
         types_null -> EXIT_types
 
-        types_return_typed_null [label="Typed null"]
+        types_return_typed_null [label="Typed null", modifier="no typed nulls", modifier_mode="off"]
         types_select_type_integer -> types_return_typed_null
         types_select_type_numeric -> types_return_typed_null
         types_select_type_3vl -> types_return_typed_null
@@ -587,30 +586,29 @@ digraph G {
         types_select_special_expression -> call1_Query
         call1_Query -> EXIT_types
 
-        call1_number [label="number\nTYPES: [integer]\nMODS: [...mods]", TYPES="[integer]", MODS="[...]", shape=rectangle, style=filled, color=chocolate]
+        call0_aggregate_function [TYPES="[known]", modifier="no function", label="Aggregate function\nTYPE: known\nmod.: 'no function'", modifier_mode="off", shape=rectangle, style=filled, color=peru]
+        types_select_special_expression -> call0_aggregate_function
+        call0_aggregate_function -> EXIT_types
+
+        call1_number [label="number\nTYPES: [integer]\nMODS: [...mods]", TYPES="[integer]", MODS="[...]", modifier="no literals", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
         types_select_type_integer -> call1_number
         call1_number -> EXIT_types
 
-        call0_number [label="number\nTYPES: [numeric]\nMODS: [...mods]", TYPES="[numeric]", MODS="[...]", shape=rectangle, style=filled, color=chocolate]
+        call0_number [label="number\nTYPES: [numeric]\nMODS: [...mods]", TYPES="[numeric]", MODS="[...]", modifier="no literals", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
         types_select_type_numeric -> call0_number
         call0_number -> EXIT_types
 
-        call1_VAL_3 [label="3VL Value\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=red]
+        call1_VAL_3 [label="3VL Value\nMODS: [...mods]", MODS="[...]", modifier="no literals", modifier_mode="off", shape=rectangle, style=filled, color=red]
         types_select_type_3vl -> call1_VAL_3
         call1_VAL_3 -> EXIT_types
 
-        call0_text [label="text\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=pink]
+        call0_text [label="text\nMODS: [...mods]", MODS="[...]", modifier="no literals", modifier_mode="off", shape=rectangle, style=filled, color=pink]
         types_select_type_text -> call0_text
         call0_text -> EXIT_types
 
-        call0_date [label="date\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=cadetblue4]
+        call0_date [label="date\nMODS: [...mods]", MODS="[...]", modifier="no literals", modifier_mode="off", shape=rectangle, style=filled, color=cadetblue4]
         types_select_type_date -> call0_date
         call0_date -> EXIT_types
-        
-        call0_aggregate_function [label="aggregate function\nTYPE: known", TYPES="[known]", shape=rectangle, style=filled, color=peru]
-        types_select_special_expression -> call0_aggregate_function
-        call0_aggregate_function -> EXIT_types
-        
     }
 
     subgraph def_column_spec {
@@ -620,7 +618,7 @@ digraph G {
         column_spec_choose_source [label="Choose column spec relation source"]
         column_spec -> column_spec_choose_source
 
-        column_spec_choose_qualified [label="Choose if qualified (R.COL/COL)"]
+        column_spec_choose_qualified [label="Choose if qualified (R.COL/COL)\nset value: 'has_unique_column_names_for_type_val'", set_value="has_unique_column_names_for_type_val"]
 
         get_column_spec_from_having [label="HAVING", modifier="having clause mode", modifier_mode="on"]
         column_spec_choose_source -> get_column_spec_from_having
@@ -680,20 +678,20 @@ digraph G {
         set_list -> new_set
         new_set -> set_list
         
-        call3_column_spec[label="new relation"]
-        new_set -> call3_column_spec
-        call3_column_spec -> new_set
-        call3_column_spec -> EXIT_group_by
+        call69_types[TYPES="[any]", label="TYPES: [any]\n MODS: [no literals, no typed nulls, no subquery, no function]", MODS="[no literals, no typed nulls, no subquery, no function]", shape=rectangle, style=filled, color=lightblue]
+        new_set -> call69_types
+        call69_types -> new_set
+        call69_types -> EXIT_group_by
         
         list_of_relations[label="list"]
         grouping_relations_list -> list_of_relations
         grouping_cube -> set_list
         grouping_rollup -> set_list
-        
-        call2_column_spec [label="new relations"]
-        list_of_relations -> call2_column_spec
-        call2_column_spec -> list_of_relations
-        call2_column_spec -> EXIT_group_by
+
+        call70_types[TYPES="[any]", label="TYPES: [any]\nMODS: [no literals, no typed nulls, no subquery, no function]", MODS="[no literals, no typed nulls, no subquery, no function]", shape=rectangle, style=filled, color=lightblue]
+        list_of_relations -> call70_types
+        call70_types -> list_of_relations
+        call70_types -> EXIT_group_by
     }
 
 
@@ -712,15 +710,26 @@ digraph G {
         aggregate_distinct -> aggregate_select_return_type
         
         aggregate_function -> aggregate_select_return_type
-        aggregate_select_type_numeric[OPTIONAL="numeric", label="numeric?"]
+        
         // aggregate_select_type_array[OPTIONAL="array", label="array?"]
-        aggregate_select_type_string[OPTIONAL="text", label="text?"]
-        aggregate_select_type_bool[OPTIONAL="3VL Value", label="3VL Value?"]
+        aggregate_select_type_numeric[OPTIONAL="numeric", TYPE_NAME="numeric", label="numeric?"]
+        aggregate_select_type_string[OPTIONAL="text", TYPE_NAME="text", label="text?"]
+        aggregate_select_type_bool[OPTIONAL="3VL Value", TYPE_NAME="3VL Value", label="3VL Value?"]
+        aggregate_select_type_integer[OPTIONAL="integer", TYPE_NAME="integer", label="integer?"]
+        // aggregate_select_type_numeric[OPTIONAL="numeric", label="numeric?"]
+        // aggregate_select_type_string[OPTIONAL="text", label="text?"]
+        // aggregate_select_type_bool[OPTIONAL="3VL Value", label="3VL Value?"]
+        // aggregate_select_type_integer[OPTIONAL="integer", label="integer?"]
+        
+        // aggregate_select_type_numeric[OPTIONAL="numeric", label="numeric?", set_value="types_type"]
+        // aggregate_select_type_string[OPTIONAL="text", label="text?", set_value="types_type"]
+        // aggregate_select_type_bool[OPTIONAL="3VL Value", label="3VL Value?", set_value="types_type"]
 
         aggregate_select_return_type -> aggregate_select_type_numeric
         // aggregate_select_return_type -> aggregate_select_type_array
         aggregate_select_return_type -> aggregate_select_type_string
         aggregate_select_return_type -> aggregate_select_type_bool
+        aggregate_select_return_type -> aggregate_select_type_integer
         
         call64_types [TYPES="[3VL Value]", label="TYPES: 3VL Value", shape=rectangle, style=filled, color=lightblue]
         call66_types [TYPES="[numeric]", label="TYPES: numeric", shape=rectangle, style=filled, color=lightblue]
@@ -728,13 +737,6 @@ digraph G {
         call64_types -> EXIT_aggregate_function
         call66_types -> EXIT_aggregate_function
         call63_types -> EXIT_aggregate_function
-
-        // call50_types [TYPES="[any]", label="TYPES: [any]\nmodif.: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
-        
-        // array_arg[label="[all]"]
-        // aggregate_select_type_array -> array_arg 
-        // array_arg -> call50_types
-        // call50_types -> EXIT_aggregate_function       
 
         arg_single_vl3 [label="[3vl]"]
         aggregate_select_type_bool -> arg_single_vl3
@@ -746,10 +748,8 @@ digraph G {
 
 
         COUNT[]
-        aggregate_select_type_numeric -> COUNT
+        aggregate_select_type_integer -> COUNT
         COUNT_wildcard[label="*"]
-        // COUNT_distinct[label="DISTINCT"]
-        // COUNT_distinct_wildcard[label="DISTINCT"]
         call65_types [TYPES="[any]", label="TYPES: [any]\nmodif.: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         
         COUNT -> COUNT_wildcard
@@ -758,9 +758,7 @@ digraph G {
         // COUNT_distinct -> call65_types
         call65_types -> EXIT_aggregate_function
         COUNT_wildcard -> EXIT_aggregate_function
-        // COUNT_wildcard -> COUNT_distinct_wildcard
-        // COUNT_distinct_wildcard -> EXIT_aggregate_function
-        
+
         arg_double_numeric [label="[numberic, numeric]"]
         aggregate_select_type_numeric -> arg_double_numeric   
 
@@ -772,35 +770,21 @@ digraph G {
         arg_single_numeric[label="[numeric]"]
         aggregate_select_type_numeric -> arg_single_numeric
         arg_single_numeric -> call66_types
+
+        arg_integer[label="[integer]"]
+        aggregate_select_type_integer -> arg_integer
+        call71_types [TYPES="[integer]", label="TYPES: [integer]\nmodif.: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        arg_integer -> call71_types
+        call71_types -> EXIT_aggregate_function
     }
 
 
     subgraph def_having {
-        having [label="HAVING", shape=rectangle, style=filled, color=mediumvioletred]
+        having [label="HAVING", MODS="[having clause mode]", shape=rectangle, style=filled, color=mediumvioletred]
         EXIT_having [label="EXIT HAVING"]
-
-        // having_condition [label="HAVING condition"]
-        // having -> having_condition
-
-        // having_not [label="NOT"]
         call45_types [TYPES="[3VL Value]", label="TYPE: [3VL]", shape=rectangle, style=filled, color=lightblue]
-        // call46_types [TYPES="[3VL Value]", label="TYPE: [3VL]", shape=rectangle, style=filled, color=lightblue]
-        // having_logical_expr [label="AND | OR ?"]
-
-        // having_condition -> having_not
-        // having_condition -> call45_types
         having -> call45_types
-
-        // call45_types -> having_logical_expr
-        // having_not -> call45_types
-
-        // having_not_optional [label="NOT"]
-        // having_logical_expr -> having_not_optional
-        // having_not_optional -> call46_types
-        // having_logical_expr -> call46_types
-
         call45_types -> EXIT_having
-        // call46_types -> EXIT_having
     }
 
     # cosmetic
