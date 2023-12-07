@@ -771,7 +771,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             last_node_outgoing.into_iter().map(|node| (1f64, node)).collect()
         };
 
-        /// TODO: THIS log-stuff and normalization looks cumbersome and needs a fix
+        /// TODO: This log-stuff and normalization looks cumbersome and needs a fix
         // unnormalized log-probs
         let last_node_outgoing = dynamic_model.assign_log_probabilities(last_node_outgoing)?;
 

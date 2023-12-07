@@ -41,16 +41,7 @@ impl ModelConfig {
     pub fn create_model(&self) -> io::Result<Box<dyn PathwayGraphModel>> {
         let mut model: Box<dyn PathwayGraphModel> = match (self.model_name.as_str(), self.stacked_version) {
             ("subgraph", false) => Box::new(ModelWithMarkovWeights::<FunctionNameContext>::new()),
-            ("subgraph", true) => {
-                let mut st = Box::new(ModelWithMarkovWeights::<StackedFunctionNamesContext>::new());
-                st.track_transitions_in(StackedFunctionNamesContext {
-                    func_names: vec![
-                        "Query", "WHERE", "types", "Query", "FROM", "Query", "WHERE", "types",
-                        "VAL_3", "types", "Query", "WHERE", "types", "VAL_3", "types", "Query",
-                    ].into_iter().map(SmolStr::new).collect()
-                });
-                st
-            },
+            ("subgraph", true) => Box::new(ModelWithMarkovWeights::<StackedFunctionNamesContext>::new()),
             ("full_function_context", false) => Box::new(ModelWithMarkovWeights::<FullFunctionContext>::new()),
             ("full_function_context", true) => Box::new(ModelWithMarkovWeights::<StackedFullFunctionContext>::new()),
             (any, st) => panic!("No such model: name: {any} stacked: {st}"),
@@ -220,7 +211,11 @@ where
         let outgoing_weights = self.weights.get_outgoing_weights_opt(&func_name, current_node);
         if let Some(ref tracked_function) = self.track_transitions_in {
             if func_name == *tracked_function {
-                println!("\nFunction: {func_name}\ncurrent_node = {current_node}\noutgoing_weights = {:?}", outgoing_weights);
+                println!(
+                    "\nFunction: {func_name}\ncurrent_node = {current_node}\noutgoing_weights = {:?}\nnode_outgoing = {:?}",
+                    outgoing_weights,
+                    node_outgoing.iter().map(|node| node.node_common.name.clone()).collect::<Vec<_>>()
+                );
             }
         }
         let output = if let Some(outgoing_weights) = outgoing_weights {
@@ -249,7 +244,7 @@ where
             // The model is undertrained for this context and cannot decide.
             // Basically, we're in a place we've never been to during training.
             // We then set weights uniformly.
-            // eprintln!("The model was not trained in this context:\ncurrent_node = {current_node}\nfunc_name = {func_name}");
+            eprintln!("The model was not trained in this context:\ncurrent_node = {current_node}\nfunc_name = {func_name}");
             let fill_with = 1f64 / (node_outgoing.len() as f64);
             node_outgoing.into_iter().map(|node| (fill_with, node)).collect()
         })
