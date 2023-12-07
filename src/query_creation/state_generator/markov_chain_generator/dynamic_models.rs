@@ -8,8 +8,8 @@ use super::{markov_chain::NodeParams, StateGenerationError};
 /// Dynamic model for assigning probabilities when using ProbabilisticModel 
 pub trait DynamicModel {
     fn new() -> Self;
-    /// assigns the (unnormalized) probabilities to the outgoing nodes.
-    /// Receives probabilities recorded in graph
+    /// assigns the (unnormalized) log-probabilities to the outgoing nodes.
+    /// Receives weights recorded in graph
     fn assign_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError>;
     /// is called at the beginning of each subquery creation
     fn notify_subquery_creation_begin(&mut self) {}
@@ -29,7 +29,10 @@ impl DynamicModel for MarkovModel {
         Self {}
     }
     fn assign_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError> {
-        Ok(node_outgoing)
+        Ok(node_outgoing.into_iter().map(|(w, node)| (
+            if w == 0f64 { f64::NEG_INFINITY } else { w.ln() },
+            node
+        )).collect())
     }
 }
 
@@ -69,7 +72,11 @@ impl DynamicModel for PathModel {
         } else {
             Ok(node_outgoing.into_iter().map(
                 |(_, node)| (
-                    if node.node_common.name == *node_name { 1f64 } else { 0f64 },
+                    if node.node_common.name == *node_name {
+                        1f64.ln()
+                    } else {
+                        f64::NEG_INFINITY  // 0f64.ln()
+                    },
                     node,
                 )
             ).collect())
@@ -106,9 +113,9 @@ impl DynamicModel for DeterministicModel {
             Ok(node_outgoing.into_iter().map(
                 |(_, node)| (
                     if node.node_common.name == node_name {
-                        1f64
+                        1f64.ln()
                     } else {
-                        0f64
+                        f64::NEG_INFINITY  // 0f64.ln()
                     },
                     node,
                 )

@@ -764,14 +764,18 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             (last_node, last_node_outgoing)
         };
 
+        // weights
         let last_node_outgoing = if let Some(predictor_model) = predictor_model_opt {
             predictor_model.predict(&self.call_stack, last_node_outgoing)
         } else {
             last_node_outgoing.into_iter().map(|node| (1f64, node)).collect()
         };
 
+        /// TODO: THIS log-stuff and normalization looks cumbersome and needs a fix
+        // unnormalized log-probs
         let last_node_outgoing = dynamic_model.assign_log_probabilities(last_node_outgoing)?;
 
+        // normalize the log-probs and choose
         let destination = self.state_chooser.choose_destination(rng, last_node_outgoing);
 
         let stack_frame = self.call_stack.last_mut().unwrap();

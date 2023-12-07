@@ -22,9 +22,11 @@ model_name="subgraph"
 # TODO: apply the same logic as in save_dot_file?
 load_weights=false
 # where to load the weights from
-load_weights_from="weights/subgraph/stacked/untrained_db_2_performance_graph_100K.mw"
+# load_weights_from="weights/fullcontext/stacked/untrained_db_2_performance_graph_100K.mw"
+# load_weights_from="weights/fullcontext/stacked/untrained_db.mw"
+load_weights_from="weights/subgraph/unstacked/untrained_db_2_performance_graph_100K.mw"
 # whether to use the stacked version of the model
-stacked_version=true
+stacked_version=false
 # where to save a dot file with graph representation.
 # Type save_dot_file=false to turn off
 # save_dot_file="weights_in_dot/subgraph/untrained_db_2_performance_graph_100K.dot"
@@ -46,7 +48,9 @@ training_db_path="training_dbs/untrained_db_2_performance_graph_100K.sql"
 training_schema="schema/tpc-h_tables.sql"
 
 # where to save model weights to
-save_weights_to="weights/subgraph/stacked/untrained_db_2_performance_graph_100K.mw"
+# save_weights_to="weights/fullcontext/stacked/untrained_db_2_performance_graph_100K.mw"
+# save_weights_to="weights/fullcontext/stacked/untrained_db.mw"
+save_weights_to="weights/subgraph/unstacked/untrained_db_2_performance_graph_100K.mw"
 
 
 [query_generator]

@@ -41,7 +41,16 @@ impl ModelConfig {
     pub fn create_model(&self) -> io::Result<Box<dyn PathwayGraphModel>> {
         let mut model: Box<dyn PathwayGraphModel> = match (self.model_name.as_str(), self.stacked_version) {
             ("subgraph", false) => Box::new(ModelWithMarkovWeights::<FunctionNameContext>::new()),
-            ("subgraph", true) => Box::new(ModelWithMarkovWeights::<StackedFunctionNamesContext>::new()),
+            ("subgraph", true) => {
+                let mut st = Box::new(ModelWithMarkovWeights::<StackedFunctionNamesContext>::new());
+                st.track_transitions_in(StackedFunctionNamesContext {
+                    func_names: vec![
+                        "Query", "WHERE", "types", "Query", "FROM", "Query", "WHERE", "types",
+                        "VAL_3", "types", "Query", "WHERE", "types", "VAL_3", "types", "Query",
+                    ].into_iter().map(SmolStr::new).collect()
+                });
+                st
+            },
             ("full_function_context", false) => Box::new(ModelWithMarkovWeights::<FullFunctionContext>::new()),
             ("full_function_context", true) => Box::new(ModelWithMarkovWeights::<StackedFullFunctionContext>::new()),
             (any, st) => panic!("No such model: name: {any} stacked: {st}"),
@@ -124,6 +133,7 @@ where
     weights: MarkovWeights<HashMap<FnCntxt, HashMap<SmolStr, HashMap<SmolStr, f64>>>>,
     weights_ready: bool,
     last_state_stack: Vec<SmolStr>,
+    track_transitions_in: Option<FnCntxt>,
 }
 
 impl<FnCntxt> ModelWithMarkovWeights<FnCntxt>
@@ -135,7 +145,12 @@ where
             weights: MarkovWeights::new(),
             weights_ready: false,
             last_state_stack: vec![],
+            track_transitions_in: None,
         }
+    }
+
+    pub fn track_transitions_in(&mut self, fn_context: FnCntxt) {
+        self.track_transitions_in = Some(fn_context);
     }
 }
 
@@ -203,6 +218,11 @@ where
         let func_name = FnCntxt::from_call_stack_and_exit_frame(call_stack, None);
         let current_node = &context.current_node.node_common.name;
         let outgoing_weights = self.weights.get_outgoing_weights_opt(&func_name, current_node);
+        if let Some(ref tracked_function) = self.track_transitions_in {
+            if func_name == *tracked_function {
+                println!("\nFunction: {func_name}\ncurrent_node = {current_node}\noutgoing_weights = {:?}", outgoing_weights);
+            }
+        }
         let output = if let Some(outgoing_weights) = outgoing_weights {
             // obtain weights
             let mut output: Vec<_> = node_outgoing.iter().map(|node| (
@@ -220,11 +240,16 @@ where
                 )).collect())
             } else { None }
         } else { None };
+        if let Some(ref tracked_function) = self.track_transitions_in {
+            if func_name == *tracked_function {
+                println!("output = {:#?}\n", output);
+            }
+        }
         output.unwrap_or_else(|| {
             // The model is undertrained for this context and cannot decide.
             // Basically, we're in a place we've never been to during training.
             // We then set weights uniformly.
-            eprintln!("The model was not trained in this context:\ncurrent_node = {current_node}\nfunc_name = {func_name}");
+            // eprintln!("The model was not trained in this context:\ncurrent_node = {current_node}\nfunc_name = {func_name}");
             let fill_with = 1f64 / (node_outgoing.len() as f64);
             node_outgoing.into_iter().map(|node| (fill_with, node)).collect()
         })

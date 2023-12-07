@@ -9,6 +9,7 @@ use super::markov_chain::NodeParams;
 
 pub trait StateChooser: Debug + Clone {
     fn new() -> Self where Self: Sized;
+    /// choose destination adhering to the unnormalized log-probabilities
     fn choose_destination(&mut self, rng: &mut ChaCha8Rng, outgoing_states: Vec<(f64, NodeParams)>) -> Option<NodeParams>;
 }
 
