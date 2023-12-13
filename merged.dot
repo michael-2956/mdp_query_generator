@@ -586,6 +586,7 @@ digraph G {
         types_select_special_expression -> call1_Query
         call1_Query -> EXIT_types
 
+        // call0_aggregate_function [TYPES="[known]", modifier="no function", label="Aggregate function\nTYPE: known\nmod.: 'no function'", modifier_mode="off", shape=rectangle, style=filled, color=peru]
         call0_aggregate_function [TYPES="[known]", modifier="no function", label="Aggregate function\nTYPE: known\nmod.: 'no function'", modifier_mode="off", shape=rectangle, style=filled, color=peru]
         types_select_special_expression -> call0_aggregate_function
         call0_aggregate_function -> EXIT_types
@@ -696,7 +697,7 @@ digraph G {
 
 
     subgraph def_aggregate_function {
-        aggregate_function [TYPES="[numeric, 3VL Value, text, date]", label="aggregate function\nTYPES=[numeric, 3VL Value, text, date]", shape=octagon, style=filled, color=peru]
+        aggregate_function [TYPES="[integer, numeric, 3VL Value, text ,date]", label="aggregate function\nTYPES=[numeric, 3VL Value, text, date]", shape=octagon, style=filled, color=peru]
         EXIT_aggregate_function [label="EXIT aggregate function"]
         
         aggregate_select_return_type [label="return type:="]
@@ -712,31 +713,28 @@ digraph G {
         aggregate_function -> aggregate_select_return_type
         
         // aggregate_select_type_array[OPTIONAL="array", label="array?"]
-        aggregate_select_type_numeric[OPTIONAL="numeric", TYPE_NAME="numeric", label="numeric?"]
-        aggregate_select_type_string[OPTIONAL="text", TYPE_NAME="text", label="text?"]
-        aggregate_select_type_bool[OPTIONAL="3VL Value", TYPE_NAME="3VL Value", label="3VL Value?"]
-        aggregate_select_type_integer[OPTIONAL="integer", TYPE_NAME="integer", label="integer?"]
-        // aggregate_select_type_numeric[OPTIONAL="numeric", label="numeric?"]
-        // aggregate_select_type_string[OPTIONAL="text", label="text?"]
-        // aggregate_select_type_bool[OPTIONAL="3VL Value", label="3VL Value?"]
-        // aggregate_select_type_integer[OPTIONAL="integer", label="integer?"]
-        
-        // aggregate_select_type_numeric[OPTIONAL="numeric", label="numeric?", set_value="types_type"]
-        // aggregate_select_type_string[OPTIONAL="text", label="text?", set_value="types_type"]
-        // aggregate_select_type_bool[OPTIONAL="3VL Value", label="3VL Value?", set_value="types_type"]
-
+        aggregate_select_type_numeric[TYPE_NAME="numeric", label="numeric?"]
+        aggregate_select_type_string[TYPE_NAME="text", label="text?"]
+        aggregate_select_type_bool[TYPE_NAME="3VL Value", label="3VL Value?"]
+        aggregate_select_type_integer[TYPE_NAME="integer", label="integer?"]
+        aggregate_select_type_date[TYPE_NAME="date", label="date?"]
+ 
+ 
         aggregate_select_return_type -> aggregate_select_type_numeric
         // aggregate_select_return_type -> aggregate_select_type_array
         aggregate_select_return_type -> aggregate_select_type_string
         aggregate_select_return_type -> aggregate_select_type_bool
         aggregate_select_return_type -> aggregate_select_type_integer
+        aggregate_select_return_type -> aggregate_select_type_date
         
         call64_types [TYPES="[3VL Value]", label="TYPES: 3VL Value", shape=rectangle, style=filled, color=lightblue]
         call66_types [TYPES="[numeric]", label="TYPES: numeric", shape=rectangle, style=filled, color=lightblue]
         call63_types [TYPES="[text]", label="TYPES: text", shape=rectangle, style=filled, color=lightblue]
+        call72_types [TYPES="[date]", label="TYPES: date", shape=rectangle, style=filled, color=lightblue]
         call64_types -> EXIT_aggregate_function
         call66_types -> EXIT_aggregate_function
         call63_types -> EXIT_aggregate_function
+        call72_types -> EXIT_aggregate_function
 
         arg_single_vl3 [label="[3vl]"]
         aggregate_select_type_bool -> arg_single_vl3
@@ -745,6 +743,10 @@ digraph G {
         arg_string[label="[Text]"]
         aggregate_select_type_string -> arg_string
         arg_string -> call63_types
+
+        arg_date[label="[date]"]
+        aggregate_select_type_date -> arg_date
+        arg_date -> call72_types
 
 
         COUNT[]

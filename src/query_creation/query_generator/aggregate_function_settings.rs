@@ -22,14 +22,15 @@ impl AggregateFunctionDistribution {
         let mut filled_map : HashMap<Vec<SubgraphType>, HashMap<Vec<SubgraphType>, BTreeMap<String, f64>>> = HashMap::new();
         for (key, _) in &content {
             match key.as_str() {
-                arm @ ("[numeric, numeric]" | "[numeric]" | "[text]" | "[Val3]" | "[integer]") => {
+                arm @ ("[numeric, numeric]" | "[numeric]" | "[text]" | "[Val3]" | "[integer]" | "[date]") => {
                     for (inner_key, _) in &content[arm] {
                         match inner_key.as_str() {
-                            inner_arm @ ("[numeric]" | "[text]" | "[Val3]" | "[integer]") => {
+                            inner_arm @ ("[numeric]" | "[text]" | "[Val3]" | "[integer]" | "[date]") => {
                                 let outer : Vec<SubgraphType> = match key.as_str() {
                                     "[numeric, numeric]" => vec![SubgraphType::Numeric, SubgraphType::Numeric],
                                     "[numeric]" => vec![SubgraphType::Numeric],
                                     "[text]" => vec![SubgraphType::Text],
+                                    "[date]" => vec![SubgraphType::Date],
                                     "[Val3]" => vec![SubgraphType::Val3],    
                                     "[integer]" => vec![SubgraphType::Integer],    
                                     _ => panic!("found unknown domain type {} while filling aggregate functions structure.", key),
@@ -37,6 +38,7 @@ impl AggregateFunctionDistribution {
                                 let inner : Vec<SubgraphType> = match inner_key.as_str() {
                                     "[numeric]" => vec![SubgraphType::Numeric],
                                     "[text]" => vec![SubgraphType::Text],
+                                    "[date]" => vec![SubgraphType::Date],
                                     "[Val3]" => vec![SubgraphType::Val3],    
                                     "[integer]" => vec![SubgraphType::Integer],    
                                     _ => panic!("found unknown return type {} while filling aggregate functions structure.", key),

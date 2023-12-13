@@ -1070,15 +1070,17 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                     any => self.panic_unexpected(any),
                 }
             },
-            arm @ ("aggregate_select_type_string" | "aggregate_select_type_bool") => {
+            arm @ ("aggregate_select_type_string" | "aggregate_select_type_bool" | "aggregate_select_type_date") => {
                 self.expect_state(match arm {
                     "aggregate_select_type_string" => "arg_string", 
                     "aggregate_select_type_bool" => "arg_single_vl3", 
+                    "aggregate_select_type_date" => "arg_date", 
                     any => self.panic_unexpected(any),
                 });
                 chosen_return_type = match arm {
                     "aggregate_select_type_string" => SubgraphType::Text, 
                     "aggregate_select_type_bool" => SubgraphType::Val3, 
+                    "aggregate_select_type_date" => SubgraphType::Date, 
                     any => self.panic_unexpected(any),
                 };
                 let chosen_type = &(
@@ -1086,12 +1088,14 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                         match arm {
                             "aggregate_select_type_string" => SubgraphType::Text, 
                             "aggregate_select_type_bool" => SubgraphType::Val3, 
+                            "aggregate_select_type_date" => SubgraphType::Date, 
                             any => self.panic_unexpected(any),
                         }],
                         vec![
                             match arm {
                                 "aggregate_select_type_string" => SubgraphType::Text, 
                                 "aggregate_select_type_bool" => SubgraphType::Val3, 
+                                "aggregate_select_type_date" => SubgraphType::Date, 
                                 any => self.panic_unexpected(any),
                             }],
                 );
@@ -1099,6 +1103,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                 self.expect_state(match arm {
                     "aggregate_select_type_string" => "call63_types", 
                     "aggregate_select_type_bool" => "call64_types", 
+                    "aggregate_select_type_date" => "call72_types", 
                     any => self.panic_unexpected(any),
                 });
                 result = Expr::Function(sqlparser::ast::Function {
@@ -1109,6 +1114,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                                 match arm {
                                     "aggregate_select_type_string" => &[SubgraphType::Text], 
                                     "aggregate_select_type_bool" => &[SubgraphType::Val3], 
+                                    "aggregate_select_type_date" => &[SubgraphType::Date], 
                                     any => self.panic_unexpected(any),
                             }), None).1,
                         )),
