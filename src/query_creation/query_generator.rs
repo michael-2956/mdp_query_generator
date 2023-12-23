@@ -154,18 +154,32 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                 select_body.selection = Some(self.handle_where().1);
                 match self.next_state().as_str() {
                     "call0_SELECT" => {},
-                    "call0_group_by" => {
+                    "call0_GROUP_BY" => {
                         select_body.group_by = self.handle_group_by(); 
-                        self.expect_state("call0_SELECT");
+                        match self.next_state().as_str() {
+                            "call0_SELECT" => {},
+                            "call0_HAVING" => {
+                                select_body.having = Some(self.handle_having().1);
+                                self.expect_state("call0_SELECT");
+                            },
+                            any => self.panic_unexpected(any),  
+                        }
                     },
                     any => self.panic_unexpected(any),  
                 }
 
             },
             "call0_SELECT" => {},
-            "call0_group_by" => {
+            "call0_GROUP_BY" => {
                 select_body.group_by = self.handle_group_by();
-                self.expect_state("call0_SELECT");
+                match self.next_state().as_str() {
+                    "call0_SELECT" => {},
+                    "call0_HAVING" => {
+                        select_body.having = Some(self.handle_having().1);
+                        self.expect_state("call0_SELECT");
+                    },
+                    any => self.panic_unexpected(any),  
+                }
 
             }
             any => self.panic_unexpected(any),
@@ -971,9 +985,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                         any => self.panic_unexpected(any),
                     },
                     "arg_integer" => {                
-                        let fun_name = self.config.aggregate_functions_distribution.get_fun_name(vec![chosen_type], (vec![chosen_return_type.clone()]));
-                        // let fun_name = "TMP_NAME";
-                        // println!("{}, {}",chosen_type.0.to_owned(), chosen_return_type.1.to_owned()); 
+                        let fun_name = self.config.aggregate_functions_distribution.get_fun_name(vec![chosen_type], vec![chosen_return_type.clone()]);
                         self.expect_state("call71_types");
                         result = Expr::Function(sqlparser::ast::Function {
                             name: fun_name,
@@ -1152,9 +1164,8 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
     }
 
     /// subgraph def_group_by
-    /// TODO add grouping function
     fn handle_group_by(&mut self) -> Vec<Expr> {
-        self.expect_state("group_by");
+        self.expect_state("GROUP_BY");
         let result;
         let mut arg: Vec<Vec<Expr>> = Vec::new();
         match self.next_state().as_str() {
@@ -1166,13 +1177,24 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
 
                         },
                         "call70_types" => {
-                            list.push(self.handle_types(
+                            let (chosen_column_type, chosen_column) = self.handle_types(
                                 None, None
-                            ).1);
+                            );
+                            println!("chosen column = {:#?}", chosen_column);
+                            list.push(chosen_column.clone());
+                            let chosen_column_ident = match chosen_column {
+                                Expr::Identifier(ident) => vec![ident],
+                                Expr::CompoundIdentifier(vec_of_ident) => vec_of_ident,
+                                // do i need to use expr somehow?
+                                Expr::CompositeAccess { expr, key } => vec![key],
+                                any => panic!("Got unexpected form of ident for GROUP BY arg: {:#?}", any),
+                            };
+                            println!("ident = {:#?}",chosen_column_ident);
+                            self.clause_context.group_by_mut().append_column(chosen_column_ident, chosen_column_type);
                         },
-                        "EXIT_group_by" => {
-                            // result = vec![Expr::Tuple(list)];
-                            result = vec![Expr::Nested(list.clone().into_iter().nth(0).map(|v| Box::new(v)).unwrap_or_else(|| panic!("empty grouping list")))];
+                        "EXIT_GROUP_BY" => {
+                            
+                            result = list;
                             return result;
                         },
                         any => self.panic_unexpected(any),
@@ -1191,14 +1213,24 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                             current_set = Vec::new();
                         },
                         "new_set" => {
-
+                            
                         },
                         "call69_types" => {
-                            current_set.push(self.handle_types(
+                            let (chosen_column_type, chosen_column) = self.handle_types(
                                 None, None
-                            ).1);
+                            );
+                            println!("chosen column = {:#?}", chosen_column);
+                            current_set.push(chosen_column.clone());
+                            let chosen_column_ident = match chosen_column {
+                                Expr::Identifier(ident) => vec![ident],
+                                Expr::CompoundIdentifier(vec_of_ident) => vec_of_ident,
+                                Expr::CompositeAccess { expr, key } => vec![key],
+                                any => panic!("Got unexpected form of ident for GROUP BY arg: {:#?}", any),
+                            };
+                            println!("ident = {:#?}",chosen_column_ident);
+                            self.clause_context.group_by_mut().append_column(chosen_column_ident, chosen_column_type);
                         },
-                        "EXIT_group_by" => {
+                        "EXIT_GROUP_BY" => {
                             arg.push(current_set);
                             result = match arm {
                                 "grouping_set" => vec![Expr::GroupingSets(arg)],
@@ -1218,7 +1250,15 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         // result
     }
 
-
+    /// subgraph def_having
+    fn handle_having(&mut self) -> (SubgraphType, Expr) {
+        self.expect_state("HAVING");
+        self.expect_state("call45_types");
+        println!("\nclause_context.group_by at HAVING generation \n{:#?}\n", self.clause_context.group_by());
+        let (selection_type, selection) = self.handle_types(Some(&[SubgraphType::Val3]), None);
+        self.expect_state("EXIT_HAVING");
+        (selection_type, selection)
+    }
     /// starting point; calls handle_query for the first time
     fn generate(&mut self) -> Query {
         let query = self.handle_query().0;
