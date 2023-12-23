@@ -1,5 +1,5 @@
 pub mod state_choosers;
-pub mod dynamic_models;
+pub mod substitute_models;
 pub mod markov_chain;
 pub mod subgraph_type;
 pub mod error;
@@ -13,7 +13,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use take_until::TakeUntilExt;
 
-use crate::{unwrap_variant, query_creation::{state_generator::markov_chain_generator::markov_chain::FunctionTypes, query_generator::{query_info::ClauseContext, call_modifiers::{StatelessCallModifier, StatefulCallModifier, IsColumnTypeAvailableModifier, TypesTypeValueSetter, ValueSetter, NamedValue, ValueSetterValue, HasUniqueColumnNamesForTypeModifier, WildcardRelationsValueSetter, IsWildcardAvailableModifier, HasUniqueColumnNamesForTypeValueSetter}}}, config::TomlReadable, training::models::PathwayGraphModel};
+use crate::{unwrap_variant, query_creation::{state_generator::markov_chain_generator::markov_chain::FunctionTypes, query_generator::{query_info::ClauseContext, call_modifiers::{StatelessCallModifier, StatefulCallModifier, IsColumnTypeAvailableModifier, TypesTypeValueSetter, ValueSetter, NamedValue, ValueSetterValue, HasUniqueColumnNamesForTypeModifier, WildcardRelationsValueSetter, IsWildcardAvailableModifier, HasUniqueColumnNamesForTypeValueSetter}}}, config::TomlReadable, training::models::{PathwayGraphModel, ModelPredictionResult}};
 
 use self::{
     markov_chain::{
@@ -22,7 +22,7 @@ use self::{
 };
 
 use state_choosers::StateChooser;
-use dynamic_models::DynamicModel;
+use substitute_models::SubstituteModel;
 
 pub use self::markov_chain::CallTypes;
 
@@ -737,10 +737,10 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             &mut self,
             rng: &mut ChaCha8Rng,
             clause_context: &ClauseContext,
-            dynamic_model: &mut (impl DynamicModel + ?Sized),
+            substitute_model: &mut (impl SubstituteModel + ?Sized),
             predictor_model_opt: Option<&mut Box<dyn PathwayGraphModel>>,
         ) -> Result<(), StateGenerationError> {
-        dynamic_model.notify_call_stack_length(self.call_stack.len());
+        substitute_model.notify_call_stack_length(self.call_stack.len());
 
         let (last_node, last_node_outgoing) = {
             let stack_frame = self.call_stack.last().unwrap();
@@ -759,21 +759,33 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
                 } else { Some(el.1.clone()) }
             }).collect::<Vec<_>>();
 
-            dynamic_model.update_current_state(&last_node.node_common.name);
+            substitute_model.update_current_state(&last_node.node_common.name);
 
             (last_node, last_node_outgoing)
         };
 
-        // weights
+        // probability distribution recorded in model
         let last_node_outgoing = if let Some(predictor_model) = predictor_model_opt {
             predictor_model.predict(&self.call_stack, last_node_outgoing)
-        } else {
-            last_node_outgoing.into_iter().map(|node| (1f64, node)).collect()
-        };
+        } else { ModelPredictionResult::None(last_node_outgoing) };
 
-        /// TODO: This log-stuff and normalization looks cumbersome and needs a fix
-        // unnormalized log-probs
-        let last_node_outgoing = dynamic_model.assign_log_probabilities(last_node_outgoing)?;
+        // transform to log probabulities, if no model is present run a dynamic one
+        let last_node_outgoing = match last_node_outgoing {
+            ModelPredictionResult::Some(predictions) => {
+                let prob_sum: f64 = predictions.iter().map(|x| x.0).sum();
+                if (prob_sum - 1f64).abs() > std::f64::EPSILON {
+                    panic!("Model predicted probabilities with a sum of {}, should have been close to 1.", prob_sum)
+                }
+                predictions.into_iter().map(|(w, node)| (
+                    w.ln(), node
+                )).collect()
+            },
+            ModelPredictionResult::None(outgoing_nodes) => {
+                let fill_with = - (outgoing_nodes.len() as f64).ln();
+                let uniform = outgoing_nodes.into_iter().map(|node| (fill_with, node)).collect();
+                substitute_model.trasform_log_probabilities(uniform)?
+            },
+        };
 
         // normalize the log-probs and choose
         let destination = self.state_chooser.choose_destination(rng, last_node_outgoing);
@@ -868,7 +880,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     pub fn next_node_name(
             &mut self, rng: &mut ChaCha8Rng,
             clause_context: &ClauseContext,
-            dynamic_model: &mut (impl DynamicModel + ?Sized),
+            substitute_model: &mut (impl SubstituteModel + ?Sized),
             predictor_model_opt: Option<&mut Box<dyn PathwayGraphModel>>,
         ) -> Result<Option<SmolStr>, StateGenerationError> {
         if let Some(call_params) = self.pending_call.take() {
@@ -881,7 +893,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         }
 
         let (is_an_exit, new_node_name) = {
-            self.update_current_node(rng, clause_context, dynamic_model, predictor_model_opt)?;
+            self.update_current_node(rng, clause_context, substitute_model, predictor_model_opt)?;
 
             let stack_frame = self.call_stack.last_mut().unwrap();
 

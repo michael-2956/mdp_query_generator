@@ -18,10 +18,10 @@ print_progress=true
 
 [model]
 # which model to use. Can be: "subgraph", "full_function_context"
-model_name="subgraph"
+model_name="depthwize_full_function_context"
 
 # whether to use the stacked version of the model
-stacked_version=true
+stacked_version=false
 
 # whether to use pretrained model weights
 # TODO: apply the same logic as in save_dot_file?
@@ -31,7 +31,8 @@ load_weights=true
 # load_weights_from="weights/fullcontext/unstacked/untrained_db_2_performance_graph_100K.mw"
 # load_weights_from="weights/fullcontext/stacked/untrained_db_2_performance_graph_100K.mw"
 # load_weights_from="weights/fullcontext/stacked/untrained_db.mw"
-load_weights_from="weights/subgraph/stacked/untrained_db_2_performance_graph_100K.mw"
+# load_weights_from="weights/subgraph/stacked/untrained_db_2_performance_graph_100K.mw"
+load_weights_from="weights/depthwize_full_function_context/unstacked/untrained_db_2_performance_graph_100K.mw"
 
 # where to save a dot file with graph representation.
 # Type save_dot_file=false to turn off
@@ -63,10 +64,9 @@ print_queries=false
 print_schema=false
 # Path to the file with the database schema
 table_schema_path="schema/tpc-h_tables.sql"
-# Which dynamic model to use as a state selector. Can be: "anticall", "markov"
-# Use "markov" when you want to give all control to the predictor model.
-# Use "anticall" when you want to use no model/constrain the model.
-dynamic_model="anticall"
+# Which substitute model to use as a state selector. Can be: "anticall", "markov".
+# Assigns probabilities when the model fails to do so or is absent
+substitute_model="anticall"
 # aggregate functions settings
 aggregate_functions_distribution_map_file="aggregate_functions_distribution_map.json"
 

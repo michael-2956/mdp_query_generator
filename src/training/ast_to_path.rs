@@ -5,7 +5,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{Query, ObjectName, Expr, SetExpr, SelectItem, Value, BinaryOperator, UnaryOperator, Ident, DataType, TrimWhereField, TableWithJoins};
 
-use crate::{query_creation::{query_generator::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{ValueSetterValue, TypesTypeValue, WildcardRelationsValue}, Unnested, QueryGenerator, value_choosers::{RandomValueChooser, DeterministicValueChooser}}, state_generator::{subgraph_type::SubgraphType, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::{CallModifiers, MarkovChain}, DynClone, ChainStateMemory}, dynamic_models::{DeterministicModel, DynamicModel, PathModel, AntiCallModel}, CallTypes}}, config::{TomlReadable, Config, MainConfig}, unwrap_variant, unwrap_variant_or_else};
+use crate::{query_creation::{query_generator::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{ValueSetterValue, TypesTypeValue, WildcardRelationsValue}, Unnested, QueryGenerator, value_choosers::{RandomValueChooser, DeterministicValueChooser}}, state_generator::{subgraph_type::SubgraphType, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::{CallModifiers, MarkovChain}, DynClone, ChainStateMemory}, substitute_models::{DeterministicModel, SubstituteModel, PathModel, AntiCallModel}, CallTypes}}, config::{TomlReadable, Config, MainConfig}, unwrap_variant, unwrap_variant_or_else};
 
 pub struct AST2PathTestingConfig {
     pub schema: PathBuf,
@@ -57,7 +57,7 @@ impl TestAST2Path {
             let query = Box::new(self.random_query_generator.generate());
             // println!("\n\n\nQuery: {query}");
             let path = self.path_generator.get_query_path(&query)?;
-            let generated_query = self.path_query_generator.generate_with_dynamic_model_and_value_chooser(
+            let generated_query = self.path_query_generator.generate_with_substitute_model_and_value_chooser(
                 Box::new(PathModel::from_path_nodes(&path)),
                 Box::new(DeterministicValueChooser::from_path_nodes(&path))
             );

@@ -5,7 +5,7 @@ use equivalence_testing::{query_creation::{
     state_generator::{
         MarkovChainGenerator,
         state_choosers::{ProbabilisticStateChooser, StateChooser},
-        dynamic_models::{DynamicModel, MarkovModel, AntiCallModel},
+        substitute_models::{SubstituteModel, MarkovModel, AntiCallModel},
     },
 }, equivalence_testing_function::{
     check_query, string_to_query
@@ -13,17 +13,16 @@ use equivalence_testing::{query_creation::{
 
 use structopt::StructOpt;
 
-fn run_generation<DynMod: DynamicModel, StC: StateChooser>(
+fn run_generation<SubMod: SubstituteModel, StC: StateChooser>(
         markov_generator: MarkovChainGenerator<StC>, config: Config,
     ) {
-
     let mut predictor_model = if config.generator_config.use_model {
         Some(config.model_config.create_model().expect("Error creating model for inference"))
     } else { None };
 
     let print_queries = config.generator_config.print_queries;
 
-    let mut generator = QueryGenerator::<DynMod, StC, RandomValueChooser>::from_state_generator_and_schema(markov_generator, config.generator_config);
+    let mut generator = QueryGenerator::<SubMod, StC, RandomValueChooser>::from_state_generator_and_schema(markov_generator, config.generator_config);
 
     let mut accumulated_time_ns = 0;
     let mut num_equivalent = 0;
@@ -74,10 +73,10 @@ fn run_generation<DynMod: DynamicModel, StC: StateChooser>(
     }
 }
 
-fn select_model_and_run_generation<StC: StateChooser>(config: Config) {
+fn select_sub_model_and_run_generation<StC: StateChooser>(config: Config) {
     let markov_generator = MarkovChainGenerator::<StC>::with_config(&config.chain_config).expect("Could not create generator!");
 
-    match config.generator_config.dynamic_model_name.as_str() {
+    match config.generator_config.substitute_model_name.as_str() {
         "anticall" => run_generation::<AntiCallModel, _>(markov_generator, config),
         "markov" => run_generation::<MarkovModel, _>(markov_generator, config),
         any => panic!("Unexpected dynamic model name in config: {any}"),
@@ -112,7 +111,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if config.main_config.mode == "train" {
         run_training(config);
     } else if config.main_config.mode == "generate" {
-        select_model_and_run_generation::<ProbabilisticStateChooser>(config);
+        select_sub_model_and_run_generation::<ProbabilisticStateChooser>(config);
     } else if config.main_config.mode == "test_ast_to_path" {
         test_ast_to_path(config);
     }

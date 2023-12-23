@@ -44,7 +44,8 @@ impl ModelConfig {
             ("subgraph", true) => Box::new(ModelWithMarkovWeights::<StackedFunctionNamesContext>::new()),
             ("full_function_context", false) => Box::new(ModelWithMarkovWeights::<FullFunctionContext>::new()),
             ("full_function_context", true) => Box::new(ModelWithMarkovWeights::<StackedFullFunctionContext>::new()),
-            (any, st) => panic!("No such model: name: {any} stacked: {st}"),
+            ("depthwize_full_function_context", false) => Box::new(ModelWithMarkovWeights::<DepthwiseFullFunctionContext>::new()),
+            (any, st) => panic!("\nModel is not supported:\nModel name: {any}\nStacked: {st}\n"),
         };
         if self.load_weights {
             println!("Loading weights from {}...", self.load_weights_from.display());
@@ -56,6 +57,12 @@ impl ModelConfig {
         }
         Ok(model)
     }
+}
+
+/// Returns None with a value if the prediction could not be made
+pub enum ModelPredictionResult {
+    Some(Vec<(f64, NodeParams)>),
+    None(Vec<NodeParams>)
 }
 
 pub trait PathwayGraphModel {
@@ -108,7 +115,7 @@ pub trait PathwayGraphModel {
     fn start_inference(&mut self) { }
 
     /// predict the probability distribution over the outgoing nodes that are available
-    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>) -> Vec<(f64, NodeParams)>;
+    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>) -> ModelPredictionResult;
 
     /// end the inference process
     fn end_inference(&mut self) { }
@@ -204,7 +211,7 @@ where
         self.weights.print();
     }
 
-    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>) -> Vec<(f64, NodeParams)> {
+    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>) -> ModelPredictionResult {
         let context = &call_stack.last().unwrap().function_context;
         let func_name = FnCntxt::from_call_stack_and_exit_frame(call_stack, None);
         let current_node = &context.current_node.node_common.name;
@@ -240,14 +247,10 @@ where
                 println!("output = {:#?}\n", output);
             }
         }
-        output.unwrap_or_else(|| {
-            // The model is undertrained for this context and cannot decide.
-            // Basically, we're in a place we've never been to during training.
-            // We then set weights uniformly.
-            eprintln!("The model was not trained in this context:\ncurrent_node = {current_node}\nfunc_name = {func_name}");
-            let fill_with = 1f64 / (node_outgoing.len() as f64);
-            node_outgoing.into_iter().map(|node| (fill_with, node)).collect()
-        })
+        output.map_or(
+            ModelPredictionResult::None(node_outgoing),
+            |output| ModelPredictionResult::Some(output)
+        )
     }
 
     fn write_weights_to_dot(&self, dot_file_path: &PathBuf) -> io::Result<()> {
@@ -394,5 +397,33 @@ impl std::fmt::Display for StackedFullFunctionContext {
             write!(f, "_{context}")?;
         }
         Ok(())
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, std::hash::Hash, Clone, Serialize, Deserialize)]
+pub struct DepthwiseFullFunctionContext {
+    depth: usize,
+    context: FullFunctionContext,
+}
+
+impl ModelFunctionContext for DepthwiseFullFunctionContext {
+    fn from_call_stack_and_exit_frame(
+        call_stack: &Vec<StackFrame>,
+        exit_stack_frame_opt: Option<&StackFrame>
+    ) -> Self {
+        Self {
+            depth: call_stack.len() + exit_stack_frame_opt.is_some() as usize,
+            context: if let Some(frame) = exit_stack_frame_opt {
+                FullFunctionContext::from_stack_frame(frame)
+            } else {
+                FullFunctionContext::from_stack_frame(call_stack.last().unwrap())
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for DepthwiseFullFunctionContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "D_{}_{}", self.depth, self.context)
     }
 }

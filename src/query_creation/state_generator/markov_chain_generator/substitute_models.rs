@@ -6,11 +6,11 @@ use super::{markov_chain::NodeParams, StateGenerationError};
 
 
 /// Dynamic model for assigning probabilities when using ProbabilisticModel 
-pub trait DynamicModel {
+pub trait SubstituteModel {
     fn new() -> Self;
     /// assigns the (unnormalized) log-probabilities to the outgoing nodes.
-    /// Receives weights recorded in graph
-    fn assign_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError>;
+    /// Receives log-probability distruibution recorded in graph
+    fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError>;
     /// is called at the beginning of each subquery creation
     fn notify_subquery_creation_begin(&mut self) {}
     /// is called at the end of each subquery creation
@@ -24,15 +24,12 @@ pub trait DynamicModel {
 /// preserves the probabilities
 pub struct MarkovModel { }
 
-impl DynamicModel for MarkovModel {
+impl SubstituteModel for MarkovModel {
     fn new() -> Self {
         Self {}
     }
-    fn assign_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError> {
-        Ok(node_outgoing.into_iter().map(|(w, node)| (
-            if w == 0f64 { f64::NEG_INFINITY } else { w.ln() },
-            node
-        )).collect())
+    fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError> {
+        Ok(node_outgoing)
     }
 }
 
@@ -54,7 +51,7 @@ impl PathModel {
     }
 }
 
-impl DynamicModel for PathModel {
+impl SubstituteModel for PathModel {
     fn new() -> Self {
         Self {
             path: vec![],
@@ -62,7 +59,7 @@ impl DynamicModel for PathModel {
         }
     }
 
-    fn assign_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError> {
+    fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError> {
         let node_name = &self.path[self.index];
         self.index += 1;
         if node_outgoing.iter().find(|(.., node)| node.node_common.name == *node_name).is_none() {
@@ -96,14 +93,14 @@ impl DeterministicModel {
     }
 }
 
-impl DynamicModel for DeterministicModel {
+impl SubstituteModel for DeterministicModel {
     fn new() -> Self where Self: Sized {
         Self {
             state_to_choose: None,
         }
     }
 
-    fn assign_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError> {
+    fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError> {
         let node_name = self.state_to_choose.take().unwrap();
         if node_outgoing.iter().find(|(.., node)| node.node_common.name == node_name).is_none() {
             Err(StateGenerationError::new(format!(
@@ -156,17 +153,17 @@ pub struct AntiCallModel {
     pub stats: QueryStats,
 }
 
-impl DynamicModel for AntiCallModel {
+impl SubstituteModel for AntiCallModel {
     fn new() -> Self {
         Self { stats: QueryStats::new() }
     }
 
-    fn assign_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError> {
+    fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError> {
         let prob_multiplier = if self.stats.current_stack_length > 3 {
             f64::ln(self.stats.current_state_num as f64)  // can set to 0.5, this may be better actually?
         } else { 1f64 };
-        Ok(node_outgoing.into_iter().map(|(w, node)| {(
-            f64::ln(w) - node.min_calls_until_function_exit as f64 * f64::ln(prob_multiplier),
+        Ok(node_outgoing.into_iter().map(|(l_p, node)| {(
+            l_p - (node.min_calls_until_function_exit as f64) * f64::ln(prob_multiplier),
             node
         )}).collect())
     }

@@ -2,7 +2,7 @@ use std::{path::PathBuf, str::FromStr, io::Write};
 
 use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query}};
 
-use crate::{config::{TomlReadable, Config, MainConfig}, query_creation::{state_generator::{markov_chain_generator::{error::SyntaxError, markov_chain::MarkovChain}, dynamic_models::PathModel, state_choosers::MaxProbStateChooser, MarkovChainGenerator}, query_generator::{query_info::DatabaseSchema, QueryGenerator, value_choosers::DeterministicValueChooser}}};
+use crate::{config::{TomlReadable, Config, MainConfig}, query_creation::{state_generator::{markov_chain_generator::{error::SyntaxError, markov_chain::MarkovChain}, substitute_models::PathModel, state_choosers::MaxProbStateChooser, MarkovChainGenerator}, query_generator::{query_info::DatabaseSchema, QueryGenerator, value_choosers::DeterministicValueChooser}}};
 
 use super::{ast_to_path::{ConvertionError, PathGenerator}, models::PathwayGraphModel};
 
