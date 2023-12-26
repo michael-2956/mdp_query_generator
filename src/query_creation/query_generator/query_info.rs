@@ -251,6 +251,7 @@ impl GroupByContents {
         let available_graph_types = column_types.into_iter().filter(
             |x| self.is_type_available(x)
         ).collect::<Vec<_>>();
+        // println!("available_graph_types: {:#?}", available_graph_types);
         let selected_graph_type = available_graph_types[rng.gen_range(0..available_graph_types.len())];
         self.get_random_column_with_type(rng, selected_graph_type)
     }

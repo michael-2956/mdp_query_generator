@@ -852,9 +852,14 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         let (selected_type, ident) = match self.next_state().as_str() {
             "get_column_spec_from_having" => {
                 self.expect_state("column_spec_choose_qualified");
+                println!("flag_before_valuechooser");
+                println!("context group_by: {:#?}", self.clause_context.group_by());
+                println!("column_types: {:#?}", column_types);
+                
                 let (selected_type, mut column_name) = self.value_chooser.choose_column_group_by(
                     self.clause_context.group_by(), &column_types
                 );
+                println!("flag_after_valuechooser");
                 match self.next_state().as_str() {
                     "unqualified_column_name" => {
                         (selected_type, Expr::Identifier(column_name.last().unwrap().clone()))
@@ -1180,7 +1185,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                             let (chosen_column_type, chosen_column) = self.handle_types(
                                 None, None
                             );
-                            println!("chosen column = {:#?}", chosen_column);
+                            // println!("chosen column = {:#?}", chosen_column);
                             list.push(chosen_column.clone());
                             let chosen_column_ident = match chosen_column {
                                 Expr::Identifier(ident) => vec![ident],
@@ -1189,7 +1194,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                                 Expr::CompositeAccess { expr, key } => vec![key],
                                 any => panic!("Got unexpected form of ident for GROUP BY arg: {:#?}", any),
                             };
-                            println!("ident = {:#?}",chosen_column_ident);
+                            // println!("ident = {:#?}",chosen_column_ident);
                             self.clause_context.group_by_mut().append_column(chosen_column_ident, chosen_column_type);
                         },
                         "EXIT_GROUP_BY" => {
@@ -1219,7 +1224,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                             let (chosen_column_type, chosen_column) = self.handle_types(
                                 None, None
                             );
-                            println!("chosen column = {:#?}", chosen_column);
+                            // println!("chosen column = {:#?}", chosen_column);
                             current_set.push(chosen_column.clone());
                             let chosen_column_ident = match chosen_column {
                                 Expr::Identifier(ident) => vec![ident],
@@ -1227,7 +1232,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                                 Expr::CompositeAccess { expr, key } => vec![key],
                                 any => panic!("Got unexpected form of ident for GROUP BY arg: {:#?}", any),
                             };
-                            println!("ident = {:#?}",chosen_column_ident);
+                            // println!("ident = {:#?}",chosen_column_ident);
                             self.clause_context.group_by_mut().append_column(chosen_column_ident, chosen_column_type);
                         },
                         "EXIT_GROUP_BY" => {
@@ -1252,7 +1257,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
     fn handle_having(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("HAVING");
         self.expect_state("call45_types");
-        println!("\nclause_context.group_by at HAVING generation \n{:#?}\n", self.clause_context.group_by());
+        // println!("\nclause_context.group_by at HAVING generation \n{:#?}\n", self.clause_context.group_by());
         let (selection_type, selection) = self.handle_types(Some(&[SubgraphType::Val3]), None);
         self.expect_state("EXIT_HAVING");
         (selection_type, selection)

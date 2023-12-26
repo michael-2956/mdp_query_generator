@@ -2,7 +2,7 @@
 # Running mode. Either "test_ast_to_path", "generate", "train"
 mode="generate"
 # number of queries to generate
-num_generate=10
+num_generate=1000
 # count the 2vl-3vl equivalent queries
 count_equivalence=true
 # measure average query generation time

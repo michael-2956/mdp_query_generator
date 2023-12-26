@@ -789,7 +789,8 @@ digraph G {
     subgraph def_HAVING {
         HAVING [label="HAVING\nmods = [HAVING clause mode]", MODS="[HAVING clause mode]", shape=rectangle, style=filled, color=mediumvioletred]
         EXIT_HAVING [label="EXIT HAVING"]
-        call45_types [TYPES="[3VL Value]", MODS="[HAVING clause mode]", label="TYPE: [3VL]\nmods=", shape=rectangle, style=filled, color=lightblue]
+        // call45_types [TYPES="[3VL Value]", MODS="[HAVING clause mode]", label="TYPE: [3VL]\nmods=", shape=rectangle, style=filled, color=lightblue]
+        call45_types [TYPES="[3VL Value]", MODS="[HAVING clause mode, no column spec]", label="TYPE: [3VL]\nmods=HAVING clause mode, no column spec", shape=rectangle, style=filled, color=lightblue]
         HAVING -> call45_types
         call45_types -> EXIT_HAVING
     }
