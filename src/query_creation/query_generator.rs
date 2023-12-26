@@ -1246,8 +1246,6 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             },
             any => self.panic_unexpected(any)
         }
-        // self.expect_state("EXIT_group_by");
-        // result
     }
 
     /// subgraph def_having

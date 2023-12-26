@@ -1033,7 +1033,6 @@ impl PathGenerator {
                             _ => panic!("Expected one of [Date, Text, Val3], got{}!", arm[0]),
                         }
                         self.try_push_state("arg_double_numeric")?;
-                        
                     },
                     [SubgraphType::Integer] => {
                         self.try_push_state("aggregate_select_type_integer")?;
@@ -1056,8 +1055,7 @@ impl PathGenerator {
                                     },
                                     _ => {
                                         self.try_push_state("call65_types")?;
-                                        // TODO: not integer
-                                        let tp = self.handle_types(arg, Some(&[SubgraphType::Integer]), None)?;
+                                        let tp = self.handle_types(arg, Some(&[SubgraphType::Undetermined]), None)?;
                                     },  
                                 };
                             },
@@ -1071,8 +1069,6 @@ impl PathGenerator {
                 }
             },
             _ => panic!("Expected funciton, got {}!", function),
-            // _ => return Err(ConvertionError::new(format!("Expected function, got {}.\n", function)))};
-
         };
         self.try_push_state("EXIT_aggregate_function")?;
         // TODO what to return?
@@ -1084,28 +1080,38 @@ impl PathGenerator {
 
     }
 
-    // subgraph def_group_by
+    /// subgraph def_group_by
     // by checking datatype?
-    
-    // fn handle_group_by(&mut self, grouping: &Vec<Expr>) -> Result<SubgraphType, ConvertionError> {
-    //     self.try_push_state("group_by")?;
+    fn handle_group_by(&mut self, grouping: &Vec<Expr>) -> Result<SubgraphType, ConvertionError> {
+        self.try_push_state("group_by")?;
         
-    //     match grouping.as_slice() {
-    //         [Expr::Nested(arg)] => {
-    //             self.try_push_state("grouping_relations_list")?;
-    //             if let [Expr::Nested(nested_expr)] = arg.as_slice() {
+        match grouping.as_slice() {
+            list @ &[..] => {
+                // println!("List: {:#?}", list);
+                self.try_push_state("grouping_relations_list")?;
+                for list_element in list {
+                    self.try_push_state("list_of_relations")?;
+                    self.try_push_state("call60_types?")?;
+                    let tp = self.handle_types(list_element, Some(&[SubgraphType::Undetermined]), None);
+                    // do i need push node? it's in handle_column_spec
+                    match list_element {
+                        Expr::Identifier(ident) => {
+                            // self.push_node(PathNode::SelectedColumnNameGROUPBY(vec![ident.clone()]));
+                        },
+                        Expr::CompoundIdentifier(vec_of_ident) => {
+                            // self.push_node(PathNode::SelectedColumnNameGROUPBY(vec_of_ident.clone()));
+                        },
+                        any => panic!("Got unexpected in GROUP BY list: {:#?}", any),
+                    };
+                };
+                self.try_push_state("EXIT_GROUP_BY")?;
 
-    //                 if let Expr::Nested(inner_list) = &**nested_expr {
-
-    //                     println!("List: {:?}", inner_list);
-    //                 }
-    //             }
-    //         },
-    //         _ => panic!("Wrong grouping arg."),
-    //     }
-    //     self.try_push_state("EXIT_group_by")?;
-    // }
-
+            },
+            _ => panic!("Wrong grouping arg."),
+        }
+        self.try_push_state("EXIT_group_by")?;
+        return Ok(SubgraphType::Date);
+    }
 
 }
 

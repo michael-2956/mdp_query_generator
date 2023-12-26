@@ -27,7 +27,7 @@ fn run_generation<DynMod: DynamicModel, StC: StateChooser>(markov_generator: Mar
 
             // let mut f_g = std::fs::File::create(format!("{i}-g")).unwrap();
             // write!(f_g, "{:#?}", query_string).unwrap();
-            println!("{:#?}", query_string);
+            // println!("{:#?}", query_string);
             // println!("{:#?}\n\n", query_ast);
             if let Some(parsed_ast) = string_to_query(&query_string) {
                 if parsed_ast != query_ast {
