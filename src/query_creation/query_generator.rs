@@ -852,14 +852,14 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         let (selected_type, ident) = match self.next_state().as_str() {
             "get_column_spec_from_having" => {
                 self.expect_state("column_spec_choose_qualified");
-                println!("flag_before_valuechooser");
-                println!("context group_by: {:#?}", self.clause_context.group_by());
-                println!("column_types: {:#?}", column_types);
+                // println!("flag_before_valuechooser");
+                // println!("context group_by: {:#?}", self.clause_context.group_by());
+                // println!("column_types: {:#?}", column_types);
                 
                 let (selected_type, mut column_name) = self.value_chooser.choose_column_group_by(
                     self.clause_context.group_by(), &column_types
                 );
-                println!("flag_after_valuechooser");
+                // println!("flag_after_valuechooser");
                 match self.next_state().as_str() {
                     "unqualified_column_name" => {
                         (selected_type, Expr::Identifier(column_name.last().unwrap().clone()))

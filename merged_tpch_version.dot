@@ -106,7 +106,8 @@ digraph G {
         call0_GROUP_BY -> call0_HAVING
         call0_HAVING -> call0_SELECT
 
-        call0_LIMIT [label="LIMIT\nMODS: [?single row]", MODS="[?single row]", shape=rectangle, style=filled, color=brown]
+        // modifier="single row", modifier_mode="on" is here to turn off all LIMIT other than LIMIT 1 
+        call0_LIMIT [label="LIMIT\nMODS: [?single row]", MODS="[?single row]", modifier="single row", modifier_mode="on", shape=rectangle, style=filled, color=brown]
         query_can_skip_limit [label="skip LIMIT allowed\nmod: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
         call0_SELECT -> call0_LIMIT
         call0_SELECT -> query_can_skip_limit
@@ -567,13 +568,13 @@ digraph G {
         types -> types_null
         types_null -> EXIT_types
 
-        types_return_typed_null [label="Typed null", modifier="no typed nulls", modifier_mode="off"]
-        types_select_type_integer -> types_return_typed_null
-        types_select_type_numeric -> types_return_typed_null
-        types_select_type_3vl -> types_return_typed_null
-        types_select_type_text -> types_return_typed_null
-        types_select_type_date -> types_return_typed_null
-        types_return_typed_null -> EXIT_types
+        // types_return_typed_null [label="Typed null", modifier="no typed nulls", modifier_mode="off"]
+        // types_select_type_integer -> types_return_typed_null
+        // types_select_type_numeric -> types_return_typed_null
+        // types_select_type_3vl -> types_return_typed_null
+        // types_select_type_text -> types_return_typed_null
+        // types_select_type_date -> types_return_typed_null
+        // types_return_typed_null -> EXIT_types
 
         types_select_special_expression [label="select special expression"]
         types_select_type_integer -> types_select_special_expression
