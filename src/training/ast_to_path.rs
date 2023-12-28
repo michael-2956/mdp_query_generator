@@ -250,6 +250,17 @@ impl PathGenerator {
             self.handle_where(selection)?;
         }
 
+        // in struct select: pub group_by: Vec<Expr>,
+        if let (ref group_by) = select_body.group_by {
+            self.try_push_state("call0_GROUP_BY")?;
+            let columns_in_grouping = self.handle_group_by(group_by)?;
+        }
+
+        if let Some(ref having) = select_body.having {
+            self.try_push_state("call0_HAVING")?;
+            let columns_in_grouping = self.handle_having(having)?;
+        }
+
         self.try_push_state("call0_SELECT")?;
         let mut column_idents_and_graph_types = self.handle_select(select_body.distinct, &select_body.projection)?;
 
@@ -749,6 +760,21 @@ impl PathGenerator {
                             );
                             let allowed_type_list = allowed_type_list.selected_types.clone();
                             match expr {
+                                Expr::Function(function) => {
+                                    if modifiers.contains(&SmolStr::new("no function")) {
+                                        unexpected_expr!(expr)
+                                    }
+                                    self.try_push_state("call0_aggregate_function")?;
+                                    match self.handle_aggregate_function(allowed_type_list, expr) {
+                                        Ok(expr_type) => {
+                                            // TODO
+                                        },
+                                        Err(err) => {
+                                            add_error(&mut error_mem, "Aggregate function", subgraph_type.clone(), err);
+                                            self.restore_checkpoint(&types_before_state_selection)
+                                        },
+                                    }
+                                },
                                 Expr::Subquery(subquery) => {
                                     if modifiers.contains(&SmolStr::new("no subquery")) {
                                         unexpected_expr!(expr)
@@ -926,10 +952,9 @@ impl PathGenerator {
     }
 
     // subgraph def_aggregater_functions
-    fn handle_aggregate_function(&mut self, function: &Expr) -> Result<SubgraphType, ConvertionError> {
+    // TODO: run through all possible types in loop
+    fn handle_aggregate_function(&mut self, return_type: Vec<SubgraphType>, function: &Expr) -> Result<SubgraphType, ConvertionError> {
         self.try_push_state("aggregate_function")?;
-        let mut return_type;
-        let mut arg_type;
         let expr_details = match function {
             Expr::Function(sqlparser::ast::Function {
                 name: obj_fun_name,
@@ -938,69 +963,13 @@ impl PathGenerator {
                 distinct: is_distinct,
                 special: is_special,
             }) => {
-                //TODO sort out named functions
                 if is_distinct.clone() {
                     self.try_push_state("aggregate_distinct")?;
                 }
                 self.try_push_state("aggregate_select_return_type")?;
-                // TODO should be decided by args, not function name
-                (return_type, arg_type) = match obj_fun_name.0[0].value.clone().as_str() {
-                    "REGR_SXX" | "REGR_SYY" | "REGR_SSY" | 
-                    "CORR" | "COVAR_POP" | "COVAR_SAMP" | 
-                    "REGR_AVGX" | "REGR_AVGY" | "REGR_COUNT" | 
-                    "REGR_INTERCEPT" | "REGR_R2" | "REGR_SLOPE" => (vec![SubgraphType::Numeric], vec![SubgraphType::Numeric, SubgraphType::Numeric]),
-                    "MIN" | "MAX" | "VAR_SAMP" | 
-                    "AVG" | "BIT_AND" | "BIT_OR" | 
-                    "BIT_XOR" | "SUM" | "STDDEV" | 
-                    "STDDEV_POP" | "STDDEV_SAMP" | "VARIANCE" |
-                    "VAR_POP" => (vec![SubgraphType::Numeric], vec![SubgraphType::Numeric]),
-                    "STRING_AGG" | "MAX" | "MIN" => (vec![SubgraphType::Text], vec![SubgraphType::Text]),
-                    "EVERY" | "BOOL_AND" | "BOOL_OR" | "MAX" | "MIN" => (vec![SubgraphType::Val3], vec![SubgraphType::Val3]),
-                    "AVG" | "MAX" | "MIN" => (vec![SubgraphType::Date], vec![SubgraphType::Date]),
-                    "BIT_XOR" | "BIT_AND" | "BIT_OR" | "MAX" | "MIN" => (vec![SubgraphType::Integer], vec![SubgraphType::Integer]),
-                    any => panic!("Unexpected name of function {}!", any),
-                };
+                
                 match return_type.as_slice() {
-                    [SubgraphType::Numeric] => {
-                        self.try_push_state("aggregate_select_type_numeric")?;
-                        let mut first_arg;
-                        let mut second_arg;
-                        match arg_type.as_slice() {
-                            [SubgraphType::Numeric] => {
-                                self.try_push_state("arg_single_numeric")?;
-                                second_arg = match function_args.as_slice() {
-                                    [
-                                        FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(second_arg)),
-                                    ] => {
-                                        second_arg
-                                    },
-                                    _ => panic!("Function args of wrong type."),
-                                };
-                            },
-                            [SubgraphType::Numeric, SubgraphType::Numeric] => {
-                                self.try_push_state("arg_double_numeric")?;
-                                (first_arg, second_arg) = match function_args.as_slice() {
-                                    [
-                                        FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(first_arg)),
-                                        FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(second_arg)),
-                                    ] => {
-                                        (first_arg, second_arg)
-                                    },
-                                    _ => panic!("Function args of wrong type."),
-                                };
-                                self.try_push_state("call68_types")?;
-                                // do i need tp1 & tp2?
-                                let tp1 = self.handle_types(first_arg, Some(&[SubgraphType::Numeric]), None)?;
-                                
-                            },
-                            _ => panic!("Unexpected input type of function!"),
-                        }
-                        self.try_push_state("call66_types")?;
-                        // do i need tp1 & tp2?
-                        let tp2 = self.handle_types(second_arg, Some(&[SubgraphType::Numeric]), None)?;
-                        
-                    },
-                    arm @ ([SubgraphType::Date] | [SubgraphType::Text] | [SubgraphType::Val3]) => {
+                    arm @ ([SubgraphType::Val3] | [SubgraphType::Date] | [SubgraphType::Text]) => {
                         let arg = match function_args.as_slice() {
                             [
                                 FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(arg)),
@@ -1032,7 +1001,43 @@ impl PathGenerator {
                             },
                             _ => panic!("Expected one of [Date, Text, Val3], got{}!", arm[0]),
                         }
-                        self.try_push_state("arg_double_numeric")?;
+                    },
+                    [SubgraphType::Numeric] => {
+                        self.try_push_state("aggregate_select_type_numeric")?;
+                        let first_arg;
+                        let second_arg;
+                        match function_args.as_slice().len() {
+                            1 => {
+                                self.try_push_state("arg_single_numeric")?;
+                                second_arg = match function_args.as_slice() {
+                                    [
+                                        FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(second_arg)),
+                                    ] => {
+                                        second_arg
+                                    },
+                                    _ => panic!("Function args of wrong type."),
+                                };
+                            },
+                            2 => {
+                                self.try_push_state("arg_double_numeric")?;
+                                (first_arg, second_arg) = match function_args.as_slice() {
+                                    [
+                                        FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(first_arg)),
+                                        FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(second_arg)),
+                                    ] => {
+                                        (first_arg, second_arg)
+                                    },
+                                    _ => panic!("Function args of wrong type."),
+                                };
+                                self.try_push_state("call68_types")?;
+                                // do i need tp1 & tp2?
+                                let tp1 = self.handle_types(first_arg, Some(&[SubgraphType::Numeric]), None)?;
+                            },
+                            any => panic!("Unexpected number of args in numeric aggregate function: {any}"),
+                        };
+                        self.try_push_state("call66_types")?;
+                        // do i need tp1 & tp2?
+                        let tp2 = self.handle_types(second_arg, Some(&[SubgraphType::Numeric]), None)?;
                     },
                     [SubgraphType::Integer] => {
                         self.try_push_state("aggregate_select_type_integer")?;
@@ -1060,57 +1065,84 @@ impl PathGenerator {
                                 };
                             },
                             _ => {
+                                self.try_push_state("arg_integer")?;
                                 self.try_push_state("call71_types")?;
                                 let tp = self.handle_types(arg, Some(&[SubgraphType::Integer]), None)?;
                             },
                         }
                     },
-                    any => panic!("Unexpected return type of function {}!", function),
+                    _ => panic!("Unexpected return type of function!"),
                 }
+
             },
             _ => panic!("Expected funciton, got {}!", function),
         };
         self.try_push_state("EXIT_aggregate_function")?;
+
         // TODO what to return?
         if let Some(first_element) = return_type.first() {
             return Ok(first_element.clone());
         } else {
             panic!("Empty return type");
         }
-
     }
 
     /// subgraph def_group_by
-    // by checking datatype?
-    fn handle_group_by(&mut self, grouping: &Vec<Expr>) -> Result<SubgraphType, ConvertionError> {
-        self.try_push_state("group_by")?;
-        
+    fn handle_group_by(&mut self, grouping: &Vec<Expr>) -> Result<Vec<(Expr, SubgraphType)>, ConvertionError> {
+        self.try_push_state("GROUP_BY")?;
+        let mut column_idents_and_graph_types = vec![];
         match grouping.as_slice() {
-            list @ &[..] => {
-                // println!("List: {:#?}", list);
-                self.try_push_state("grouping_relations_list")?;
-                for list_element in list {
-                    self.try_push_state("list_of_relations")?;
-                    self.try_push_state("call60_types?")?;
-                    let tp = self.handle_types(list_element, Some(&[SubgraphType::Undetermined]), None);
-                    // do i need push node? it's in handle_column_spec
-                    match list_element {
-                        Expr::Identifier(ident) => {
-                            // self.push_node(PathNode::SelectedColumnNameGROUPBY(vec![ident.clone()]));
-                        },
-                        Expr::CompoundIdentifier(vec_of_ident) => {
-                            // self.push_node(PathNode::SelectedColumnNameGROUPBY(vec_of_ident.clone()));
-                        },
-                        any => panic!("Got unexpected in GROUP BY list: {:#?}", any),
-                    };
+            arm @ ([Expr::GroupingSets(arg)] | [Expr::Rollup(arg)] | [Expr::Cube(arg)]) => {
+                match arm {
+                    [Expr::GroupingSets(_)] => {
+                        self.try_push_state("grouping_set")?;
+                    },
+                    [Expr::Rollup(_)] => {
+                        self.try_push_state("grouping_rollup")?;
+                    },
+                    [Expr::Cube(_)] => {
+                        self.try_push_state("grouping_cube")?;
+                    },
+                    _ => panic!("Wrong grouping type"),
                 };
-                self.try_push_state("EXIT_GROUP_BY")?;
-
+                for arg_element in arg.as_slice() {
+                    self.try_push_state("set_list")?;
+                    for column_listed in arg_element.as_slice() {
+                        self.try_push_state("new_set")?;
+                        let column_idents = match column_listed {
+                            Expr::Identifier(ident) => vec![ident.clone()],
+                            Expr::CompoundIdentifier(vec_of_ident) => vec_of_ident.clone(),
+                            Expr::CompositeAccess { expr, key } => vec![key.clone()],
+                            _ => panic!("Unexpected element in set CUBE/ROLLUP/SET"),
+                        };
+                        self.try_push_state("call69_types")?;
+                        let tp = self.handle_types(column_listed, None, None)?;
+                        self.clause_context.group_by_mut().append_column(column_idents, tp.clone());
+                        column_idents_and_graph_types.push((column_listed.clone(), tp.clone()));
+                    }
+                }
+            },
+            list @ &[..] => {
+                self.try_push_state("grouping_relations_list")?;
+                for column_listed in list {
+                    self.try_push_state("list_of_relations")?;
+                    let column_idents = match column_listed {
+                        Expr::Identifier(ident) => vec![ident.clone()],
+                        Expr::CompoundIdentifier(vec_of_ident) => vec_of_ident.clone(),
+                        Expr::CompositeAccess { expr, key } => vec![key.clone()],
+                        _ => panic!("Unexpected element in set CUBE/ROLLUP/SET"),
+                    };
+                    self.try_push_state("call60_types?")?;
+                    let tp = self.handle_types(column_listed, None, None)?;
+                    self.clause_context.group_by_mut().append_column(column_idents, tp.clone());
+                    column_idents_and_graph_types.push((column_listed.clone(), tp.clone()));
+                    // do i need push node? it's pushed in handle_column_spec... 
+                };
             },
             _ => panic!("Wrong grouping arg."),
         }
         self.try_push_state("EXIT_group_by")?;
-        return Ok(SubgraphType::Date);
+        return Ok(column_idents_and_graph_types);
     }
 
 }

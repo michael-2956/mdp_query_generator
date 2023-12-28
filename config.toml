@@ -20,7 +20,7 @@ print_progress=true
 # schema for the testing queries generation
 testing_schema="schema/tpc-h_tables.sql"
 # number of tests
-n_tests=100
+n_tests=10
 
 [training]
 # path to a file with all the training queries separated by ";\n"
