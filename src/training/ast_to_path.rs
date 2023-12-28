@@ -258,7 +258,7 @@ impl PathGenerator {
 
         if let Some(ref having) = select_body.having {
             self.try_push_state("call0_HAVING")?;
-            let columns_in_grouping = self.handle_having(having)?;
+            self.handle_having(having)?;
         }
 
         self.try_push_state("call0_SELECT")?;
