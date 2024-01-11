@@ -3,3 +3,6 @@
 .DS_Store
 /target
 data/
+training_dbs/
+weights/
+weights_in_dot/

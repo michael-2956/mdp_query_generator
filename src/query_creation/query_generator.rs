@@ -850,7 +850,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         );
         self.expect_state("column_spec_choose_source");
         let (selected_type, ident) = match self.next_state().as_str() {
-            "get_column_spec_from_having" => {
+            "get_column_spec_from_group_by" => {
                 self.expect_state("column_spec_choose_qualified");
                 // println!("flag_before_valuechooser");
                 // println!("context group_by: {:#?}", self.clause_context.group_by());

@@ -888,8 +888,8 @@ impl PathGenerator {
             self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList, || self.state_generator.print_stack()
         );
         self.try_push_state("column_spec_choose_source")?;
-        let check_group_by = if self.state_generator.get_fn_modifiers().contains(&SmolStr::new("having clause mode")) {
-            self.try_push_state("get_column_spec_from_having")?;
+        let check_group_by = if self.state_generator.get_fn_modifiers().contains(&SmolStr::new("group by columns")) {
+            self.try_push_state("get_column_spec_from_group_by")?;
             true
         } else {
             self.try_push_state("get_column_spec_from_from")?;

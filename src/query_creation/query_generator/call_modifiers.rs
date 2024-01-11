@@ -67,7 +67,7 @@ impl ValueSetter for TypesTypeValueSetter {
             any => vec![any]
         };
 
-        let check_group_by = function_context.call_params.modifiers.contains(&SmolStr::new("having clause mode"));
+        let check_group_by = function_context.call_params.modifiers.contains(&SmolStr::new("group by columns"));
 
         ValueSetterValue::TypesType(TypesTypeValue {
             type_is_available_in_clause: allowed_type_list.iter().any(|x|

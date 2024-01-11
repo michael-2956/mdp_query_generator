@@ -545,7 +545,7 @@ digraph G {
     }
 
     subgraph def_types {
-        types [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no literals, no typed nulls, no column spec, no subquery, having clause mode, enable untyped null, no function]", label="TYPE(S) (generic):\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[no literals, no typed nulls, no column spec, no subquery, having clause mode, enable untyped null]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no literals, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no function]", label="TYPE(S) (generic):\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[no literals, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
         types_select_type_integer[TYPE_NAME="integer", label="integer?", set_value="types_type"]
@@ -578,7 +578,7 @@ digraph G {
         types_select_type_text -> types_select_special_expression
         types_select_type_date -> types_select_special_expression
 
-        call0_column_spec [TYPES="[known]", MODS="[?having clause mode]", modifier="no column spec", modifier_mode="off", call_modifier="is_column_type_available", label="column specifier\nTYPE: known\nMODS: [?having clause mode]\nmod.: 'no column spec' -> OFF\ncall.mod.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
+        call0_column_spec [TYPES="[known]", MODS="[?group by columns]", modifier="no column spec", modifier_mode="off", call_modifier="is_column_type_available", label="column specifier\nTYPE: known\nMODS: [?group by columns]\nmod.: 'no column spec' -> OFF\ncall.mod.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
         types_select_special_expression -> call0_column_spec
         call0_column_spec -> EXIT_types
 
@@ -612,7 +612,7 @@ digraph G {
     }
 
     subgraph def_column_spec {
-        column_spec [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[having clause mode]", label="column specifier\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[having clause mode]", shape=octagon, style=filled, color=gold]
+        column_spec [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[group by columns]", label="column specifier\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[group by columns]", shape=octagon, style=filled, color=gold]
         EXIT_column_spec [label="EXIT column specifier", shape=rectangle]
 
         column_spec_choose_source [label="Choose column spec relation source"]
@@ -620,11 +620,11 @@ digraph G {
 
         column_spec_choose_qualified [label="Choose if qualified (R.COL/COL)\nset value: 'has_unique_column_names_for_type_val'", set_value="has_unique_column_names_for_type_val"]
 
-        get_column_spec_from_having [label="HAVING", modifier="having clause mode", modifier_mode="on"]
-        column_spec_choose_source -> get_column_spec_from_having
-        get_column_spec_from_having -> column_spec_choose_qualified
+        get_column_spec_from_group_by [label="HAVING", modifier="group by columns", modifier_mode="on"]
+        column_spec_choose_source -> get_column_spec_from_group_by
+        get_column_spec_from_group_by -> column_spec_choose_qualified
 
-        get_column_spec_from_from [label="FROM", modifier="having clause mode", modifier_mode="off"]
+        get_column_spec_from_from [label="FROM", modifier="group by columns", modifier_mode="off"]
         column_spec_choose_source -> get_column_spec_from_from
         get_column_spec_from_from -> column_spec_choose_qualified
 
@@ -768,7 +768,7 @@ digraph G {
 
 
     subgraph def_having {
-        having [label="HAVING", MODS="[having clause mode]", shape=rectangle, style=filled, color=mediumvioletred]
+        having [label="HAVING", MODS="[group by columns]", shape=rectangle, style=filled, color=mediumvioletred]
         EXIT_having [label="EXIT HAVING"]
         call45_types [TYPES="[3VL Value]", label="TYPE: [3VL]", shape=rectangle, style=filled, color=lightblue]
         having -> call45_types
