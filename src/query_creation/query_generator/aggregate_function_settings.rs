@@ -9,20 +9,33 @@ use rand::thread_rng;
 use rand::distributions::Distribution;
 use std::fs;
 
-#[derive(Debug, Clone)]
-pub struct AggregateFunctionDistribution {
-    /// domain -> return -> aggr name -> weight
-    func_map: HashMap<Vec<SubgraphType>, HashMap<Vec<SubgraphType>, BTreeMap<String, f64>>>,
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
+pub enum AggregateFunctionAgruments {
+    AnyType,
+    Wildcard,
+    TypeList(Vec<SubgraphType>),
 }
 
-fn parse_type_list(mut types_str: String) -> Vec<SubgraphType> {
-    if !types_str.starts_with("[") || !types_str.ends_with("]") {
-        panic!("Error parsing aggregate function JSON file!\nTypes must conform to format: [type1, type2, type3] Got: {types_str}")
+#[derive(Debug, Clone)]
+pub struct AggregateFunctionDistribution {
+    /// return -> domain -> aggr name -> weight
+    func_map: HashMap<SubgraphType, HashMap<AggregateFunctionAgruments, BTreeMap<String, f64>>>,
+}
+
+fn parse_type_list(mut types_str: String) -> AggregateFunctionAgruments {
+    types_str = types_str.trim().to_lowercase();
+    if types_str.starts_with("[") && types_str.ends_with("]") {
+        types_str = String::from(&types_str[1..types_str.len()-1]);
+        AggregateFunctionAgruments::TypeList(types_str.split(",").map(
+            |x| SubgraphType::from_type_name(x.trim()).unwrap()
+        ).collect())
+    } else {
+        match types_str.as_str() {
+            "any" => AggregateFunctionAgruments::AnyType,
+            "*" => AggregateFunctionAgruments::Wildcard,
+            any => panic!("Error parsing aggregate function JSON file!\nTypes must conform to format: \"[type1, type2, type3]\", \"*\" or \"any\" Got: {any}")
+        }
     }
-    types_str = String::from(&types_str[1..types_str.len()-1]);
-    types_str.split(",").map(
-        |x| SubgraphType::from_type_name(x.trim()).unwrap()
-    ).collect()
 }
 
 impl AggregateFunctionDistribution {
@@ -31,10 +44,10 @@ impl AggregateFunctionDistribution {
             &fs::read_to_string(file_path).expect("Unable to read file")
         ).unwrap();
         
-        let mut func_map: HashMap<Vec<SubgraphType>, HashMap<Vec<SubgraphType>, BTreeMap<String, f64>>> = HashMap::new();
+        let mut func_map: HashMap<SubgraphType, HashMap<AggregateFunctionAgruments, BTreeMap<String, f64>>> = HashMap::new();
         for (return_types_str, domain_map) in content {
-            let return_types = parse_type_list(return_types_str);
-            let mut domain_type_map: HashMap<Vec<SubgraphType>, BTreeMap<String, f64>> = HashMap::new();
+            let return_types = SubgraphType::from_type_name(return_types_str.as_str()).unwrap();
+            let mut domain_type_map: HashMap<AggregateFunctionAgruments, BTreeMap<String, f64>> = HashMap::new();
             for (domain_type_str, name_weight_map) in domain_map {
                 let domain_types = parse_type_list(domain_type_str);
                 domain_type_map.insert(domain_types, BTreeMap::from_iter(name_weight_map.into_iter()));
@@ -45,8 +58,8 @@ impl AggregateFunctionDistribution {
         AggregateFunctionDistribution { func_map }
     }  
 
-    pub fn get_fun_name(&mut self, arg_domain: Vec<SubgraphType>, arg_return: Vec<SubgraphType>) -> sqlparser::ast::ObjectName {
-        let aggr_weight_map = &self.func_map[&arg_domain][&arg_return];
+    pub fn get_func_name(&mut self, arguments: AggregateFunctionAgruments, return_type: SubgraphType) -> sqlparser::ast::ObjectName {
+        let aggr_weight_map = &self.func_map[&return_type][&arguments];
         let dist = WeightedIndex::new(
             aggr_weight_map.iter().map(|item| *item.1)
         ).unwrap();

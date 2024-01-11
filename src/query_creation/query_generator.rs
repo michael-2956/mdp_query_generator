@@ -19,7 +19,7 @@ use sqlparser::ast::{
 use crate::config::TomlReadable;
 
 use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generator::{CallTypes, markov_chain_generator::subgraph_type::SubgraphType}};
-use self::{query_info::{DatabaseSchema, ClauseContext}, aggregate_function_settings::AggregateFunctionDistribution, expr_precedence::ExpressionPriority, call_modifiers::{TypesTypeValue, ValueSetterValue, WildcardRelationsValue}, value_choosers::QueryValueChooser};
+use self::{query_info::{DatabaseSchema, ClauseContext}, aggregate_function_settings::{AggregateFunctionDistribution, AggregateFunctionAgruments}, expr_precedence::ExpressionPriority, call_modifiers::{TypesTypeValue, ValueSetterValue, WildcardRelationsValue}, value_choosers::QueryValueChooser};
 
 use super::state_generator::{MarkovChainGenerator, dynamic_models::DynamicModel, state_choosers::StateChooser};
 
@@ -109,6 +109,12 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         if new_state.as_str() != state {
             self.state_generator.print_stack();
             panic!("Expected {state}, got {new_state}")
+        }
+    }
+
+    fn expect_states(&mut self, states: &[&str]) {
+        for state in states {
+            self.expect_state(*state)
         }
     }
 
@@ -933,189 +939,93 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             },
             any => self.panic_unexpected(any),  
         };
-        // let aggr_return_type: SubgraphType = ;
-        // let aggr_domain = ;
 
-
-        let chosen_return_type: SubgraphType;
-        let result;
-        match self.next_state().as_str() {
+        let (
+            aggr_args_type, aggr_args_expr, aggr_return_type
+        ): (AggregateFunctionAgruments, Vec<FunctionArg>, SubgraphType) = match self.next_state().as_str() {
             "aggregate_select_type_integer" => {
-                chosen_return_type = SubgraphType::Integer;
-                let chosen_type = SubgraphType::Integer;
-                match self.next_state().as_str() {
-                    arm @ "COUNT" => match self.next_state().as_str() {
-                        "COUNT_wildcard" => {
-                            result = Expr::Function(sqlparser::ast::Function {
-                                name: ObjectName(vec![Ident {
-                                    value: arm.to_string(),
-                                    quote_style: (None),
-                                }]),
-                                args: vec![FunctionArg::Unnamed(
-                                    sqlparser::ast::FunctionArgExpr::Wildcard,
-                                )],
-                                over: None,
-                                distinct: distinct,
-                                special: false,
-                            });
-                        }
-                        "call65_types" => {
-                            result = Expr::Function(sqlparser::ast::Function {
-                                name: ObjectName(vec![Ident {
-                                    value: arm.to_string(),
-                                    quote_style: (None),
-                                }]),
-                                args: vec![FunctionArg::Unnamed(
-                                    sqlparser::ast::FunctionArgExpr::Expr(self.handle_types(None, None).1),
-                                )],
-                                over: None,
-                                distinct: distinct,
-                                special: false,
-                            });
-                        }
-                        any => self.panic_unexpected(any),
+                let return_type = SubgraphType::Integer;
+                let (args_type, args_expr) = match self.next_state().as_str() {
+                    "COUNT" => {
+                        self.expect_state("COUNT_wildcard");
+                        (AggregateFunctionAgruments::Wildcard, vec![FunctionArg::Unnamed(FunctionArgExpr::Wildcard)])
                     },
-                    "arg_integer" => {                
-                        let fun_name = self.config.aggregate_functions_distribution.get_fun_name(
-                            vec![chosen_type], vec![chosen_return_type.clone()]
-                        );
+                    "arg_integer_any" => {
+                        self.expect_state("call65_types");
+                        (AggregateFunctionAgruments::AnyType, vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(
+                            self.handle_types(None, None).1
+                        ))])
+                    },
+                    "arg_integer" => {
                         self.expect_state("call71_types");
-                        result = Expr::Function(sqlparser::ast::Function {
-                            name: fun_name,
-                            args: vec![FunctionArg::Unnamed(
-                                sqlparser::ast::FunctionArgExpr::Expr(self.handle_types(Some(&[SubgraphType::Integer]), None).1),
-                            )],
-                            over: None,
-                            distinct: distinct,
-                            special: false,
-                        });
+                        (AggregateFunctionAgruments::TypeList(vec![SubgraphType::Integer]), vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(
+                            self.handle_types(Some(&[SubgraphType::Integer]), None).1
+                        ))])
                     },
                     any => self.panic_unexpected(any),
-                }
+                };
+                (args_type, args_expr, return_type)
             },
-
             "aggregate_select_type_numeric" => {
-                chosen_return_type = SubgraphType::Numeric;
-                match self.next_state().as_str() {
-                    arm @ "COUNT" => match self.next_state().as_str() {
-                        "COUNT_wildcard" => {
-                            result = Expr::Function(sqlparser::ast::Function {
-                                name: ObjectName(vec![Ident {
-                                    value: arm.to_string(),
-                                    quote_style: (None),
-                                }]),
-                                args: vec![FunctionArg::Unnamed(
-                                    sqlparser::ast::FunctionArgExpr::Wildcard,
-                                )],
-                                over: None,
-                                distinct: distinct,
-                                special: false,
-                            });
-                            //return result;
-                        }
-                        "call65_types" => {
-                            result = Expr::Function(sqlparser::ast::Function {
-                                name: ObjectName(vec![Ident {
-                                    value: arm.to_string(),
-                                    quote_style: (None),
-                                }]),
-                                args: vec![FunctionArg::Unnamed(
-                                    sqlparser::ast::FunctionArgExpr::Expr(self.handle_types(None, None).1),
-                                )],
-                                over: None,
-                                distinct: distinct,
-                                special: false,
-                            });
-                        }
-                        any => self.panic_unexpected(any),
-                    },
+                let return_type = SubgraphType::Integer;
+                let (args_type, args_expr) = match self.next_state().as_str() {
                     "arg_double_numeric" => {
-                        let chosen_type = &(
-                            vec![SubgraphType::Numeric, SubgraphType::Numeric],
-                            vec![SubgraphType::Numeric],
-                        );
-                        let fun_name = self.config.aggregate_functions_distribution.get_fun_name(chosen_type.0.to_owned(), chosen_type.1.to_owned());
                         self.expect_state("call68_types");
                         let first_arg = self.handle_types(Some(&[SubgraphType::Numeric]), None).1;
                         self.expect_state("call66_types");
-                        result = Expr::Function(sqlparser::ast::Function {
-                            name: fun_name,
-                            args: vec![
-                                FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(
-                                    first_arg,
-                                )),
-                                FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(
-                                    self.handle_types(Some(&[SubgraphType::Numeric]), None).1,
-                                )),
-                            ],
-                            over: None,
-                            distinct: false,
-                            special: false,
-                        });
+                        let second_arg = self.handle_types(Some(&[SubgraphType::Numeric]), None).1;
+                        (
+                            AggregateFunctionAgruments::TypeList(vec![SubgraphType::Numeric, SubgraphType::Numeric]),
+                            vec![
+                                FunctionArg::Unnamed(FunctionArgExpr::Expr(first_arg)),
+                                FunctionArg::Unnamed(FunctionArgExpr::Expr(second_arg))
+                            ]
+                        )
                     }
                     "arg_single_numeric" => {
-                        let chosen_type = &(
-                            vec![SubgraphType::Numeric],
-                            vec![SubgraphType::Numeric],
-                        );
-                        let fun_name = self.config.aggregate_functions_distribution.get_fun_name(chosen_type.0.to_owned(), chosen_type.1.to_owned());
                         self.expect_state("call66_types");
-                        result = Expr::Function(sqlparser::ast::Function {
-                            name: fun_name,
-                            args: vec![
-                                FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(
-                                    self.handle_types(Some(&[SubgraphType::Numeric]), None).1,
-                                )),
-                            ],
-                            over: None,
-                            distinct: false,
-                            special: false,
-                        });
+                        (
+                            AggregateFunctionAgruments::TypeList(vec![SubgraphType::Numeric]),
+                            vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(
+                                self.handle_types(Some(&[SubgraphType::Numeric]), None).1,
+                            ))]
+                        )
                     },
                     any => self.panic_unexpected(any),
-                }
+                };
+                (args_type, args_expr, return_type)
             },
             arm @ ("aggregate_select_type_text" | "aggregate_select_type_bool" | "aggregate_select_type_date") => {
-                chosen_return_type = match arm {
-                    "aggregate_select_type_text" => SubgraphType::Text, 
-                    "aggregate_select_type_bool" => SubgraphType::Val3, 
-                    "aggregate_select_type_date" => SubgraphType::Date, 
+                let (return_type, states) = match arm {
+                    "aggregate_select_type_text" => (SubgraphType::Text, &["arg_text", "call63_types"]),
+                    "aggregate_select_type_bool" => (SubgraphType::Val3, &["arg_single_3vl", "call64_types"]),
+                    "aggregate_select_type_date" => (SubgraphType::Date, &["arg_date", "call72_types"]),
                     any => self.panic_unexpected(any),
                 };
-                self.expect_state(match chosen_return_type {
-                    SubgraphType::Text => "arg_text", 
-                    SubgraphType::Val3 => "arg_single_3vl", 
-                    SubgraphType::Date => "arg_date",
-                    _ => panic!(),
-                });
-                let chosen_type = &(
-                    vec![chosen_return_type.clone()], vec![chosen_return_type.clone()],
-                );
-                let fun_name = self.config.aggregate_functions_distribution.get_fun_name(
-                    chosen_type.0.to_owned(), chosen_type.1.to_owned()
-                );
-                self.expect_state(match arm {
-                    "aggregate_select_type_text" => "call63_types", 
-                    "aggregate_select_type_bool" => "call64_types", 
-                    "aggregate_select_type_date" => "call72_types", 
-                    any => self.panic_unexpected(any),
-                });
-                result = Expr::Function(ast::Function {
-                    name: fun_name,
-                    args: vec![
-                        FunctionArg::Unnamed(FunctionArgExpr::Expr(
-                            self.handle_types(Some(&[chosen_return_type.clone()]), None).1,
-                        )),
-                    ],
-                    over: None,
-                    distinct: false,
-                    special: false,
-                });
+                let args_type = AggregateFunctionAgruments::TypeList(vec![return_type.clone()]);
+                self.expect_states(states);
+                let args_expr = vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(
+                        self.handle_types(Some(&[return_type.clone()]), None).1,
+                ))];
+                (args_type, args_expr, return_type)
             },
             any => self.panic_unexpected(any),
-        }
+        };
+
+        let aggr_name = self.config.aggregate_functions_distribution.get_func_name(
+            aggr_args_type, aggr_return_type.clone()
+        );
+
+        let expr = Expr::Function(ast::Function {
+            name: aggr_name,
+            args: aggr_args_expr,
+            over: None,
+            distinct: distinct,
+            special: false,
+        });
+
         self.expect_state("EXIT_aggregate_function");
-        (chosen_return_type,  result)
+        (aggr_return_type,  expr)
     }
 
     /// subgraph def_group_by
@@ -1148,7 +1058,6 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                             self.clause_context.group_by_mut().append_column(chosen_column_ident, chosen_column_type);
                         },
                         "EXIT_GROUP_BY" => {
-                            
                             result = list;
                             return result;
                         },

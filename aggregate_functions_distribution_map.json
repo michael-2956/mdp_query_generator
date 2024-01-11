@@ -1,21 +1,5 @@
 {
-    "[numeric, numeric]": {
-        "[numeric]": {
-            "REGR_SXX": 1.0, 
-            "REGR_SYY": 1.0, 
-            "REGR_SSY": 1.0, 
-            "CORR": 3.0, 
-            "COVAR_POP": 1.0, 
-            "COVAR_SAMP": 2.0, 
-            "REGR_AVGX": 2.0, 
-            "REGR_AVGY": 2.0,
-            "REGR_COUNT": 2.0, 
-            "REGR_INTERCEPT": 1.0, 
-            "REGR_R2": 1.0, 
-            "REGR_SLOPE": 1.0
-        }
-    },
-    "[numeric]": {
+    "numeric": {
         "[numeric]": {
             "MIN": 5.0, 
             "MAX": 5.0, 
@@ -30,23 +14,45 @@
             "STDDEV_SAMP": 1.0, 
             "VARIANCE": 4.0, 
             "VAR_POP": 1.0
+        },
+        "[numeric, numeric]": {
+            "REGR_SXX": 1.0, 
+            "REGR_SYY": 1.0, 
+            "REGR_SSY": 1.0, 
+            "CORR": 3.0, 
+            "COVAR_POP": 1.0, 
+            "COVAR_SAMP": 2.0, 
+            "REGR_AVGX": 2.0, 
+            "REGR_AVGY": 2.0,
+            "REGR_COUNT": 2.0, 
+            "REGR_INTERCEPT": 1.0, 
+            "REGR_R2": 1.0, 
+            "REGR_SLOPE": 1.0
+        },
+        "any": {
+            "COUNT": 1.0
+        },
+        "*": {
+            "COUNT": 1.0
         }
     },
-    "[text]": {
+    "text": {
+        "[text, text]": {
+            "STRING_AGG": 1.0
+        },
         "[text]": {
-            "STRING_AGG": 1.0, 
             "MAX": 1.0, 
             "MIN": 1.0
         }
     },
-    "[date]": {
+    "date": {
         "[date]": {
             "AVG": 2.0, 
             "MAX": 3.0, 
             "MIN": 3.0
         }
     },
-    "[3VL Value]": {
+    "3VL Value": {
         "[3VL Value]": {
             "BOOL_AND": 2.0, 
             "BOOL_OR": 2.0, 
@@ -55,7 +61,7 @@
             "EVERY": 1.0
         }
     },
-    "[integer]": {
+    "integer": {
         "[integer]": {
             "MIN": 3.0,
             "MAX": 3.0,

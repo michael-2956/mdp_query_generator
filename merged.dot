@@ -719,13 +719,16 @@ digraph G {
         arg_integer -> call71_types
         call71_types -> EXIT_aggregate_function
 
+        arg_integer_any [label="any type"]
+        aggregate_select_type_integer -> arg_integer_any
+        call65_types [TYPES="[any]", label="TYPES: [any]\nmodif.: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        arg_integer_any -> call65_types
+        call65_types -> EXIT_aggregate_function
+
         COUNT []
         aggregate_select_type_integer -> COUNT
         COUNT_wildcard [label="*"]
-        call65_types [TYPES="[any]", label="TYPES: [any]\nmodif.: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         COUNT -> COUNT_wildcard
-        COUNT -> call65_types
-        call65_types -> EXIT_aggregate_function
         COUNT_wildcard -> EXIT_aggregate_function
 
 
