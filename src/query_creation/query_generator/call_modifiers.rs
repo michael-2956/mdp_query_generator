@@ -15,7 +15,7 @@ pub trait NamedValue: Debug {
 pub enum ValueSetterValue {
     TypesType(TypesTypeValue),
     WildcardRelations(WildcardRelationsValue),
-    HasUniqueColumnNamesForType(HasUniqueColumnNamesForTypeValue),
+    HasUniqueColumnNamesForType(HasUniqueColumnNamesForSelectedTypesValue),
 }
 
 pub trait ValueSetter: Debug {
@@ -124,13 +124,13 @@ impl StatelessCallModifier for IsColumnTypeAvailableModifier {
 }
 
 #[derive(Debug, Clone)]
-pub struct HasUniqueColumnNamesForTypeValue {
+pub struct HasUniqueColumnNamesForSelectedTypesValue {
     value: bool,
 }
 
-impl NamedValue for HasUniqueColumnNamesForTypeValue {
+impl NamedValue for HasUniqueColumnNamesForSelectedTypesValue {
     fn name() -> SmolStr {
-        SmolStr::new("has_unique_column_names_for_type_val")
+        SmolStr::new("do_unique_column_names_exist_for_selected_types")
     }
 }
 
@@ -139,7 +139,7 @@ pub struct HasUniqueColumnNamesForTypeValueSetter { }
 
 impl ValueSetter for HasUniqueColumnNamesForTypeValueSetter {
     fn get_value_name(&self) -> SmolStr {
-        HasUniqueColumnNamesForTypeValue::name()
+        HasUniqueColumnNamesForSelectedTypesValue::name()
     }
 
     fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
@@ -147,22 +147,22 @@ impl ValueSetter for HasUniqueColumnNamesForTypeValueSetter {
             &function_context.call_params.selected_types, CallTypes::TypeList
         );
         // in any clause context the column ambiguity is determined by FROM
-        ValueSetterValue::HasUniqueColumnNamesForType(HasUniqueColumnNamesForTypeValue {
+        ValueSetterValue::HasUniqueColumnNamesForType(HasUniqueColumnNamesForSelectedTypesValue {
             value: clause_context.from().has_unique_columns_for_types(column_types)
         })
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct HasUniqueColumnNamesForTypeModifier {}
+pub struct HasUniqueColumnNamesForSelectedTypesModifier {}
 
-impl StatelessCallModifier for HasUniqueColumnNamesForTypeModifier {
+impl StatelessCallModifier for HasUniqueColumnNamesForSelectedTypesModifier {
     fn get_name(&self) -> SmolStr {
-        SmolStr::new("has_unique_column_names_for_type")
+        SmolStr::new("has_unique_column_names_for_selected_types")
     }
 
     fn get_associated_value_name(&self) -> Option<SmolStr> {
-        Some(HasUniqueColumnNamesForTypeValue::name())
+        Some(HasUniqueColumnNamesForSelectedTypesValue::name())
     }
 
     fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {

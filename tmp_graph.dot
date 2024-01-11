@@ -134,7 +134,7 @@ digraph G {
         WHERE [label="WHERE", shape=rectangle, style=filled, color=darkgoldenrod1]
         EXIT_WHERE [label="EXIT WHERE"]
 
-        call53_types [TYPES="[3VL Value]", MODS="[no function]", label="TYPES: 3VL Value\nMODS: no function", shape=rectangle, style=filled, color=lightblue]
+        call53_types [TYPES="[3VL Value]", MODS="[no aggregate]", label="TYPES: 3VL Value\nMODS: no aggregate", shape=rectangle, style=filled, color=lightblue]
         WHERE -> call53_types
         call53_types -> EXIT_WHERE
     }
@@ -213,7 +213,7 @@ digraph G {
 
         limit_num [label="limit [num]\nmod: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
         LIMIT -> limit_num
-        call52_types [TYPES="[integer, numeric]", MODS="[no column spec, no function]", label="TYPES: [integer, numeric]\nMODS: [no column spec]", shape=rectangle, style=filled, color=lightblue]
+        call52_types [TYPES="[integer, numeric]", MODS="[no column spec, no aggregate]", label="TYPES: [integer, numeric]\nMODS: [no column spec]", shape=rectangle, style=filled, color=lightblue]
         limit_num -> call52_types
         call52_types -> EXIT_LIMIT
     }
@@ -545,7 +545,7 @@ digraph G {
     }
 
     subgraph def_types {
-        types [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no literals, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no function]", label="TYPE(S) (generic):\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[no literals, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no literals, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no aggregate]", label="TYPE(S) (generic):\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[no literals, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
         types_select_type_integer[TYPE_NAME="integer", label="integer?", set_value="types_type"]
@@ -586,7 +586,7 @@ digraph G {
         types_select_special_expression -> call1_Query
         call1_Query -> EXIT_types
 
-        call0_aggregate_function [TYPES="[known]", modifier="no function", label="Aggregate function\nTYPE: known\nmod.: 'no function'", modifier_mode="off", shape=rectangle, style=filled, color=peru]
+        call0_aggregate_function [TYPES="[known]", modifier="no aggregate", label="Aggregate function\nTYPE: known\nmod.: 'no aggregate'", modifier_mode="off", shape=rectangle, style=filled, color=peru]
         types_select_special_expression -> call0_aggregate_function
         call0_aggregate_function -> EXIT_types
 
@@ -618,7 +618,7 @@ digraph G {
         column_spec_choose_source [label="Choose column spec relation source"]
         column_spec -> column_spec_choose_source
 
-        column_spec_choose_qualified [label="Choose if qualified (R.COL/COL)\nset value: 'has_unique_column_names_for_type_val'", set_value="has_unique_column_names_for_type_val"]
+        column_spec_choose_qualified [label="Choose if qualified (R.COL/COL)\nset value: 'do_unique_column_names_exist_for_selected_types'", set_value="do_unique_column_names_exist_for_selected_types"]
 
         get_column_spec_from_group_by [label="HAVING", modifier="group by columns", modifier_mode="on"]
         column_spec_choose_source -> get_column_spec_from_group_by
@@ -632,7 +632,7 @@ digraph G {
         column_spec_choose_qualified -> qualified_column_name
         qualified_column_name -> EXIT_column_spec
 
-        unqualified_column_name [label="Unqualified\ncall mod.: 'has_unique_column_names_for_type'", call_modifier="has_unique_column_names_for_type"]
+        unqualified_column_name [label="Unqualified\ncall mod.: 'has_unique_column_names_for_selected_types'", call_modifier="has_unique_column_names_for_selected_types"]
         column_spec_choose_qualified -> unqualified_column_name
         unqualified_column_name -> EXIT_column_spec
     }
@@ -678,7 +678,7 @@ digraph G {
         set_list -> new_set
         new_set -> set_list
         
-        call69_types[TYPES="[any]", label="TYPES: [any]\n MODS: [no literals, no typed nulls, no subquery, no function]", MODS="[no literals, no typed nulls, no subquery, no function]", shape=rectangle, style=filled, color=lightblue]
+        call69_types[TYPES="[any]", label="TYPES: [any]\n MODS: [no literals, no typed nulls, no subquery, no aggregate]", MODS="[no literals, no typed nulls, no subquery, no aggregate]", shape=rectangle, style=filled, color=lightblue]
         new_set -> call69_types
         call69_types -> new_set
         call69_types -> EXIT_group_by
@@ -688,7 +688,7 @@ digraph G {
         grouping_cube -> set_list
         grouping_rollup -> set_list
 
-        call70_types[TYPES="[any]", label="TYPES: [any]\nMODS: [no literals, no typed nulls, no subquery, no function]", MODS="[no literals, no typed nulls, no subquery, no function]", shape=rectangle, style=filled, color=lightblue]
+        call70_types[TYPES="[any]", label="TYPES: [any]\nMODS: [no literals, no typed nulls, no subquery, no aggregate]", MODS="[no literals, no typed nulls, no subquery, no aggregate]", shape=rectangle, style=filled, color=lightblue]
         list_of_relations -> call70_types
         call70_types -> list_of_relations
         call70_types -> EXIT_group_by

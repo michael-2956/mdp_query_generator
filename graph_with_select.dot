@@ -609,7 +609,7 @@ digraph G {
         column_spec_choose_source [label="Choose column spec relation source"]
         column_spec -> column_spec_choose_source
 
-        column_spec_choose_qualified [label="Choose if qualified (R.COL/COL)\nset value: 'has_unique_column_names_for_type_val'", set_value="has_unique_column_names_for_type_val"]
+        column_spec_choose_qualified [label="Choose if qualified (R.COL/COL)\nset value: 'do_unique_column_names_exist_for_selected_types'", set_value="do_unique_column_names_exist_for_selected_types"]
 
         get_column_spec_from_group_by [label="HAVING", modifier="group by columns", modifier_mode="on"]
         column_spec_choose_source -> get_column_spec_from_group_by
@@ -623,7 +623,7 @@ digraph G {
         column_spec_choose_qualified -> qualified_column_name
         qualified_column_name -> EXIT_column_spec
 
-        unqualified_column_name [label="Unqualified\ncall mod.: 'has_unique_column_names_for_type'", call_modifier="has_unique_column_names_for_type"]
+        unqualified_column_name [label="Unqualified\ncall mod.: 'has_unique_column_names_for_selected_types'", call_modifier="has_unique_column_names_for_selected_types"]
         column_spec_choose_qualified -> unqualified_column_name
         unqualified_column_name -> EXIT_column_spec
     }

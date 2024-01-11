@@ -761,7 +761,7 @@ impl PathGenerator {
                             let allowed_type_list = allowed_type_list.selected_types.clone();
                             match expr {
                                 Expr::Function(function) => {
-                                    if modifiers.contains(&SmolStr::new("no function")) {
+                                    if modifiers.contains(&SmolStr::new("no aggregate")) {
                                         unexpected_expr!(expr)
                                     }
                                     self.try_push_state("call0_aggregate_function")?;
