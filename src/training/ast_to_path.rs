@@ -987,8 +987,8 @@ impl PathGenerator {
                             },
                             [SubgraphType::Text] => {
                                 // TODO rename node
-                                self.try_push_state("aggregate_select_type_string")?;
-                                self.try_push_state("arg_string")?;
+                                self.try_push_state("aggregate_select_type_text")?;
+                                self.try_push_state("arg_text")?;
                                 self.try_push_state("call63_types")?;
                                 let tp = self.handle_types(arg, Some(&[SubgraphType::Text]), None)?;
                             },

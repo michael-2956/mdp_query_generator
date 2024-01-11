@@ -11,64 +11,49 @@ use std::fs;
 
 #[derive(Debug, Clone)]
 pub struct AggregateFunctionDistribution {
-   pub map : HashMap<Vec<SubgraphType>, HashMap<Vec<SubgraphType>, BTreeMap<String, f64>>>,
+    /// domain -> return -> aggr name -> weight
+    func_map: HashMap<Vec<SubgraphType>, HashMap<Vec<SubgraphType>, BTreeMap<String, f64>>>,
+}
+
+fn parse_type_list(mut types_str: String) -> Vec<SubgraphType> {
+    if !types_str.starts_with("[") || !types_str.ends_with("]") {
+        panic!("Error parsing aggregate function JSON file!\nTypes must conform to format: [type1, type2, type3] Got: {types_str}")
+    }
+    types_str = String::from(&types_str[1..types_str.len()-1]);
+    types_str.split(",").map(
+        |x| SubgraphType::from_type_name(x.trim()).unwrap()
+    ).collect()
 }
 
 impl AggregateFunctionDistribution {
     pub fn parse_file(file_path: PathBuf) -> AggregateFunctionDistribution {
-        let content : HashMap<String, HashMap<String, HashMap<String, f64>>>;
-        let data = fs::read_to_string(file_path).expect("Unable to read file");
-        content = serde_json::from_str(&data).unwrap();
-        let mut filled_map : HashMap<Vec<SubgraphType>, HashMap<Vec<SubgraphType>, BTreeMap<String, f64>>> = HashMap::new();
-        for (key, _) in &content {
-            match key.as_str() {
-                arm @ ("[numeric, numeric]" | "[numeric]" | "[text]" | "[Val3]" | "[integer]" | "[date]") => {
-                    for (inner_key, _) in &content[arm] {
-                        match inner_key.as_str() {
-                            inner_arm @ ("[numeric]" | "[text]" | "[Val3]" | "[integer]" | "[date]") => {
-                                let outer : Vec<SubgraphType> = match key.as_str() {
-                                    "[numeric, numeric]" => vec![SubgraphType::Numeric, SubgraphType::Numeric],
-                                    "[numeric]" => vec![SubgraphType::Numeric],
-                                    "[text]" => vec![SubgraphType::Text],
-                                    "[date]" => vec![SubgraphType::Date],
-                                    "[Val3]" => vec![SubgraphType::Val3],    
-                                    "[integer]" => vec![SubgraphType::Integer],    
-                                    _ => panic!("found unknown domain type {} while filling aggregate functions structure.", key),
-                                };
-                                let inner : Vec<SubgraphType> = match inner_key.as_str() {
-                                    "[numeric]" => vec![SubgraphType::Numeric],
-                                    "[text]" => vec![SubgraphType::Text],
-                                    "[date]" => vec![SubgraphType::Date],
-                                    "[Val3]" => vec![SubgraphType::Val3],    
-                                    "[integer]" => vec![SubgraphType::Integer],    
-                                    _ => panic!("found unknown return type {} while filling aggregate functions structure.", key),
-                                };
-                                let mut tree : BTreeMap<String, f64> = BTreeMap::new();
-                                for (func, weight) in &content[arm][inner_arm] {
-                                    tree.insert(String::from(func), *weight);
-                                }
-                                let mut return_type_map : HashMap<Vec<SubgraphType>, BTreeMap<String, f64>> = HashMap::new();
-                                return_type_map.insert(inner, tree);
-                                filled_map.insert(outer, return_type_map);
-                            },
-                            _ => panic!("found unknown return type {} while parsing json file.", key),
-                        }
-                    }
-                },
-                _ => panic!("found unknown domain type {} while parsing json file.", key),
+        let content: HashMap<String, HashMap<String, HashMap<String, f64>>> = serde_json::from_str(
+            &fs::read_to_string(file_path).expect("Unable to read file")
+        ).unwrap();
+        
+        let mut func_map: HashMap<Vec<SubgraphType>, HashMap<Vec<SubgraphType>, BTreeMap<String, f64>>> = HashMap::new();
+        for (return_types_str, domain_map) in content {
+            let return_types = parse_type_list(return_types_str);
+            let mut domain_type_map: HashMap<Vec<SubgraphType>, BTreeMap<String, f64>> = HashMap::new();
+            for (domain_type_str, name_weight_map) in domain_map {
+                let domain_types = parse_type_list(domain_type_str);
+                domain_type_map.insert(domain_types, BTreeMap::from_iter(name_weight_map.into_iter()));
             }
+            func_map.insert(return_types, domain_type_map);
         }
-        AggregateFunctionDistribution {
-            map : filled_map,
-        }
+
+        AggregateFunctionDistribution { func_map }
     }  
 
-    pub fn get_fun_name (&mut self, arg_domain: Vec<SubgraphType>, arg_return: Vec<SubgraphType>) -> sqlparser::ast::ObjectName {
-        let dist = WeightedIndex::new(self.map[&arg_domain][&arg_return].iter().map(|item| item.1)).unwrap();
+    pub fn get_fun_name(&mut self, arg_domain: Vec<SubgraphType>, arg_return: Vec<SubgraphType>) -> sqlparser::ast::ObjectName {
+        let aggr_weight_map = &self.func_map[&arg_domain][&arg_return];
+        let dist = WeightedIndex::new(
+            aggr_weight_map.iter().map(|item| *item.1)
+        ).unwrap();
         let mut rng = thread_rng();
-        let selected_name = self.map[&arg_domain][&arg_return].keys().nth(dist.sample(&mut rng)).unwrap();
+        let selected_name = aggr_weight_map.keys().nth(dist.sample(&mut rng)).unwrap();
         ObjectName(vec![Ident {
-            value: selected_name.to_string(),
+            value: selected_name.clone(),
             quote_style: (None),
         }])
     }

@@ -707,28 +707,21 @@ digraph G {
         EXIT_aggregate_function [label="EXIT aggregate function"]
         
         aggregate_select_return_type [label="return type:="]
-        aggregate_alias[label="named function"]
-        //aggregate_unnamed[labe="unnamed function"]
         aggregate_distinct[label="DISTINCT"]
-        aggregate_function -> aggregate_alias
         aggregate_function -> aggregate_distinct
-        aggregate_alias -> aggregate_select_return_type
-        aggregate_alias -> aggregate_distinct
         aggregate_distinct -> aggregate_select_return_type
         
         aggregate_function -> aggregate_select_return_type
-        
-        // aggregate_select_type_array[OPTIONAL="array", label="array?"]
+
         aggregate_select_type_numeric[TYPE_NAME="numeric", label="numeric?"]
-        aggregate_select_type_string[TYPE_NAME="text", label="text?"]
+        aggregate_select_type_text[TYPE_NAME="text", label="text?"]
         aggregate_select_type_bool[TYPE_NAME="3VL Value", label="3VL Value?"]
         aggregate_select_type_integer[TYPE_NAME="integer", label="integer?"]
         aggregate_select_type_date[TYPE_NAME="date", label="date?"]
  
  
         aggregate_select_return_type -> aggregate_select_type_numeric
-        // aggregate_select_return_type -> aggregate_select_type_array
-        aggregate_select_return_type -> aggregate_select_type_string
+        aggregate_select_return_type -> aggregate_select_type_text
         aggregate_select_return_type -> aggregate_select_type_bool
         aggregate_select_return_type -> aggregate_select_type_integer
         aggregate_select_return_type -> aggregate_select_type_date
@@ -742,13 +735,13 @@ digraph G {
         call63_types -> EXIT_aggregate_function
         call72_types -> EXIT_aggregate_function
 
-        arg_single_vl3 [label="[3vl]"]
-        aggregate_select_type_bool -> arg_single_vl3
-        arg_single_vl3 -> call64_types
+        arg_single_3vl [label="[3vl]"]
+        aggregate_select_type_bool -> arg_single_3vl
+        arg_single_3vl -> call64_types
 
-        arg_string[label="[Text]"]
-        aggregate_select_type_string -> arg_string
-        arg_string -> call63_types
+        arg_text[label="[Text]"]
+        aggregate_select_type_text -> arg_text
+        arg_text -> call63_types
 
         arg_date[label="[date]"]
         aggregate_select_type_date -> arg_date
