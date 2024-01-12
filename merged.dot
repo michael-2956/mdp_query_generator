@@ -663,18 +663,28 @@ digraph G {
         GROUP_BY [label="GROUP BY", shape=rectangle, style=filled, color=gray]
         EXIT_GROUP_BY [label="EXIT GROUP BY"]
 
+        grouping_column_list[label="columns list"]
+        GROUP_BY -> grouping_column_list
+
+        call70_types[TYPES="[any]", label="TYPES: [any]\nMODS: [no literals, no typed nulls, no subquery, no aggregate]", MODS="[no literals, no typed nulls, no subquery, no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        grouping_column_list -> call70_types
+        call70_types -> grouping_column_list
+        call70_types -> EXIT_GROUP_BY
+
+        special_grouping [label="special grouping"]
+        grouping_column_list -> special_grouping
         set_list[label="set list"]
         
         grouping_rollup [label="rollup"]
-        GROUP_BY -> grouping_rollup
+        special_grouping -> grouping_rollup
         grouping_rollup -> set_list
         
         grouping_cube [label="cube"]
-        GROUP_BY -> grouping_cube
+        special_grouping -> grouping_cube
         grouping_cube -> set_list
         
         grouping_set [label="grouping set"]
-        GROUP_BY -> grouping_set
+        special_grouping -> grouping_set
         grouping_set -> set_list
         
         call69_types [TYPES="[any]", label="TYPES: [any]\n MODS: [no literals, no typed nulls, no subquery, no aggregate]", MODS="[no literals, no typed nulls, no subquery, no aggregate]", shape=rectangle, style=filled, color=lightblue]
@@ -684,14 +694,7 @@ digraph G {
         call69_types -> set_multiple
         set_multiple -> call69_types
         set_multiple -> EXIT_GROUP_BY
-
-        grouping_column_list[label="columns list"]
-        GROUP_BY -> grouping_column_list
-
-        call70_types[TYPES="[any]", label="TYPES: [any]\nMODS: [no literals, no typed nulls, no subquery, no aggregate]", MODS="[no literals, no typed nulls, no subquery, no aggregate]", shape=rectangle, style=filled, color=lightblue]
-        grouping_column_list -> call70_types
-        call70_types -> grouping_column_list
-        call70_types -> EXIT_GROUP_BY
+        set_multiple -> grouping_column_list
     }
 
 
@@ -788,7 +791,7 @@ digraph G {
         EXIT_FROM -> WHERE [color=none, weight=10]
         EXIT_WHERE -> SELECT [color=none, weight=10]
         EXIT_SELECT -> LIMIT [color=none, weight=10]
-        EXIT_VAL_3 -> number [color=none]
+        EXIT_VAL_3 -> number [color=none, weight=10]
         EXIT_number -> text [color=none]
         EXIT_text -> date [color=none]
         EXIT_list_expr -> aggregate_function [color=none]

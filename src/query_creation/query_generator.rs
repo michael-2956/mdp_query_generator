@@ -1031,71 +1031,85 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
     /// subgraph def_group_by
     fn handle_group_by(&mut self) -> Vec<Expr> {
         self.expect_state("GROUP_BY");
-        match self.next_state().as_str() {
-            "grouping_column_list" => {
-                let mut result: Vec<Expr> = Vec::new();
-                loop {
-                    self.expect_state("call70_types");
-                    let (chosen_column_type, chosen_column) = self.handle_types(
+        self.expect_state("grouping_column_list");
+        let mut result: Vec<Expr> = Vec::new();
+        loop {
+            let mut return_result = false;
+            match self.next_state().as_str() {
+                "call70_types" => {
+                    let (column_type, column_expr) = self.handle_types(
                         None, None
                     );
-                    result.push(chosen_column.clone());
-                    let chosen_column_ident = match chosen_column {
+                    result.push(column_expr.clone());
+                    let chosen_column_ident = match column_expr {
                         Expr::Identifier(ident) => vec![ident],
                         Expr::CompoundIdentifier(vec_of_ident) => vec_of_ident,
                         any => panic!("Unexpected expression for GROUP BY column: {:#?}", any),
                     };
-                    self.clause_context.group_by_mut().append_column(chosen_column_ident, chosen_column_type);
+                    self.clause_context.group_by_mut().append_column(chosen_column_ident, column_type);
 
                     match self.next_state().as_str() {
                         "grouping_column_list" => { },
-                        "EXIT_GROUP_BY" => return result,
+                        "EXIT_GROUP_BY" => return_result = true,
                         any => self.panic_unexpected(any),
                     }
-                }
-            },
-            arm @ ("grouping_set" | "grouping_rollup" | "grouping_cube") => {
-                let mut set_list: Vec<Vec<Expr>> = Vec::new();
-                self.expect_state("set_list");
-                loop {
-                    let mut current_set = Vec::new();
-                    let mut do_break = false;
+                },
+                "special_grouping" => {
+                    let groupping_type_str = match self.next_state().as_str() {
+                        arm @ ("grouping_set" | "grouping_rollup" | "grouping_cube") => arm.to_string(),
+                        any => self.panic_unexpected(any)
+                    };
+                    let mut set_list: Vec<Vec<Expr>> = Vec::new();
+                    self.expect_state("set_list");
                     loop {
-                        match self.next_state().as_str() {
-                            "call69_types" => {
-                                let (column_type, column_expr) = self.handle_types(None, None);
-                                current_set.push(column_expr.clone());
-                                let column_name = match column_expr {
-                                    Expr::Identifier(ident) => vec![ident],
-                                    Expr::CompoundIdentifier(ident_components) => ident_components,
-                                    any => panic!("Unexpected expression for GROUP BY column: {:#?}", any),
-                                };
-                                self.clause_context.group_by_mut().append_column(column_name, column_type);
-                                match self.next_state().as_str() {
-                                    "set_multiple" => { },
-                                    "set_list" => break,
-                                    any => self.panic_unexpected(any),
-                                }
-                            },
-                            "EXIT_GROUP_BY" => {
-                                do_break = true;
-                                break;
-                            },
-                            any => self.panic_unexpected(any),
+                        let mut current_set = Vec::new();
+                        let mut finish_groupping = false;
+                        loop {
+                            match self.next_state().as_str() {
+                                "call69_types" => {
+                                    let (column_type, column_expr) = self.handle_types(None, None);
+                                    current_set.push(column_expr.clone());
+                                    let column_name = match column_expr {
+                                        Expr::Identifier(ident) => vec![ident],
+                                        Expr::CompoundIdentifier(ident_components) => ident_components,
+                                        any => panic!("Unexpected expression for GROUP BY column: {:#?}", any),
+                                    };
+                                    self.clause_context.group_by_mut().append_column(column_name, column_type);
+                                    match self.next_state().as_str() {
+                                        "set_multiple" => { },
+                                        "set_list" => break,
+                                        any => self.panic_unexpected(any),
+                                    }
+                                },
+                                "grouping_column_list" => {
+                                    finish_groupping = true;
+                                    break;
+                                },
+                                "EXIT_GROUP_BY" => {
+                                    finish_groupping = true;
+                                    return_result = true;
+                                    break;
+                                },
+                                any => self.panic_unexpected(any),
+                            }
+                        }
+                        set_list.push(current_set);
+                        if finish_groupping {
+                            result.push(match groupping_type_str.as_str() {
+                                "grouping_set" => Expr::GroupingSets(set_list),
+                                "grouping_rollup" => Expr::Rollup(set_list),
+                                "grouping_cube" => Expr::Cube(set_list),
+                                any => self.panic_unexpected(any),
+                            });
+                            break
                         }
                     }
-                    set_list.push(current_set);
-                    if do_break {
-                        break match arm {
-                            "grouping_set" => vec![Expr::GroupingSets(set_list)],
-                            "grouping_rollup" => vec![Expr::Rollup(set_list)],
-                            "grouping_cube" => vec![Expr::Cube(set_list)],
-                            any => self.panic_unexpected(any),
-                        }
-                    }
-                }
-            },
-            any => self.panic_unexpected(any)
+                },
+                any => self.panic_unexpected(any)
+            }
+            if return_result {
+                break result
+            }
         }
     }
 

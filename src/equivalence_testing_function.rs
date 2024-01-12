@@ -157,7 +157,7 @@ fn check_expr(expr: Expr) -> bool {
 
             condition_1 && condition_2
         },
-        // The `GROUPING SETS` expr.
+        // The `grouping SETS` expr.
         Expr::GroupingSets(vec_vec) => {
             vec_vec.into_iter().all(|vec| vec.into_iter().all(check_expr))
         },
