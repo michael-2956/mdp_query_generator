@@ -1123,7 +1123,7 @@ impl PathGenerator {
                 }
             },
             list @ &[..] => {
-                self.try_push_state("grouping_relations_list")?;
+                self.try_push_state("grouping_column_list")?;
                 for column_listed in list {
                     self.try_push_state("list_of_relations")?;
                     let column_idents = match column_listed {

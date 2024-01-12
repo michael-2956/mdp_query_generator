@@ -1031,80 +1031,67 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
     /// subgraph def_group_by
     fn handle_group_by(&mut self) -> Vec<Expr> {
         self.expect_state("GROUP_BY");
-        let result;
-        let mut arg: Vec<Vec<Expr>> = Vec::new();
         match self.next_state().as_str() {
-            "grouping_relations_list" => {
-                let mut list : Vec<Expr> = Vec::new();
+            "grouping_column_list" => {
+                let mut result: Vec<Expr> = Vec::new();
                 loop {
-                    match self.next_state().as_str() {
-                        "list_of_relations" => {
+                    self.expect_state("call70_types");
+                    let (chosen_column_type, chosen_column) = self.handle_types(
+                        None, None
+                    );
+                    result.push(chosen_column.clone());
+                    let chosen_column_ident = match chosen_column {
+                        Expr::Identifier(ident) => vec![ident],
+                        Expr::CompoundIdentifier(vec_of_ident) => vec_of_ident,
+                        any => panic!("Unexpected expression for GROUP BY column: {:#?}", any),
+                    };
+                    self.clause_context.group_by_mut().append_column(chosen_column_ident, chosen_column_type);
 
-                        },
-                        "call70_types" => {
-                            let (chosen_column_type, chosen_column) = self.handle_types(
-                                None, None
-                            );
-                            // println!("chosen column = {:#?}", chosen_column);
-                            list.push(chosen_column.clone());
-                            let chosen_column_ident = match chosen_column {
-                                Expr::Identifier(ident) => vec![ident],
-                                Expr::CompoundIdentifier(vec_of_ident) => vec_of_ident,
-                                // do i need to use expr somehow?
-                                Expr::CompositeAccess { expr: _, key } => vec![key],
-                                any => panic!("Got unexpected form of ident for GROUP BY arg: {:#?}", any),
-                            };
-                            // println!("ident = {:#?}",chosen_column_ident);
-                            self.clause_context.group_by_mut().append_column(chosen_column_ident, chosen_column_type);
-                        },
-                        "EXIT_GROUP_BY" => {
-                            result = list;
-                            return result;
-                        },
+                    match self.next_state().as_str() {
+                        "grouping_column_list" => { },
+                        "EXIT_GROUP_BY" => return result,
                         any => self.panic_unexpected(any),
                     }
                 }
             },
             arm @ ("grouping_set" | "grouping_rollup" | "grouping_cube") => {
-                //let mut arg: Vec<Vec<Expr>> = Vec::new();
-                let mut current_set : Vec<Expr> = Vec::new();
+                let mut set_list: Vec<Vec<Expr>> = Vec::new();
+                self.expect_state("set_list");
                 loop {
-                    match self.next_state().as_str() {
-                        "set_list" => {
-                            if current_set.is_empty() == false {
-                                arg.push(current_set);
-                            }
-                            current_set = Vec::new();
-                        },
-                        "new_set" => {
-                            
-                        },
-                        "call69_types" => {
-                            let (chosen_column_type, chosen_column) = self.handle_types(
-                                None, None
-                            );
-                            // println!("chosen column = {:#?}", chosen_column);
-                            current_set.push(chosen_column.clone());
-                            let chosen_column_ident = match chosen_column {
-                                Expr::Identifier(ident) => vec![ident],
-                                Expr::CompoundIdentifier(vec_of_ident) => vec_of_ident,
-                                Expr::CompositeAccess { expr: _, key } => vec![key],
-                                any => panic!("Got unexpected form of ident for GROUP BY arg: {:#?}", any),
-                            };
-                            // println!("ident = {:#?}",chosen_column_ident);
-                            self.clause_context.group_by_mut().append_column(chosen_column_ident, chosen_column_type);
-                        },
-                        "EXIT_GROUP_BY" => {
-                            arg.push(current_set);
-                            result = match arm {
-                                "grouping_set" => vec![Expr::GroupingSets(arg)],
-                                "grouping_rollup" => vec![Expr::Rollup(arg)],
-                                "grouping_cube" => vec![Expr::Cube(arg)],
-                                any => self.panic_unexpected(any),
-                            };
-                            return result;
+                    let mut current_set = Vec::new();
+                    let mut do_break = false;
+                    loop {
+                        match self.next_state().as_str() {
+                            "call69_types" => {
+                                let (column_type, column_expr) = self.handle_types(None, None);
+                                current_set.push(column_expr.clone());
+                                let column_name = match column_expr {
+                                    Expr::Identifier(ident) => vec![ident],
+                                    Expr::CompoundIdentifier(ident_components) => ident_components,
+                                    any => panic!("Unexpected expression for GROUP BY column: {:#?}", any),
+                                };
+                                self.clause_context.group_by_mut().append_column(column_name, column_type);
+                                match self.next_state().as_str() {
+                                    "set_multiple" => { },
+                                    "set_list" => break,
+                                    any => self.panic_unexpected(any),
+                                }
+                            },
+                            "EXIT_GROUP_BY" => {
+                                do_break = true;
+                                break;
+                            },
+                            any => self.panic_unexpected(any),
                         }
-                        any => self.panic_unexpected(any),
+                    }
+                    set_list.push(current_set);
+                    if do_break {
+                        break match arm {
+                            "grouping_set" => vec![Expr::GroupingSets(set_list)],
+                            "grouping_rollup" => vec![Expr::Rollup(set_list)],
+                            "grouping_cube" => vec![Expr::Cube(set_list)],
+                            any => self.panic_unexpected(any),
+                        }
                     }
                 }
             },

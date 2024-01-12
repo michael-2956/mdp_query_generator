@@ -663,38 +663,34 @@ digraph G {
         GROUP_BY [label="GROUP BY", shape=rectangle, style=filled, color=gray]
         EXIT_GROUP_BY [label="EXIT GROUP BY"]
 
+        set_list[label="set list"]
+        
         grouping_rollup [label="rollup"]
         GROUP_BY -> grouping_rollup
-
+        grouping_rollup -> set_list
+        
         grouping_cube [label="cube"]
         GROUP_BY -> grouping_cube
+        grouping_cube -> set_list
         
-        grouping_relations_list[label="relations list"]
-        GROUP_BY -> grouping_relations_list
-
         grouping_set [label="grouping set"]
         GROUP_BY -> grouping_set
-
-        set_list[label="set list"]
-
-        new_set [label="new set"]
         grouping_set -> set_list
-        set_list -> new_set
-        new_set -> set_list
         
-        call69_types[TYPES="[any]", label="TYPES: [any]\n MODS: [no literals, no typed nulls, no subquery, no aggregate]", MODS="[no literals, no typed nulls, no subquery, no aggregate]", shape=rectangle, style=filled, color=lightblue]
-        new_set -> call69_types
-        call69_types -> new_set
-        call69_types -> EXIT_GROUP_BY
-        
-        list_of_relations[label="list"]
-        grouping_relations_list -> list_of_relations
-        grouping_cube -> set_list
-        grouping_rollup -> set_list
+        call69_types [TYPES="[any]", label="TYPES: [any]\n MODS: [no literals, no typed nulls, no subquery, no aggregate]", MODS="[no literals, no typed nulls, no subquery, no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        set_list -> call69_types
+        call69_types -> set_list
+        set_multiple [label="multiple cols in set"]
+        call69_types -> set_multiple
+        set_multiple -> call69_types
+        set_multiple -> EXIT_GROUP_BY
+
+        grouping_column_list[label="columns list"]
+        GROUP_BY -> grouping_column_list
 
         call70_types[TYPES="[any]", label="TYPES: [any]\nMODS: [no literals, no typed nulls, no subquery, no aggregate]", MODS="[no literals, no typed nulls, no subquery, no aggregate]", shape=rectangle, style=filled, color=lightblue]
-        list_of_relations -> call70_types
-        call70_types -> list_of_relations
+        grouping_column_list -> call70_types
+        call70_types -> grouping_column_list
         call70_types -> EXIT_GROUP_BY
     }
 
@@ -702,7 +698,7 @@ digraph G {
     subgraph def_aggregate_function {
         aggregate_function [TYPES="[integer, numeric, 3VL Value, text, date]", label="aggregate function\nTYPES=[integer, numeric, 3VL Value, text, date]", shape=octagon, style=filled, color=peru]
         EXIT_aggregate_function [label="EXIT aggregate function"]
-        
+
         aggregate_select_return_type [label="return type:="]
         aggregate_function -> aggregate_select_return_type
         aggregate_distinct[label="DISTINCT"]
@@ -719,7 +715,7 @@ digraph G {
         arg_integer -> call71_types
         call71_types -> EXIT_aggregate_function
 
-        arg_integer_any [label="any type"]
+        arg_integer_any [label="[any]"]
         aggregate_select_type_integer -> arg_integer_any
         call65_types [TYPES="[any]", label="TYPES: [any]\nmodif.: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         arg_integer_any -> call65_types
@@ -790,8 +786,8 @@ digraph G {
     # cosmetic
     subgraph ignore {
         EXIT_FROM -> WHERE [color=none, weight=10]
-        EXIT_WHERE -> SELECT [color=none]
-        EXIT_SELECT -> LIMIT [color=none]
+        EXIT_WHERE -> SELECT [color=none, weight=10]
+        EXIT_SELECT -> LIMIT [color=none, weight=10]
         EXIT_VAL_3 -> number [color=none]
         EXIT_number -> text [color=none]
         EXIT_text -> date [color=none]

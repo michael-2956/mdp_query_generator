@@ -665,8 +665,8 @@ digraph G {
         grouping_cube [label="cube"]
         group_by -> grouping_cube
         
-        grouping_relations_list[label="relations list"]
-        group_by -> grouping_relations_list
+        grouping_column_list[label="relations list"]
+        group_by -> grouping_column_list
 
         grouping_set [label="grouping set"]
         group_by -> grouping_set
@@ -684,7 +684,7 @@ digraph G {
         call69_types -> EXIT_group_by
         
         list_of_relations[label="list"]
-        grouping_relations_list -> list_of_relations
+        grouping_column_list -> list_of_relations
         grouping_cube -> set_list
         grouping_rollup -> set_list
 
