@@ -967,7 +967,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                 (args_type, args_expr, return_type)
             },
             "aggregate_select_type_numeric" => {
-                let return_type = SubgraphType::Integer;
+                let return_type = SubgraphType::Numeric;
                 let (args_type, args_expr) = match self.next_state().as_str() {
                     "arg_double_numeric" => {
                         self.expect_state("call68_types");
