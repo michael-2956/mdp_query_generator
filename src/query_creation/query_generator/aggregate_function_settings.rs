@@ -23,7 +23,7 @@ pub struct AggregateFunctionDistribution {
 }
 
 fn parse_type_list(mut types_str: String) -> AggregateFunctionAgruments {
-    types_str = types_str.trim().to_lowercase();
+    types_str = String::from(types_str.trim());
     if types_str.starts_with("[") && types_str.ends_with("]") {
         types_str = String::from(&types_str[1..types_str.len()-1]);
         AggregateFunctionAgruments::TypeList(types_str.split(",").map(
