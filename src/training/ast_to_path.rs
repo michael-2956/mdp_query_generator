@@ -251,10 +251,8 @@ impl PathGenerator {
         }
 
         // in struct select: pub group_by: Vec<Expr>,
-        if let (ref group_by) = select_body.group_by {
-            self.try_push_state("call0_GROUP_BY")?;
-            let columns_in_grouping = self.handle_group_by(group_by)?;
-        }
+        self.try_push_state("call0_GROUP_BY")?;
+        self.handle_group_by(&select_body.group_by)?;
 
         if let Some(ref having) = select_body.having {
             self.try_push_state("call0_HAVING")?;
@@ -323,11 +321,8 @@ impl PathGenerator {
         if distinct {
             self.try_push_state("SELECT_DISTINCT")?;
         }
-        self.try_push_state("SELECT_distinct_end")?;
 
         let mut column_idents_and_graph_types = vec![];
-
-        self.try_push_state("SELECT_projection")?;
 
         let single_column_mod = match self.state_generator.get_fn_modifiers() {
             CallModifiers::StaticList(list) if list.contains(&SmolStr::new("single column")) => true,
@@ -760,13 +755,14 @@ impl PathGenerator {
                             );
                             let allowed_type_list = allowed_type_list.selected_types.clone();
                             match expr {
-                                Expr::Function(function) => {
+                                Expr::Function(_function) => {
+                                    /// TODO: inspect for bugs
                                     if modifiers.contains(&SmolStr::new("no aggregate")) {
                                         unexpected_expr!(expr)
                                     }
                                     self.try_push_state("call0_aggregate_function")?;
                                     match self.handle_aggregate_function(allowed_type_list, expr) {
-                                        Ok(expr_type) => {
+                                        Ok(_expr_type) => {
                                             // TODO
                                         },
                                         Err(err) => {
@@ -955,13 +951,13 @@ impl PathGenerator {
     // TODO: run through all possible types in loop
     fn handle_aggregate_function(&mut self, return_type: Vec<SubgraphType>, function: &Expr) -> Result<SubgraphType, ConvertionError> {
         self.try_push_state("aggregate_function")?;
-        let expr_details = match function {
+        let _expr_details = match function {
             Expr::Function(sqlparser::ast::Function {
                 name: obj_fun_name,
                 args: function_args,
                 over: None,
                 distinct: is_distinct,
-                special: is_special,
+                special: _,
             }) => {
                 if is_distinct.clone() {
                     self.try_push_state("aggregate_distinct")?;
@@ -983,21 +979,21 @@ impl PathGenerator {
                                 self.try_push_state("aggregate_select_type_date")?;
                                 self.try_push_state("arg_date")?;
                                 self.try_push_state("call72_types")?;
-                                let tp = self.handle_types(arg, Some(&[SubgraphType::Date]), None)?;
+                                let _tp = self.handle_types(arg, Some(&[SubgraphType::Date]), None)?;
                             },
                             [SubgraphType::Text] => {
                                 // TODO rename node
                                 self.try_push_state("aggregate_select_type_text")?;
                                 self.try_push_state("arg_text")?;
                                 self.try_push_state("call63_types")?;
-                                let tp = self.handle_types(arg, Some(&[SubgraphType::Text]), None)?;
+                                let _tp = self.handle_types(arg, Some(&[SubgraphType::Text]), None)?;
                             },
                             [SubgraphType::Val3] => {
                                 // TODO rename node
                                 self.try_push_state("aggregate_select_type_bool")?;
                                 self.try_push_state("arg_single_val3")?;
                                 self.try_push_state("call64_types")?;
-                                let tp = self.handle_types(arg, Some(&[SubgraphType::Val3]), None)?;
+                                let _tp = self.handle_types(arg, Some(&[SubgraphType::Val3]), None)?;
                             },
                             _ => panic!("Expected one of [Date, Text, Val3], got{}!", arm[0]),
                         }
@@ -1031,13 +1027,13 @@ impl PathGenerator {
                                 };
                                 self.try_push_state("call68_types")?;
                                 // do i need tp1 & tp2?
-                                let tp1 = self.handle_types(first_arg, Some(&[SubgraphType::Numeric]), None)?;
+                                let _tp1 = self.handle_types(first_arg, Some(&[SubgraphType::Numeric]), None)?;
                             },
                             any => panic!("Unexpected number of args in numeric aggregate function: {any}"),
                         };
                         self.try_push_state("call66_types")?;
                         // do i need tp1 & tp2?
-                        let tp2 = self.handle_types(second_arg, Some(&[SubgraphType::Numeric]), None)?;
+                        let _tp2 = self.handle_types(second_arg, Some(&[SubgraphType::Numeric]), None)?;
                     },
                     [SubgraphType::Integer] => {
                         self.try_push_state("aggregate_select_type_integer")?;
@@ -1060,14 +1056,14 @@ impl PathGenerator {
                                     },
                                     _ => {
                                         self.try_push_state("call65_types")?;
-                                        let tp = self.handle_types(arg, Some(&[SubgraphType::Undetermined]), None)?;
+                                        let _tp = self.handle_types(arg, Some(&[SubgraphType::Undetermined]), None)?;
                                     },  
                                 };
                             },
                             _ => {
                                 self.try_push_state("arg_integer")?;
                                 self.try_push_state("call71_types")?;
-                                let tp = self.handle_types(arg, Some(&[SubgraphType::Integer]), None)?;
+                                let _tp = self.handle_types(arg, Some(&[SubgraphType::Integer]), None)?;
                             },
                         }
                     },
@@ -1112,7 +1108,7 @@ impl PathGenerator {
                         let column_idents = match column_listed {
                             Expr::Identifier(ident) => vec![ident.clone()],
                             Expr::CompoundIdentifier(vec_of_ident) => vec_of_ident.clone(),
-                            Expr::CompositeAccess { expr, key } => vec![key.clone()],
+                            Expr::CompositeAccess { expr: _, key } => vec![key.clone()],
                             _ => panic!("Unexpected element in set CUBE/ROLLUP/SET"),
                         };
                         self.try_push_state("call69_types")?;
@@ -1129,7 +1125,7 @@ impl PathGenerator {
                     let column_idents = match column_listed {
                         Expr::Identifier(ident) => vec![ident.clone()],
                         Expr::CompoundIdentifier(vec_of_ident) => vec_of_ident.clone(),
-                        Expr::CompositeAccess { expr, key } => vec![key.clone()],
+                        Expr::CompositeAccess { expr: _, key } => vec![key.clone()],
                         _ => panic!("Unexpected element in set CUBE/ROLLUP/SET"),
                     };
                     self.try_push_state("call60_types?")?;
@@ -1139,7 +1135,6 @@ impl PathGenerator {
                     // do i need push node? it's pushed in handle_column_spec... 
                 };
             },
-            _ => panic!("Wrong grouping arg."),
         }
         self.try_push_state("EXIT_group_by")?;
         return Ok(column_idents_and_graph_types);

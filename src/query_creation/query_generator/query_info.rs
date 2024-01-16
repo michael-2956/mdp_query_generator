@@ -223,19 +223,40 @@ impl<ColumnNameType: Ord + Clone + Hash + std::fmt::Debug> ColumnContainer<Colum
     fn get_column_names_iter(&self) -> impl Iterator<Item = &ColumnNameType> {
         self.columns.values().flat_map(|x| x.iter())
     }
+
+    fn is_empty(&self) -> bool {
+        self.columns.is_empty()
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct GroupByContents {
     /// A container of columns accessible by names
     columns: ColumnContainer<Vec<Ident>>,
+    /// Whether a catch-all single group is used
+    /// In Postgres, this is either GROUP BY () or aggregation without group by
+    single_group_grouping: bool,
 }
 
 impl GroupByContents {
     fn new() -> GroupByContents {
         GroupByContents {
             columns: ColumnContainer::new(),
+            single_group_grouping: false,
         }
+    }
+
+    /// returns whether the groupping is enabled
+    pub fn is_groupping_active(&self) -> bool {
+        return self.single_group_grouping || !self.columns.is_empty()
+    }
+
+    pub fn set_single_group_grouping(&mut self) {
+        self.single_group_grouping = true;
+    }
+
+    pub fn is_single_group(&self) -> bool {
+        return self.single_group_grouping
     }
 
     pub fn append_column(&mut self, column_name: Vec<Ident>, graph_type: SubgraphType) {

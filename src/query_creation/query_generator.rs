@@ -191,7 +191,10 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             any => self.panic_unexpected(any),
         }
 
-        let (mut column_idents_and_graph_types, (distinct, mut projection)) = self.handle_select();
+        let (
+            mut column_idents_and_graph_types,
+            (distinct, mut projection)
+        ) = self.handle_select();
         select_body.distinct = distinct;
         std::mem::swap(&mut select_body.projection, &mut projection);
 
@@ -205,8 +208,8 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         self.dynamic_model.notify_subquery_creation_end();
         self.clause_context.on_query_end();
 
+        // select pg_typeof((select null)); -- returns text
         for (_, column_type) in column_idents_and_graph_types.iter_mut() {
-            // select pg_typeof((select null)); -- returns text
             if *column_type == SubgraphType::Undetermined {
                 *column_type = SubgraphType::Text;
             }
@@ -272,26 +275,17 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         self.expect_state("SELECT");
         let distinct = match self.next_state().as_str() {
             "SELECT_DISTINCT" => {
-                self.expect_state("SELECT_distinct_end");
+                self.expect_state("SELECT_list");
                 true
             },
-            "SELECT_distinct_end" => false,
+            "SELECT_list" => false,
             any => self.panic_unexpected(any)
         };
 
         let mut column_idents_and_graph_types = vec![];
         let mut projection = vec![];
 
-        self.expect_state("SELECT_projection");
-        while match self.next_state().as_str() {
-            "SELECT_list" => true,
-            "SELECT_list_multiple_values" => {
-                self.expect_state("SELECT_list");
-                true
-            },
-            "EXIT_SELECT" => false,
-            any => self.panic_unexpected(any)
-        } {
+        loop {
             match self.next_state().as_str() {
                 "SELECT_tables_eligible_for_wildcard" => {
                     match self.next_state().as_str() {
@@ -344,6 +338,11 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                     projection.push(select_item);
                     column_idents_and_graph_types.push((alias, subgraph_type));
                 },
+                any => self.panic_unexpected(any)
+            };
+            match self.next_state().as_str() {
+                "SELECT_list_multiple_values" => self.expect_state("SELECT_list"),
+                "EXIT_SELECT" => break,
                 any => self.panic_unexpected(any)
             };
         }
@@ -1031,7 +1030,14 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
     /// subgraph def_group_by
     fn handle_group_by(&mut self) -> Vec<Expr> {
         self.expect_state("GROUP_BY");
-        self.expect_state("grouping_column_list");
+        match self.next_state().as_str() {
+            "group_by_single_group" => {
+                self.clause_context.group_by_mut().set_single_group_grouping();
+                return vec![]
+            },
+            "grouping_column_list" => { },
+            any => self.panic_unexpected(any),
+        }
         let mut result: Vec<Expr> = Vec::new();
         loop {
             let mut return_result = false;

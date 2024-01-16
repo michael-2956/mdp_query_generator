@@ -147,64 +147,42 @@ digraph G {
         SELECT [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[single column]", label="SELECT\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[single column]", shape=rectangle, style=filled, color=bisque]
         EXIT_SELECT [label="EXIT SELECT", shape=rectangle]
 
-        // call0_GROUP_BY [label="GROUP BY Statement", TYPES="[known]", shape=rectangle, style=filled, color=gray]
-        // EXIT_WHERE -> call0_GROUP_BY
-        // call0_GROUP_BY -> SELECT
-
         SELECT_DISTINCT [label="DISTINCT"]
-        // SELECT_PERCENT [label="PERCENT"]
-        // SELECT_TOP [label="TOP"]
-        // call43_types [TYPES="[integer, numeric]", label="TYPES: [integer, numeric]", shape=rectangle, style=filled, color=lightblue]
-        // SELECT_WITH_TIES [label="WITH TIES"]
-        SELECT_distinct_end [label=";"]
-        // SELECT_percent_end [label=";"]
-
         SELECT -> SELECT_DISTINCT
-        SELECT_DISTINCT -> SELECT_distinct_end
-        SELECT -> SELECT_distinct_end
-        // SELECT_distinct_end -> SELECT_TOP
-        // SELECT_TOP -> call43_types
-        // call43_types -> SELECT_PERCENT
-        // SELECT_PERCENT -> SELECT_percent_end
-        // call43_types -> SELECT_percent_end
-        // SELECT_percent_end -> SELECT_WITH_TIES
-
-        SELECT_projection [label="SELECT projection"]
-        // SELECT_WITH_TIES -> SELECT_projection
-        SELECT_distinct_end -> SELECT_projection
-        // SELECT_percent_end -> SELECT_projection
 
         SELECT_list [label="SELECT list"]
-        
+        SELECT_DISTINCT -> SELECT_list
+        SELECT -> SELECT_list
+
+        SELECT_unnamed_expr [label="Unnamed"]
+        SELECT_expr_with_alias [label="With alias"]
+        SELECT_list_multiple_values [label="Multiple values\nmod.: 'single column' -> OFF", modifier="single column", modifier_mode="off"]
+
+        SELECT_list -> SELECT_unnamed_expr
+        SELECT_list -> SELECT_expr_with_alias
+        select_expr [label="Expression"]
+        SELECT_unnamed_expr -> select_expr
+        SELECT_expr_with_alias -> select_expr
+        call54_types [label="TYPES: [...types]", TYPES="[...]", shape=rectangle, style=filled, color=lightblue]
+        select_expr -> call54_types
+
+        call54_types -> SELECT_list_multiple_values
+        call54_types -> EXIT_SELECT
+        SELECT_list_multiple_values -> SELECT_list
+
         // we can make a call trigger, moving this to a separate subgraph,
         // that would check whether there is a single column for a wildcard,
         // but let's keep it simple for now
-        // SELECT_wildcard[label="wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
-        // SELECT_qualified_wildcard[label="qualified wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
-        // SELECT_tables_eligible_for_wildcard[label="Set Relations for wildcards\nset_value='wildcard_relations'", set_value="wildcard_relations"]
+        // SELECT_tables_eligible_for_wildcard [label="Set Relations for wildcards\nset_value='wildcard_relations'", set_value="wildcard_relations"]
+        // SELECT_list -> SELECT_tables_eligible_for_wildcard
+        // SELECT_wildcard [label="wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
+        // SELECT_qualified_wildcard [label="qualified wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
         // SELECT_tables_eligible_for_wildcard -> SELECT_wildcard
         // SELECT_tables_eligible_for_wildcard -> SELECT_qualified_wildcard
-
-        // SELECT_unnamed_expr[label="unnamed expression"]
-        SELECT_expr_with_alias[label="expression with alias"]
-        // SELECT_list_multiple_values[label="SELECT list multiple values\nOFF: 'single column'", modifier="single column", modifier_mode="off"]
-
-        SELECT_projection -> SELECT_list
-        // SELECT_list -> SELECT_tables_eligible_for_wildcard
-        // SELECT_list -> SELECT_unnamed_expr
-        SELECT_list -> SELECT_expr_with_alias
-        call54_types [label="TYPES: [...types]", TYPES="[...]", shape=rectangle, style=filled, color=lightblue]
-        // SELECT_unnamed_expr -> call54_types
-        SELECT_expr_with_alias -> call54_types
-
-        // call0_aggregate_function [label="aggregate function*", TYPES="[known]", shape=rectangle, style=filled, color=peru]
         // SELECT_wildcard -> SELECT_list_multiple_values
         // SELECT_wildcard -> EXIT_SELECT
         // SELECT_qualified_wildcard -> SELECT_list_multiple_values
         // SELECT_qualified_wildcard -> EXIT_SELECT
-        // call54_types -> SELECT_list_multiple_values
-        call54_types -> EXIT_SELECT
-        // SELECT_list_multiple_values -> SELECT_list
     }
 
     subgraph def_LIMIT {
@@ -663,7 +641,11 @@ digraph G {
         GROUP_BY [label="GROUP BY", shape=rectangle, style=filled, color=gray]
         EXIT_GROUP_BY [label="EXIT GROUP BY"]
 
-        grouping_column_list[label="columns list"]
+        group_by_single_group [label="single group\n(GROUP BY ())"]
+        GROUP_BY -> group_by_single_group
+        group_by_single_group -> EXIT_GROUP_BY
+
+        grouping_column_list [label="columns list"]
         GROUP_BY -> grouping_column_list
 
         call70_types[TYPES="[any]", label="TYPES: [any]\nMODS: [no literals, no typed nulls, no subquery, no aggregate]", MODS="[no literals, no typed nulls, no subquery, no aggregate]", shape=rectangle, style=filled, color=lightblue]
@@ -790,13 +772,13 @@ digraph G {
     # cosmetic
     subgraph ignore {
         EXIT_FROM -> WHERE [color=none, weight=10]
-        EXIT_WHERE -> SELECT [color=none, weight=10]
-        EXIT_SELECT -> LIMIT [color=none, weight=10]
+        EXIT_WHERE -> SELECT [color=none]
+        EXIT_SELECT -> LIMIT [color=none]
         EXIT_VAL_3 -> number [color=none, weight=10]
         EXIT_number -> text [color=none]
         EXIT_text -> date [color=none]
         EXIT_list_expr -> aggregate_function [color=none]
-        EXIT_types -> column_spec [color=none]
+        EXIT_types -> column_spec [color=none, weight=10]
         EXIT_column_spec -> list_expr[color=none]
         EXIT_LIMIT -> GROUP_BY [color=none]
         EXIT_aggregate_function -> HAVING [color=none]
