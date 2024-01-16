@@ -1063,7 +1063,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                     self.expect_state("set_list");
                     loop {
                         let mut current_set = Vec::new();
-                        let mut finish_groupping = false;
+                        let mut finish_grouping_sets = false;
                         loop {
                             match self.next_state().as_str() {
                                 "call69_types" => {
@@ -1081,12 +1081,13 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                                         any => self.panic_unexpected(any),
                                     }
                                 },
+                                "set_list" => break,
                                 "grouping_column_list" => {
-                                    finish_groupping = true;
+                                    finish_grouping_sets = true;
                                     break;
                                 },
                                 "EXIT_GROUP_BY" => {
-                                    finish_groupping = true;
+                                    finish_grouping_sets = true;
                                     return_result = true;
                                     break;
                                 },
@@ -1094,7 +1095,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                             }
                         }
                         set_list.push(current_set);
-                        if finish_groupping {
+                        if finish_grouping_sets {
                             result.push(match groupping_type_str.as_str() {
                                 "grouping_set" => Expr::GroupingSets(set_list),
                                 "grouping_rollup" => Expr::Rollup(set_list),

@@ -674,6 +674,7 @@ digraph G {
         special_grouping [label="special grouping"]
         grouping_column_list -> special_grouping
         set_list[label="set list"]
+        set_list -> set_list
         
         grouping_rollup [label="rollup"]
         special_grouping -> grouping_rollup
