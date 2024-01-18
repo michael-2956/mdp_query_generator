@@ -42,7 +42,7 @@ aggregate_functions_distribution_map_file="aggregate_functions_distribution_map.
 
 [state_generator]
 # Path to graph source for a markov chain
-graph_file_path="merged.dot"
+graph_file_path="graph_with_select.dot"
 
 [dynmod_anticall]
 # TODO: anticall dynamic model settings
