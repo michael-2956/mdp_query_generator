@@ -153,22 +153,26 @@ digraph G {
         SELECT_list [label="SELECT list"]
         SELECT_DISTINCT -> SELECT_list
         SELECT -> SELECT_list
+        SELECT_list_multiple_values [label="Multiple values\nmod.: 'single column' -> OFF", modifier="single column", modifier_mode="off"]
+        SELECT_list_multiple_values -> SELECT_list
 
         SELECT_unnamed_expr [label="Unnamed"]
         SELECT_expr_with_alias [label="With alias"]
-        SELECT_list_multiple_values [label="Multiple values\nmod.: 'single column' -> OFF", modifier="single column", modifier_mode="off"]
-
         SELECT_list -> SELECT_unnamed_expr
         SELECT_list -> SELECT_expr_with_alias
-        select_expr [label="Expression"]
+
+        select_expr [label="Expression\nset value: 'grouping_enabled'", set_value="grouping_enabled"]
         SELECT_unnamed_expr -> select_expr
         SELECT_expr_with_alias -> select_expr
-        call54_types [label="TYPES: [...types]", TYPES="[...]", shape=rectangle, style=filled, color=lightblue]
+        select_expr_done [label="Expression done"]
+        select_expr_done -> SELECT_list_multiple_values
+        select_expr_done -> EXIT_SELECT
+        call73_types [label="TYPES: [...types]\nMODS: [group by columns]\ncall mod.: 'grouping mode switch'", TYPES="[...]", MODS="[group by columns]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
+        select_expr -> call73_types
+        call73_types -> select_expr_done
+        call54_types [label="TYPES: [...types]\nMODS: [no aggregate]\ncall mod.: 'grouping mode switch'", TYPES="[...]", MODS="[no aggregate]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
         select_expr -> call54_types
-
-        call54_types -> SELECT_list_multiple_values
-        call54_types -> EXIT_SELECT
-        SELECT_list_multiple_values -> SELECT_list
+        call54_types -> select_expr_done
 
         // we can make a call trigger, moving this to a separate subgraph,
         // that would check whether there is a single column for a wildcard,
@@ -645,32 +649,36 @@ digraph G {
         GROUP_BY -> group_by_single_group
         group_by_single_group -> EXIT_GROUP_BY
 
-        grouping_column_list [label="columns list"]
-        GROUP_BY -> grouping_column_list
+        has_accessible_columns [label="Has selectable columns\n[set value]", set_value="has_accessible_cols"]
+        GROUP_BY -> has_accessible_columns
+        grouping_column_list [label="columns list\n[call mod]", call_modifier="has_accessible_cols_mod"]
+        has_accessible_columns -> grouping_column_list
 
-        call70_types[TYPES="[any]", label="TYPES: [any]\nMODS: [no literals, no typed nulls, no subquery, no aggregate]", MODS="[no literals, no typed nulls, no subquery, no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        call70_types[TYPES="[any]", label="TYPES: [any]\nMODS: [no literals, no typed nulls,\nno subquery, no aggregate]", MODS="[no literals, no typed nulls, no subquery, no aggregate]", shape=rectangle, style=filled, color=lightblue]
         grouping_column_list -> call70_types
         call70_types -> grouping_column_list
         call70_types -> EXIT_GROUP_BY
 
         special_grouping [label="special grouping"]
         grouping_column_list -> special_grouping
-        set_list[label="set list"]
-        set_list -> set_list
-        
-        grouping_rollup [label="rollup"]
+        set_list [label="set list"]
+        set_list_empty_allowed [label="Empty set allowed\n[call mod.]", call_modifier="empty set allowed"]
+        set_list -> set_list_empty_allowed
+        set_list_empty_allowed -> set_list
+
+        grouping_rollup [label="rollup\n[set value]", set_value="is_grouping_sets"]
         special_grouping -> grouping_rollup
         grouping_rollup -> set_list
-        
-        grouping_cube [label="cube"]
+
+        grouping_cube [label="cube\n[set value]", set_value="is_grouping_sets"]
         special_grouping -> grouping_cube
         grouping_cube -> set_list
-        
-        grouping_set [label="grouping set"]
+
+        grouping_set [label="grouping set\n[set value]\n(allows empty set)", set_value="is_grouping_sets"]
         special_grouping -> grouping_set
         grouping_set -> set_list
-        
-        call69_types [TYPES="[any]", label="TYPES: [any]\n MODS: [no literals, no typed nulls, no subquery, no aggregate]", MODS="[no literals, no typed nulls, no subquery, no aggregate]", shape=rectangle, style=filled, color=lightblue]
+
+        call69_types [TYPES="[any]", label="TYPES: [any]\n MODS: [no literals, no typed nulls,\nno subquery, no aggregate]", MODS="[no literals, no typed nulls, no subquery, no aggregate]", shape=rectangle, style=filled, color=lightblue]
         set_list -> call69_types
         call69_types -> set_list
         set_multiple [label="multiple cols in set"]
@@ -697,13 +705,13 @@ digraph G {
 
         arg_integer [label="[integer]"]
         aggregate_select_type_integer -> arg_integer
-        call71_types [TYPES="[integer]", label="TYPES: [integer]\nmodif.: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call71_types [TYPES="[integer]", label="TYPES: integer\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
         arg_integer -> call71_types
         call71_types -> EXIT_aggregate_function
 
         arg_integer_any [label="[any]"]
         aggregate_select_type_integer -> arg_integer_any
-        call65_types [TYPES="[any]", label="TYPES: [any]\nmodif.: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call65_types [TYPES="[any]", label="TYPES: any\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
         arg_integer_any -> call65_types
         call65_types -> EXIT_aggregate_function
 
@@ -719,13 +727,13 @@ digraph G {
 
         arg_single_numeric [label="[numeric]"]
         aggregate_select_type_numeric -> arg_single_numeric
-        call66_types [TYPES="[numeric]", label="TYPES: numeric", shape=rectangle, style=filled, color=lightblue]
+        call66_types [TYPES="[numeric]", label="TYPES: numeric\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
         arg_single_numeric -> call66_types
         call66_types -> EXIT_aggregate_function
         
         arg_double_numeric [label="[numeric, numeric]"]
         aggregate_select_type_numeric -> arg_double_numeric   
-        call68_types[TYPES="[numeric]", label="TYPES: numeric", shape=rectangle, style=filled, color=lightblue]
+        call68_types[TYPES="[numeric]", label="TYPES: numeric\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
         arg_double_numeric -> call68_types
         call68_types -> call66_types
 
@@ -735,7 +743,7 @@ digraph G {
 
         arg_text [label="[Text]"]
         aggregate_select_type_text -> arg_text
-        call63_types [TYPES="[text]", label="TYPES: text", shape=rectangle, style=filled, color=lightblue]
+        call63_types [TYPES="[text]", label="TYPES: text\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
         arg_text -> call63_types
         call63_types -> EXIT_aggregate_function
 
@@ -745,7 +753,7 @@ digraph G {
 
         arg_single_3vl [label="[3vl]"]
         aggregate_select_type_bool -> arg_single_3vl
-        call64_types [TYPES="[3VL Value]", label="TYPES: 3VL Value", shape=rectangle, style=filled, color=lightblue]
+        call64_types [TYPES="[3VL Value]", label="TYPES: 3VL Value\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
         arg_single_3vl -> call64_types
         call64_types -> EXIT_aggregate_function
 
@@ -755,7 +763,7 @@ digraph G {
 
         arg_date [label="[date]"]
         aggregate_select_type_date -> arg_date
-        call72_types [TYPES="[date]", label="TYPES: date", shape=rectangle, style=filled, color=lightblue]
+        call72_types [TYPES="[date]", label="TYPES: date\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
         arg_date -> call72_types
         call72_types -> EXIT_aggregate_function
     }
@@ -763,7 +771,7 @@ digraph G {
     subgraph def_HAVING {
         HAVING [label="HAVING\nmods = [group by columns]", MODS="[group by columns]", shape=rectangle, style=filled, color=mediumvioletred]
         EXIT_HAVING [label="EXIT HAVING"]
-        
+
         call45_types [TYPES="[3VL Value]", MODS="[group by columns]", label="TYPE: [3VL]\nMODS: group by columns", shape=rectangle, style=filled, color=lightblue]
         HAVING -> call45_types
         call45_types -> EXIT_HAVING
@@ -772,15 +780,17 @@ digraph G {
     # cosmetic
     subgraph ignore {
         EXIT_FROM -> WHERE [color=none, weight=10]
-        EXIT_WHERE -> SELECT [color=none]
+        EXIT_WHERE -> SELECT [color=none, weight=10]
         EXIT_SELECT -> LIMIT [color=none]
+        EXIT_LIMIT -> GROUP_BY [color=none]
+        EXIT_GROUP_BY -> HAVING [color=none]
+
         EXIT_VAL_3 -> number [color=none, weight=10]
         EXIT_number -> text [color=none]
         EXIT_text -> date [color=none]
-        EXIT_list_expr -> aggregate_function [color=none]
+
         EXIT_types -> column_spec [color=none, weight=10]
         EXIT_column_spec -> list_expr[color=none]
-        EXIT_LIMIT -> GROUP_BY [color=none]
-        EXIT_aggregate_function -> HAVING [color=none]
+        EXIT_list_expr -> aggregate_function [color=none]
     }
 }

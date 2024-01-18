@@ -13,7 +13,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use take_until::TakeUntilExt;
 
-use crate::{unwrap_variant, query_creation::{state_generator::markov_chain_generator::markov_chain::FunctionTypes, query_generator::{query_info::ClauseContext, call_modifiers::{StatelessCallModifier, StatefulCallModifier, IsColumnTypeAvailableModifier, TypesTypeValueSetter, ValueSetter, NamedValue, ValueSetterValue, HasUniqueColumnNamesForSelectedTypesModifier, WildcardRelationsValueSetter, IsWildcardAvailableModifier, HasUniqueColumnNamesForTypeValueSetter}}}, config::TomlReadable};
+use crate::{unwrap_variant, query_creation::{state_generator::markov_chain_generator::markov_chain::FunctionTypes, query_generator::{query_info::ClauseContext, call_modifiers::{StatelessCallModifier, StatefulCallModifier, IsColumnTypeAvailableModifier, TypesTypeValueSetter, ValueSetter, NamedValue, ValueSetterValue, HasUniqueColumnNamesForSelectedTypesModifier, WildcardRelationsValueSetter, IsWildcardAvailableModifier, HasUniqueColumnNamesForTypeValueSetter, GroupingEnabledValueSetter, GroupingModeSwitchModifier, IsGroupingSetsValueSetter, IsEmptySetAllowedModifier, HasAccessibleColumnsValueSetter, HasAccessibleColumnsModifier}}}, config::TomlReadable};
 
 use self::{
     markov_chain::{
@@ -514,6 +514,12 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         _self.register_stateless_call_modifier(HasUniqueColumnNamesForSelectedTypesModifier {});
         _self.register_value_setter(WildcardRelationsValueSetter {});
         _self.register_stateless_call_modifier(IsWildcardAvailableModifier {});
+        _self.register_value_setter(GroupingEnabledValueSetter {});
+        _self.register_stateless_call_modifier(GroupingModeSwitchModifier {});
+        _self.register_value_setter(IsGroupingSetsValueSetter {});
+        _self.register_stateless_call_modifier(IsEmptySetAllowedModifier {});
+        _self.register_value_setter(HasAccessibleColumnsValueSetter {});
+        _self.register_stateless_call_modifier(HasAccessibleColumnsModifier {});
         _self.fill_function_modifier_info();
         _self.reset();
         Ok(_self)
@@ -933,7 +939,7 @@ fn check_node_off(
     }
     if let Some(ref modifier_name) = node_common.call_modifier_name {
         off = off || !affected_node_states.get(&node_common.name).unwrap_or_else(
-            || panic!("Didn't find {} in affected_node_states", node_common.name)
+            || panic!("Didn't find {} in affected_node_states. Check if the node's modifier associated value was set properly.", node_common.name)
         ).unwrap_or_else(
             || panic!("State of call modifier {modifier_name} was not set (node {})", node_common.name)
         )

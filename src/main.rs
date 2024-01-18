@@ -25,10 +25,6 @@ fn run_generation<DynMod: DynamicModel, StC: StateChooser>(markov_generator: Mar
         if main_config.assert_parcing_equivalence {
             let query_string = query_ast.to_string();
 
-            // let mut f_g = std::fs::File::create(format!("{i}-g")).unwrap();
-            // write!(f_g, "{:#?}", query_string).unwrap();
-            // println!("{:#?}\n", query_string);
-            // println!("{:#?}\n\n", query_ast);
             if let Some(parsed_ast) = string_to_query(&query_string) {
                 if parsed_ast != query_ast {
                     println!("AST mismatch! For query: {query_string}");

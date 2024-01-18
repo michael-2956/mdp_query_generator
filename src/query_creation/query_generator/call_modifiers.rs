@@ -14,7 +14,10 @@ pub trait NamedValue: Debug {
 #[derive(Debug, Clone)]
 pub enum ValueSetterValue {
     TypesType(TypesTypeValue),
+    IsGroupingSets(IsGroupingSetsValue),
+    GroupingEnabled(GroupingEnabledValue),
     WildcardRelations(WildcardRelationsValue),
+    HasAccessibleColumns(HasAccessibleColumnsValue),
     HasUniqueColumnNamesForType(HasUniqueColumnNamesForSelectedTypesValue),
 }
 
@@ -271,4 +274,149 @@ impl StatelessCallModifier for FromHasAccessibleColumnsModifier {
     // fn run(&self, clause_context: &ClauseContext, _function_context: &FunctionContext, _associated_value: Option<&ValueSetterValue>) -> bool {
     //     clause_context.from().relations_iter().any(|(_, relation)| relation.has_accessible_columns())
     // }
+}
+
+#[derive(Debug, Clone)]
+pub struct GroupingEnabledValue {
+    /// grouping is enabled in this query
+    pub enabled: bool,
+}
+
+impl NamedValue for GroupingEnabledValue {
+    fn name() -> SmolStr {
+        SmolStr::new("grouping_enabled")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct GroupingEnabledValueSetter { }
+
+impl ValueSetter for GroupingEnabledValueSetter {
+    fn get_value_name(&self) -> SmolStr {
+        GroupingEnabledValue::name()
+    }
+
+    fn get_value(&self, clause_context: &ClauseContext, _function_context: &FunctionContext) -> ValueSetterValue {
+        ValueSetterValue::GroupingEnabled(GroupingEnabledValue {
+            enabled: clause_context.group_by().is_groupping_active(),
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct GroupingModeSwitchModifier {}
+
+impl StatelessCallModifier for GroupingModeSwitchModifier {
+    fn get_name(&self) -> SmolStr {
+        SmolStr::new("grouping mode switch")
+    }
+
+    fn get_associated_value_name(&self) -> Option<SmolStr> {
+        Some(GroupingEnabledValue::name())
+    }
+
+    fn run(&self, function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
+        let grouping_enabled = unwrap_variant!(associated_value.unwrap(), ValueSetterValue::GroupingEnabled).enabled;
+        match function_context.current_node.node_common.name.as_str() {
+            "call73_types" => grouping_enabled,
+            "call54_types" => !grouping_enabled,
+            any => panic!("grouping mode switch cannot be called at {any}")
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IsGroupingSetsValue {
+    pub value: bool,
+}
+
+impl NamedValue for IsGroupingSetsValue {
+    fn name() -> SmolStr {
+        SmolStr::new("is_grouping_sets")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IsGroupingSetsValueSetter { }
+
+impl ValueSetter for IsGroupingSetsValueSetter {
+    fn get_value_name(&self) -> SmolStr {
+        IsGroupingSetsValue::name()
+    }
+
+    fn get_value(&self, _clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
+        ValueSetterValue::IsGroupingSets(IsGroupingSetsValue {
+            value: match function_context.current_node.node_common.name.as_str() {
+                "grouping_rollup" => false,
+                "grouping_cube" => false,
+                "grouping_set" => true,
+                any => panic!("is_grouping_sets value cannot be evalueted at {any}")
+            },
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IsEmptySetAllowedModifier {}
+
+impl StatelessCallModifier for IsEmptySetAllowedModifier {
+    fn get_name(&self) -> SmolStr {
+        SmolStr::new("empty set allowed")
+    }
+
+    fn get_associated_value_name(&self) -> Option<SmolStr> {
+        Some(IsGroupingSetsValue::name())
+    }
+
+    fn run(&self, function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
+        let is_grouping_sets = unwrap_variant!(associated_value.unwrap(), ValueSetterValue::IsGroupingSets).value;
+        match function_context.current_node.node_common.name.as_str() {
+            "set_list_empty_allowed" => is_grouping_sets,
+            any => panic!("'empty set allowed' cannot be called at {any}")
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HasAccessibleColumnsValue {
+    /// accessible columns are present in FROM
+    pub available: bool,
+}
+
+impl NamedValue for HasAccessibleColumnsValue {
+    fn name() -> SmolStr {
+        SmolStr::new("has_accessible_cols")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HasAccessibleColumnsValueSetter { }
+
+impl ValueSetter for HasAccessibleColumnsValueSetter {
+    fn get_value_name(&self) -> SmolStr {
+        HasAccessibleColumnsValue::name()
+    }
+
+    fn get_value(&self, clause_context: &ClauseContext, _function_context: &FunctionContext) -> ValueSetterValue {
+        ValueSetterValue::HasAccessibleColumns(HasAccessibleColumnsValue {
+            available: clause_context.from().has_unique_columns_for_types(&vec![SubgraphType::Undetermined]),
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HasAccessibleColumnsModifier {}
+
+impl StatelessCallModifier for HasAccessibleColumnsModifier {
+    fn get_name(&self) -> SmolStr {
+        SmolStr::new("has_accessible_cols_mod")
+    }
+
+    fn get_associated_value_name(&self) -> Option<SmolStr> {
+        Some(HasAccessibleColumnsValue::name())
+    }
+
+    fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
+        unwrap_variant!(associated_value.unwrap(), ValueSetterValue::HasAccessibleColumns).available
+    }
 }

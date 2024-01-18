@@ -96,6 +96,9 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
     }
 
     fn next_state(&mut self) -> SmolStr {
+        // let r = self.next_state_opt().unwrap();
+        // println!("{r}");
+        // r
         self.next_state_opt().unwrap()
     }
 
@@ -315,14 +318,22 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                         any => self.panic_unexpected(any)
                     }
                 },
-                arm @ ("SELECT_unnamed_expr" | "SELECT_expr_with_alias") => {
-                    self.expect_state("call54_types");
+                alias_node @ ("SELECT_unnamed_expr" | "SELECT_expr_with_alias") => {
+                    self.expect_state("select_expr");
+                    match self.next_state().as_str() {
+                        "call73_types" => { },
+                        "call54_types" => { },
+                        any => self.panic_unexpected(any)
+                    };
                     let (subgraph_type, expr) = self.handle_types(None, None);
-                    let (alias, select_item) = match arm {
+                    self.expect_state("select_expr_done");
+                    let (alias, select_item) = match alias_node {
                         "SELECT_unnamed_expr" => {
                             let alias = match &expr.unnested() {
                                 Expr::Identifier(ident) => Some(ident.clone()),
                                 Expr::CompoundIdentifier(idents) => Some(idents.last().unwrap().clone()),
+                                // unnnamed aggregation can be referred to by function name in postgres
+                                Expr::Function(func) => Some(func.name.0.last().unwrap().clone()),
                                 _ => None,
                             };
                             (alias, SelectItem::UnnamedExpr(expr))
@@ -1033,9 +1044,12 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         match self.next_state().as_str() {
             "group_by_single_group" => {
                 self.clause_context.group_by_mut().set_single_group_grouping();
+                self.expect_state("EXIT_GROUP_BY");
                 return vec![]
             },
-            "grouping_column_list" => { },
+            "has_accessible_columns" => {
+                self.expect_state("grouping_column_list");
+            },
             any => self.panic_unexpected(any),
         }
         let mut result: Vec<Expr> = Vec::new();
@@ -1087,7 +1101,10 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                                         any => self.panic_unexpected(any),
                                     }
                                 },
-                                "set_list" => break,
+                                "set_list_empty_allowed" => {
+                                    self.expect_state("set_list");
+                                    break
+                                },
                                 "grouping_column_list" => {
                                     finish_grouping_sets = true;
                                     break;
