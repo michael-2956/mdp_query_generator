@@ -734,10 +734,10 @@ digraph G {
         aggregate_select_type_text[TYPE_NAME="text", label="text?"]
         aggregate_select_return_type -> aggregate_select_type_text
 
-        arg_text [label="[Text]"]
-        aggregate_select_type_text -> arg_text
+        arg_single_text [label="[Text]"]
+        aggregate_select_type_text -> arg_single_text
         call63_types [TYPES="[text]", label="TYPES: text\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
-        arg_text -> call63_types
+        arg_single_text -> call63_types
         call63_types -> EXIT_aggregate_function
 
 

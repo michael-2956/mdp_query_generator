@@ -4,10 +4,7 @@
             "MIN": 5.0, 
             "MAX": 5.0, 
             "VAR_SAMP": 2.0, 
-            "AVG": 5.0, 
-            "BIT_AND": 3.0, 
-            "BIT_OR": 3.0, 
-            "BIT_XOR": 3.0, 
+            "AVG": 5.0,
             "SUM": 4.0, 
             "STDDEV": 4.0, 
             "STDDEV_POP": 1.0, 
@@ -41,7 +38,6 @@
     },
     "date": {
         "[date]": {
-            "AVG": 2.0, 
             "MAX": 3.0, 
             "MIN": 3.0
         }
@@ -49,9 +45,7 @@
     "3VL Value": {
         "[3VL Value]": {
             "BOOL_AND": 2.0, 
-            "BOOL_OR": 2.0, 
-            "MAX": 1.0, 
-            "MIN": 1.0, 
+            "BOOL_OR": 2.0,
             "EVERY": 1.0
         }
     },

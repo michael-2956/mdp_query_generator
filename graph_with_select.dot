@@ -733,11 +733,16 @@ digraph G {
         aggregate_select_type_text[TYPE_NAME="text", label="text?"]
         aggregate_select_return_type -> aggregate_select_type_text
 
-        arg_text [label="[Text]"]
-        aggregate_select_type_text -> arg_text
+        arg_single_text [label="[text]"]
+        aggregate_select_type_text -> arg_single_text
         call63_types [TYPES="[text]", label="TYPES: text\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
-        arg_text -> call63_types
+        arg_single_text -> call63_types
         call63_types -> EXIT_aggregate_function
+        arg_double_text [label="[text, text]"]
+        call74_types [TYPES="[text]", label="TYPES: text\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        aggregate_select_type_text -> arg_double_text
+        arg_double_text -> call74_types
+        call74_types -> call63_types
 
 
         aggregate_select_type_bool[TYPE_NAME="3VL Value", label="3VL Value?"]
@@ -778,7 +783,7 @@ digraph G {
         EXIT_GROUP_BY -> HAVING [color=none]
 
         EXIT_VAL_3 -> number [color=none, weight=10]
-        EXIT_number -> text [color=none]
+        EXIT_number -> text [color=none, weight=10]
         EXIT_text -> date [color=none]
 
         EXIT_types -> column_spec [color=none, weight=10]

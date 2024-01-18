@@ -951,7 +951,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         };
 
         let (
-            aggr_args_type, aggr_args_expr, aggr_return_type
+            aggr_args_type, aggr_arg_expr_v, aggr_return_type
         ): (AggregateFunctionAgruments, Vec<FunctionArg>, SubgraphType) = match self.next_state().as_str() {
             "aggregate_select_type_integer" => {
                 let return_type = SubgraphType::Integer;
@@ -976,38 +976,33 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                 };
                 (args_type, args_expr, return_type)
             },
-            "aggregate_select_type_numeric" => {
-                let return_type = SubgraphType::Numeric;
-                let (args_type, args_expr) = match self.next_state().as_str() {
-                    "arg_double_numeric" => {
-                        self.expect_state("call68_types");
-                        let first_arg = self.handle_types(Some(&[SubgraphType::Numeric]), None).1;
-                        self.expect_state("call66_types");
-                        let second_arg = self.handle_types(Some(&[SubgraphType::Numeric]), None).1;
-                        (
-                            AggregateFunctionAgruments::TypeList(vec![SubgraphType::Numeric, SubgraphType::Numeric]),
-                            vec![
-                                FunctionArg::Unnamed(FunctionArgExpr::Expr(first_arg)),
-                                FunctionArg::Unnamed(FunctionArgExpr::Expr(second_arg))
-                            ]
-                        )
-                    }
-                    "arg_single_numeric" => {
-                        self.expect_state("call66_types");
-                        (
-                            AggregateFunctionAgruments::TypeList(vec![SubgraphType::Numeric]),
-                            vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(
-                                self.handle_types(Some(&[SubgraphType::Numeric]), None).1,
-                            ))]
-                        )
-                    },
+            arm @ ("aggregate_select_type_numeric" | "aggregate_select_type_text") => {
+                let (return_type, states) = match arm {
+                    "aggregate_select_type_text" => (SubgraphType::Text, &["arg_double_text", "call74_types", "arg_single_text", "call63_types"]),
+                    "aggregate_select_type_numeric" => (SubgraphType::Numeric, &["arg_double_numeric", "call68_types", "arg_single_numeric", "call66_types"]),
                     any => self.panic_unexpected(any),
                 };
-                (args_type, args_expr, return_type)
+                let mut args_type_v = vec![];
+                let mut args_expr_v = vec![];
+                match self.next_state().as_str() {
+                    arm if arm == states[0] => {
+                        self.expect_state(states[1]);
+                        let arg_expr = self.handle_types(Some(&[return_type.clone()]), None).1;
+                        args_type_v.push(return_type.clone());
+                        args_expr_v.push(FunctionArg::Unnamed(FunctionArgExpr::Expr(arg_expr)));
+                    }
+                    arm if arm == states[2] => { },
+                    any => self.panic_unexpected(any),
+                };
+                self.expect_state(states[3]);
+                let arg_expr = self.handle_types(Some(&[return_type.clone()]), None).1;
+                args_type_v.push(return_type.clone());
+                args_expr_v.push(FunctionArg::Unnamed(FunctionArgExpr::Expr(arg_expr)));
+                let args_type = AggregateFunctionAgruments::TypeList(args_type_v);
+                (args_type, args_expr_v, return_type)
             },
-            arm @ ("aggregate_select_type_text" | "aggregate_select_type_bool" | "aggregate_select_type_date") => {
+            arm @ ("aggregate_select_type_bool" | "aggregate_select_type_date") => {
                 let (return_type, states) = match arm {
-                    "aggregate_select_type_text" => (SubgraphType::Text, &["arg_text", "call63_types"]),
                     "aggregate_select_type_bool" => (SubgraphType::Val3, &["arg_single_3vl", "call64_types"]),
                     "aggregate_select_type_date" => (SubgraphType::Date, &["arg_date", "call72_types"]),
                     any => self.panic_unexpected(any),
@@ -1028,7 +1023,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
 
         let expr = Expr::Function(ast::Function {
             name: aggr_name,
-            args: aggr_args_expr,
+            args: aggr_arg_expr_v,
             over: None,
             distinct: distinct,
             special: false,
