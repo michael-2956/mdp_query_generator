@@ -14,8 +14,8 @@
         },
         "[numeric, numeric]": {
             "REGR_SXX": 1.0, 
+            "REGR_SXY": 1.0, 
             "REGR_SYY": 1.0, 
-            "REGR_SSY": 1.0, 
             "CORR": 3.0, 
             "COVAR_POP": 1.0, 
             "COVAR_SAMP": 2.0, 

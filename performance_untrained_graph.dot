@@ -686,9 +686,11 @@ digraph G {
         aggregate_function [TYPES="[integer, numeric, 3VL Value, text, date]", label="aggregate function\nTYPES=[integer, numeric, 3VL Value, text, date]", shape=octagon, style=filled, color=peru]
         EXIT_aggregate_function [label="EXIT aggregate function"]
 
-        aggregate_select_return_type [label="return type:="]
-        aggregate_function -> aggregate_select_return_type
-        aggregate_distinct[label="DISTINCT"]
+        aggregate_select_return_type [label="select\nreturn type"]
+        aggregate_not_distinct[label="bypass\n[set value]", set_value="distinct_aggr"]
+        aggregate_function -> aggregate_not_distinct
+        aggregate_not_distinct -> aggregate_select_return_type
+        aggregate_distinct[label="DISTINCT\n[set value]", set_value="distinct_aggr"]
         aggregate_function -> aggregate_distinct
         aggregate_distinct -> aggregate_select_return_type
 
@@ -708,11 +710,9 @@ digraph G {
         arg_integer_any -> call65_types
         call65_types -> EXIT_aggregate_function
 
-        COUNT []
-        aggregate_select_type_integer -> COUNT
-        COUNT_wildcard [label="*"]
-        COUNT -> COUNT_wildcard
-        COUNT_wildcard -> EXIT_aggregate_function
+        arg_star [label="COUNT(*)\n[call mod.]", call_modifier="distinct_aggr_mod"]
+        aggregate_select_type_integer -> arg_star
+        arg_star -> EXIT_aggregate_function
 
 
         aggregate_select_type_numeric[TYPE_NAME="numeric", label="numeric?"]
@@ -734,11 +734,16 @@ digraph G {
         aggregate_select_type_text[TYPE_NAME="text", label="text?"]
         aggregate_select_return_type -> aggregate_select_type_text
 
-        arg_single_text [label="[Text]"]
+        arg_single_text [label="[text]"]
         aggregate_select_type_text -> arg_single_text
         call63_types [TYPES="[text]", label="TYPES: text\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
         arg_single_text -> call63_types
         call63_types -> EXIT_aggregate_function
+        arg_double_text [label="[text, text]"]
+        call74_types [TYPES="[text]", label="TYPES: text\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        aggregate_select_type_text -> arg_double_text
+        arg_double_text -> call74_types
+        call74_types -> call63_types
 
 
         aggregate_select_type_bool[TYPE_NAME="3VL Value", label="3VL Value?"]

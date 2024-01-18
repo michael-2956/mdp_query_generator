@@ -13,7 +13,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use take_until::TakeUntilExt;
 
-use crate::{unwrap_variant, query_creation::{state_generator::markov_chain_generator::markov_chain::FunctionTypes, query_generator::{query_info::ClauseContext, call_modifiers::{StatelessCallModifier, StatefulCallModifier, IsColumnTypeAvailableModifier, TypesTypeValueSetter, ValueSetter, NamedValue, ValueSetterValue, HasUniqueColumnNamesForSelectedTypesModifier, WildcardRelationsValueSetter, IsWildcardAvailableModifier, HasUniqueColumnNamesForTypeValueSetter, GroupingEnabledValueSetter, GroupingModeSwitchModifier, IsGroupingSetsValueSetter, IsEmptySetAllowedModifier, HasAccessibleColumnsValueSetter, HasAccessibleColumnsModifier}}}, config::TomlReadable};
+use crate::{unwrap_variant, query_creation::{state_generator::markov_chain_generator::markov_chain::FunctionTypes, query_generator::{query_info::ClauseContext, call_modifiers::{StatelessCallModifier, StatefulCallModifier, IsColumnTypeAvailableModifier, TypesTypeValueSetter, ValueSetter, NamedValue, ValueSetterValue, HasUniqueColumnNamesForSelectedTypesModifier, WildcardRelationsValueSetter, IsWildcardAvailableModifier, HasUniqueColumnNamesForTypeValueSetter, GroupingEnabledValueSetter, GroupingModeSwitchModifier, IsGroupingSetsValueSetter, IsEmptySetAllowedModifier, HasAccessibleColumnsValueSetter, HasAccessibleColumnsModifier, DistinctAggregationValueSetter, DistinctAggregationModifier}}}, config::TomlReadable};
 
 use self::{
     markov_chain::{
@@ -520,6 +520,8 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         _self.register_stateless_call_modifier(IsEmptySetAllowedModifier {});
         _self.register_value_setter(HasAccessibleColumnsValueSetter {});
         _self.register_stateless_call_modifier(HasAccessibleColumnsModifier {});
+        _self.register_value_setter(DistinctAggregationValueSetter {});
+        _self.register_stateless_call_modifier(DistinctAggregationModifier {});
         _self.fill_function_modifier_info();
         _self.reset();
         Ok(_self)

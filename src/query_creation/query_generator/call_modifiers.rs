@@ -17,6 +17,7 @@ pub enum ValueSetterValue {
     IsGroupingSets(IsGroupingSetsValue),
     GroupingEnabled(GroupingEnabledValue),
     WildcardRelations(WildcardRelationsValue),
+    DistinctAggregation(DistinctAggregationValue),
     HasAccessibleColumns(HasAccessibleColumnsValue),
     HasUniqueColumnNamesForType(HasUniqueColumnNamesForSelectedTypesValue),
 }
@@ -56,7 +57,7 @@ impl ValueSetter for TypesTypeValueSetter {
             "types_select_type_3vl" => SubgraphType::Val3,
             "types_select_type_text" => SubgraphType::Text,
             "types_select_type_date" => SubgraphType::Date,
-            any => panic!("{any} unexpectedly triggered the is_column_type_available call modifier affector"),
+            any => panic!("{any} unexpectedly triggered the types_type value setter"),
         };
         let allowed_type_list = match selected_type {
             with_inner @ SubgraphType::ListExpr(..) => {
@@ -418,5 +419,53 @@ impl StatelessCallModifier for HasAccessibleColumnsModifier {
 
     fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
         unwrap_variant!(associated_value.unwrap(), ValueSetterValue::HasAccessibleColumns).available
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DistinctAggregationValue {
+    /// aggreagtion is DISTINCT
+    pub is_distinct: bool,
+}
+
+impl NamedValue for DistinctAggregationValue {
+    fn name() -> SmolStr {
+        SmolStr::new("distinct_aggr")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DistinctAggregationValueSetter { }
+
+impl ValueSetter for DistinctAggregationValueSetter {
+    fn get_value_name(&self) -> SmolStr {
+        DistinctAggregationValue::name()
+    }
+
+    fn get_value(&self, _clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
+        ValueSetterValue::DistinctAggregation(DistinctAggregationValue {
+            is_distinct: match function_context.current_node.node_common.name.as_str() {
+                "aggregate_not_distinct" => false,
+                "aggregate_distinct" => true,
+                any => panic!("{any} unexpectedly triggered the distinct_aggr value setter"),
+            },
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DistinctAggregationModifier {}
+
+impl StatelessCallModifier for DistinctAggregationModifier {
+    fn get_name(&self) -> SmolStr {
+        SmolStr::new("distinct_aggr_mod")
+    }
+
+    fn get_associated_value_name(&self) -> Option<SmolStr> {
+        Some(DistinctAggregationValue::name())
+    }
+
+    fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
+        !unwrap_variant!(associated_value.unwrap(), ValueSetterValue::DistinctAggregation).is_distinct
     }
 }

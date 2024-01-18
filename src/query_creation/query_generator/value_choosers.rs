@@ -46,11 +46,11 @@ impl QueryValueChooser for RandomValueChooser {
     }
 
     fn choose_integer(&mut self) -> String {
-        self.rng.gen_range(0..=10).to_string()
+        self.rng.gen_range(0..=5).to_string()
     }
 
     fn choose_numeric(&mut self) -> String {
-        self.rng.gen_range(0f64..=10f64).to_string()
+        self.rng.gen_range(0f64..=5f64).to_string()
     }
 
     fn choose_qualified_wildcard_relation<'a>(&mut self, from_contents: &'a FromContents, wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation) {

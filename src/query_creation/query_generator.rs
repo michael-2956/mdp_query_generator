@@ -942,13 +942,11 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
     fn handle_aggregate_function(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("aggregate_function");
         let distinct = match self.next_state().as_str() {
-            "aggregate_select_return_type" => false,
-            "aggregate_distinct" => {
-                self.expect_state("aggregate_select_return_type");
-                true
-            },
+            "aggregate_not_distinct" => false,
+            "aggregate_distinct" => true,
             any => self.panic_unexpected(any),  
         };
+        self.expect_state("aggregate_select_return_type");
 
         let (
             aggr_args_type, aggr_arg_expr_v, aggr_return_type
@@ -956,8 +954,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             "aggregate_select_type_integer" => {
                 let return_type = SubgraphType::Integer;
                 let (args_type, args_expr) = match self.next_state().as_str() {
-                    "COUNT" => {
-                        self.expect_state("COUNT_wildcard");
+                    "arg_star" => {
                         (AggregateFunctionAgruments::Wildcard, vec![FunctionArg::Unnamed(FunctionArgExpr::Wildcard)])
                     },
                     "arg_integer_any" => {
