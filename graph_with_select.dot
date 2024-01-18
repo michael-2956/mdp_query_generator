@@ -654,9 +654,11 @@ digraph G {
         special_grouping [label="special grouping"]
         grouping_column_list -> special_grouping
         set_list [label="set list"]
-        set_list_empty_allowed [label="Empty set allowed\n[call mod.]", call_modifier="empty set allowed"]
+        set_list_empty_allowed [label="Empty set\n[call mod]", call_modifier="empty set allowed"]
         set_list -> set_list_empty_allowed
         set_list_empty_allowed -> set_list
+        set_list_empty_allowed -> grouping_column_list
+        set_list_empty_allowed -> EXIT_GROUP_BY
 
         grouping_rollup [label="rollup\n[set value]", set_value="is_grouping_sets"]
         special_grouping -> grouping_rollup

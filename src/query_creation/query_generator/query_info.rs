@@ -246,9 +246,13 @@ impl GroupByContents {
         }
     }
 
+    pub fn contains_columns(&self) -> bool {
+        !self.columns.is_empty()
+    }
+
     /// returns whether the groupping is enabled
-    pub fn is_groupping_active(&self) -> bool {
-        return self.single_group_grouping || !self.columns.is_empty()
+    pub fn is_grouping_active(&self) -> bool {
+        return self.is_single_group() || !self.columns.is_empty()
     }
 
     pub fn set_single_group_grouping(&mut self) {

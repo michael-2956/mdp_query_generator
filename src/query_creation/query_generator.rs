@@ -1087,16 +1087,10 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                                         any => panic!("Unexpected expression for GROUP BY column: {:#?}", any),
                                     };
                                     self.clause_context.group_by_mut().append_column(column_name, column_type);
-                                    match self.next_state().as_str() {
-                                        "set_multiple" => { },
-                                        "set_list" => break,
-                                        any => self.panic_unexpected(any),
-                                    }
                                 },
-                                "set_list_empty_allowed" => {
-                                    self.expect_state("set_list");
-                                    break
-                                },
+                                "set_multiple" => { },
+                                "set_list_empty_allowed" => { },  // will break in next iteration
+                                "set_list" => break,
                                 "grouping_column_list" => {
                                     finish_grouping_sets = true;
                                     break;
@@ -1124,9 +1118,16 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                 any => self.panic_unexpected(any)
             }
             if return_result {
-                break result
+                break
             }
         }
+
+        // For cases such as: GROUPING SETS ( (), (), () )
+        if !self.clause_context.group_by().contains_columns() {
+            self.clause_context.group_by_mut().set_single_group_grouping()
+        }
+
+        result
     }
 
     /// subgraph def_having

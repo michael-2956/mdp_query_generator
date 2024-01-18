@@ -299,7 +299,7 @@ impl ValueSetter for GroupingEnabledValueSetter {
 
     fn get_value(&self, clause_context: &ClauseContext, _function_context: &FunctionContext) -> ValueSetterValue {
         ValueSetterValue::GroupingEnabled(GroupingEnabledValue {
-            enabled: clause_context.group_by().is_groupping_active(),
+            enabled: clause_context.group_by().is_grouping_active(),
         })
     }
 }
