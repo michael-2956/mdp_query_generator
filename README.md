@@ -11,4 +11,4 @@ This query generator is designed to generate large amounts of SQL queries. The a
 The project is currently a work in progress, with the current stage concentrated around **constraining** over a given table schema.
 
 ## Query generator graph (preview) 
-![Query generator graph](query-generator-graph/graph%2025_09.svg)
+![Query generator graph](illustrations/graph.svg)
