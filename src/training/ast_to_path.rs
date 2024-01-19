@@ -631,7 +631,7 @@ impl PathGenerator {
             },
             Expr::Nested(inner) => {
                 self.try_push_states(&["nested_number", "call4_types"])?;
-                self.handle_types(inner, Some(&[SubgraphType::Numeric, SubgraphType::Integer]), None)?
+                self.handle_types(inner, Some(&[SubgraphType::Numeric, SubgraphType::Integer, SubgraphType::BigInt]), None)?
             },
             any => unexpected_expr!(any),
         };
