@@ -1,3 +1,2 @@
-pub mod helpers;
-pub mod random_query_generator;
-pub mod state_generators;
+pub mod query_generator;
+pub mod state_generator;

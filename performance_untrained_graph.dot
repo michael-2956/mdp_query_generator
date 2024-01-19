@@ -98,7 +98,8 @@ digraph G {
         call0_GROUP_BY -> call0_HAVING
         call0_HAVING -> call0_SELECT
 
-        call0_LIMIT [label="LIMIT\nMODS: [?single row]", MODS="[?single row]", shape=rectangle, style=filled, color=brown]
+        // modifier="single row", modifier_mode="on" is here to turn off all LIMIT other than LIMIT 1 
+        call0_LIMIT [label="LIMIT\nMODS: [?single row]", MODS="[?single row]", modifier="single row", modifier_mode="on", shape=rectangle, style=filled, color=brown]
         query_can_skip_limit [label="skip LIMIT allowed\nmod: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
         call0_SELECT -> call0_LIMIT
         call0_SELECT -> query_can_skip_limit
@@ -115,12 +116,12 @@ digraph G {
         Table []
         FROM -> Table
         Table -> FROM_multiple_relations
-        FROM_multiple_relations -> Table
+        // FROM_multiple_relations -> Table
 
         call0_Query [label="Query", shape=rectangle, TYPES="[any]", MODS="[]", style=filled, color=green]
         FROM -> call0_Query
         call0_Query -> FROM_multiple_relations
-        FROM_multiple_relations -> call0_Query
+        // FROM_multiple_relations -> call0_Query
 
         // FROM -> EXIT_FROM
         FROM_multiple_relations -> EXIT_FROM
@@ -370,7 +371,7 @@ digraph G {
     }
 
     subgraph def_number {
-        number [shape=rectangle, label="number\ntypes=[integer, numeric]\nmods: [no column spec]", TYPES="[integer, numeric, bigint]", MODS="[no column spec]", style=filled, color=chocolate]
+        number [shape=rectangle, label="number\ntypes=[integer, numeric, bigint]\nmods: [no column spec]", TYPES="[integer, numeric, bigint]", MODS="[no column spec]", style=filled, color=chocolate]
         EXIT_number [label="EXIT number"]
 
         number_literal[label="literal", literal="t"]
@@ -546,14 +547,14 @@ digraph G {
         types -> types_null
         types_null -> EXIT_types
 
-        types_return_typed_null [label="Typed null\nmod.: 'no typed nulls' -> OFF", modifier="no typed nulls", modifier_mode="off"]
-        types_select_type_bigint -> types_return_typed_null
-        types_select_type_integer -> types_return_typed_null
-        types_select_type_numeric -> types_return_typed_null
-        types_select_type_3vl -> types_return_typed_null
-        types_select_type_text -> types_return_typed_null
-        types_select_type_date -> types_return_typed_null
-        types_return_typed_null -> EXIT_types
+        // types_return_typed_null [label="Typed null\nmod.: 'no typed nulls' -> OFF", modifier="no typed nulls", modifier_mode="off"]
+        // types_select_type_bigint -> types_return_typed_null
+        // types_select_type_integer -> types_return_typed_null
+        // types_select_type_numeric -> types_return_typed_null
+        // types_select_type_3vl -> types_return_typed_null
+        // types_select_type_text -> types_return_typed_null
+        // types_select_type_date -> types_return_typed_null
+        // types_return_typed_null -> EXIT_types
 
         types_select_special_expression [label="select special expression"]
         types_select_type_bigint -> types_select_special_expression
@@ -667,7 +668,7 @@ digraph G {
         set_list [label="set list"]
         set_list_empty_allowed [label="Empty set\n[call mod]", call_modifier="empty set allowed"]
         set_list -> set_list_empty_allowed
-        set_list_empty_allowed -> set_list
+        // set_list_empty_allowed -> set_list
         set_list_empty_allowed -> grouping_column_list
         set_list_empty_allowed -> EXIT_GROUP_BY
 
@@ -685,7 +686,7 @@ digraph G {
 
         call69_types [TYPES="[any]", label="TYPES: [any]\n MODS: [no literals, no typed nulls,\nno subquery, no aggregate]", MODS="[no literals, no typed nulls, no subquery, no aggregate]", shape=rectangle, style=filled, color=lightblue]
         set_list -> call69_types
-        call69_types -> set_list
+        // call69_types -> set_list
         set_multiple [label="multiple cols in set"]
         call69_types -> set_multiple
         set_multiple -> call69_types

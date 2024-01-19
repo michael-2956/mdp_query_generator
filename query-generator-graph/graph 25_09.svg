@@ -1330,69 +1330,69 @@
 <path fill="none" stroke="#000000" d="M2258.4287,-1822.4987C2247.8943,-1820.3398 2237.0679,-1818.2919 2226.7981,-1816.6356 2021.2056,-1783.4784 1775.4612,-1762.4566 1659.1633,-1753.6122"/>
 <polygon fill="#000000" stroke="#000000" points="1659.2267,-1750.1071 1648.9917,-1752.8446 1658.6999,-1757.0872 1659.2267,-1750.1071"/>
 </g>
-<!-- numeric_literal -->
+<!-- number_literal -->
 <g id="node92" class="node">
-<title>numeric_literal</title>
+<title>number_literal</title>
 <ellipse fill="none" stroke="#000000" cx="1049.7981" cy="-1419.2785" rx="33.6189" ry="18"/>
 <text text-anchor="middle" x="1049.7981" y="-1415.0785" font-family="Times,serif" font-size="14.00" fill="#000000">literal</text>
 </g>
-<!-- numeric&#45;&gt;numeric_literal -->
+<!-- numeric&#45;&gt;number_literal -->
 <g id="edge129" class="edge">
-<title>numeric-&gt;numeric_literal</title>
+<title>numeric-&gt;number_literal</title>
 <path fill="none" stroke="#000000" d="M1560.7263,-1660.9392C1508.2366,-1656.6584 1399.4554,-1643.9953 1314.7981,-1608.957 1215.3858,-1567.8119 1117.4406,-1483.1309 1073.638,-1442.297"/>
 <polygon fill="#000000" stroke="#000000" points="1075.7818,-1439.5082 1066.1011,-1435.203 1070.9841,-1444.6055 1075.7818,-1439.5082"/>
 </g>
-<!-- BinaryNumericOp -->
+<!-- BinaryNumberOp -->
 <g id="node95" class="node">
-<title>BinaryNumericOp</title>
+<title>BinaryNumberOp</title>
 <ellipse fill="none" stroke="#000000" cx="1373.7981" cy="-1590.957" rx="50.3858" ry="18"/>
 <text text-anchor="middle" x="1373.7981" y="-1586.757" font-family="Times,serif" font-size="14.00" fill="#000000">binary op.</text>
 </g>
-<!-- numeric&#45;&gt;BinaryNumericOp -->
+<!-- numeric&#45;&gt;BinaryNumberOp -->
 <g id="edge134" class="edge">
-<title>numeric-&gt;BinaryNumericOp</title>
+<title>numeric-&gt;BinaryNumberOp</title>
 <path fill="none" stroke="#000000" d="M1560.564,-1652.6412C1523.8646,-1640.5203 1462.624,-1620.2941 1420.3281,-1606.3248"/>
 <polygon fill="#000000" stroke="#000000" points="1421.4028,-1602.9938 1410.8097,-1603.1811 1419.2075,-1609.6407 1421.4028,-1602.9938"/>
 </g>
-<!-- UnaryNumericOp -->
+<!-- UnaryNumberOp -->
 <g id="node105" class="node">
-<title>UnaryNumericOp</title>
+<title>UnaryNumberOp</title>
 <ellipse fill="none" stroke="#000000" cx="1591.7981" cy="-1590.957" rx="47.5177" ry="18"/>
 <text text-anchor="middle" x="1591.7981" y="-1586.757" font-family="Times,serif" font-size="14.00" fill="#000000">unary op.</text>
 </g>
-<!-- numeric&#45;&gt;UnaryNumericOp -->
+<!-- numeric&#45;&gt;UnaryNumberOp -->
 <g id="edge151" class="edge">
-<title>numeric-&gt;UnaryNumericOp</title>
+<title>numeric-&gt;UnaryNumberOp</title>
 <path fill="none" stroke="#000000" d="M1591.7981,-1644.7884C1591.7981,-1637.088 1591.7981,-1627.9314 1591.7981,-1619.3737"/>
 <polygon fill="#000000" stroke="#000000" points="1595.2982,-1619.3703 1591.7981,-1609.3703 1588.2982,-1619.3703 1595.2982,-1619.3703"/>
 </g>
-<!-- numeric_string_Position -->
+<!-- number_string_position -->
 <g id="node115" class="node">
-<title>numeric_string_Position</title>
+<title>number_string_position</title>
 <ellipse fill="none" stroke="#000000" cx="1800.7981" cy="-1590.957" rx="120.925" ry="18"/>
 <text text-anchor="middle" x="1800.7981" y="-1586.757" font-family="Times,serif" font-size="14.00" fill="#000000">POSITION([expr] in [expr])</text>
 </g>
-<!-- numeric&#45;&gt;numeric_string_Position -->
+<!-- numeric&#45;&gt;number_string_position -->
 <g id="edge169" class="edge">
-<title>numeric-&gt;numeric_string_Position</title>
+<title>numeric-&gt;number_string_position</title>
 <path fill="none" stroke="#000000" d="M1623.0875,-1652.1779C1654.686,-1641.2923 1704.2318,-1624.2239 1742.9901,-1610.8718"/>
 <polygon fill="#000000" stroke="#000000" points="1744.2793,-1614.1296 1752.594,-1607.5632 1741.9993,-1607.5113 1744.2793,-1614.1296"/>
 </g>
-<!-- Nested_numeric -->
+<!-- nested_number -->
 <g id="node119" class="node">
-<title>Nested_numeric</title>
+<title>nested_number</title>
 <ellipse fill="none" stroke="#000000" cx="2026.7981" cy="-1590.957" rx="41.1084" ry="18"/>
 <text text-anchor="middle" x="2026.7981" y="-1586.757" font-family="Times,serif" font-size="14.00" fill="#000000">([expr])</text>
 </g>
-<!-- numeric&#45;&gt;Nested_numeric -->
+<!-- numeric&#45;&gt;nested_number -->
 <g id="edge174" class="edge">
-<title>numeric-&gt;Nested_numeric</title>
+<title>numeric-&gt;nested_number</title>
 <path fill="none" stroke="#000000" d="M1622.6943,-1658.3252C1682.3394,-1649.3194 1817.4679,-1628.6043 1930.7981,-1608.957 1946.5596,-1606.2246 1963.741,-1603.0617 1979.1554,-1600.1566"/>
 <polygon fill="#000000" stroke="#000000" points="1979.8234,-1603.5924 1988.9971,-1598.2919 1978.5203,-1596.7148 1979.8234,-1603.5924"/>
 </g>
-<!-- EXIT_numeric -->
+<!-- EXIT_number -->
 <g id="node91" class="node">
-<title>EXIT_numeric</title>
+<title>EXIT_number</title>
 <ellipse fill="none" stroke="#000000" cx="1571.7981" cy="-1261.4393" rx="67.1535" ry="18"/>
 <text text-anchor="middle" x="1571.7981" y="-1257.2393" font-family="Times,serif" font-size="14.00" fill="#000000">EXIT numeric</text>
 </g>
@@ -1402,57 +1402,57 @@
 <polygon fill="#ffc0cb" stroke="#ffc0cb" points="1598.7981,-1193.6 1544.7981,-1193.6 1544.7981,-1157.6 1598.7981,-1157.6 1598.7981,-1193.6"/>
 <text text-anchor="middle" x="1571.7981" y="-1171.4" font-family="Times,serif" font-size="14.00" fill="#000000">string</text>
 </g>
-<!-- EXIT_numeric&#45;&gt;string -->
+<!-- EXIT_number&#45;&gt;string -->
 <g id="edge177" class="edge">
-<title>EXIT_numeric-&gt;string</title>
+<title>EXIT_number-&gt;string</title>
 <path fill="none" stroke="transparent" d="M1571.7981,-1243.235C1571.7981,-1231.8543 1571.7981,-1216.9567 1571.7981,-1204.0407"/>
 <polygon fill="transparent" stroke="transparent" points="1575.2982,-1203.778 1571.7981,-1193.7781 1568.2982,-1203.7781 1575.2982,-1203.778"/>
 </g>
-<!-- numeric_literal_int -->
+<!-- number_literal_integer -->
 <g id="node93" class="node">
-<title>numeric_literal_int</title>
+<title>number_literal_integer</title>
 <ellipse fill="none" stroke="#000000" cx="1065.7981" cy="-1347.2785" rx="53.2916" ry="18"/>
 <text text-anchor="middle" x="1065.7981" y="-1343.0785" font-family="Times,serif" font-size="14.00" fill="#000000">random int</text>
 </g>
-<!-- numeric_literal&#45;&gt;numeric_literal_int -->
+<!-- number_literal&#45;&gt;number_literal_integer -->
 <g id="edge130" class="edge">
-<title>numeric_literal-&gt;numeric_literal_int</title>
+<title>number_literal-&gt;number_literal_integer</title>
 <path fill="none" stroke="#000000" d="M1053.8356,-1401.1099C1055.5468,-1393.4095 1057.5816,-1384.2529 1059.4833,-1375.6952"/>
 <polygon fill="#000000" stroke="#000000" points="1062.9535,-1376.2129 1061.7062,-1365.6918 1056.1202,-1374.6944 1062.9535,-1376.2129"/>
 </g>
-<!-- numeric_literal_float -->
+<!-- number_literal_numeric -->
 <g id="node94" class="node">
-<title>numeric_literal_float</title>
+<title>number_literal_numeric</title>
 <ellipse fill="none" stroke="#000000" cx="1229.7981" cy="-1347.2785" rx="60.7946" ry="18"/>
 <text text-anchor="middle" x="1229.7981" y="-1343.0785" font-family="Times,serif" font-size="14.00" fill="#000000">random float</text>
 </g>
-<!-- numeric_literal&#45;&gt;numeric_literal_float -->
+<!-- number_literal&#45;&gt;number_literal_numeric -->
 <g id="edge132" class="edge">
-<title>numeric_literal-&gt;numeric_literal_float</title>
+<title>number_literal-&gt;number_literal_numeric</title>
 <path fill="none" stroke="#000000" d="M1076.5995,-1407.9573C1081.9565,-1405.7232 1087.5497,-1403.4111 1092.7981,-1401.2785 1122.8578,-1389.0644 1156.7841,-1375.6888 1183.3553,-1365.3054"/>
 <polygon fill="#000000" stroke="#000000" points="1184.7479,-1368.5191 1192.7911,-1361.623 1182.2029,-1361.9981 1184.7479,-1368.5191"/>
 </g>
-<!-- numeric_literal_int&#45;&gt;EXIT_numeric -->
+<!-- number_literal_integer&#45;&gt;EXIT_number -->
 <g id="edge131" class="edge">
-<title>numeric_literal_int-&gt;EXIT_numeric</title>
+<title>number_literal_integer-&gt;EXIT_number</title>
 <path fill="none" stroke="#000000" d="M1112.131,-1338.1583C1127.3059,-1335.2376 1144.2573,-1332.0454 1159.7981,-1329.2785 1280.7201,-1307.7492 1422.0518,-1285.0017 1503.8079,-1272.0792"/>
 <polygon fill="#000000" stroke="#000000" points="1504.3892,-1275.5309 1513.7211,-1270.5143 1503.2976,-1268.6165 1504.3892,-1275.5309"/>
 </g>
-<!-- numeric_literal_float&#45;&gt;EXIT_numeric -->
+<!-- number_literal_numeric&#45;&gt;EXIT_number -->
 <g id="edge133" class="edge">
-<title>numeric_literal_float-&gt;EXIT_numeric</title>
+<title>number_literal_numeric-&gt;EXIT_number</title>
 <path fill="none" stroke="#000000" d="M1276.2776,-1335.6125C1337.5999,-1320.2211 1445.5843,-1293.1179 1512.6578,-1276.283"/>
 <polygon fill="#000000" stroke="#000000" points="1513.805,-1279.6037 1522.6521,-1273.7745 1512.1009,-1272.8143 1513.805,-1279.6037"/>
 </g>
-<!-- binary_numeric_left -->
+<!-- binary_number_left -->
 <g id="node97" class="node">
-<title>binary_numeric_left</title>
+<title>binary_number_left</title>
 <polygon fill="#0000ff" stroke="#0000ff" points="1328.8367,-1523.1178 1216.7595,-1523.1178 1216.7595,-1487.1178 1328.8367,-1487.1178 1328.8367,-1523.1178"/>
 <text text-anchor="middle" x="1272.7981" y="-1500.9178" font-family="Times,serif" font-size="14.00" fill="#000000">TYPES: numeric</text>
 </g>
-<!-- BinaryNumericOp&#45;&gt;binary_numeric_left -->
+<!-- BinaryNumberOp&#45;&gt;binary_number_left -->
 <g id="edge135" class="edge">
-<title>BinaryNumericOp-&gt;binary_numeric_left</title>
+<title>BinaryNumberOp-&gt;binary_number_left</title>
 <path fill="none" stroke="#000000" d="M1353.8437,-1573.998C1339.0223,-1561.4013 1318.5779,-1544.0258 1301.9313,-1529.8779"/>
 <polygon fill="#000000" stroke="#000000" points="1303.9922,-1527.0361 1294.1057,-1523.227 1299.4589,-1532.37 1303.9922,-1527.0361"/>
 </g>
@@ -1462,231 +1462,231 @@
 <polygon fill="#0000ff" stroke="#0000ff" points="1436.8367,-1365.2785 1324.7595,-1365.2785 1324.7595,-1329.2785 1436.8367,-1329.2785 1436.8367,-1365.2785"/>
 <text text-anchor="middle" x="1380.7981" y="-1343.0785" font-family="Times,serif" font-size="14.00" fill="#000000">TYPES: numeric</text>
 </g>
-<!-- numericRight&#45;&gt;EXIT_numeric -->
+<!-- numericRight&#45;&gt;EXIT_number -->
 <g id="edge150" class="edge">
-<title>numericRight-&gt;EXIT_numeric</title>
+<title>numericRight-&gt;EXIT_number</title>
 <path fill="none" stroke="#000000" d="M1421.3043,-1329.0742C1452.5995,-1315.0095 1495.8467,-1295.5733 1527.9527,-1281.1443"/>
 <polygon fill="#000000" stroke="#000000" points="1529.4261,-1284.3194 1537.1125,-1277.0276 1526.5566,-1277.9345 1529.4261,-1284.3194"/>
 </g>
-<!-- binary_numeric_plus -->
+<!-- binary_number_plus -->
 <g id="node98" class="node">
-<title>binary_numeric_plus</title>
+<title>binary_number_plus</title>
 <ellipse fill="none" stroke="#000000" cx="1128.7981" cy="-1419.2785" rx="27" ry="18"/>
 <text text-anchor="middle" x="1128.7981" y="-1415.0785" font-family="Times,serif" font-size="14.00" fill="#000000">+</text>
 </g>
-<!-- binary_numeric_left&#45;&gt;binary_numeric_plus -->
+<!-- binary_number_left&#45;&gt;binary_number_plus -->
 <g id="edge136" class="edge">
-<title>binary_numeric_left-&gt;binary_numeric_plus</title>
+<title>binary_number_left-&gt;binary_number_plus</title>
 <path fill="none" stroke="#000000" d="M1242.2594,-1486.9135C1217.3693,-1472.0764 1182.4513,-1451.2616 1157.9451,-1436.6533"/>
 <polygon fill="#000000" stroke="#000000" points="1159.4871,-1433.4978 1149.1053,-1431.3838 1155.9028,-1439.5106 1159.4871,-1433.4978"/>
 </g>
-<!-- binary_numeric_minus -->
+<!-- binary_number_minus -->
 <g id="node99" class="node">
-<title>binary_numeric_minus</title>
+<title>binary_number_minus</title>
 <ellipse fill="none" stroke="#000000" cx="1200.7981" cy="-1419.2785" rx="27" ry="18"/>
 <text text-anchor="middle" x="1200.7981" y="-1415.0785" font-family="Times,serif" font-size="14.00" fill="#000000">-</text>
 </g>
-<!-- binary_numeric_left&#45;&gt;binary_numeric_minus -->
+<!-- binary_number_left&#45;&gt;binary_number_minus -->
 <g id="edge138" class="edge">
-<title>binary_numeric_left-&gt;binary_numeric_minus</title>
+<title>binary_number_left-&gt;binary_number_minus</title>
 <path fill="none" stroke="#000000" d="M1257.5287,-1486.9135C1246.7626,-1474.078 1232.2441,-1456.7688 1220.5898,-1442.8744"/>
 <polygon fill="#000000" stroke="#000000" points="1223.217,-1440.5603 1214.1089,-1435.1478 1217.8538,-1445.0588 1223.217,-1440.5603"/>
 </g>
-<!-- binary_numeric_mul -->
+<!-- binary_number_mul -->
 <g id="node100" class="node">
-<title>binary_numeric_mul</title>
+<title>binary_number_mul</title>
 <ellipse fill="none" stroke="#000000" cx="1272.7981" cy="-1419.2785" rx="27" ry="18"/>
 <text text-anchor="middle" x="1272.7981" y="-1415.0785" font-family="Times,serif" font-size="14.00" fill="#000000">*</text>
 </g>
-<!-- binary_numeric_left&#45;&gt;binary_numeric_mul -->
+<!-- binary_number_left&#45;&gt;binary_number_mul -->
 <g id="edge140" class="edge">
-<title>binary_numeric_left-&gt;binary_numeric_mul</title>
+<title>binary_number_left-&gt;binary_number_mul</title>
 <path fill="none" stroke="#000000" d="M1272.7981,-1486.9135C1272.7981,-1475.5329 1272.7981,-1460.6353 1272.7981,-1447.7192"/>
 <polygon fill="#000000" stroke="#000000" points="1276.2982,-1447.4565 1272.7981,-1437.4566 1269.2982,-1447.4566 1276.2982,-1447.4565"/>
 </g>
-<!-- binary_numeric_div -->
+<!-- binary_number_div -->
 <g id="node101" class="node">
-<title>binary_numeric_div</title>
+<title>binary_number_div</title>
 <ellipse fill="none" stroke="#000000" cx="1344.7981" cy="-1419.2785" rx="27" ry="18"/>
 <text text-anchor="middle" x="1344.7981" y="-1415.0785" font-family="Times,serif" font-size="14.00" fill="#000000">/</text>
 </g>
-<!-- binary_numeric_left&#45;&gt;binary_numeric_div -->
+<!-- binary_number_left&#45;&gt;binary_number_div -->
 <g id="edge142" class="edge">
-<title>binary_numeric_left-&gt;binary_numeric_div</title>
+<title>binary_number_left-&gt;binary_number_div</title>
 <path fill="none" stroke="#000000" d="M1288.0674,-1486.9135C1298.8336,-1474.078 1313.3521,-1456.7688 1325.0064,-1442.8744"/>
 <polygon fill="#000000" stroke="#000000" points="1327.7424,-1445.0588 1331.4873,-1435.1478 1322.3792,-1440.5603 1327.7424,-1445.0588"/>
 </g>
-<!-- binary_numeric_bin_or -->
+<!-- binary_number_bin_or -->
 <g id="node102" class="node">
-<title>binary_numeric_bin_or</title>
+<title>binary_number_bin_or</title>
 <ellipse fill="none" stroke="#000000" cx="1416.7981" cy="-1419.2785" rx="27" ry="18"/>
 <text text-anchor="middle" x="1416.7981" y="-1415.0785" font-family="Times,serif" font-size="14.00" fill="#000000">|</text>
 </g>
-<!-- binary_numeric_left&#45;&gt;binary_numeric_bin_or -->
+<!-- binary_number_left&#45;&gt;binary_number_bin_or -->
 <g id="edge144" class="edge">
-<title>binary_numeric_left-&gt;binary_numeric_bin_or</title>
+<title>binary_number_left-&gt;binary_number_bin_or</title>
 <path fill="none" stroke="#000000" d="M1303.3368,-1486.9135C1328.2268,-1472.0764 1363.1448,-1451.2616 1387.651,-1436.6533"/>
 <polygon fill="#000000" stroke="#000000" points="1389.6933,-1439.5106 1396.4908,-1431.3838 1386.109,-1433.4978 1389.6933,-1439.5106"/>
 </g>
-<!-- binary_numeric_bin_and -->
+<!-- binary_number_bin_and -->
 <g id="node103" class="node">
-<title>binary_numeric_bin_and</title>
+<title>binary_number_bin_and</title>
 <ellipse fill="none" stroke="#000000" cx="1488.7981" cy="-1419.2785" rx="27" ry="18"/>
 <text text-anchor="middle" x="1488.7981" y="-1415.0785" font-family="Times,serif" font-size="14.00" fill="#000000">&amp;</text>
 </g>
-<!-- binary_numeric_left&#45;&gt;binary_numeric_bin_and -->
+<!-- binary_number_left&#45;&gt;binary_number_bin_and -->
 <g id="edge146" class="edge">
-<title>binary_numeric_left-&gt;binary_numeric_bin_and</title>
+<title>binary_number_left-&gt;binary_number_bin_and</title>
 <path fill="none" stroke="#000000" d="M1307.1028,-1487.1049C1316.8836,-1482.302 1327.6434,-1477.3277 1337.7981,-1473.2785 1387.5458,-1453.4415 1403.1318,-1457.3185 1452.7981,-1437.2785 1454.5963,-1436.553 1456.4277,-1435.7732 1458.2639,-1434.9595"/>
 <polygon fill="#000000" stroke="#000000" points="1459.7827,-1438.1131 1467.3543,-1430.7021 1456.8138,-1431.7738 1459.7827,-1438.1131"/>
 </g>
-<!-- binary_numeric_bin_xor -->
+<!-- binary_number_bin_xor -->
 <g id="node104" class="node">
-<title>binary_numeric_bin_xor</title>
+<title>binary_number_bin_xor</title>
 <ellipse fill="none" stroke="#000000" cx="1560.7981" cy="-1419.2785" rx="27" ry="18"/>
 <text text-anchor="middle" x="1560.7981" y="-1415.0785" font-family="Times,serif" font-size="14.00" fill="#000000">^</text>
 </g>
-<!-- binary_numeric_left&#45;&gt;binary_numeric_bin_xor -->
+<!-- binary_number_left&#45;&gt;binary_number_bin_xor -->
 <g id="edge148" class="edge">
-<title>binary_numeric_left-&gt;binary_numeric_bin_xor</title>
+<title>binary_number_left-&gt;binary_number_bin_xor</title>
 <path fill="none" stroke="#000000" d="M1305.4827,-1487.0089C1315.606,-1481.9781 1326.9539,-1476.9063 1337.7981,-1473.2785 1418.0629,-1446.4269 1444.6435,-1464.4576 1524.7981,-1437.2785 1526.6841,-1436.639 1528.5964,-1435.9188 1530.5057,-1435.1438"/>
 <polygon fill="#000000" stroke="#000000" points="1532.2015,-1438.2191 1539.8921,-1430.9318 1529.3356,-1431.8326 1532.2015,-1438.2191"/>
 </g>
-<!-- binary_numeric_plus&#45;&gt;numericRight -->
+<!-- binary_number_plus&#45;&gt;numericRight -->
 <g id="edge137" class="edge">
-<title>binary_numeric_plus-&gt;numericRight</title>
+<title>binary_number_plus-&gt;numericRight</title>
 <path fill="none" stroke="#000000" d="M1149.7761,-1407.8286C1154.621,-1405.456 1159.8173,-1403.121 1164.7981,-1401.2785 1192.0446,-1391.1994 1261.7621,-1374.3396 1314.6828,-1362.1366"/>
 <polygon fill="#000000" stroke="#000000" points="1315.727,-1365.488 1324.6898,-1359.8383 1314.16,-1358.6656 1315.727,-1365.488"/>
 </g>
-<!-- binary_numeric_minus&#45;&gt;numericRight -->
+<!-- binary_number_minus&#45;&gt;numericRight -->
 <g id="edge139" class="edge">
-<title>binary_numeric_minus-&gt;numericRight</title>
+<title>binary_number_minus-&gt;numericRight</title>
 <path fill="none" stroke="#000000" d="M1222.3259,-1408.0551C1227.0505,-1405.7214 1232.0582,-1403.3454 1236.7981,-1401.2785 1263.3828,-1389.6858 1293.3327,-1378.2088 1319.0058,-1368.8364"/>
 <polygon fill="#000000" stroke="#000000" points="1320.4112,-1372.0499 1328.6199,-1365.3516 1318.0257,-1365.4689 1320.4112,-1372.0499"/>
 </g>
-<!-- binary_numeric_mul&#45;&gt;numericRight -->
+<!-- binary_number_mul&#45;&gt;numericRight -->
 <g id="edge141" class="edge">
-<title>binary_numeric_mul-&gt;numericRight</title>
+<title>binary_number_mul-&gt;numericRight</title>
 <path fill="none" stroke="#000000" d="M1292.1063,-1406.4064C1306.8101,-1396.6039 1327.4648,-1382.834 1345.1429,-1371.0487"/>
 <polygon fill="#000000" stroke="#000000" points="1347.1639,-1373.9078 1353.5429,-1365.4486 1343.281,-1368.0835 1347.1639,-1373.9078"/>
 </g>
-<!-- binary_numeric_div&#45;&gt;numericRight -->
+<!-- binary_number_div&#45;&gt;numericRight -->
 <g id="edge143" class="edge">
-<title>binary_numeric_div-&gt;numericRight</title>
+<title>binary_number_div-&gt;numericRight</title>
 <path fill="none" stroke="#000000" d="M1353.5127,-1401.8493C1357.6209,-1393.633 1362.6177,-1383.6393 1367.207,-1374.4606"/>
 <polygon fill="#000000" stroke="#000000" points="1370.4461,-1375.8087 1371.7878,-1365.2991 1364.1851,-1372.6781 1370.4461,-1375.8087"/>
 </g>
-<!-- binary_numeric_bin_or&#45;&gt;numericRight -->
+<!-- binary_number_bin_or&#45;&gt;numericRight -->
 <g id="edge145" class="edge">
-<title>binary_numeric_bin_or-&gt;numericRight</title>
+<title>binary_number_bin_or-&gt;numericRight</title>
 <path fill="none" stroke="#000000" d="M1408.0835,-1401.8493C1403.9753,-1393.633 1398.9785,-1383.6393 1394.3891,-1374.4606"/>
 <polygon fill="#000000" stroke="#000000" points="1397.4111,-1372.6781 1389.8084,-1365.2991 1391.1501,-1375.8087 1397.4111,-1372.6781"/>
 </g>
-<!-- binary_numeric_bin_and&#45;&gt;numericRight -->
+<!-- binary_number_bin_and&#45;&gt;numericRight -->
 <g id="edge147" class="edge">
-<title>binary_numeric_bin_and-&gt;numericRight</title>
+<title>binary_number_bin_and-&gt;numericRight</title>
 <path fill="none" stroke="#000000" d="M1469.4898,-1406.4064C1454.7861,-1396.6039 1434.1313,-1382.834 1416.4533,-1371.0487"/>
 <polygon fill="#000000" stroke="#000000" points="1418.3152,-1368.0835 1408.0532,-1365.4486 1414.4323,-1373.9078 1418.3152,-1368.0835"/>
 </g>
-<!-- binary_numeric_bin_xor&#45;&gt;numericRight -->
+<!-- binary_number_bin_xor&#45;&gt;numericRight -->
 <g id="edge149" class="edge">
-<title>binary_numeric_bin_xor-&gt;numericRight</title>
+<title>binary_number_bin_xor-&gt;numericRight</title>
 <path fill="none" stroke="#000000" d="M1539.2702,-1408.0551C1534.5456,-1405.7214 1529.5379,-1403.3454 1524.7981,-1401.2785 1498.2134,-1389.6858 1468.2635,-1378.2088 1442.5904,-1368.8364"/>
 <polygon fill="#000000" stroke="#000000" points="1443.5704,-1365.4689 1432.9762,-1365.3516 1441.185,-1372.0499 1443.5704,-1365.4689"/>
 </g>
-<!-- unary_numeric_plus -->
+<!-- unary_number_plus -->
 <g id="node107" class="node">
-<title>unary_numeric_plus</title>
+<title>unary_number_plus</title>
 <ellipse fill="none" stroke="#000000" cx="1373.7981" cy="-1505.1178" rx="27" ry="18"/>
 <text text-anchor="middle" x="1373.7981" y="-1500.9178" font-family="Times,serif" font-size="14.00" fill="#000000">+</text>
 </g>
-<!-- UnaryNumericOp&#45;&gt;unary_numeric_plus -->
+<!-- UnaryNumberOp&#45;&gt;unary_number_plus -->
 <g id="edge152" class="edge">
-<title>UnaryNumericOp-&gt;unary_numeric_plus</title>
+<title>UnaryNumberOp-&gt;unary_number_plus</title>
 <path fill="none" stroke="#000000" d="M1548.1609,-1583.5664C1509.9261,-1575.828 1453.7548,-1561.3307 1409.7981,-1536.957 1405.0847,-1534.3435 1400.4579,-1531.0218 1396.1741,-1527.5157"/>
 <polygon fill="#000000" stroke="#000000" points="1398.2417,-1524.6725 1388.4264,-1520.6838 1393.612,-1529.9229 1398.2417,-1524.6725"/>
 </g>
-<!-- unary_numeric_minus -->
+<!-- unary_number_minus -->
 <g id="node108" class="node">
-<title>unary_numeric_minus</title>
+<title>unary_number_minus</title>
 <ellipse fill="none" stroke="#000000" cx="1445.7981" cy="-1505.1178" rx="27" ry="18"/>
 <text text-anchor="middle" x="1445.7981" y="-1500.9178" font-family="Times,serif" font-size="14.00" fill="#000000">-</text>
 </g>
-<!-- UnaryNumericOp&#45;&gt;unary_numeric_minus -->
+<!-- UnaryNumberOp&#45;&gt;unary_number_minus -->
 <g id="edge154" class="edge">
-<title>UnaryNumericOp-&gt;unary_numeric_minus</title>
+<title>UnaryNumberOp-&gt;unary_number_minus</title>
 <path fill="none" stroke="#000000" d="M1559.2655,-1577.7423C1536.6843,-1567.921 1506.366,-1553.4154 1481.7981,-1536.957 1477.4049,-1534.014 1472.9806,-1530.5769 1468.8099,-1527.0706"/>
 <polygon fill="#000000" stroke="#000000" points="1470.9963,-1524.3325 1461.1766,-1520.3545 1466.3724,-1529.5879 1470.9963,-1524.3325"/>
 </g>
-<!-- unary_numeric_bin_not -->
+<!-- unary_number_bin_not -->
 <g id="node109" class="node">
-<title>unary_numeric_bin_not</title>
+<title>unary_number_bin_not</title>
 <ellipse fill="none" stroke="#000000" cx="1517.7981" cy="-1505.1178" rx="27" ry="18"/>
 <text text-anchor="middle" x="1517.7981" y="-1500.9178" font-family="Times,serif" font-size="14.00" fill="#000000">~</text>
 </g>
-<!-- UnaryNumericOp&#45;&gt;unary_numeric_bin_not -->
+<!-- UnaryNumberOp&#45;&gt;unary_number_bin_not -->
 <g id="edge156" class="edge">
-<title>UnaryNumericOp-&gt;unary_numeric_bin_not</title>
+<title>UnaryNumberOp-&gt;unary_number_bin_not</title>
 <path fill="none" stroke="#000000" d="M1576.8231,-1573.5862C1565.6671,-1560.6454 1550.311,-1542.8325 1538.0583,-1528.6195"/>
 <polygon fill="#000000" stroke="#000000" points="1540.4383,-1526.0199 1531.2579,-1520.7311 1535.1365,-1530.5905 1540.4383,-1526.0199"/>
 </g>
-<!-- unary_numeric_sq_root -->
+<!-- unary_number_sq_root -->
 <g id="node110" class="node">
-<title>unary_numeric_sq_root</title>
+<title>unary_number_sq_root</title>
 <ellipse fill="none" stroke="#000000" cx="1589.7981" cy="-1505.1178" rx="27" ry="18"/>
 <text text-anchor="middle" x="1589.7981" y="-1500.9178" font-family="Times,serif" font-size="14.00" fill="#000000">|/</text>
 </g>
-<!-- UnaryNumericOp&#45;&gt;unary_numeric_sq_root -->
+<!-- UnaryNumberOp&#45;&gt;unary_number_sq_root -->
 <g id="edge158" class="edge">
-<title>UnaryNumericOp-&gt;unary_numeric_sq_root</title>
+<title>UnaryNumberOp-&gt;unary_number_sq_root</title>
 <path fill="none" stroke="#000000" d="M1591.3739,-1572.7527C1591.1088,-1561.3721 1590.7617,-1546.4745 1590.4607,-1533.5585"/>
 <polygon fill="#000000" stroke="#000000" points="1593.9537,-1533.2116 1590.2216,-1523.2958 1586.9556,-1533.3747 1593.9537,-1533.2116"/>
 </g>
-<!-- unary_numeric_cub_root -->
+<!-- unary_number_cub_root -->
 <g id="node111" class="node">
-<title>unary_numeric_cub_root</title>
+<title>unary_number_cub_root</title>
 <ellipse fill="none" stroke="#000000" cx="1661.7981" cy="-1505.1178" rx="27" ry="18"/>
 <text text-anchor="middle" x="1661.7981" y="-1500.9178" font-family="Times,serif" font-size="14.00" fill="#000000">||/</text>
 </g>
-<!-- UnaryNumericOp&#45;&gt;unary_numeric_cub_root -->
+<!-- UnaryNumberOp&#45;&gt;unary_number_cub_root -->
 <g id="edge160" class="edge">
-<title>UnaryNumericOp-&gt;unary_numeric_cub_root</title>
+<title>UnaryNumberOp-&gt;unary_number_cub_root</title>
 <path fill="none" stroke="#000000" d="M1605.9636,-1573.5862C1616.4498,-1560.7273 1630.8589,-1543.0578 1642.4126,-1528.8898"/>
 <polygon fill="#000000" stroke="#000000" points="1645.2266,-1530.9771 1648.834,-1521.0153 1639.8017,-1526.5532 1645.2266,-1530.9771"/>
 </g>
-<!-- unary_numeric_postfix_fact -->
+<!-- unary_number_postfix_fact -->
 <g id="node112" class="node">
-<title>unary_numeric_postfix_fact</title>
+<title>unary_number_postfix_fact</title>
 <ellipse fill="none" stroke="#000000" cx="1733.7981" cy="-1505.1178" rx="27" ry="18"/>
 <text text-anchor="middle" x="1733.7981" y="-1500.9178" font-family="Times,serif" font-size="14.00" fill="#000000">!</text>
 </g>
-<!-- UnaryNumericOp&#45;&gt;unary_numeric_postfix_fact -->
+<!-- UnaryNumberOp&#45;&gt;unary_number_postfix_fact -->
 <g id="edge162" class="edge">
-<title>UnaryNumericOp-&gt;unary_numeric_postfix_fact</title>
+<title>UnaryNumberOp-&gt;unary_number_postfix_fact</title>
 <path fill="none" stroke="#000000" d="M1623.5823,-1577.337C1645.2755,-1567.4337 1674.2372,-1552.9949 1697.7981,-1536.957 1702.1693,-1533.9816 1706.5825,-1530.528 1710.7491,-1527.0155"/>
 <polygon fill="#000000" stroke="#000000" points="1713.1871,-1529.5323 1718.3815,-1520.2982 1708.5623,-1524.2775 1713.1871,-1529.5323"/>
 </g>
-<!-- unary_numeric_prefix_fact -->
+<!-- unary_number_prefix_fact -->
 <g id="node113" class="node">
-<title>unary_numeric_prefix_fact</title>
+<title>unary_number_prefix_fact</title>
 <ellipse fill="none" stroke="#000000" cx="1805.7981" cy="-1505.1178" rx="27" ry="18"/>
 <text text-anchor="middle" x="1805.7981" y="-1500.9178" font-family="Times,serif" font-size="14.00" fill="#000000">!!</text>
 </g>
-<!-- UnaryNumericOp&#45;&gt;unary_numeric_prefix_fact -->
+<!-- UnaryNumberOp&#45;&gt;unary_number_prefix_fact -->
 <g id="edge164" class="edge">
-<title>UnaryNumericOp-&gt;unary_numeric_prefix_fact</title>
+<title>UnaryNumberOp-&gt;unary_number_prefix_fact</title>
 <path fill="none" stroke="#000000" d="M1631.6423,-1580.9934C1676.445,-1569.4204 1746.0444,-1550.2235 1769.7981,-1536.957 1774.5035,-1534.3291 1779.1263,-1531.0003 1783.4086,-1527.4915"/>
 <polygon fill="#000000" stroke="#000000" points="1785.9708,-1529.8987 1791.1562,-1520.6595 1781.3409,-1524.6484 1785.9708,-1529.8987"/>
 </g>
-<!-- unary_numeric_abs -->
+<!-- unary_number_abs -->
 <g id="node114" class="node">
-<title>unary_numeric_abs</title>
+<title>unary_number_abs</title>
 <ellipse fill="none" stroke="#000000" cx="1877.7981" cy="-1505.1178" rx="27" ry="18"/>
 <text text-anchor="middle" x="1877.7981" y="-1500.9178" font-family="Times,serif" font-size="14.00" fill="#000000">@</text>
 </g>
-<!-- UnaryNumericOp&#45;&gt;unary_numeric_abs -->
+<!-- UnaryNumberOp&#45;&gt;unary_number_abs -->
 <g id="edge166" class="edge">
-<title>UnaryNumericOp-&gt;unary_numeric_abs</title>
+<title>UnaryNumberOp-&gt;unary_number_abs</title>
 <path fill="none" stroke="#000000" d="M1632.3648,-1581.5788C1644.6974,-1578.7642 1658.2941,-1575.6976 1670.7981,-1572.957 1746.6633,-1556.3296 1772.4071,-1571.8411 1841.7981,-1536.957 1846.83,-1534.4274 1851.7112,-1531.0182 1856.1713,-1527.3691"/>
 <polygon fill="#000000" stroke="#000000" points="1858.5438,-1529.943 1863.6864,-1520.6799 1853.8897,-1524.7143 1858.5438,-1529.943"/>
 </g>
@@ -1696,57 +1696,57 @@
 <polygon fill="#0000ff" stroke="#0000ff" points="1717.8367,-1437.2785 1605.7595,-1437.2785 1605.7595,-1401.2785 1717.8367,-1401.2785 1717.8367,-1437.2785"/>
 <text text-anchor="middle" x="1661.7981" y="-1415.0785" font-family="Times,serif" font-size="14.00" fill="#000000">TYPES: numeric</text>
 </g>
-<!-- call1_types&#45;&gt;EXIT_numeric -->
+<!-- call1_types&#45;&gt;EXIT_number -->
 <g id="edge168" class="edge">
-<title>call1_types-&gt;EXIT_numeric</title>
+<title>call1_types-&gt;EXIT_number</title>
 <path fill="none" stroke="#000000" d="M1651.4739,-1401.1724C1635.673,-1373.4611 1605.3992,-1320.3679 1587.0588,-1288.2031"/>
 <polygon fill="#000000" stroke="#000000" points="1589.9957,-1286.2876 1582.0018,-1279.3343 1583.9147,-1289.755 1589.9957,-1286.2876"/>
 </g>
-<!-- unary_numeric_plus&#45;&gt;call1_types -->
+<!-- unary_number_plus&#45;&gt;call1_types -->
 <g id="edge153" class="edge">
-<title>unary_numeric_plus-&gt;call1_types</title>
+<title>unary_number_plus-&gt;call1_types</title>
 <path fill="none" stroke="#000000" d="M1387.875,-1489.4856C1394.0416,-1483.5443 1401.7123,-1477.2561 1409.7981,-1473.2785 1482.9254,-1437.3056 1512.2015,-1455.1338 1595.6085,-1437.3818"/>
 <polygon fill="#000000" stroke="#000000" points="1596.5059,-1440.7676 1605.4987,-1435.1657 1594.9753,-1433.937 1596.5059,-1440.7676"/>
 </g>
-<!-- unary_numeric_minus&#45;&gt;call1_types -->
+<!-- unary_number_minus&#45;&gt;call1_types -->
 <g id="edge155" class="edge">
-<title>unary_numeric_minus-&gt;call1_types</title>
+<title>unary_number_minus-&gt;call1_types</title>
 <path fill="none" stroke="#000000" d="M1460.4331,-1489.5638C1466.5693,-1483.7771 1474.0698,-1477.5791 1481.7981,-1473.2785 1492.145,-1467.5207 1548.6422,-1450.9276 1595.6199,-1437.6399"/>
 <polygon fill="#000000" stroke="#000000" points="1596.8051,-1440.9423 1605.4799,-1434.8597 1594.9054,-1434.205 1596.8051,-1440.9423"/>
 </g>
-<!-- unary_numeric_bin_not&#45;&gt;call1_types -->
+<!-- unary_number_bin_not&#45;&gt;call1_types -->
 <g id="edge157" class="edge">
-<title>unary_numeric_bin_not-&gt;call1_types</title>
+<title>unary_number_bin_not-&gt;call1_types</title>
 <path fill="none" stroke="#000000" d="M1533.1953,-1489.9089C1539.3167,-1484.2996 1546.6065,-1478.1344 1553.7981,-1473.2785 1571.3359,-1461.4368 1591.8353,-1450.5376 1610.2338,-1441.6789"/>
 <polygon fill="#000000" stroke="#000000" points="1611.8087,-1444.8058 1619.3547,-1437.3688 1608.818,-1438.4768 1611.8087,-1444.8058"/>
 </g>
-<!-- unary_numeric_sq_root&#45;&gt;call1_types -->
+<!-- unary_number_sq_root&#45;&gt;call1_types -->
 <g id="edge159" class="edge">
-<title>unary_numeric_sq_root-&gt;call1_types</title>
+<title>unary_number_sq_root-&gt;call1_types</title>
 <path fill="none" stroke="#000000" d="M1603.004,-1489.3735C1613.3208,-1477.0738 1627.8803,-1459.7157 1639.9294,-1445.3506"/>
 <polygon fill="#000000" stroke="#000000" points="1642.9377,-1447.2103 1646.6826,-1437.2994 1637.5745,-1442.7118 1642.9377,-1447.2103"/>
 </g>
-<!-- unary_numeric_cub_root&#45;&gt;call1_types -->
+<!-- unary_number_cub_root&#45;&gt;call1_types -->
 <g id="edge161" class="edge">
-<title>unary_numeric_cub_root-&gt;call1_types</title>
+<title>unary_number_cub_root-&gt;call1_types</title>
 <path fill="none" stroke="#000000" d="M1661.7981,-1486.9135C1661.7981,-1475.5329 1661.7981,-1460.6353 1661.7981,-1447.7192"/>
 <polygon fill="#000000" stroke="#000000" points="1665.2982,-1447.4565 1661.7981,-1437.4566 1658.2982,-1447.4566 1665.2982,-1447.4565"/>
 </g>
-<!-- unary_numeric_postfix_fact&#45;&gt;call1_types -->
+<!-- unary_number_postfix_fact&#45;&gt;call1_types -->
 <g id="edge163" class="edge">
-<title>unary_numeric_postfix_fact-&gt;call1_types</title>
+<title>unary_number_postfix_fact-&gt;call1_types</title>
 <path fill="none" stroke="#000000" d="M1720.5922,-1489.3735C1710.2754,-1477.0738 1695.7158,-1459.7157 1683.6667,-1445.3506"/>
 <polygon fill="#000000" stroke="#000000" points="1686.0216,-1442.7118 1676.9136,-1437.2994 1680.6584,-1447.2103 1686.0216,-1442.7118"/>
 </g>
-<!-- unary_numeric_prefix_fact&#45;&gt;call1_types -->
+<!-- unary_number_prefix_fact&#45;&gt;call1_types -->
 <g id="edge165" class="edge">
-<title>unary_numeric_prefix_fact-&gt;call1_types</title>
+<title>unary_number_prefix_fact-&gt;call1_types</title>
 <path fill="none" stroke="#000000" d="M1790.4009,-1489.9089C1784.2795,-1484.2996 1776.9897,-1478.1344 1769.7981,-1473.2785 1752.2603,-1461.4368 1731.7609,-1450.5376 1713.3624,-1441.6789"/>
 <polygon fill="#000000" stroke="#000000" points="1714.7782,-1438.4768 1704.2414,-1437.3688 1711.7875,-1444.8058 1714.7782,-1438.4768"/>
 </g>
-<!-- unary_numeric_abs&#45;&gt;call1_types -->
+<!-- unary_number_abs&#45;&gt;call1_types -->
 <g id="edge167" class="edge">
-<title>unary_numeric_abs-&gt;call1_types</title>
+<title>unary_number_abs-&gt;call1_types</title>
 <path fill="none" stroke="#000000" d="M1863.1631,-1489.5638C1857.0268,-1483.7771 1849.5264,-1477.5791 1841.7981,-1473.2785 1806.6389,-1453.7134 1763.5814,-1440.4668 1728.3951,-1431.9917"/>
 <polygon fill="#000000" stroke="#000000" points="1728.7538,-1428.4815 1718.2203,-1429.6198 1727.1646,-1435.2987 1728.7538,-1428.4815"/>
 </g>
@@ -1756,9 +1756,9 @@
 <polygon fill="#0000ff" stroke="#0000ff" points="2020.8521,-1523.1178 1922.7441,-1523.1178 1922.7441,-1487.1178 2020.8521,-1487.1178 2020.8521,-1523.1178"/>
 <text text-anchor="middle" x="1971.7981" y="-1500.9178" font-family="Times,serif" font-size="14.00" fill="#000000">TYPES: string</text>
 </g>
-<!-- numeric_string_Position&#45;&gt;call2_types -->
+<!-- number_string_position&#45;&gt;call2_types -->
 <g id="edge170" class="edge">
-<title>numeric_string_Position-&gt;call2_types</title>
+<title>number_string_position-&gt;call2_types</title>
 <path fill="none" stroke="#000000" d="M1838.2094,-1573.7245C1860.3427,-1563.3694 1888.8409,-1549.7576 1913.7981,-1536.957 1919.3653,-1534.1016 1925.1891,-1531.0199 1930.9083,-1527.9375"/>
 <polygon fill="#000000" stroke="#000000" points="1932.6445,-1530.9774 1939.7577,-1523.1255 1929.3005,-1524.8278 1932.6445,-1530.9774"/>
 </g>
@@ -1786,9 +1786,9 @@
 <path fill="none" stroke="#000000" d="M1856.365,-1405.7359C1843.266,-1396.1121 1825.3145,-1382.9232 1809.7777,-1371.5084"/>
 <polygon fill="#000000" stroke="#000000" points="1811.5717,-1368.4835 1801.4406,-1365.3833 1807.4272,-1374.1247 1811.5717,-1368.4835"/>
 </g>
-<!-- call3_types&#45;&gt;EXIT_numeric -->
+<!-- call3_types&#45;&gt;EXIT_number -->
 <g id="edge173" class="edge">
-<title>call3_types-&gt;EXIT_numeric</title>
+<title>call3_types-&gt;EXIT_number</title>
 <path fill="none" stroke="#000000" d="M1733.3229,-1329.0742C1699.2673,-1314.8142 1652.0249,-1295.0325 1617.4287,-1280.5461"/>
 <polygon fill="#000000" stroke="#000000" points="1618.6034,-1277.2436 1608.0276,-1276.6096 1615.8997,-1283.7004 1618.6034,-1277.2436"/>
 </g>
@@ -1798,51 +1798,51 @@
 <polygon fill="#0000ff" stroke="#0000ff" points="2048.8367,-1365.2785 1936.7595,-1365.2785 1936.7595,-1329.2785 2048.8367,-1329.2785 2048.8367,-1365.2785"/>
 <text text-anchor="middle" x="1992.7981" y="-1343.0785" font-family="Times,serif" font-size="14.00" fill="#000000">TYPES: numeric</text>
 </g>
-<!-- Nested_numeric&#45;&gt;call4_types -->
+<!-- nested_number&#45;&gt;call4_types -->
 <g id="edge175" class="edge">
-<title>Nested_numeric-&gt;call4_types</title>
+<title>nested_number-&gt;call4_types</title>
 <path fill="none" stroke="#000000" d="M2028.0793,-1572.4732C2028.738,-1562.0494 2029.4698,-1548.7832 2029.7981,-1536.957 2030.5833,-1508.6664 2033.8261,-1501.292 2029.7981,-1473.2785 2024.8358,-1438.7676 2012.5982,-1400.5241 2003.5485,-1375.3233"/>
 <polygon fill="#000000" stroke="#000000" points="2006.7461,-1373.877 2000.0169,-1365.6936 2000.1742,-1376.2873 2006.7461,-1373.877"/>
 </g>
-<!-- call4_types&#45;&gt;EXIT_numeric -->
+<!-- call4_types&#45;&gt;EXIT_number -->
 <g id="edge176" class="edge">
-<title>call4_types-&gt;EXIT_numeric</title>
+<title>call4_types-&gt;EXIT_number</title>
 <path fill="none" stroke="#000000" d="M1936.457,-1335.7909C1858.2722,-1319.8495 1717.2784,-1291.1018 1635.4047,-1274.4083"/>
 <polygon fill="#000000" stroke="#000000" points="1635.9752,-1270.9526 1625.4775,-1272.3842 1634.5766,-1277.8115 1635.9752,-1270.9526"/>
 </g>
-<!-- string_literal -->
+<!-- text_literal -->
 <g id="node123" class="node">
-<title>string_literal</title>
+<title>text_literal</title>
 <ellipse fill="none" stroke="#000000" cx="1446.7981" cy="-1031.6" rx="89.7634" ry="18"/>
 <text text-anchor="middle" x="1446.7981" y="-1027.4" font-family="Times,serif" font-size="14.00" fill="#000000">random string literal</text>
 </g>
-<!-- string&#45;&gt;string_literal -->
+<!-- string&#45;&gt;text_literal -->
 <g id="edge178" class="edge">
-<title>string-&gt;string_literal</title>
+<title>string-&gt;text_literal</title>
 <path fill="none" stroke="#000000" d="M1555.9667,-1157.3623C1533.9887,-1132.0436 1494.1229,-1086.1182 1469.1289,-1057.3251"/>
 <polygon fill="#000000" stroke="#000000" points="1471.6993,-1054.947 1462.5009,-1049.6896 1466.4131,-1059.5357 1471.6993,-1054.947"/>
 </g>
-<!-- string_trim -->
+<!-- text_trim -->
 <g id="node124" class="node">
-<title>string_trim</title>
+<title>text_trim</title>
 <ellipse fill="none" stroke="#000000" cx="1571.7981" cy="-1103.6" rx="35.3509" ry="18"/>
 <text text-anchor="middle" x="1571.7981" y="-1099.4" font-family="Times,serif" font-size="14.00" fill="#000000">TRIM</text>
 </g>
-<!-- string&#45;&gt;string_trim -->
+<!-- string&#45;&gt;text_trim -->
 <g id="edge180" class="edge">
-<title>string-&gt;string_trim</title>
+<title>string-&gt;text_trim</title>
 <path fill="none" stroke="#000000" d="M1571.7981,-1157.4314C1571.7981,-1149.731 1571.7981,-1140.5743 1571.7981,-1132.0166"/>
 <polygon fill="#000000" stroke="#000000" points="1575.2982,-1132.0132 1571.7981,-1122.0133 1568.2982,-1132.0133 1575.2982,-1132.0132"/>
 </g>
-<!-- string_concat -->
+<!-- text_concat -->
 <g id="node130" class="node">
-<title>string_concat</title>
+<title>text_concat</title>
 <ellipse fill="none" stroke="#000000" cx="1952.7981" cy="-1103.6" rx="64.8273" ry="18"/>
 <text text-anchor="middle" x="1952.7981" y="-1099.4" font-family="Times,serif" font-size="14.00" fill="#000000">concatenation</text>
 </g>
-<!-- string&#45;&gt;string_concat -->
+<!-- string&#45;&gt;text_concat -->
 <g id="edge190" class="edge">
-<title>string-&gt;string_concat</title>
+<title>string-&gt;text_concat</title>
 <path fill="none" stroke="#000000" d="M1598.8932,-1170.4797C1658.9298,-1159.1342 1804.5126,-1131.6225 1889.0716,-1115.6428"/>
 <polygon fill="#000000" stroke="#000000" points="1889.8951,-1119.0492 1899.0713,-1113.7531 1888.5952,-1112.1709 1889.8951,-1119.0492"/>
 </g>
@@ -1852,9 +1852,9 @@
 <ellipse fill="none" stroke="#000000" cx="1683.7981" cy="-815.6" rx="57.3609" ry="18"/>
 <text text-anchor="middle" x="1683.7981" y="-811.4" font-family="Times,serif" font-size="14.00" fill="#000000">EXIT string</text>
 </g>
-<!-- string_literal&#45;&gt;EXIT_string -->
+<!-- text_literal&#45;&gt;EXIT_string -->
 <g id="edge179" class="edge">
-<title>string_literal-&gt;EXIT_string</title>
+<title>text_literal-&gt;EXIT_string</title>
 <path fill="none" stroke="#000000" d="M1466.1928,-1013.9238C1508.5004,-975.3649 1609.1349,-883.6475 1657.2665,-839.7806"/>
 <polygon fill="#000000" stroke="#000000" points="1659.7644,-842.2396 1664.7978,-832.9167 1655.0492,-837.066 1659.7644,-842.2396"/>
 </g>
@@ -1864,9 +1864,9 @@
 <polygon fill="#0000ff" stroke="#0000ff" points="1732.8521,-905.6 1634.7441,-905.6 1634.7441,-869.6 1732.8521,-869.6 1732.8521,-905.6"/>
 <text text-anchor="middle" x="1683.7981" y="-883.4" font-family="Times,serif" font-size="14.00" fill="#000000">TYPES: string</text>
 </g>
-<!-- string_trim&#45;&gt;call5_types -->
+<!-- text_trim&#45;&gt;call5_types -->
 <g id="edge181" class="edge">
-<title>string_trim-&gt;call5_types</title>
+<title>text_trim-&gt;call5_types</title>
 <path fill="none" stroke="#000000" d="M1567.9248,-1085.565C1562.1276,-1053.6708 1554.7429,-986.4546 1583.7981,-941.6 1593.617,-926.4418 1609.1991,-915.2197 1625.1676,-907.0569"/>
 <polygon fill="#000000" stroke="#000000" points="1627.0371,-910.0441 1634.5737,-902.5976 1624.0384,-903.7189 1627.0371,-910.0441"/>
 </g>
@@ -1876,9 +1876,9 @@
 <polygon fill="#0000ff" stroke="#0000ff" points="1739.8521,-1049.6 1641.7441,-1049.6 1641.7441,-1013.6 1739.8521,-1013.6 1739.8521,-1049.6"/>
 <text text-anchor="middle" x="1690.7981" y="-1027.4" font-family="Times,serif" font-size="14.00" fill="#000000">TYPES: string</text>
 </g>
-<!-- string_trim&#45;&gt;call6_types -->
+<!-- text_trim&#45;&gt;call6_types -->
 <g id="edge182" class="edge">
-<title>string_trim-&gt;call6_types</title>
+<title>text_trim-&gt;call6_types</title>
 <path fill="none" stroke="#000000" d="M1594.7425,-1089.7177C1610.9513,-1079.9106 1633.0695,-1066.5282 1651.9958,-1055.077"/>
 <polygon fill="#000000" stroke="#000000" points="1653.9677,-1057.9748 1660.7117,-1049.8035 1650.344,-1051.9857 1653.9677,-1057.9748"/>
 </g>
@@ -1948,21 +1948,21 @@
 <polygon fill="#0000ff" stroke="#0000ff" points="2017.8521,-1049.6 1919.7441,-1049.6 1919.7441,-1013.6 2017.8521,-1013.6 2017.8521,-1049.6"/>
 <text text-anchor="middle" x="1968.7981" y="-1027.4" font-family="Times,serif" font-size="14.00" fill="#000000">TYPES: string</text>
 </g>
-<!-- string_concat&#45;&gt;call7_types -->
+<!-- text_concat&#45;&gt;call7_types -->
 <g id="edge191" class="edge">
-<title>string_concat-&gt;call7_types</title>
+<title>text_concat-&gt;call7_types</title>
 <path fill="none" stroke="#000000" d="M1956.8356,-1085.4314C1958.5468,-1077.731 1960.5816,-1068.5743 1962.4833,-1060.0166"/>
 <polygon fill="#000000" stroke="#000000" points="1965.9535,-1060.5344 1964.7062,-1050.0133 1959.1202,-1059.0159 1965.9535,-1060.5344"/>
 </g>
-<!-- string_concat_concat -->
+<!-- text_concat_concat -->
 <g id="node132" class="node">
-<title>string_concat_concat</title>
+<title>text_concat_concat</title>
 <ellipse fill="none" stroke="#000000" cx="1969.7981" cy="-959.6" rx="27" ry="18"/>
 <text text-anchor="middle" x="1969.7981" y="-955.4" font-family="Times,serif" font-size="14.00" fill="#000000">||</text>
 </g>
-<!-- call7_types&#45;&gt;string_concat_concat -->
+<!-- call7_types&#45;&gt;text_concat_concat -->
 <g id="edge192" class="edge">
-<title>call7_types-&gt;string_concat_concat</title>
+<title>call7_types-&gt;text_concat_concat</title>
 <path fill="none" stroke="#000000" d="M1969.0504,-1013.4314C1969.1574,-1005.731 1969.2845,-996.5743 1969.4034,-988.0166"/>
 <polygon fill="#000000" stroke="#000000" points="1972.903,-988.0609 1969.5423,-978.0133 1965.9037,-987.9637 1972.903,-988.0609"/>
 </g>
@@ -1972,9 +1972,9 @@
 <polygon fill="#0000ff" stroke="#0000ff" points="1960.8521,-905.6 1862.7441,-905.6 1862.7441,-869.6 1960.8521,-869.6 1960.8521,-905.6"/>
 <text text-anchor="middle" x="1911.7981" y="-883.4" font-family="Times,serif" font-size="14.00" fill="#000000">TYPES: string</text>
 </g>
-<!-- string_concat_concat&#45;&gt;call8_types -->
+<!-- text_concat_concat&#45;&gt;call8_types -->
 <g id="edge193" class="edge">
-<title>string_concat_concat-&gt;call8_types</title>
+<title>text_concat_concat-&gt;call8_types</title>
 <path fill="none" stroke="#000000" d="M1956.926,-943.6209C1949.8863,-934.8819 1940.9874,-923.835 1932.9561,-913.8651"/>
 <polygon fill="#000000" stroke="#000000" points="1935.4727,-911.41 1926.4737,-905.8181 1930.0214,-915.8013 1935.4727,-911.41"/>
 </g>
@@ -2143,15 +2143,15 @@
 <path fill="none" stroke="#000000" d="M2726.2027,-2417.0767C2733.6753,-2402.904 2744.2431,-2382.8609 2752.7231,-2366.7774"/>
 <polygon fill="#000000" stroke="#000000" points="2755.8677,-2368.3177 2757.4356,-2357.8396 2749.6756,-2365.0529 2755.8677,-2368.3177"/>
 </g>
-<!-- types_select_type_string -->
+<!-- types_select_type_text -->
 <g id="node142" class="node">
-<title>types_select_type_string</title>
+<title>types_select_type_text</title>
 <ellipse fill="none" stroke="#000000" cx="2868.7981" cy="-2340.0825" rx="37.1367" ry="18"/>
 <text text-anchor="middle" x="2868.7981" y="-2335.8825" font-family="Times,serif" font-size="14.00" fill="#000000">string?</text>
 </g>
-<!-- types_select_type&#45;&gt;types_select_type_string -->
+<!-- types_select_type&#45;&gt;types_select_type_text -->
 <g id="edge204" class="edge">
-<title>types_select_type-&gt;types_select_type_string</title>
+<title>types_select_type-&gt;types_select_type_text</title>
 <path fill="none" stroke="#000000" d="M2740.8624,-2420.2142C2762.3914,-2407.0274 2794.7819,-2387.0991 2822.7981,-2369.4981 2827.6141,-2366.4725 2832.6995,-2363.2493 2837.6634,-2360.0873"/>
 <polygon fill="#000000" stroke="#000000" points="2839.8394,-2362.8505 2846.3829,-2354.5177 2836.0713,-2356.9512 2839.8394,-2362.8505"/>
 </g>
@@ -2212,9 +2212,9 @@
 <path fill="none" stroke="#000000" d="M2748.9201,-2323.1286C2732.551,-2307.6055 2708.2164,-2284.5288 2690.284,-2267.5232"/>
 <polygon fill="#000000" stroke="#000000" points="2692.2114,-2264.5274 2682.5469,-2260.186 2687.3946,-2269.6067 2692.2114,-2264.5274"/>
 </g>
-<!-- types_select_type_string&#45;&gt;types_select_type_end -->
+<!-- types_select_type_text&#45;&gt;types_select_type_end -->
 <g id="edge205" class="edge">
-<title>types_select_type_string-&gt;types_select_type_end</title>
+<title>types_select_type_text-&gt;types_select_type_end</title>
 <path fill="none" stroke="#000000" d="M2847.2618,-2325.2291C2839.6945,-2320.3033 2831.0252,-2314.9814 2822.7981,-2310.6669 2781.9626,-2289.2516 2732.5373,-2269.4986 2700.4189,-2257.4243"/>
 <polygon fill="#000000" stroke="#000000" points="2701.2246,-2253.9897 2690.6318,-2253.7815 2698.7828,-2260.55 2701.2246,-2253.9897"/>
 </g>

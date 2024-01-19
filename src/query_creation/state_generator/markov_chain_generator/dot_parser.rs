@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
-use logos::{Filter, Lexer, Logos};
 use regex::Regex;
+use serde::{Serialize, Deserialize};
 use smol_str::SmolStr;
+use logos::{Filter, Lexer, Logos};
 
-use super::error::SyntaxError;
+use super::{error::SyntaxError, subgraph_type::SubgraphType};
 
 #[derive(Logos, Debug, PartialEq)]
 enum DotToken {
@@ -86,6 +87,23 @@ fn block_comment(lex: &mut Lexer<'_, DotToken>) -> Filter<()> {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum TypeWithFields {
+    Type(SubgraphType),  // no fields here for now
+}
+
+impl TypeWithFields {
+    pub fn inner_ref(&self) -> &SubgraphType {
+        match self {
+            TypeWithFields::Type(tp) => tp,
+        }
+    }
+
+    fn from_type_name(s: &str) -> Result<Self, SyntaxError> {
+        Ok(Self::Type(SubgraphType::from_type_name(s)?))
+    }
+}
+
 /// this structure can be treated in two ways: either
 /// as the output types the function should be restricted
 /// to generate, when in the context of a call node, or
@@ -93,13 +111,29 @@ fn block_comment(lex: &mut Lexer<'_, DotToken>) -> Filter<()> {
 /// in function definition
 #[derive(Debug, Clone, PartialEq)]
 pub enum FunctionInputsType {
+    /// Used in function calls to choose all types out of the allowed type list
     Any,
+    /// Used in function calls to choose none of the types out of the allowed type list
+    /// Used in function declarations to indicate that no types are accepted.
     None,
-    Known,
+    /// Used in function calls to be able to set the type list in handlers
+    KnownList,
+    /// Used in function calls to be able to set the type later. Similar to known, but indicates type compatibility.
+    /// Will be extended in the future to link to the types call node which would supply the type
     Compatible,
-    TypeName(SmolStr),
-    TypeNameList(Vec<SmolStr>),
-    TypeNameVariants(Vec<SmolStr>),
+    /// Used in function calls to pass the function's type constraints further
+    PassThrough,
+    /// Used in function calls to select multiple types among the allowed type list.
+    /// Used in function declarations to specify the allowed type list, of which multiple can be selected.
+    TypeListWithFields(Vec<TypeWithFields>),
+}
+
+/// splits a string with commas into a list of trimmed identifiers
+fn get_identifier_names(name_list_str: SmolStr) -> Vec<SmolStr> {
+    name_list_str
+        .split(',')
+        .map(|string| SmolStr::new(string.trim()))
+        .collect::<Vec<_>>()
 }
 
 impl FunctionInputsType {
@@ -107,36 +141,59 @@ impl FunctionInputsType {
     fn try_extract_special_type(idents: &SmolStr) -> Option<FunctionInputsType> {
         match idents.as_str() {
             "any" => Some(FunctionInputsType::Any),
-            "known" => Some(FunctionInputsType::Known),
+            "..." => Some(FunctionInputsType::PassThrough),
             "compatible" => Some(FunctionInputsType::Compatible),
+            "known" => Some(FunctionInputsType::KnownList),
             _ => None,
         }
     }
 
     /// splits a string with commas into a list of trimmed identifiers
-    fn get_identifier_names(name_list_str: SmolStr) -> Vec<SmolStr> {
+    fn parse_types(name_list_str: SmolStr) -> Result<Vec<TypeWithFields>, SyntaxError> {
         name_list_str
             .split(',')
-            .map(|string| SmolStr::new(string.trim()))
-            .collect::<Vec<_>>()
+            .map(|x| x.trim())
+            .map(TypeWithFields::from_type_name)
+            .collect::<Result<Vec<_>, _>>()
+    }
+}
+
+/// This structure contains common fields for a node definition.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct NodeCommon {
+    /// Node identifier
+    pub name: SmolStr,
+    /// Type name if specified (basically an "on" modifier)
+    pub type_names: Option<Vec<SubgraphType>>,
+    /// Graph modifier with mode if specified
+    pub modifier: Option<(SmolStr, bool)>,
+    /// Name of the call modifier if specified
+    pub call_modifier_name: Option<SmolStr>,
+    /// Name of the call modifier that this node affects, if specified
+    pub affects_call_modifier_name: Option<SmolStr>,
+    /// Name of the value that this node sets, if specified
+    pub sets_value_name: Option<SmolStr>,
+}
+
+impl NodeCommon {
+    pub fn with_name(name: SmolStr) -> Self {
+        Self { name: name, type_names: None, modifier: None, call_modifier_name: None, affects_call_modifier_name: None, sets_value_name: None }
     }
 }
 
 /// a code unit represents a distinct command in code.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CodeUnit {
-    Function(Function),
-    NodeDef {
-        name: SmolStr,
-        option_name: Option<SmolStr>,
+    FunctionDeclaration(FunctionDeclaration),
+    RegularNode {
+        node_common: NodeCommon,
         literal: bool,
     },
-    Call {
-        node_name: SmolStr,
+    CallNode {
+        node_common: NodeCommon,
         func_name: SmolStr,
         inputs: FunctionInputsType,
         modifiers: Option<Vec<SmolStr>>,
-        option_name: Option<SmolStr>,
     },
     Edge {
         node_name_from: SmolStr,
@@ -148,7 +205,7 @@ pub enum CodeUnit {
 /// this structure contains function details extracted
 /// from function declaration
 #[derive(Clone, Debug)]
-pub struct Function {
+pub struct FunctionDeclaration {
     pub source_node_name: SmolStr,
     pub exit_node_name: SmolStr,
     pub input_type: FunctionInputsType,
@@ -160,7 +217,7 @@ pub struct Function {
 pub struct DotTokenizer<'a> {
     lexer: Lexer<'a, DotToken>,
     digraph_defined: bool,
-    in_function_definition: bool,
+    current_function_definition: Option<FunctionDeclaration>,
     call_ident_regex: Regex,
 }
 
@@ -170,10 +227,19 @@ impl<'a> DotTokenizer<'a> {
         DotTokenizer {
             lexer: DotToken::lexer(source),
             digraph_defined: false,
-            in_function_definition: false,
+            current_function_definition: None,
             call_ident_regex: Regex::new(r"^call[0-9]+_[A-Za-z_][A-Za-z0-9_]*$").unwrap(),
         }
     }
+}
+
+macro_rules! return_some_err {
+    ($expr:expr) => {{
+        match $expr {
+            Ok(value) => value,
+            Err(err) => break Some(Err(err)),
+        }
+    }};
 }
 
 impl<'a> Iterator for DotTokenizer<'a> {
@@ -202,75 +268,138 @@ impl<'a> Iterator for DotTokenizer<'a> {
                             format!("multiple digraph definitions are not supported")
                         )))
                     }
-                    if let Err(err) = handle_digraph(&mut self.lexer) {
-                        break Some(Err(err))
-                    }
+                    return_some_err!(handle_digraph(&mut self.lexer));
                     self.digraph_defined = true;
                 },
                 DotToken::Subgraph => {
-                    match try_parse_function_def(&mut self.lexer) {
-                        Ok(Some(func @ CodeUnit::Function {..})) => {
-                            if self.in_function_definition {
+                    match return_some_err!(try_parse_function_def(&mut self.lexer)) {
+                        Some(func) => {
+                            if self.current_function_definition.is_some() {
                                 break Some(Err(SyntaxError::new(
                                     format!("nested functional node definitions are not supported")
                                 )))
                             } else {
-                                self.in_function_definition = true;
-                                break Some(Ok(func))
+                                self.current_function_definition = Some(func.clone());
+                                break Some(Ok(CodeUnit::FunctionDeclaration(func)))
                             }
                         },
-                        Ok(_) => {  // there is no function
-                            match self.lexer.next()? {
-                                DotToken::OpenDeclaration => ignore_subgraph = true,
-                                _ => break Some(Err(SyntaxError::new(
-                                    format!("Expected subgraph body: {}", self.lexer.slice())
-                                )))
-                            };
+                        _ => match self.lexer.next()? {
+                            DotToken::OpenDeclaration => ignore_subgraph = true,
+                            _ => break Some(Err(SyntaxError::new(
+                                format!("Expected subgraph body: {}", self.lexer.slice())
+                            )))
                         },
-                        Err(err) => break Some(Err(err)),
                     }
                 },
                 DotToken::Identifier(node_name) => {
                     match self.lexer.next() {
                         Some(DotToken::OpenSpecification) => {
-                            match read_opened_node_specification(&mut self.lexer, &node_name) {
-                                Ok(mut node_spec) => {
-                                    let option_name = match node_spec.remove("OPTIONAL") {
-                                        Some(DotToken::QuotedIdentifiers(idents)) => Some(idents),
-                                        _ => None
+                            let mut node_spec = return_some_err!(
+                                read_opened_node_specification(&mut self.lexer, &node_name)
+                            );
+
+                            let type_names = match node_spec.remove("TYPE_NAME") {
+                                Some(DotToken::QuotedIdentifiers(ident)) => Some({
+                                    let TypeWithFields::Type(tp) = return_some_err!(TypeWithFields::from_type_name(&ident));
+                                    vec![tp]
+                                }),
+                                Some(DotToken::QuotedIdentifiersWithBrackets(idents)) => Some({
+                                    let out_types = return_some_err!(
+                                        get_identifier_names(idents.clone()).into_iter()
+                                            .filter(|el| el.len() > 0)
+                                            .map(|el| TypeWithFields::from_type_name(&el))
+                                            .collect::<Result<Vec<_>, _>>()
+                                    );
+                                    out_types.into_iter().map(|el| {
+                                        let TypeWithFields::Type(tp) = el;
+                                        tp
+                                    }).collect::<Vec<_>>()
+                                }),
+                                _ => None
+                            };
+
+                            if self.current_function_definition.is_none() {
+                                return Some(Err(SyntaxError::new(format!(
+                                    "Node definitions outside of subgraphs are not allowed"
+                                ))))
+                            }
+
+                            let modifier = match node_spec.remove("MODIFIER") {
+                                Some(DotToken::QuotedIdentifiers(idents)) => {
+                                    let modifier_on = match node_spec.remove("MODIFIER_MODE") {
+                                        Some(DotToken::QuotedIdentifiers(mode_name)) => match mode_name.as_str() {
+                                            mode_name @ ("on" | "off") => Some(mode_name == "on"), _ => None
+                                        }, _ => None,
                                     };
-                                    let literal = match node_spec.remove("LITERAL") {
-                                        Some(DotToken::QuotedIdentifiers(idents)) => idents == SmolStr::new("t"),
-                                        _ => false
+                                    let modifier_on = match modifier_on {
+                                        Some(v) => v,
+                                        None => break Some(Err(SyntaxError::new(format!(
+                                            "Expected modifier_mode=\"on\" or modifier_mode=\"off\" after modifier=\"{idents}\" for node {node_name}"
+                                        )))),
                                     };
-                                    if self.call_ident_regex.is_match(&node_name) {
-                                        let (input_type, modifiers) = match parse_function_options(
-                                            &node_name, node_spec, true
-                                        ) {
-                                            Ok(options) => options,
-                                            Err(err) => break Some(Err(err))
-                                        };
-                                        if literal {
-                                            break Some(Err(SyntaxError::new(format!(
-                                                "call nodes can't be declaread as literal (node {node_name})"
-                                            ))));
-                                        }
-                                        break Some(Ok(CodeUnit::Call {
-                                            node_name: node_name.clone(),
-                                            func_name: SmolStr::new(node_name.split_once('_').unwrap().1),
-                                            inputs: input_type,
-                                            modifiers,
-                                            option_name,
-                                        }));
-                                    } else {
-                                        break Some(Ok(CodeUnit::NodeDef {
-                                            name: node_name,
-                                            option_name,
-                                            literal: false,
-                                        }));
-                                    }
+                                    Some((idents, modifier_on))
                                 },
-                                Err(err) => break Some(Err(err))
+                                _ => None
+                            };
+
+                            let call_modifier_name = match node_spec.remove("CALL_MODIFIER") {
+                                Some(DotToken::QuotedIdentifiers(idents)) => {
+                                    Some(idents)
+                                },
+                                _ => None,
+                            };
+
+                            let affects_call_modifier_name = match node_spec.remove("AFFECTS_CALL_MODIFIER") {
+                                Some(DotToken::QuotedIdentifiers(idents)) => {
+                                    Some(idents)
+                                },
+                                _ => None,
+                            };
+
+                            let sets_value_name = match node_spec.remove("SET_VALUE") {
+                                Some(DotToken::QuotedIdentifiers(idents)) => {
+                                    Some(idents)
+                                },
+                                _ => None,
+                            };
+
+                            let literal = match node_spec.remove("LITERAL") {
+                                Some(DotToken::QuotedIdentifiers(idents)) => idents == SmolStr::new("t"),
+                                _ => false
+                            };
+
+                            let node_common = NodeCommon {
+                                name: node_name.clone(),
+                                type_names,
+                                modifier,
+                                call_modifier_name,
+                                affects_call_modifier_name,
+                                sets_value_name,
+                            };
+
+                            if self.call_ident_regex.is_match(&node_name) {
+                                let (
+                                    input_type, modifiers, _,
+                                ) = return_some_err!(
+                                    parse_function_options(&node_name, node_spec, true)
+                                );
+                                if literal {
+                                    break Some(Err(SyntaxError::new(format!(
+                                        "call nodes can't be declaread as literals (node {node_name})"
+                                    ))));
+                                }
+                                let func_name = SmolStr::new(node_name.split_once('_').unwrap().1);
+                                break Some(Ok(CodeUnit::CallNode {
+                                    node_common,
+                                    func_name,
+                                    inputs: input_type,
+                                    modifiers,
+                                }));
+                            } else {
+                                break Some(Ok(CodeUnit::RegularNode {
+                                    node_common,
+                                    literal,
+                                }));
                             }
                         },
                         Some(DotToken::Arrow) => {
@@ -297,8 +426,8 @@ impl<'a> Iterator for DotTokenizer<'a> {
                     format!("Quoted identifiers are not supported: \"{name}\"")
                 ))),
                 DotToken::CloseDeclaration => {
-                    if self.in_function_definition {
-                        self.in_function_definition = false;
+                    if self.current_function_definition.is_some() {
+                        self.current_function_definition = None;
                         break Some(Ok(CodeUnit::CloseDeclaration))
                     }
                 },
@@ -328,7 +457,7 @@ fn handle_digraph(lex: &mut Lexer<'_, DotToken>) -> Result<(), SyntaxError> {
 }
 
 /// returns None if subgraph is not a function
-fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<CodeUnit>, SyntaxError> {
+fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<FunctionDeclaration>, SyntaxError> {
     match lex.next() {
         Some(DotToken::Identifier(function_name)) => {
             if !function_name.starts_with("def_") {
@@ -349,18 +478,20 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<CodeUn
                                     )
                                 ))
                         } else {
-                            let (input_type, modifiers) = parse_function_options(
+                            let (
+                                input_type, modifiers, _,
+                            ) = parse_function_options(
                                 &node_name,
                                 read_node_specification(lex, &node_name)?,
                                 false,
                             )?;
                             let exit_node_name = parse_function_exit_node_name(lex, &node_name)?;
-                            Ok(Some(CodeUnit::Function(Function {
+                            Ok(Some(FunctionDeclaration {
                                 source_node_name: node_name,
                                 exit_node_name,
                                 input_type,
                                 modifiers,
-                            })))
+                            }))
                         }
                     }
                     _ => Err(SyntaxError::new(format!("expected source node definition"))),
@@ -375,46 +506,22 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<CodeUn
     }
 }
 
-/// parse funciton options, either in function declaration or in function call
+/// parse function options, either in function declaration or in function call
 fn parse_function_options(
     node_name: &SmolStr,
     mut node_spec: HashMap<SmolStr, DotToken>,
-    call: bool,
-) -> Result<(FunctionInputsType, Option<Vec<SmolStr>>), SyntaxError> {
+    is_call_node: bool,
+) -> Result<(FunctionInputsType, Option<Vec<SmolStr>>, Option<Vec<SubgraphType>>), SyntaxError> {
     let mut input_type = FunctionInputsType::None;
     let mut modifiers = Option::<Vec<SmolStr>>::None;
-    if let Some(token) = node_spec.remove("TYPE") {
-        if let DotToken::QuotedIdentifiers(idents) = token {
-            if let Some(special_type) = FunctionInputsType::try_extract_special_type(&idents) {
-                input_type = special_type;
-            } else {
-                let idents = FunctionInputsType::get_identifier_names(idents);
-                if call {
-                    match idents.len() {
-                        1 => input_type = FunctionInputsType::TypeName(idents[0].clone()),
-                        _ => {
-                            return Err(SyntaxError::new(format!(
-                                "call..._{node_name}[TYPE=... takes only 1 parameter"
-                            )))
-                        }
-                    }
-                } else {
-                    input_type = FunctionInputsType::TypeNameVariants(idents);
-                }
-            }
-        } else {
-            return Err(SyntaxError::new(format!(
-                "{node_name}[TYPE=... should take unbracketed form: TYPE=\".., \""
-            )));
-        }
-    }
+    let mut output_types = Option::<Vec<SubgraphType>>::None;
     if let Some(token) = node_spec.remove("TYPES") {
         if let DotToken::QuotedIdentifiersWithBrackets(idents) = token {
             if let Some(special_type) = FunctionInputsType::try_extract_special_type(&idents) {
                 input_type = special_type;
             } else {
-                input_type = FunctionInputsType::TypeNameList(
-                    FunctionInputsType::get_identifier_names(idents),
+                input_type = FunctionInputsType::TypeListWithFields(
+                    FunctionInputsType::parse_types(idents)?,
                 );
             }
         } else {
@@ -423,12 +530,10 @@ fn parse_function_options(
             )));
         }
     }
-    if let Some(token) = node_spec.remove("MOD") {
+    if let Some(token) = node_spec.remove("MODS") {
         if let DotToken::QuotedIdentifiersWithBrackets(value) = token {
-            let mods = FunctionInputsType::get_identifier_names(value)
-                .iter()
+            let mods = get_identifier_names(value).into_iter()
                 .filter(|el| el.len() > 0)
-                .map(|el| el.to_owned())
                 .collect::<Vec<_>>();
 
             if mods.len() > 0 {
@@ -436,11 +541,34 @@ fn parse_function_options(
             }
         } else {
             return Err(SyntaxError::new(format!(
-                "{node_name}[MOD=... should take bracketed form: MOD=\"[.., ]\""
+                "{node_name}[MODS=.. should take bracketed form: MODS=\"[.., ]\""
             )));
         }
     }
-    Ok((input_type, modifiers))
+    if let Some(token) = node_spec.remove("OUT_TYPES") {
+        if let DotToken::QuotedIdentifiersWithBrackets(value) = token {
+            let out_types = get_identifier_names(value).into_iter()
+                .filter(|el| el.len() > 0)
+                .map(|el| SubgraphType::from_type_name(&el))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            if out_types.len() > 0 {
+                output_types = Some(out_types);
+            }
+        } else {
+            return Err(SyntaxError::new(format!(
+                "{node_name}[OUT_TYPES=... should take bracketed form: OUT_TYPES=\"[.., ]\""
+            )));
+        }
+    }
+    if is_call_node {
+        if output_types.is_some() {
+            return Err(SyntaxError::new(format!(
+                "call nodes can't have a OUT_TYPES option, which is reserved for function definitions (node {node_name})"
+            )));
+        }
+    }
+    Ok((input_type, modifiers, output_types))
 }
 
 /// expects and parses an exit node name after function declaration

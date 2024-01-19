@@ -1,0 +1,123 @@
+digraph G {
+    layout="dot"
+    // nodesep="0.2"
+    // ranksep="0.25"
+    // subgraph def_number {
+    //     number [shape=parallelogram, label="number (types: [integer, numeric])", style=filled, color=lightblue]
+    //     EXIT_number [label="EXIT number", shape=rectangle, color=gray, style=filled]
+
+    //     number_literal[label="Literal Value"]
+    //     number -> number_literal
+    //     number_literal -> EXIT_number
+
+    //     BinaryNumberOp[label="Binary operation"]
+    //     call47_types [shape=rectangle, label="number | types=types", style=filled, color=royalblue]
+    //     number -> BinaryNumberOp
+    //     call48_types [shape=rectangle, label="number | types=types", style=filled, color=royalblue]
+    //     BinaryNumberOp -> call48_types
+    //     binary_number_plus [label="+"]
+    //     call48_types -> binary_number_plus
+    //     binary_number_plus -> call47_types
+    //     binary_number_minus [label="-"]
+    //     call48_types -> binary_number_minus
+    //     binary_number_minus -> call47_types
+    //     binary_number_mul [label="*"]
+    //     call48_types -> binary_number_mul
+    //     binary_number_mul -> call47_types
+    //     binary_number_div [label="/"]
+    //     call48_types -> binary_number_div
+    //     binary_number_div -> call47_types
+    //     call47_types -> EXIT_number
+
+    //     number_string_position[label="POSITION | type=integer"]
+    //     number -> number_string_position
+    //     call2_types [shape=rectangle, label="text", style=filled, color=pink]
+    //     number_string_position -> call2_types
+    //     string_position_in [label="in"]
+    //     call2_types -> string_position_in
+    //     call3_types [shape=rectangle, label="text", style=filled, color=pink]
+    //     string_position_in -> call3_types
+    //     call3_types -> EXIT_number
+    // }
+
+    // subgraph def_SELECT {
+    //     SELECT [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[single column]", label="SELECT\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[single column]", shape=rectangle, style=filled, color=bisque]
+    //     EXIT_SELECT [label="EXIT SELECT", shape=rectangle]
+
+    //     SELECT_list_multiple_values[label="Multiple values\n'single column' -> OFF", modifier="single column", modifier_mode="off"]
+
+    //     call54_types [label="COLUMN types=types", TYPES="[...]", shape=rectangle, style=filled, color=chartreuse2]
+    //     SELECT -> call54_types
+
+    //     call54_types -> SELECT_list_multiple_values
+    //     call54_types -> EXIT_SELECT
+    //     SELECT_list_multiple_values -> call54_types
+    // }
+
+
+    // subgraph def_Query {
+    //     Query [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[single column, single row]", label="Query", shape=octagon, style=filled, color=green]
+    //     EXIT_Query [label="EXIT Query"]
+
+    //     call0_FROM [label="FROM", shape=rectangle, color=cornflowerblue, style=filled]
+    //     Query -> call0_FROM
+
+    //     call0_WHERE [label="WHERE", shape=rectangle, style=filled, color=darkgoldenrod1]
+    //     call0_FROM -> call0_WHERE
+
+    //     call0_SELECT [label="SELECT", TYPES="[...]", MODS="[?single column]", shape=rectangle, style=filled, color=bisque]
+    //     call0_WHERE -> call0_SELECT
+    //     call0_FROM -> call0_SELECT
+
+    //     // call0_group_by [label="GROUP BY Statement", TYPES="[known]", shape=rectangle, style=filled, color=gray]
+    //     // call0_WHERE -> call0_group_by
+    //     // call0_group_by -> call0_SELECT
+
+    //     // call0_having [label="HAVING", TYPES="[known]", MODS="[]", shape=rectangle, style=filled, color=mediumvioletred]
+    //     // call0_SELECT -> call0_having
+    //     // call0_having -> EXIT_Query
+
+    //     call0_LIMIT [label="LIMIT", MODS="[?single row]", shape=rectangle, style=filled, color=brown]
+    //     call0_SELECT -> call0_LIMIT
+    //     call0_SELECT -> EXIT_Query
+    //     call0_LIMIT -> EXIT_Query
+    // }
+
+    // subgraph def_FROM {
+    //     FROM [shape=rectangle, color=cornflowerblue, style=filled]
+    //     EXIT_FROM [label="EXIT FROM", shape=rectangle]
+
+    //     FROM_multiple_relations [label="Multiple Relations"]
+
+    //     Table []
+    //     FROM -> Table
+    //     Table -> FROM_multiple_relations
+    //     FROM_multiple_relations -> Table
+
+    //     call0_Query [label="Query", shape=rectangle, TYPES="[any]", MODS="[]", style=filled, color=green]
+    //     FROM -> call0_Query
+    //     call0_Query -> FROM_multiple_relations
+    //     FROM_multiple_relations -> call0_Query
+
+    //     FROM_multiple_relations -> EXIT_FROM
+    // }
+
+    subgraph pruning {
+        o[color=gray, label=""]
+
+        o -> a [style=dashed, color=gray]
+
+        a [label="3"]
+        b [label="+"]
+        c [label="'a'"]
+        d [label="id: int"]
+
+        a -> b -> c
+        b -> d
+
+        c -> e [style=dashed, color=gray]
+        d -> e [style=dashed, color=gray]
+
+        e[color=gray, label=""]
+    }
+}

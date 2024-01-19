@@ -1,0 +1,72 @@
+[main]
+# Running mode. Either "test_ast_to_path", "generate", "train"
+mode="generate"
+# number of queries to generate
+num_generate=20
+# count the 2vl-3vl equivalent queries
+count_equivalence=false
+# measure average query generation time
+measure_generation_time=false
+# assert parcing the printed AST gives the
+# same result (checks validity of AST usage)
+assert_parcing_equivalence=false
+# (TODO): check the queries run without errors on the schema
+assert_runs_on_schema=false
+# Pring how many queries were already generated
+print_progress=false
+
+[model]
+# which model to use. Can be: "subgraph", "full_function_context"
+model_name="subgraph"
+# whether to use the stacked version of the model
+stacked_version=true
+# whether to use pretrained model weights
+# TODO: apply the same logic as in save_dot_file?
+load_weights=true
+# where to load the weights from
+# load_weights_from="weights/fullcontext/unstacked/untrained_db_2_performance_graph_100K.mw"
+# load_weights_from="weights/fullcontext/stacked/untrained_db_2_performance_graph_100K.mw"
+# load_weights_from="weights/fullcontext/stacked/untrained_db.mw"
+load_weights_from="weights/subgraph/stacked/untrained_db_2_performance_graph_100K.mw"
+# where to save a dot file with graph representation.
+# Type save_dot_file=false to turn off
+# save_dot_file="weights_in_dot/subgraph/untrained_db_2_performance_graph_100K.dot"
+save_dot_file=false
+
+[ast_to_path_testing]
+# schema for the testing queries generation
+testing_schema="schema/tpc-h_tables.sql"
+# number of tests
+n_tests=10000
+
+[training]
+# path to a file with all the training queries separated by ";\n"
+# training_db_path="training_dbs/untrained_db.sql"
+training_db_path="training_dbs/untrained_db_2_performance_graph_100K.sql"
+# schema of the training queries
+training_schema="schema/tpc-h_tables.sql"
+# where to save model weights to
+save_weights_to="weights/fullcontext/unstacked/untrained_db_2_performance_graph_100K.mw"
+
+[query_generator]
+# Whether to use the predictor model for query generation
+use_model=false
+# print the queries in "generate" mode
+print_queries=false
+# print the table schema after parcing
+print_schema=false
+# Path to the file with the database schema
+table_schema_path="schema/tpc-h_tables.sql"
+# Which substitute model to use as a state selector. Can be: "anticall", "markov".
+# Assigns probabilities when the model fails to do so or is absent
+substitute_model="anticall"
+# aggregate functions settings
+aggregate_functions_distribution_map_file="aggregate_functions_distribution_map.json"
+
+[state_generator]
+# Path to graph source for a markov chain
+# graph_file_path="graph.dot"
+graph_file_path="performance_untrained_graph.dot"
+
+[dynmod_anticall]
+# TODO: anticall dynamic model settings

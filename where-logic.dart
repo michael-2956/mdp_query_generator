@@ -1,8 +1,8 @@
-ANY = [column, null, query(single value), numeric, boolean, array, list expr, string]
+ANY = [column, null, query(single value), numeric, boolean, list expr, string]
 ANY_STRING = [column, null, query(single value), string]
 ANY_BOOLEAN = [column, null, query(single value), boolean]
 ANY_NUMERIC = [column, null, query(single value), numeric]
-ANY_BETWEEN = ANY - [array, boolean]
+ANY_BETWEEN = ANY - [boolean]
 ANY_IN_SUBQUERY = ANY - [list expr]
 
 2vl:
@@ -12,7 +12,7 @@ IsNull, IsDistinctFrom, Exists
 InList, InSubquery, Between, BinaryComp, BinaryStringLike, BinaryBooleanOp, UnaryNotOp
 
 numeric:
-BinaryNumericOp, UnaryNumericOp, Position
+BinaryNumberOp, UnaryNumberOp, Position
 
 string:
 BinaryStringConcat, Trim, Substring
@@ -40,10 +40,10 @@ BinaryOp (And, Or, Xor) (ANY_BOOLEAN ||| SAME TYPE OR NULL) 2
 
 BinaryOp (BitwiseOr, BitwiseAnd, BitwiseXor) (ANY_NUMERIC ||| SAME TYPE OR NULL) 2
 
-AnyOp 1 (ANY ||| <, =, <=, <> ||| array / subquery (SAME TYPE)) (only the right side of BinaryOp)
-AnyOp 1 (list expr (ANY) ||| <, =, <=, <> ||| array / subquery (SAME TYPE)) (only the right side of BinaryOp)
-AllOp 1 (ANY ||| <, =, <=, <> ||| array / subquery (SAME TYPE)) (only the right side of BinaryOp)
-AllOp 1 (list expr (ANY) ||| <, =, <=, <> ||| array / subquery (SAME TYPE)) (only the right side of BinaryOp)
+AnyOp 1 (ANY ||| <, =, <=, <> ||| subquery (SAME TYPE)) (only the right side of BinaryOp)
+AnyOp 1 (list expr (ANY) ||| <, =, <=, <> ||| subquery (SAME TYPE)) (only the right side of BinaryOp)
+AllOp 1 (ANY ||| <, =, <=, <> ||| subquery (SAME TYPE)) (only the right side of BinaryOp)
+AllOp 1 (list expr (ANY) ||| <, =, <=, <> ||| subquery (SAME TYPE)) (only the right side of BinaryOp)
 
 UnaryOp (Plus, Minus, PGBitwiseNot, PGSquareRoot, PGCubeRoot, PGPostfixFactorial, PGPrefixFactorial, PGAbs) (ANY_NUMERIC) 1
 
@@ -68,4 +68,3 @@ Nested (ANY) 1
 // EXTRACT MONTH FROM … (TODO)
 // IS FALSE / IS TRUE -> =FALSE, =TRUE
 // Add COLLATE?
-// Add array index?
