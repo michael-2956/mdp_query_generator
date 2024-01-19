@@ -72,7 +72,7 @@ aggregate_functions_distribution_map_file="aggregate_functions_distribution_map.
 
 [state_generator]
 # Path to graph source for a markov chain
-# graph_file_path="graph_with_select.dot"
+# graph_file_path="graph.dot"
 graph_file_path="performance_untrained_graph.dot"
 
 [dynmod_anticall]

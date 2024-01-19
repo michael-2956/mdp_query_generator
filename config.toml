@@ -57,7 +57,7 @@ save_weights_to="weights/fullcontext/unstacked/untrained_db_2_performance_graph_
 
 [query_generator]
 # Whether to use the predictor model for query generation
-use_model=true
+use_model=false
 # print the queries in "generate" mode
 print_queries=false
 # print the table schema after parcing
@@ -72,7 +72,7 @@ aggregate_functions_distribution_map_file="aggregate_functions_distribution_map.
 
 [state_generator]
 # Path to graph source for a markov chain
-# graph_file_path="graph_with_select.dot"
+# graph_file_path="graph.dot"
 graph_file_path="performance_untrained_graph.dot"
 
 [dynmod_anticall]

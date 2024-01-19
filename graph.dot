@@ -375,13 +375,13 @@ digraph G {
 
         number_literal[label="literal", literal="t"]
         number -> number_literal
-        number_literal_integer[label="random integer\nTYPE_NAME=integer?", TYPE_NAME="integer", literal="t"]
+        number_literal_integer[label="random integer\ntn(i)", TYPE_NAME="integer", literal="t"]
         number_literal -> number_literal_integer
         number_literal_integer -> EXIT_number
-        number_literal_numeric[label="random numeric\nTYPE_NAME=numeric?", TYPE_NAME="numeric", literal="t"]
+        number_literal_numeric[label="random numeric\ntn(num)", TYPE_NAME="numeric", literal="t"]
         number_literal -> number_literal_numeric
         number_literal_numeric -> EXIT_number
-        number_literal_bigint[label="random bigint\nTYPE_NAME=bigint?", TYPE_NAME="bigint", literal="t"]
+        number_literal_bigint[label="random bigint\ntn(bi)", TYPE_NAME="bigint", literal="t"]
         number_literal -> number_literal_bigint
         number_literal_bigint -> EXIT_number
 
