@@ -371,7 +371,7 @@ digraph G {
     }
 
     subgraph def_number {
-        number [shape=rectangle, label="number\ntypes=[integer, numeric]\nmods: [no column spec]", TYPES="[integer, numeric, bigint]", MODS="[no column spec]", style=filled, color=chocolate]
+        number [shape=rectangle, label="number\ntypes=[integer, numeric, bigint]\nmods: [no column spec]", TYPES="[integer, numeric, bigint]", MODS="[no column spec]", style=filled, color=chocolate]
         EXIT_number [label="EXIT number"]
 
         number_literal[label="literal", literal="t"]

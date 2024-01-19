@@ -9,7 +9,8 @@ use super::markov_chain::NodeParams;
 
 pub trait StateChooser: Debug + Clone {
     fn new() -> Self where Self: Sized;
-    fn choose_destination(&mut self, rng: &mut ChaCha8Rng, outgoing_states: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams>;
+    /// choose destination adhering to the unnormalized log-probabilities
+    fn choose_destination(&mut self, rng: &mut ChaCha8Rng, outgoing_states: Vec<(f64, NodeParams)>) -> Option<NodeParams>;
 }
 
 #[derive(Debug, Clone)]
@@ -20,14 +21,11 @@ impl StateChooser for ProbabilisticStateChooser {
         Self { }
     }
 
-    fn choose_destination(&mut self, rng: &mut ChaCha8Rng, outgoing_states: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams> {
+    fn choose_destination(&mut self, rng: &mut ChaCha8Rng, outgoing_states: Vec<(f64, NodeParams)>) -> Option<NodeParams> {
         let cur_node_outgoing: Vec<(f64, NodeParams)> = {
-            let cur_node_outgoing = outgoing_states.iter().map(|el| {
-                (if el.0 { f64::NEG_INFINITY } else { el.1 }, el.2.clone())
-            }).collect::<Vec<_>>();
-            // Rebalancing on the current level only as a temporary work-around
-            let max_level: f64 = cur_node_outgoing.iter().map(|el| { el.0 }).ln_sum_exp();
-            cur_node_outgoing.into_iter().map(|el| { (f64::exp(el.0 - max_level), el.1) }).collect()
+            // Balance the weights so they make up a probability distribution
+            let w_sum: f64 = outgoing_states.iter().map(|el| { el.0 }).ln_sum_exp();
+            outgoing_states.into_iter().map(|el| { (f64::exp(el.0 - w_sum), el.1) }).collect()
         };
         let level: f64 = rng.gen::<f64>();
         let mut cumulative_prob = 0f64;
@@ -51,10 +49,10 @@ impl StateChooser for MaxProbStateChooser {
         Self { }
     }
 
-    fn choose_destination(&mut self, _rng: &mut ChaCha8Rng, outgoing_states: Vec<(bool, f64, NodeParams)>) -> Option<NodeParams> {
+    fn choose_destination(&mut self, _rng: &mut ChaCha8Rng, outgoing_states: Vec<(f64, NodeParams)>) -> Option<NodeParams> {
         outgoing_states.iter()
-            .max_by(|x, y|
-                x.1.partial_cmp(&y.1).unwrap()
-            ).map(|(.., node)| node.clone())
+            .max_by(|(x_w, _), (y_w, _)|
+                x_w.partial_cmp(y_w).unwrap()
+            ).map(|(_, node)| node.clone())
     }
 }

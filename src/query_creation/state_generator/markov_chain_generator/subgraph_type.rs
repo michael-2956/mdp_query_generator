@@ -1,12 +1,13 @@
 use std::fmt::Display;
 
+use serde::{Serialize, Deserialize};
 use sqlparser::ast::{DataType, ExactNumberInfo};
 
 use crate::unwrap_variant;
 
 use super::error::SyntaxError;
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum SubgraphType {
     /// This type is used if the type is yet to be determined
     Undetermined,

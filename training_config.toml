@@ -1,33 +1,33 @@
 [main]
 # Running mode. Either "test_ast_to_path", "generate", "train"
-mode="generate"
+mode="train"
 # number of queries to generate
 num_generate=20
 # count the 2vl-3vl equivalent queries
-count_equivalence=false
+count_equivalence=true
 # measure average query generation time
-measure_generation_time=false
+measure_generation_time=true
 # assert parcing the printed AST gives the
 # same result (checks validity of AST usage)
-assert_parcing_equivalence=false
+assert_parcing_equivalence=true
 # (TODO): check the queries run without errors on the schema
 assert_runs_on_schema=false
 # Pring how many queries were already generated
-print_progress=false
+print_progress=true
 
 [model]
 # which model to use. Can be: "subgraph", "full_function_context"
-model_name="subgraph"
-# whether to use the stacked version of the model
-stacked_version=true
+model_name="depthwize_full_function_context"
 # whether to use pretrained model weights
 # TODO: apply the same logic as in save_dot_file?
-load_weights=true
+load_weights=false
 # where to load the weights from
-# load_weights_from="weights/fullcontext/unstacked/untrained_db_2_performance_graph_100K.mw"
 # load_weights_from="weights/fullcontext/stacked/untrained_db_2_performance_graph_100K.mw"
 # load_weights_from="weights/fullcontext/stacked/untrained_db.mw"
-load_weights_from="weights/subgraph/stacked/untrained_db_2_performance_graph_100K.mw"
+# load_weights_from="weights/subgraph/unstacked/untrained_db_2_performance_graph_100K.mw"
+load_weights_from="weights/depthwize_full_function_context/unstacked/untrained_db_2_performance_graph_100K.mw"
+# whether to use the stacked version of the model
+stacked_version=false
 # where to save a dot file with graph representation.
 # Type save_dot_file=false to turn off
 # save_dot_file="weights_in_dot/subgraph/untrained_db_2_performance_graph_100K.dot"
@@ -39,18 +39,25 @@ testing_schema="schema/tpc-h_tables.sql"
 # number of tests
 n_tests=10000
 
+
 [training]
 # path to a file with all the training queries separated by ";\n"
 # training_db_path="training_dbs/untrained_db.sql"
 training_db_path="training_dbs/untrained_db_2_performance_graph_100K.sql"
+
 # schema of the training queries
 training_schema="schema/tpc-h_tables.sql"
+
 # where to save model weights to
-save_weights_to="weights/fullcontext/unstacked/untrained_db_2_performance_graph_100K.mw"
+# save_weights_to="weights/fullcontext/stacked/untrained_db_2_performance_graph_100K.mw"
+# save_weights_to="weights/fullcontext/stacked/untrained_db.mw"
+# save_weights_to="weights/subgraph/unstacked/untrained_db_2_performance_graph_100K.mw"
+save_weights_to="weights/depthwize_full_function_context/unstacked/untrained_db_2_performance_graph_100K.mw"
+
 
 [query_generator]
 # Whether to use the predictor model for query generation
-use_model=false
+use_model=true
 # print the queries in "generate" mode
 print_queries=false
 # print the table schema after parcing
@@ -69,4 +76,4 @@ aggregate_functions_distribution_map_file="aggregate_functions_distribution_map.
 graph_file_path="performance_untrained_graph.dot"
 
 [dynmod_anticall]
-# TODO: anticall dynamic model settings
+# TODO: anticall substitute model settings

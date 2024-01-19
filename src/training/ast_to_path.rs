@@ -5,7 +5,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{Query, ObjectName, Expr, SetExpr, SelectItem, Value, BinaryOperator, UnaryOperator, Ident, DataType, TrimWhereField, TableWithJoins, FunctionArg,};
 
-use crate::{query_creation::{query_generator::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{ValueSetterValue, TypesTypeValue, WildcardRelationsValue}, Unnested, QueryGenerator, value_choosers::{RandomValueChooser, DeterministicValueChooser}}, state_generator::{subgraph_type::SubgraphType, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::CallModifiers, DynClone, ChainStateMemory}, dynamic_models::{DeterministicModel, DynamicModel, PathModel, AntiCallModel}, CallTypes}}, config::{TomlReadable, Config, MainConfig}, unwrap_variant, unwrap_variant_or_else};
+use crate::{query_creation::{query_generator::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{ValueSetterValue, TypesTypeValue, WildcardRelationsValue}, Unnested, QueryGenerator, value_choosers::{RandomValueChooser, DeterministicValueChooser}}, state_generator::{subgraph_type::SubgraphType, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::{CallModifiers, MarkovChain}, DynClone, ChainStateMemory}, substitute_models::{DeterministicModel, SubstituteModel, PathModel, AntiCallModel}, CallTypes}}, config::{TomlReadable, Config, MainConfig}, unwrap_variant, unwrap_variant_or_else};
 
 pub struct AST2PathTestingConfig {
     pub schema: PathBuf,
@@ -54,10 +54,10 @@ impl TestAST2Path {
     pub fn test(&mut self) -> Result<(), ConvertionError> {
         for i in 0..self.config.n_tests {
             // println!("\n\n\n ================== Beggining GENERATION ================== \n\n\n");
-            let query = Box::new(self.random_query_generator.next().unwrap());
+            let query = Box::new(self.random_query_generator.generate());
             // println!("\n\n\nQuery: {query}");
             let path = self.path_generator.get_query_path(&query)?;
-            let generated_query = self.path_query_generator.generate_with_dynamic_model_and_value_chooser(
+            let generated_query = self.path_query_generator.generate_with_substitute_model_and_value_chooser(
                 Box::new(PathModel::from_path_nodes(&path)),
                 Box::new(DeterministicValueChooser::from_path_nodes(&path))
             );
@@ -106,6 +106,7 @@ pub enum PathNode {
     IntegerValue(String),
     BigIntValue(String),
     QualifiedWildcardSelectedRelation(Ident),
+    SelectAlias(Ident),
 }
 
 pub struct PathGenerator {
@@ -129,13 +130,22 @@ impl PathGenerator {
         })
     }
 
-    pub fn get_query_path(&mut self, query: &Box<Query>) -> Result<Vec<PathNode>, ConvertionError> {
+    fn process_query(&mut self, query: &Box<Query>) -> Result<(), ConvertionError> {
         self.handle_query(query)?;
         // reset the generator
         if let Some(state) = self.next_state_opt().unwrap() {
             panic!("Couldn't reset state generator: Received {state}");
         }
+        Ok(())
+    }
+
+    pub fn get_query_path(&mut self, query: &Box<Query>) -> Result<Vec<PathNode>, ConvertionError> {
+        self.process_query(query)?;
         Ok(std::mem::replace(&mut self.current_path, vec![]))
+    }
+
+    pub fn markov_chain_ref(&self) -> &MarkovChain {
+        self.state_generator.markov_chain_ref()
     }
 }
 
@@ -182,8 +192,8 @@ impl PathGenerator {
     }
 
     fn next_state_opt(&mut self) -> Result<Option<SmolStr>, ConvertionError> {
-        match self.state_generator.next(
-            &mut self.rng, &self.clause_context, &mut self.state_selector
+        match self.state_generator.next_node_name(
+            &mut self.rng, &self.clause_context, &mut self.state_selector, None
         ) {
             Ok(state) => Ok(state),
             Err(err) => Err(ConvertionError::new(format!("{err}"))),
@@ -356,10 +366,9 @@ impl PathGenerator {
                 },
                 SelectItem::ExprWithAlias { expr, alias } => {
                     self.try_push_states(&["SELECT_expr_with_alias", "call54_types"])?;
-                    column_idents_and_graph_types.push((
-                        Some(alias.clone()),
-                        self.handle_types(expr, None, None)?
-                    ));
+                    let expr = self.handle_types(expr, None, None)?;
+                    self.push_node(PathNode::SelectAlias(alias.clone()));  // the order is important
+                    column_idents_and_graph_types.push((Some(alias.clone()), expr));
                 },
                 SelectItem::QualifiedWildcard(alias, ..) => {
                     self.try_push_states(&["SELECT_tables_eligible_for_wildcard", "SELECT_qualified_wildcard"])?;

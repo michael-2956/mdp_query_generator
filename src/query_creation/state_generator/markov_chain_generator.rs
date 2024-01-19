@@ -1,5 +1,5 @@
 pub mod state_choosers;
-pub mod dynamic_models;
+pub mod substitute_models;
 pub mod markov_chain;
 pub mod subgraph_type;
 pub mod error;
@@ -8,7 +8,7 @@ mod dot_parser;
 use std::{path::PathBuf, collections::{HashMap, HashSet, VecDeque, BTreeMap}, sync::{Arc, Mutex}, error::Error, fmt};
 
 use core::fmt::Debug;
-use rand::{seq::SliceRandom, SeedableRng};
+use rand::seq::SliceRandom;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use take_until::TakeUntilExt;
@@ -22,7 +22,7 @@ use self::{
 };
 
 use state_choosers::StateChooser;
-use dynamic_models::{MarkovModel, DynamicModel};
+use substitute_models::SubstituteModel;
 
 pub use self::markov_chain::CallTypes;
 
@@ -52,6 +52,9 @@ pub struct MarkovChainGenerator<StC: StateChooser> {
     markov_chain: MarkovChain,
     call_stack: Vec<StackFrame>,
     pending_call: Option<CallParams>,
+    /// needed if we want to know the function that we just received
+    /// an exit node from
+    popped_stack_frame: Option<StackFrame>,
     state_chooser: Box<StC>,
     value_setters: HashMap<SmolStr, Box<dyn ValueSetter>>,
     stateless_call_modifiers: HashMap<SmolStr, Box<dyn StatelessCallModifier>>,
@@ -76,7 +79,7 @@ pub struct StackFrame {
     /// current function arguments (call params)
     pub function_context: FunctionContext,
     /// various call modifier info
-    call_modifier_info: CallModifierInfo,
+    pub call_modifier_info: CallModifierInfo,
     /// Cached version of all the dead ends
     /// in the current function
     dead_end_info: Arc<Mutex<HashMap<SmolStr, bool>>>,
@@ -210,7 +213,7 @@ impl FunctionModifierInfo {
         clause_context: &ClauseContext,
         value_setters: &HashMap<SmolStr, Box<dyn ValueSetter>>,
         stateless_call_modifiers: &HashMap<SmolStr, Box<dyn StatelessCallModifier>>,
-    ) -> (BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>, Vec<(SmolStr, Option<bool>)>) {
+    ) -> (BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>, BTreeMap<SmolStr, bool>) {
         let stateless_call_modifiers: HashMap<_, _> = stateless_call_modifiers.iter().filter(
             |(modifier_name, _)| self.stateless_modifier_names.contains(*modifier_name)
         ).collect();
@@ -228,14 +231,14 @@ impl FunctionModifierInfo {
 
         let valueless_modifier_node_states = stateless_call_modifiers.iter().filter(
             |(_, x)| x.get_associated_value_name().is_none()
-        ).flat_map(|(mod_name, x)| (
+        ).flat_map(|(mod_name, modifier)| (
             self.modified_nodes_map.get(*mod_name).unwrap().iter().map(
                 |node| (
                     node.node_common.name.clone(),
-                    Some(x.run(
+                    modifier.run(
                         &function_context.with_node(node.clone()),
                         None
-                    ))
+                    )
                 )
             ).collect::<Vec<_>>().into_iter()
         )).collect();
@@ -334,13 +337,15 @@ impl FunctionContext {
 /// This structure stores all the info about
 /// call modifiers in the current function
 #[derive(Debug)]
-struct CallModifierInfo {
+pub struct CallModifierInfo {
     call_modifier_states: CallModifierStates,
     /// the call modifier inner state memory
     values: HashMap<SmolStr, ValueSetterValue>,
     /// call modifier configuration: How each STATELESS call modifier
     /// affector node affects every node with a call modifier (STATELESS)
     stateless_node_relations: BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>,
+    /// this is kept for the models so that we can retrieve the entire context
+    valueless_modifier_node_states: BTreeMap<SmolStr, bool>,
 }
 
 impl CallModifierInfo {
@@ -348,13 +353,27 @@ impl CallModifierInfo {
         function_modifier_info: &FunctionModifierInfo,
         stateful_call_modifier_creators: &HashMap<SmolStr, StatefulCallModifierCreator>,
         stateless_node_relations: BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>,
-        valueless_modifier_node_states: Vec<(SmolStr, Option<bool>)>,
+        valueless_modifier_node_states: BTreeMap<SmolStr, bool>,
     ) -> Self {
         Self {
-            call_modifier_states: CallModifierStates::new(function_modifier_info, stateful_call_modifier_creators, valueless_modifier_node_states),
+            call_modifier_states: CallModifierStates::new(
+                function_modifier_info, stateful_call_modifier_creators, valueless_modifier_node_states.clone()
+            ),
             values: HashMap::new(),
-            stateless_node_relations
+            stateless_node_relations,
+            valueless_modifier_node_states,
         }
+    }
+
+    /// useful for the models to get info about the
+    /// function's call modifier context
+    pub fn get_context(&self) -> (
+        BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>, BTreeMap<SmolStr, bool>,
+    ) {
+        (
+            self.stateless_node_relations.clone(),
+            self.valueless_modifier_node_states.clone(),
+        )
     }
 
     fn update_modifier_states(
@@ -414,6 +433,7 @@ impl DynClone for CallModifierInfo {
             call_modifier_states: self.call_modifier_states.dyn_clone(),
             values: self.values.clone(),
             stateless_node_relations: self.stateless_node_relations.clone(),
+            valueless_modifier_node_states: self.valueless_modifier_node_states.clone(),
         }
     }
 }
@@ -449,13 +469,15 @@ impl CallModifierStates {
     fn new(
         function_modifier_info: &FunctionModifierInfo,
         stateful_call_modifier_creators: &HashMap<SmolStr, StatefulCallModifierCreator>,
-        valueless_modifier_node_states: Vec<(SmolStr, Option<bool>)>,
+        valueless_modifier_node_states: BTreeMap<SmolStr, bool>,
     ) -> Self {
         let mut _self = Self {
             affected_node_states: function_modifier_info.get_initial_affected_node_states(),
             stateful_modifiers: function_modifier_info.create_stateful_modifiers(stateful_call_modifier_creators)
         };
-        _self.affected_node_states.extend(valueless_modifier_node_states.into_iter());
+        _self.affected_node_states.extend(valueless_modifier_node_states.into_iter().map(
+            |(node_name, state)| (node_name, Some(state))
+        ));
         _self
     }
 
@@ -501,6 +523,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             markov_chain: chain,
             call_stack: vec![],
             pending_call: None,
+            popped_stack_frame: None,
             state_chooser: Box::new(StC::new()),
             value_setters: HashMap::new(),
             stateless_call_modifiers: HashMap::new(),
@@ -527,6 +550,18 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         Ok(_self)
     }
 
+    pub fn get_last_popped_stack_frame_ref(&self) -> Option<&StackFrame> {
+        self.popped_stack_frame.as_ref()
+    }
+
+    pub fn markov_chain_ref(&self) -> &MarkovChain {
+        &self.markov_chain
+    }
+
+    pub fn call_stack_ref(&self) -> &Vec<StackFrame> {
+        &self.call_stack
+    }
+
     fn register_value_setter<T: ValueSetter + 'static>(&mut self, value_setter: T) {
         self.value_setters.insert(value_setter.get_value_name(), Box::new(value_setter));
     }
@@ -535,10 +570,29 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         self.stateless_call_modifiers.insert(modifier.get_name(), Box::new(modifier));
     }
 
+    /// Do not use.\
+    /// Unstable feature, left so that we can re-implement it\
+    /// once and if it is actually ever needed
     fn _register_stateful_call_modifier<T: StatefulCallModifier + 'static>(&mut self) {
         self.stateful_call_modifier_creators.insert(T::new().get_name(), StatefulCallModifierCreator(
             T::new
         ));
+        todo!("
+            Unstable feature, left so that we can re-implement it once and if
+            it is actually ever needed.
+            This may work fine, but has not been tested to do so in a while
+
+            The problem is that the models won't be able to get the full function
+            characteristic with call modifiers in place, since they can be called
+            unlimited number of times, unlike stateless modifiers that depend on
+            a limited number of value setters.
+
+            This can be solved if we add 'characteristic' that the stateful modifiers
+            would produce for themselves, so that models would be able to differentiate
+            between different contexts.
+            
+            Until then, this function should not be used
+        ");
     }
 
     fn fill_function_modifier_info(&mut self) {
@@ -654,7 +708,10 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         let function_modifier_info = self.function_modifier_info.get(&call_params.func_name).unwrap();
         let function_context = FunctionContext::new(call_params);
 
-        let (stateless_node_relations, valueless_modifier_node_states) = function_modifier_info.get_stateless_node_relations(
+        let (
+            stateless_node_relations,
+            valueless_modifier_node_states
+        ) = function_modifier_info.get_stateless_node_relations(
             &function_context, clause_context, &self.value_setters, &self.stateless_call_modifiers
         );
 
@@ -684,34 +741,66 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     }
 
     /// choose a new node among the available destibation nodes with the fynamic model
-    fn update_current_node(&mut self, rng: &mut ChaCha8Rng, clause_context: &ClauseContext, dynamic_model: &mut (impl DynamicModel + ?Sized)) -> Result<(), StateGenerationError> {
-        dynamic_model.notify_call_stack_length(self.call_stack.len());
+    fn update_current_node(
+            &mut self,
+            rng: &mut ChaCha8Rng,
+            clause_context: &ClauseContext,
+            substitute_model: &mut (impl SubstituteModel + ?Sized),
+            predictor_model_opt: Option<&mut Box<dyn PathwayGraphModel>>,
+        ) -> Result<(), StateGenerationError> {
+        substitute_model.notify_call_stack_length(self.call_stack.len());
 
-        let stack_frame = self.call_stack.last_mut().unwrap();
-        // last_node guaranteed not to be an exit node
-        let last_node = stack_frame.function_context.current_node.clone();
-        let function = self.markov_chain.functions.get(&stack_frame.function_context.call_params.func_name).unwrap();
-        let function_modifier_info = self.function_modifier_info.get(
-            &stack_frame.function_context.call_params.func_name
-        ).unwrap();
+        let (last_node, last_node_outgoing) = {
+            let stack_frame = self.call_stack.last().unwrap();
+            // last_node guaranteed not to be an exit node
+            let last_node = stack_frame.function_context.current_node.clone();
+            let function = self.markov_chain.functions.get(&stack_frame.function_context.call_params.func_name).unwrap();
+            let function_modifier_info = self.function_modifier_info.get(
+                &stack_frame.function_context.call_params.func_name
+            ).unwrap();
 
-        let last_node_outgoing = function.chain.get(&last_node.node_common.name).unwrap();
+            let last_node_outgoing = function.chain.get(&last_node.node_common.name).unwrap();
 
-        let last_node_outgoing = last_node_outgoing.iter().map(|el| {
-            (check_node_off_dfs(rng, function, function_modifier_info, clause_context, stack_frame, &el.1), el.0, el.1.clone())
-        }).collect::<Vec<_>>();
+            let last_node_outgoing = last_node_outgoing.iter().filter_map(|el| {
+                if check_node_off_dfs(rng, function, function_modifier_info, clause_context, stack_frame, &el.1) {
+                    None
+                } else { Some(el.1.clone()) }
+            }).collect::<Vec<_>>();
 
-        dynamic_model.update_current_state(&last_node.node_common.name);
-        let last_node_outgoing = dynamic_model.assign_log_probabilities(last_node_outgoing);
+            substitute_model.update_current_state(&last_node.node_common.name);
 
+            (last_node, last_node_outgoing)
+        };
+
+        // probability distribution recorded in model
+        let last_node_outgoing = if let Some(predictor_model) = predictor_model_opt {
+            predictor_model.predict(&self.call_stack, last_node_outgoing)
+        } else { ModelPredictionResult::None(last_node_outgoing) };
+
+        // transform to log probabulities, if no model is present run a dynamic one
+        let last_node_outgoing = match last_node_outgoing {
+            ModelPredictionResult::Some(predictions) => {
+                let prob_sum: f64 = predictions.iter().map(|x| x.0).sum();
+                if (prob_sum - 1f64).abs() > std::f64::EPSILON {
+                    panic!("Model predicted probabilities with a sum of {}, should have been close to 1.", prob_sum)
+                }
+                predictions.into_iter().map(|(w, node)| (
+                    w.ln(), node
+                )).collect()
+            },
+            ModelPredictionResult::None(outgoing_nodes) => {
+                let fill_with = - (outgoing_nodes.len() as f64).ln();
+                let uniform = outgoing_nodes.into_iter().map(|node| (fill_with, node)).collect();
+                substitute_model.trasform_log_probabilities(uniform)?
+            },
+        };
+
+        // normalize the log-probs and choose
         let destination = self.state_chooser.choose_destination(rng, last_node_outgoing);
 
+        let stack_frame = self.call_stack.last_mut().unwrap();
+
         if let Some(destination) = destination {
-            if check_node_off_dfs(rng, function, function_modifier_info, clause_context, stack_frame, &destination) {
-                return Err(StateGenerationError::new(format!(
-                    "Chosen node is off: {} (after {})", destination.node_common.name, last_node.node_common.name
-                )));
-            }
             stack_frame.function_context.current_node = destination.clone();
         } else {
             let function_context = stack_frame.function_context.clone();
@@ -790,7 +879,12 @@ impl StateGenerationError {
 }
 
 impl<StC: StateChooser> MarkovChainGenerator<StC> {
-    pub fn next(&mut self, rng: &mut ChaCha8Rng, clause_context: &ClauseContext, dynamic_model: &mut (impl DynamicModel + ?Sized)) -> Result<Option<<Self as Iterator>::Item>, StateGenerationError> {
+    pub fn next_node_name(
+            &mut self, rng: &mut ChaCha8Rng,
+            clause_context: &ClauseContext,
+            substitute_model: &mut (impl SubstituteModel + ?Sized),
+            predictor_model_opt: Option<&mut Box<dyn PathwayGraphModel>>,
+        ) -> Result<Option<SmolStr>, StateGenerationError> {
         if let Some(call_params) = self.pending_call.take() {
             return Ok(Some(self.start_function(call_params, clause_context)));
         }
@@ -801,7 +895,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         }
 
         let (is_an_exit, new_node_name) = {
-            self.update_current_node(rng, clause_context, dynamic_model)?;
+            self.update_current_node(rng, clause_context, substitute_model, predictor_model_opt)?;
 
             let stack_frame = self.call_stack.last_mut().unwrap();
 
@@ -818,7 +912,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         };
 
         if is_an_exit {
-            self.call_stack.pop();
+            self.popped_stack_frame = self.call_stack.pop();
         }
 
         Ok(Some(new_node_name))
@@ -943,12 +1037,4 @@ fn check_node_off(
         )
     }
     return off;
-}
-
-impl<StC: StateChooser> Iterator for MarkovChainGenerator<StC> {
-    type Item = SmolStr;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.next(&mut ChaCha8Rng::seed_from_u64(1), &mut ClauseContext::new(), &mut MarkovModel::new()).unwrap()
-    }
 }

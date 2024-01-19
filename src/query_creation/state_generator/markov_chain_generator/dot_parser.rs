@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use regex::Regex;
+use serde::{Serialize, Deserialize};
 use smol_str::SmolStr;
 use logos::{Filter, Lexer, Logos};
 
@@ -86,7 +87,7 @@ fn block_comment(lex: &mut Lexer<'_, DotToken>) -> Filter<()> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TypeWithFields {
     Type(SubgraphType),  // no fields here for now
 }
