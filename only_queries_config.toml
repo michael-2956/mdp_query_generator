@@ -52,7 +52,7 @@ save_weights_to="weights/fullcontext/unstacked/untrained_db_2_performance_graph_
 # Whether to use the predictor model for query generation
 use_model=false
 # print the queries in "generate" mode
-print_queries=false
+print_queries=true
 # print the table schema after parcing
 print_schema=false
 # Path to the file with the database schema
