@@ -15,6 +15,8 @@ pub trait QueryValueChooser {
 
     fn choose_column_group_by(&mut self, group_by_contents: &GroupByContents, column_types: &Vec<SubgraphType>) -> (SubgraphType, Vec<Ident>);
 
+    fn choose_bigint(&mut self) -> String;
+    
     fn choose_integer(&mut self) -> String;
 
     fn choose_numeric(&mut self) -> String;
@@ -45,6 +47,10 @@ impl QueryValueChooser for RandomValueChooser {
         group_by_contents.get_random_column_with_type_of(&mut self.rng, column_types)
     }
 
+    fn choose_bigint(&mut self) -> String {
+        self.rng.gen_range(0..=5).to_string()
+    }
+
     fn choose_integer(&mut self) -> String {
         self.rng.gen_range(0..=5).to_string()
     }
@@ -61,6 +67,7 @@ impl QueryValueChooser for RandomValueChooser {
 }
 
 pub struct DeterministicValueChooser {
+    chosen_bigints: (Vec<String>, usize),
     chosen_integers: (Vec<String>, usize),
     chosen_numerics: (Vec<String>, usize),
     chosen_tables: (Vec<ObjectName>, usize),
@@ -72,6 +79,9 @@ pub struct DeterministicValueChooser {
 impl DeterministicValueChooser {
     pub fn from_path_nodes(path: &Vec<PathNode>) -> Self {
         Self {
+            chosen_bigints: (path.iter().filter_map(
+                |x| if let PathNode::BigIntValue(value) = x { Some(value) } else { None }
+            ).cloned().collect(), 0),
             chosen_integers: (path.iter().filter_map(
                 |x| if let PathNode::IntegerValue(value) = x { Some(value) } else { None }
             ).cloned().collect(), 0),
@@ -97,6 +107,7 @@ impl DeterministicValueChooser {
 impl QueryValueChooser for DeterministicValueChooser {
     fn new() -> Self {
         Self {
+            chosen_bigints: (vec![], 0),
             chosen_integers: (vec![], 0),
             chosen_numerics: (vec![], 0),
             chosen_tables: (vec![], 0),
@@ -133,6 +144,12 @@ impl QueryValueChooser for DeterministicValueChooser {
             panic!("column_types = {:?} does not contain col_type = {:?}", column_types, col_type)
         }
         (col_type, ident_components.clone())
+    }
+
+    fn choose_bigint(&mut self) -> String {
+        let value = &self.chosen_bigints.0[self.chosen_bigints.1];
+        self.chosen_bigints.1 += 1;
+        value.clone()
     }
 
     fn choose_integer(&mut self) -> String {

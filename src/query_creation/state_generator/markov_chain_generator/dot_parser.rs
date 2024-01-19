@@ -163,7 +163,7 @@ pub struct NodeCommon {
     /// Node identifier
     pub name: SmolStr,
     /// Type name if specified (basically an "on" modifier)
-    pub type_name: Option<SubgraphType>,
+    pub type_names: Option<Vec<SubgraphType>>,
     /// Graph modifier with mode if specified
     pub modifier: Option<(SmolStr, bool)>,
     /// Name of the call modifier if specified
@@ -176,7 +176,7 @@ pub struct NodeCommon {
 
 impl NodeCommon {
     pub fn with_name(name: SmolStr) -> Self {
-        Self { name: name, type_name: None, modifier: None, call_modifier_name: None, affects_call_modifier_name: None, sets_value_name: None }
+        Self { name: name, type_names: None, modifier: None, call_modifier_name: None, affects_call_modifier_name: None, sets_value_name: None }
     }
 }
 
@@ -297,10 +297,22 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                 read_opened_node_specification(&mut self.lexer, &node_name)
                             );
 
-                            let type_name = match node_spec.remove("TYPE_NAME") {
-                                Some(DotToken::QuotedIdentifiers(idents)) => Some({
-                                    let TypeWithFields::Type(tp) = return_some_err!(TypeWithFields::from_type_name(&idents));
-                                    tp
+                            let type_names = match node_spec.remove("TYPE_NAME") {
+                                Some(DotToken::QuotedIdentifiers(ident)) => Some({
+                                    let TypeWithFields::Type(tp) = return_some_err!(TypeWithFields::from_type_name(&ident));
+                                    vec![tp]
+                                }),
+                                Some(DotToken::QuotedIdentifiersWithBrackets(idents)) => Some({
+                                    let out_types = return_some_err!(
+                                        get_identifier_names(idents.clone()).into_iter()
+                                            .filter(|el| el.len() > 0)
+                                            .map(|el| TypeWithFields::from_type_name(&el))
+                                            .collect::<Result<Vec<_>, _>>()
+                                    );
+                                    out_types.into_iter().map(|el| {
+                                        let TypeWithFields::Type(tp) = el;
+                                        tp
+                                    }).collect::<Vec<_>>()
                                 }),
                                 _ => None
                             };
@@ -357,7 +369,7 @@ impl<'a> Iterator for DotTokenizer<'a> {
 
                             let node_common = NodeCommon {
                                 name: node_name.clone(),
-                                type_name,
+                                type_names,
                                 modifier,
                                 call_modifier_name,
                                 affects_call_modifier_name,

@@ -371,7 +371,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             },
             "limit_num" => {
                 self.expect_state("call52_types");
-                self.handle_types(Some(&[SubgraphType::Numeric, SubgraphType::Integer]), None)
+                self.handle_types(Some(&[SubgraphType::Numeric, SubgraphType::Integer, SubgraphType::BigInt]), None)
             },
             any => self.panic_unexpected(any)
         };
@@ -612,6 +612,14 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         let (number_type, number) = match self.next_state().as_str() {
             "number_literal" => {
                 let (number_type, number_str) = match self.next_state().as_str() {
+                    "number_literal_bigint" => {
+                        // NOTE:
+                        // - if bigint is too small, it will be interp. as an int by postgres.
+                        // however, int can be cast to bigint (if required), so no problem for now.
+                        // - in AST->path, the extracted 'int' path will produce the same query,
+                        // even though the intended type could be bigint, if it is too small.
+                        (SubgraphType::BigInt, self.value_chooser.choose_bigint())
+                    },
                     "number_literal_integer" => {
                         (SubgraphType::Integer, self.value_chooser.choose_integer())
                     },
@@ -675,7 +683,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
             "nested_number" => {
                 self.expect_state("call4_types");
                 let (number_type, number) = self.handle_types(
-                    Some(&[SubgraphType::Numeric, SubgraphType::Integer]), None
+                    Some(&[SubgraphType::Numeric, SubgraphType::Integer, SubgraphType::BigInt]), None
                 );
                 (number_type, Expr::Nested(Box::new(number)))
             },
@@ -780,6 +788,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
     ) -> (SubgraphType, Expr) {
         self.expect_state("types");
         match self.next_state().as_str() {
+            "types_select_type_bigint" |
             "types_select_type_integer" |
             "types_select_type_numeric" |
             "types_select_type_3vl" |
@@ -836,7 +845,8 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
                     any => self.panic_unexpected(any)
                 }
             },
-            "call1_number" => self.handle_number(),
+            "call2_number" |
+            "call1_number" |
             "call0_number" => self.handle_number(),
             "call1_VAL_3" => self.handle_val_3(),
             "call0_text" => self.handle_text(),
@@ -848,8 +858,7 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         if let Some(generators) = check_generated_by_one_of {
             if !generators.iter().any(|as_what| selected_type.is_same_or_more_determined_or_undetermined(&as_what)) {
                 self.state_generator.print_stack();
-                // panic!("Unexpected type: expected one of {:?}, got {:?}", generators, selected_type);
-                panic!("Unexpected type: expected one of {:?}, got {:?}, {:?}", generators, selected_type, types_value);
+                panic!("types got an unexpected type: expected one of {:?}, got {:?}.\nExpr: {:?}", generators, selected_type, types_value);
             }
         }
         if let Some(with) = check_compatible_with {
@@ -951,18 +960,31 @@ impl<DynMod: DynamicModel, StC: StateChooser, QVC: QueryValueChooser> QueryGener
         let (
             aggr_args_type, aggr_arg_expr_v, aggr_return_type
         ): (AggregateFunctionAgruments, Vec<FunctionArg>, SubgraphType) = match self.next_state().as_str() {
-            "aggregate_select_type_integer" => {
-                let return_type = SubgraphType::Integer;
+            "aggregate_select_type_bigint" => {
+                let return_type = SubgraphType::BigInt;
                 let (args_type, args_expr) = match self.next_state().as_str() {
                     "arg_star" => {
                         (AggregateFunctionAgruments::Wildcard, vec![FunctionArg::Unnamed(FunctionArgExpr::Wildcard)])
                     },
-                    "arg_integer_any" => {
+                    "arg_bigint_any" => {
                         self.expect_state("call65_types");
                         (AggregateFunctionAgruments::AnyType, vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(
                             self.handle_types(None, None).1
                         ))])
                     },
+                    "arg_bigint" => {
+                        self.expect_state("call75_types");
+                        (AggregateFunctionAgruments::TypeList(vec![SubgraphType::BigInt]), vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(
+                            self.handle_types(Some(&[SubgraphType::BigInt]), None).1
+                        ))])
+                    },
+                    any => self.panic_unexpected(any),
+                };
+                (args_type, args_expr, return_type)
+            },
+            "aggregate_select_type_integer" => {
+                let return_type = SubgraphType::Integer;
+                let (args_type, args_expr) = match self.next_state().as_str() {
                     "arg_integer" => {
                         self.expect_state("call71_types");
                         (AggregateFunctionAgruments::TypeList(vec![SubgraphType::Integer]), vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(

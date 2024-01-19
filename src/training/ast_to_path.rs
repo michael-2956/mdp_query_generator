@@ -104,6 +104,7 @@ pub enum PathNode {
     SelectedColumnNameGROUPBY(Vec<Ident>),
     NumericValue(String),
     IntegerValue(String),
+    BigIntValue(String),
     QualifiedWildcardSelectedRelation(Ident),
 }
 
@@ -407,7 +408,7 @@ impl PathGenerator {
             },
             _ => {
                 self.try_push_states(&["limit_num", "call52_types"])?;
-                self.handle_types(expr, Some(&[SubgraphType::Numeric, SubgraphType::Integer]), None)?
+                self.handle_types(expr, Some(&[SubgraphType::Numeric, SubgraphType::Integer, SubgraphType::BigInt]), None)?
             },
         };
 
@@ -573,10 +574,16 @@ impl PathGenerator {
         let number_type = match expr {
             Expr::Value(Value::Number(number_str, false)) => {
                 self.try_push_state("number_literal")?;
-                if number_str.parse::<u64>().is_ok() {
+                // assume that literals are the smallest type that they fit into
+                // (this is now postgres determines them)
+                if number_str.parse::<u32>().is_ok() {
                     self.try_push_state("number_literal_integer")?;
                     self.push_node(PathNode::IntegerValue(number_str.clone()));
                     SubgraphType::Integer
+                } else if number_str.parse::<u64>().is_ok() {
+                    self.try_push_state("number_literal_bigint")?;
+                    self.push_node(PathNode::BigIntValue(number_str.clone()));
+                    SubgraphType::BigInt
                 } else {
                     self.try_push_state("number_literal_numeric")?;
                     self.push_node(PathNode::NumericValue(number_str.clone()));
@@ -723,6 +730,7 @@ impl PathGenerator {
                     unexpected_subgraph_type!(null_type)
                 }
                 self.try_push_state(match &null_type {
+                    SubgraphType::BigInt => "types_select_type_bigint",
                     SubgraphType::Integer => "types_select_type_integer",
                     SubgraphType::Numeric => "types_select_type_numeric",
                     SubgraphType::Val3 => "types_select_type_3vl",
@@ -741,6 +749,7 @@ impl PathGenerator {
                     match selected_types_iter.next() {
                         Some(subgraph_type) => {
                             self.try_push_state(match subgraph_type {
+                                SubgraphType::BigInt => "types_select_type_bigint",
                                 SubgraphType::Integer => "types_select_type_integer",
                                 SubgraphType::Numeric => "types_select_type_numeric",
                                 SubgraphType::Val3 => "types_select_type_3vl",
@@ -809,6 +818,10 @@ impl PathGenerator {
                                             add_error(&mut error_mem, "column identifier", subgraph_type.clone(), err);
                                             self.restore_checkpoint(&types_after_state_selection);
                                             match match subgraph_type {
+                                                SubgraphType::BigInt => {
+                                                    self.try_push_state("call2_number")?;
+                                                    self.handle_number(expr)
+                                                },
                                                 SubgraphType::Integer => {
                                                     self.try_push_state("call1_number")?;
                                                     self.handle_number(expr)

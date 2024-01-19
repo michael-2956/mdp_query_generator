@@ -52,6 +52,7 @@ impl ValueSetter for TypesTypeValueSetter {
 
     fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
         let selected_type = match function_context.current_node.node_common.name.as_str() {
+            "types_select_type_bigint" => SubgraphType::BigInt,
             "types_select_type_integer" => SubgraphType::Integer,
             "types_select_type_numeric" => SubgraphType::Numeric,
             "types_select_type_3vl" => SubgraphType::Val3,

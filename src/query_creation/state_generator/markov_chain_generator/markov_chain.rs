@@ -531,7 +531,7 @@ fn define_node(
         node_common: NodeCommon, call_params: Option<CallParams>, literal: bool
     ) -> Result<(), SyntaxError> {
     if let Some(function) = current_function {
-        check_type(&function, &node_common.name, &node_common.type_name)?;
+        check_type(&function, &node_common.name, &node_common.type_names)?;
         check_modifier(&function, &node_common.name, &node_common.modifier)?;
         function.chain.insert(node_common.name.clone(), Vec::<_>::new());
         node_params.insert(node_common.name.clone(), NodeParams {
@@ -547,17 +547,18 @@ fn define_node(
 }
 
 /// Perform checks for typed nodes
-fn check_type(current_function: &Function, node_name: &SmolStr, type_name_opt: &Option<SubgraphType>) -> Result<(), SyntaxError> {
-    if let Some(type_name) = type_name_opt {
-        if !(match &current_function.accepted_types {
+fn check_type(current_function: &Function, node_name: &SmolStr, type_names_opt: &Option<Vec<SubgraphType>>) -> Result<(), SyntaxError> {
+    if let Some(type_names) = type_names_opt {
+        let acc_types_list = match &current_function.accepted_types {
             FunctionTypes::TypeList(list) => list,
             _ => return Err(SyntaxError::new(format!(
                 "Unexpected typed node: {node_name}. Function does not acccept arguments"
             )))
-        }.contains(type_name)) {
+        };
+        if !(type_names.iter().any(|type_name| acc_types_list.contains(type_name))) {
             return Err(SyntaxError::new(format!(
-                "Unexpected option: {type_name} Expected one of: {:?}",
-                current_function.accepted_types
+                "Unexpected type names: {:?}. Expected one of: {:?}, which were declared in function definition.",
+                type_names, current_function.accepted_types
             )))
         }
     }

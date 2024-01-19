@@ -191,7 +191,7 @@ digraph G {
 
         limit_num [label="limit [num]\nmod: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
         LIMIT -> limit_num
-        call52_types [TYPES="[integer, numeric]", MODS="[no column spec, no aggregate]", label="TYPES: [integer, numeric]\nMODS: [no column spec, no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        call52_types [TYPES="[integer, numeric, bigint]", MODS="[no column spec, no aggregate]", label="TYPES: [integer, numeric, bigint]\nMODS: [no column spec, no aggregate]", shape=rectangle, style=filled, color=lightblue]
         limit_num -> call52_types
         call52_types -> EXIT_LIMIT
     }
@@ -370,7 +370,7 @@ digraph G {
     }
 
     subgraph def_number {
-        number [shape=rectangle, label="number\ntypes=[integer, numeric]\nmods: [no column spec]", TYPES="[integer, numeric]", MODS="[no column spec]", style=filled, color=chocolate]
+        number [shape=rectangle, label="number\ntypes=[integer, numeric]\nmods: [no column spec]", TYPES="[integer, numeric, bigint]", MODS="[no column spec]", style=filled, color=chocolate]
         EXIT_number [label="EXIT number"]
 
         number_literal[label="literal", literal="t"]
@@ -381,6 +381,9 @@ digraph G {
         number_literal_numeric[label="random numeric\nTYPE_NAME=numeric?", TYPE_NAME="numeric", literal="t"]
         number_literal -> number_literal_numeric
         number_literal_numeric -> EXIT_number
+        number_literal_bigint[label="random bigint\nTYPE_NAME=bigint?", TYPE_NAME="bigint", literal="t"]
+        number_literal -> number_literal_bigint
+        number_literal_bigint -> EXIT_number
 
         BinaryNumberOp[label="binary op."]
         call47_types [TYPES="[...]", MODS="[...]", label="TYPES: [...types]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
@@ -399,13 +402,13 @@ digraph G {
         binary_number_div [label="/"]
         call48_types -> binary_number_div
         binary_number_div -> call47_types
-        binary_number_bin_or [label="|\ntn(int)", TYPE_NAME="integer"]
+        binary_number_bin_or [label="|\ntn(i, bi)", TYPE_NAME="[integer, bigint]"]
         call48_types -> binary_number_bin_or
         binary_number_bin_or -> call47_types
-        binary_number_bin_and [label="&\ntn(int)", TYPE_NAME="integer"]
+        binary_number_bin_and [label="&\ntn(i, bi)", TYPE_NAME="[integer, bigint]"]
         call48_types -> binary_number_bin_and
         binary_number_bin_and -> call47_types
-        binary_number_bin_xor [label="#\ntn(int)", TYPE_NAME="integer"]
+        binary_number_bin_xor [label="#\ntn(i, bi)", TYPE_NAME="[integer, bigint]"]
         call48_types -> binary_number_bin_xor
         binary_number_bin_xor -> call47_types
         binary_number_exp [label="^\ntn(num)", TYPE_NAME="numeric"]
@@ -425,7 +428,7 @@ digraph G {
         unary_number_abs [label="@"]
         UnaryNumberOp -> unary_number_abs
         unary_number_abs -> call1_types
-        unary_number_bin_not [label="~\ntn(int)", TYPE_NAME="integer"]
+        unary_number_bin_not [label="~\ntn(i, bi)", TYPE_NAME="[integer, bigint]"]
         UnaryNumberOp -> unary_number_bin_not
         unary_number_bin_not -> call1_types
         // unary_number_sq_root [label="|/\ntn(num)", TYPE_NAME="numeric"]
@@ -523,9 +526,11 @@ digraph G {
     }
 
     subgraph def_types {
-        types [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no literals, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no aggregate]", label="TYPE(S) (generic):\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[no literals, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[no literals, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no aggregate]", label="TYPE(S) (generic):\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods=[no literals, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
+        types_select_type_bigint[TYPE_NAME="bigint", label="bigint?", set_value="types_type"]
+        types -> types_select_type_bigint
         types_select_type_integer[TYPE_NAME="integer", label="integer?", set_value="types_type"]
         types -> types_select_type_integer
         types_select_type_numeric[TYPE_NAME="numeric", label="numeric?", set_value="types_type"]
@@ -542,6 +547,7 @@ digraph G {
         types_null -> EXIT_types
 
         types_return_typed_null [label="Typed null\nmod.: 'no typed nulls' -> OFF", modifier="no typed nulls", modifier_mode="off"]
+        types_select_type_bigint -> types_return_typed_null
         types_select_type_integer -> types_return_typed_null
         types_select_type_numeric -> types_return_typed_null
         types_select_type_3vl -> types_return_typed_null
@@ -550,6 +556,7 @@ digraph G {
         types_return_typed_null -> EXIT_types
 
         types_select_special_expression [label="select special expression"]
+        types_select_type_bigint -> types_select_special_expression
         types_select_type_integer -> types_select_special_expression
         types_select_type_numeric -> types_select_special_expression
         types_select_type_3vl -> types_select_special_expression
@@ -567,6 +574,10 @@ digraph G {
         call0_aggregate_function [TYPES="[known]", modifier="no aggregate", modifier_mode="off", label="Aggregate function\nTYPE: known\nmod.: 'no aggregate' -> OFF", shape=rectangle, style=filled, color=peru]
         types_select_special_expression -> call0_aggregate_function
         call0_aggregate_function -> EXIT_types
+
+        call2_number [label="number\nTYPES: [bigint]\nMODS: [...mods]\nmod.: 'no literals' -> OFF", TYPES="[bigint]", MODS="[...]", modifier="no literals", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
+        types_select_type_bigint -> call2_number
+        call2_number -> EXIT_types
 
         call1_number [label="number\nTYPES: [integer]\nMODS: [...mods]\nmod.: 'no literals' -> OFF", TYPES="[integer]", MODS="[...]", modifier="no literals", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
         types_select_type_integer -> call1_number
@@ -684,7 +695,7 @@ digraph G {
 
 
     subgraph def_aggregate_function {
-        aggregate_function [TYPES="[integer, numeric, 3VL Value, text, date]", label="aggregate function\nTYPES=[integer, numeric, 3VL Value, text, date]", shape=octagon, style=filled, color=peru]
+        aggregate_function [TYPES="[bigint, integer, numeric, 3VL Value, text, date]", label="aggregate function\nTYPES=[bigint, integer, numeric, 3VL Value, text, date]", shape=octagon, style=filled, color=peru]
         EXIT_aggregate_function [label="EXIT aggregate function"]
 
         aggregate_select_return_type [label="select\nreturn type"]
@@ -696,6 +707,26 @@ digraph G {
         aggregate_distinct -> aggregate_select_return_type
 
 
+        aggregate_select_type_bigint[TYPE_NAME="bigint", label="bigint?"]
+        aggregate_select_return_type -> aggregate_select_type_bigint
+
+        arg_bigint [label="[bigint]"]
+        aggregate_select_type_bigint -> arg_bigint
+        call75_types [TYPES="[bigint]", label="TYPES: bigint\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        arg_bigint -> call75_types
+        call75_types -> EXIT_aggregate_function
+
+        arg_bigint_any [label="[any]"]
+        aggregate_select_type_bigint -> arg_bigint_any
+        call65_types [TYPES="[any]", label="TYPES: any\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        arg_bigint_any -> call65_types
+        call65_types -> EXIT_aggregate_function
+
+        arg_star [label="COUNT(*)\n[call mod.]", call_modifier="distinct_aggr_mod"]
+        aggregate_select_type_bigint -> arg_star
+        arg_star -> EXIT_aggregate_function
+
+
         aggregate_select_type_integer[TYPE_NAME="integer", label="integer?"]
         aggregate_select_return_type -> aggregate_select_type_integer
 
@@ -704,16 +735,6 @@ digraph G {
         call71_types [TYPES="[integer]", label="TYPES: integer\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
         arg_integer -> call71_types
         call71_types -> EXIT_aggregate_function
-
-        arg_integer_any [label="[any]"]
-        aggregate_select_type_integer -> arg_integer_any
-        call65_types [TYPES="[any]", label="TYPES: any\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
-        arg_integer_any -> call65_types
-        call65_types -> EXIT_aggregate_function
-
-        arg_star [label="COUNT(*)\n[call mod.]", call_modifier="distinct_aggr_mod"]
-        aggregate_select_type_integer -> arg_star
-        arg_star -> EXIT_aggregate_function
 
 
         aggregate_select_type_numeric[TYPE_NAME="numeric", label="numeric?"]

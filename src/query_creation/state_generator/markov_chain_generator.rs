@@ -728,12 +728,6 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         selected_types
     }
 
-    pub fn get_current_state_type_name_unwrapped(&self) -> SubgraphType {
-        let function_context = &self.call_stack.last().unwrap().function_context;
-        let call_node_type_name = function_context.current_node.node_common.type_name.as_ref().unwrap().clone();
-        call_node_type_name
-    }
-
     /// get crrent function modifiers list
     pub fn get_fn_modifiers(&self) -> &CallModifiers {
        &self.call_stack.last().unwrap().function_context.call_params.modifiers
@@ -924,11 +918,13 @@ fn check_node_off(
         node_common: &NodeCommon
     ) -> bool {
     let mut off = false;
-    if let Some(ref type_name) = node_common.type_name {
+    if let Some(ref type_names) = node_common.type_names {
         off = match call_params.selected_types {
             CallTypes::None => true,
             CallTypes::TypeList(ref t_name_list) => !t_name_list.iter()
-                .any(|x| x.is_same_or_more_determined_or_undetermined(type_name)),
+                .any(|x| type_names.iter().any(
+                    |type_name|  x.is_same_or_more_determined_or_undetermined(type_name)
+                )),
             _ => panic!("Expected None or TypeNameList for function selected types")
         };
     }

@@ -12,6 +12,7 @@ pub enum SubgraphType {
     Undetermined,
     Numeric,
     Integer,
+    BigInt,
     Val3,
     ListExpr(Box<SubgraphType>),
     Text,
@@ -23,6 +24,7 @@ impl SubgraphType {
         match s {
             "numeric" => Ok(SubgraphType::Numeric),
             "integer" => Ok(SubgraphType::Integer),
+            "bigint" => Ok(SubgraphType::BigInt),
             "3VL Value" => Ok(SubgraphType::Val3),
             "list expr" => Ok(SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined))),
             "text" => Ok(SubgraphType::Text),
@@ -48,6 +50,7 @@ impl SubgraphType {
     pub fn from_data_type(data_type: &DataType) -> Self {
         match data_type {
             DataType::Integer(_) => Self::Integer,
+            DataType::BigInt(_) => Self::BigInt,
             DataType::Varchar(_) => Self::Text,
             DataType::CharVarying(_) => Self::Text,
             DataType::Char(_) => Self::Text,
@@ -72,6 +75,7 @@ impl SubgraphType {
         match self {
             SubgraphType::Numeric => DataType::Numeric(ExactNumberInfo::None),
             SubgraphType::Integer => DataType::Integer(None),
+            SubgraphType::BigInt => DataType::BigInt(None),
             SubgraphType::Val3 => DataType::Boolean,
             SubgraphType::Text => DataType::Text,
             SubgraphType::Date => DataType::Date,
@@ -85,6 +89,7 @@ impl Display for SubgraphType {
         let str = match self {
             SubgraphType::Numeric => "numeric".to_string(),
             SubgraphType::Integer => "integer".to_string(),
+            SubgraphType::BigInt => "bigint".to_string(),
             SubgraphType::Val3 => "3VL Value".to_string(),
             SubgraphType::ListExpr(inner) => format!("list expr[{}]", inner),
             SubgraphType::Text => "text".to_string(),
@@ -96,11 +101,13 @@ impl Display for SubgraphType {
 }
 
 impl SubgraphType {
-    /// get a list of compatible types
+    /// get a list of compatible types\
+    /// if the returned vector includes the needed type, this type is compatible
     pub fn get_compat_types(&self) -> Vec<SubgraphType> {
         let (inner_type, wrapper): (&Box<SubgraphType>, Box<dyn Fn(SubgraphType) -> SubgraphType>) = match self {
             SubgraphType::ListExpr(inner) => (inner, Box::new(|x| SubgraphType::ListExpr(Box::new(x)))),
             SubgraphType::Numeric => return vec![SubgraphType::Numeric, SubgraphType::Integer],
+            SubgraphType::Integer => return vec![SubgraphType::Integer, SubgraphType::BigInt],
             any => return vec![any.clone()],
         };
         inner_type.get_compat_types()
