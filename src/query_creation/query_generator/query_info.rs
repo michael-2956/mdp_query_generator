@@ -127,21 +127,32 @@ impl DatabaseSchema {
 /// call modifiers to disable nodes.
 #[derive(Debug, Clone)]
 pub struct ClauseContext {
+    query_props_stack: Vec<QueryProps>,
     from_contents_stack: Vec<FromContents>,
-    group_by_contents_stack: Vec<GroupByContents>
+    group_by_contents_stack: Vec<GroupByContents>,
 }
 
 impl ClauseContext {
     pub fn new() -> Self{
         Self {
+            query_props_stack: vec![],
             from_contents_stack: vec![],
             group_by_contents_stack: vec![],
         }
     }
 
     pub fn on_query_begin(&mut self) {
+        self.query_props_stack.push(QueryProps::new());
         self.from_contents_stack.push(FromContents::new());
         self.group_by_contents_stack.push(GroupByContents::new());
+    }
+
+    pub fn query(&self) -> &QueryProps {
+        self.query_props_stack.last().unwrap()
+    }
+
+    pub fn query_mut(&mut self) -> &mut QueryProps {
+        self.query_props_stack.last_mut().unwrap()
     }
 
     pub fn from(&self) -> &FromContents {
@@ -161,8 +172,30 @@ impl ClauseContext {
     }
 
     pub fn on_query_end(&mut self) {
+        self.query_props_stack.pop();
         self.from_contents_stack.pop();
         self.group_by_contents_stack.pop();
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct QueryProps {
+    is_aggregation_indicated: bool,
+}
+
+impl QueryProps {
+    fn new() -> QueryProps {
+        Self {
+            is_aggregation_indicated: false
+        }
+    }
+
+    pub fn is_aggregation_indicated(&self) -> bool {
+        self.is_aggregation_indicated
+    }
+
+    pub fn set_aggregation_indicated(&mut self) {
+        self.is_aggregation_indicated = true;
     }
 }
 
@@ -236,6 +269,8 @@ pub struct GroupByContents {
     /// Whether a catch-all single group is used
     /// In Postgres, this is either GROUP BY () or aggregation without group by
     single_group_grouping: bool,
+    /// whether single group grouping is also single row
+    single_row_grouping: bool,
 }
 
 impl GroupByContents {
@@ -243,6 +278,7 @@ impl GroupByContents {
         GroupByContents {
             columns: ColumnContainer::new(),
             single_group_grouping: false,
+            single_row_grouping: false,
         }
     }
 
@@ -261,6 +297,14 @@ impl GroupByContents {
 
     pub fn is_single_group(&self) -> bool {
         return self.single_group_grouping
+    }
+
+    pub fn set_single_row_grouping(&mut self) {
+        self.single_row_grouping = true;
+    }
+
+    pub fn is_single_row(&self) -> bool {
+        return self.single_row_grouping
     }
 
     pub fn append_column(&mut self, column_name: Vec<Ident>, graph_type: SubgraphType) {

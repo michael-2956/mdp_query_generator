@@ -14,6 +14,7 @@ pub trait NamedValue: Debug {
 #[derive(Debug, Clone)]
 pub enum ValueSetterValue {
     TypesType(TypesTypeValue),
+    CanSkipLimit(CanSkipLimitValue),
     IsGroupingSets(IsGroupingSetsValue),
     GroupingEnabled(GroupingEnabledValue),
     WildcardRelations(WildcardRelationsValue),
@@ -320,6 +321,7 @@ impl StatelessCallModifier for GroupingModeSwitchModifier {
     fn run(&self, function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
         let grouping_enabled = unwrap_variant!(associated_value.unwrap(), ValueSetterValue::GroupingEnabled).enabled;
         match function_context.current_node.node_common.name.as_str() {
+            "call76_types" => grouping_enabled,
             "call73_types" => grouping_enabled,
             "call54_types" => !grouping_enabled,
             any => panic!("grouping mode switch cannot be called at {any}")
@@ -468,5 +470,58 @@ impl StatelessCallModifier for DistinctAggregationModifier {
 
     fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
         !unwrap_variant!(associated_value.unwrap(), ValueSetterValue::DistinctAggregation).is_distinct
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CanSkipLimitValue {
+    /// LIMIT can be skipped
+    pub can_skip: bool,
+}
+
+impl NamedValue for CanSkipLimitValue {
+    fn name() -> SmolStr {
+        SmolStr::new("can_skip_limit")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CanSkipLimitValueSetter { }
+
+impl ValueSetter for CanSkipLimitValueSetter {
+    fn get_value_name(&self) -> SmolStr {
+        CanSkipLimitValue::name()
+    }
+
+    fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
+        ValueSetterValue::CanSkipLimit(CanSkipLimitValue {
+            can_skip: match function_context.current_node.node_common.name.as_str() {
+                "query_can_skip_limit_set_val" => {
+                    !function_context.call_params.modifiers.contains(&SmolStr::new("single row")) ||
+                    (
+                        clause_context.group_by().is_single_group() &&
+                        clause_context.group_by().is_single_row()
+                    )
+                },
+                any => panic!("{any} unexpectedly triggered the can_skip_limit value setter"),
+            },
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CanSkipLimitModifier {}
+
+impl StatelessCallModifier for CanSkipLimitModifier {
+    fn get_name(&self) -> SmolStr {
+        SmolStr::new("can_skip_limit_mod")
+    }
+
+    fn get_associated_value_name(&self) -> Option<SmolStr> {
+        Some(CanSkipLimitValue::name())
+    }
+
+    fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
+        unwrap_variant!(associated_value.unwrap(), ValueSetterValue::CanSkipLimit).can_skip
     }
 }

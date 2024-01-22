@@ -98,13 +98,9 @@ digraph G {
         call0_GROUP_BY -> call0_HAVING
         call0_HAVING -> call0_SELECT
 
-        // modifier="single row", modifier_mode="on" is here to turn off all LIMIT other than LIMIT 1 
-        call0_LIMIT [label="LIMIT\nMODS: [?single row]", MODS="[?single row]", modifier="single row", modifier_mode="on", shape=rectangle, style=filled, color=brown]
-        query_can_skip_limit [label="skip LIMIT allowed\nmod: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
+        call0_LIMIT [label="LIMIT\nMODS: [?single row]", MODS="[?single row]", shape=rectangle, style=filled, color=brown]
         call0_SELECT -> call0_LIMIT
-        call0_SELECT -> query_can_skip_limit
         call0_LIMIT -> EXIT_Query
-        query_can_skip_limit -> EXIT_Query
     }
 
     subgraph def_FROM {
@@ -186,15 +182,21 @@ digraph G {
         LIMIT [MODS="[single row]", label="LIMIT\nmods=[single row]", shape=rectangle, style=filled, color=brown]
         EXIT_LIMIT [label="EXIT LIMIT", shape=rectangle]
 
+        query_can_skip_limit_set_val [label="Can skip LIMIT?\n[set value]", set_value="can_skip_limit"]
+        LIMIT -> query_can_skip_limit_set_val
+        query_can_skip_limit [label="Skip LIMIT\n[call mod]", call_modifier="can_skip_limit_mod"]
+        query_can_skip_limit_set_val-> query_can_skip_limit
+        query_can_skip_limit -> EXIT_LIMIT
+
         single_row_true [label="limit 1\nmod: 'single row' -> ON", modifier="single row", modifier_mode="on"]
         LIMIT -> single_row_true
         single_row_true -> EXIT_LIMIT
 
-        limit_num [label="limit [num]\nmod: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
-        LIMIT -> limit_num
-        call52_types [TYPES="[integer, numeric, bigint]", MODS="[no column spec, no aggregate]", label="TYPES: [integer, numeric, bigint]\nMODS: [no column spec, no aggregate]", shape=rectangle, style=filled, color=lightblue]
-        limit_num -> call52_types
-        call52_types -> EXIT_LIMIT
+        // limit_num [label="limit [num]\nmod: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
+        // LIMIT -> limit_num
+        // call52_types [TYPES="[integer, numeric, bigint]", MODS="[no column spec, no aggregate]", label="TYPES: [integer, numeric, bigint]\nMODS: [no column spec, no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        // limit_num -> call52_types
+        // call52_types -> EXIT_LIMIT
     }
 
     subgraph def_VAL_3 {
@@ -527,7 +529,7 @@ digraph G {
     }
 
     subgraph def_types {
-        types [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[no literals, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no aggregate]", label="TYPE(S) (generic):\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods=[no literals, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[no type expr, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no aggregate]", label="TYPE(S) (generic):\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods=[no type expr, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
         types_select_type_bigint[TYPE_NAME="bigint", label="bigint?", set_value="types_type"]
@@ -576,27 +578,27 @@ digraph G {
         types_select_special_expression -> call0_aggregate_function
         call0_aggregate_function -> EXIT_types
 
-        call2_number [label="number\nTYPES: [bigint]\nMODS: [...mods]\nmod.: 'no literals' -> OFF", TYPES="[bigint]", MODS="[...]", modifier="no literals", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
+        call2_number [label="number\nTYPES: [bigint]\nMODS: [...mods]\nmod.: 'no type expr' -> OFF", TYPES="[bigint]", MODS="[...]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
         types_select_type_bigint -> call2_number
         call2_number -> EXIT_types
 
-        call1_number [label="number\nTYPES: [integer]\nMODS: [...mods]\nmod.: 'no literals' -> OFF", TYPES="[integer]", MODS="[...]", modifier="no literals", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
+        call1_number [label="number\nTYPES: [integer]\nMODS: [...mods]\nmod.: 'no type expr' -> OFF", TYPES="[integer]", MODS="[...]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
         types_select_type_integer -> call1_number
         call1_number -> EXIT_types
 
-        call0_number [label="number\nTYPES: [numeric]\nMODS: [...mods]\nmod.: 'no literals' -> OFF", TYPES="[numeric]", MODS="[...]", modifier="no literals", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
+        call0_number [label="number\nTYPES: [numeric]\nMODS: [...mods]\nmod.: 'no type expr' -> OFF", TYPES="[numeric]", MODS="[...]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
         types_select_type_numeric -> call0_number
         call0_number -> EXIT_types
 
-        call1_VAL_3 [label="3VL Value\nMODS: [...mods]\nmod.: 'no literals' -> OFF", MODS="[...]", modifier="no literals", modifier_mode="off", shape=rectangle, style=filled, color=red]
+        call1_VAL_3 [label="3VL Value\nMODS: [...mods]\nmod.: 'no type expr' -> OFF", MODS="[...]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=red]
         types_select_type_3vl -> call1_VAL_3
         call1_VAL_3 -> EXIT_types
 
-        call0_text [label="text\nMODS: [...mods]\nmod.: 'no literals' -> OFF", MODS="[...]", modifier="no literals", modifier_mode="off", shape=rectangle, style=filled, color=pink]
+        call0_text [label="text\nMODS: [...mods]\nmod.: 'no type expr' -> OFF", MODS="[...]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=pink]
         types_select_type_text -> call0_text
         call0_text -> EXIT_types
 
-        call0_date [label="date\nMODS: [...mods]\nmod.: 'no literals' -> OFF", MODS="[...]", modifier="no literals", modifier_mode="off", shape=rectangle, style=filled, color=cadetblue4]
+        call0_date [label="date\nMODS: [...mods]\nmod.: 'no type expr' -> OFF", MODS="[...]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=cadetblue4]
         types_select_type_date -> call0_date
         call0_date -> EXIT_types
     }
@@ -658,7 +660,7 @@ digraph G {
         grouping_column_list [label="columns list\n[call mod]", call_modifier="has_accessible_cols_mod"]
         has_accessible_columns -> grouping_column_list
 
-        call70_types[TYPES="[any]", label="TYPES: [any]\nMODS: [no literals, no typed nulls,\nno subquery, no aggregate]", MODS="[no literals, no typed nulls, no subquery, no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        call70_types[TYPES="[any]", label="TYPES: [any]\nMODS: [no type expr, no typed nulls,\nno subquery, no aggregate]", MODS="[no type expr, no typed nulls, no subquery, no aggregate]", shape=rectangle, style=filled, color=lightblue]
         grouping_column_list -> call70_types
         call70_types -> grouping_column_list
         call70_types -> EXIT_GROUP_BY
@@ -684,7 +686,7 @@ digraph G {
         special_grouping -> grouping_set
         grouping_set -> set_list
 
-        call69_types [TYPES="[any]", label="TYPES: [any]\n MODS: [no literals, no typed nulls,\nno subquery, no aggregate]", MODS="[no literals, no typed nulls, no subquery, no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        call69_types [TYPES="[any]", label="TYPES: [any]\n MODS: [no type expr, no typed nulls,\nno subquery, no aggregate]", MODS="[no type expr, no typed nulls, no subquery, no aggregate]", shape=rectangle, style=filled, color=lightblue]
         set_list -> call69_types
         // call69_types -> set_list
         set_multiple [label="multiple cols in set"]

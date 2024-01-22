@@ -273,12 +273,8 @@ impl PathGenerator {
         self.try_push_state("call0_SELECT")?;
         let mut column_idents_and_graph_types = self.handle_select(select_body.distinct, &select_body.projection)?;
 
-        if let Some(ref limit) = query.limit {
-            self.try_push_state("call0_LIMIT")?;
-            self.handle_limit(limit)?;
-        } else {
-            self.try_push_state("query_can_skip_limit")?;
-        }
+        self.try_push_state("call0_LIMIT")?;
+        self.handle_limit(&query.limit)?;
 
         self.try_push_state("EXIT_Query")?;
         self.clause_context.on_query_end();
@@ -402,23 +398,28 @@ impl PathGenerator {
     }
 
     /// subgraph def_LIMIT
-    fn handle_limit(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+    fn handle_limit(&mut self, expr_opt: &Option<Expr>) -> Result<SubgraphType, ConvertionError> {
         self.try_push_state("LIMIT")?;
 
-        let limit_type = match self.state_generator.get_fn_modifiers() {
-            CallModifiers::StaticList(list) if list.contains(&SmolStr::new("single row")) => {
-                if expr != &Expr::Value(Value::Number("1".to_string(), false)) {
-                    return Err(ConvertionError::new(format!(
-                        "Expected query to have \"LIMIT 1\" because of \'single row\', got {:#?}", expr
-                    )))
-                }
-                self.try_push_state("single_row_true")?;
-                SubgraphType::Integer
-            },
-            _ => {
-                self.try_push_states(&["limit_num", "call52_types"])?;
-                self.handle_types(expr, Some(&[SubgraphType::Numeric, SubgraphType::Integer, SubgraphType::BigInt]), None)?
-            },
+        let limit_type = if let Some(expr) = expr_opt {
+            match self.state_generator.get_fn_modifiers() {
+                CallModifiers::StaticList(list) if list.contains(&SmolStr::new("single row")) => {
+                    if expr != &Expr::Value(Value::Number("1".to_string(), false)) {
+                        return Err(ConvertionError::new(format!(
+                            "Expected query to have \"LIMIT 1\" because of \'single row\', got {:#?}", expr
+                        )))
+                    }
+                    self.try_push_state("single_row_true")?;
+                    SubgraphType::Integer
+                },
+                _ => {
+                    self.try_push_states(&["limit_num", "call52_types"])?;
+                    self.handle_types(expr, Some(&[SubgraphType::Numeric, SubgraphType::Integer, SubgraphType::BigInt]), None)?
+                },
+            }
+        } else {
+            self.try_push_states(&["query_can_skip_limit_set_val", "query_can_skip_limit"])?;
+            SubgraphType::Undetermined
         };
 
         self.try_push_state("EXIT_LIMIT")?;

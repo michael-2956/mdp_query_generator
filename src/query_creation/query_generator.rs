@@ -208,11 +208,16 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         select_body.distinct = distinct;
         std::mem::swap(&mut select_body.projection, &mut projection);
 
-        let select_limit = match self.next_state().as_str() {
-            "query_can_skip_limit" => None,
-            "call0_LIMIT" => Some(self.handle_limit().1),
-            any => self.panic_unexpected(any),
-        };
+        if self.clause_context.group_by().is_grouping_active() && !self.clause_context.query().is_aggregation_indicated() {
+            // eprintln!("Grouping is active but wasn't indicated in any way. Add GROUP BY ()");
+            if select_body.group_by.is_empty() {
+                // instead of group by (), because unsupported by parser
+                select_body.group_by = vec![Expr::Value(Value::Boolean(true))]
+            }
+        }
+
+        self.expect_state("call0_LIMIT");
+        let select_limit = self.handle_limit().1;
 
         self.expect_state("EXIT_Query");
         self.substitute_model.notify_subquery_creation_end();
@@ -369,16 +374,24 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     }
 
     /// subgraph def_LIMIT
-    fn handle_limit(&mut self) -> (SubgraphType, Expr) {
+    fn handle_limit(&mut self) -> (SubgraphType, Option<Expr>) {
         self.expect_state("LIMIT");
 
         let (limit_type, limit) = match self.next_state().as_str() {
+            "query_can_skip_limit_set_val" => {
+                self.expect_state("query_can_skip_limit");
+                (SubgraphType::Undetermined, None)
+            }
             "single_row_true" => {
-                (SubgraphType::Integer, Expr::Value(Value::Number("1".to_string(), false)))
+                (SubgraphType::Integer, Some(Expr::Value(Value::Number("1".to_string(), false))))
             },
             "limit_num" => {
                 self.expect_state("call52_types");
-                self.handle_types(Some(&[SubgraphType::Numeric, SubgraphType::Integer, SubgraphType::BigInt]), None)
+                let (limit_type, limit_expr) = self.handle_types(
+                    Some(&[SubgraphType::Numeric, SubgraphType::Integer, SubgraphType::BigInt]),
+                    None
+                );
+                (limit_type, Some(limit_expr))
             },
             any => self.panic_unexpected(any)
         };
@@ -957,10 +970,12 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     /// subgraph def_aggregate_function
     fn handle_aggregate_function(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("aggregate_function");
+        // if any aggregate funciton is present in query, aggregation was succesfully indicated.
+        self.clause_context.query_mut().set_aggregation_indicated();
         let distinct = match self.next_state().as_str() {
             "aggregate_not_distinct" => false,
             "aggregate_distinct" => true,
-            any => self.panic_unexpected(any),  
+            any => self.panic_unexpected(any),
         };
         self.expect_state("aggregate_select_return_type");
 
@@ -1065,6 +1080,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         match self.next_state().as_str() {
             "group_by_single_group" => {
                 self.clause_context.group_by_mut().set_single_group_grouping();
+                self.clause_context.group_by_mut().set_single_row_grouping();
                 self.expect_state("EXIT_GROUP_BY");
                 return vec![]
             },
@@ -1153,8 +1169,16 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
 
         // For cases such as: GROUPING SETS ( (), (), () )
         if !self.clause_context.group_by().contains_columns() {
-            self.clause_context.group_by_mut().set_single_group_grouping()
+            self.clause_context.group_by_mut().set_single_group_grouping();
+            // Check is GROUPING SETS ( () )
+            if let &[Expr::GroupingSets(ref set_list)] = result.as_slice() {
+                if set_list.len() == 1 {
+                    self.clause_context.group_by_mut().set_single_row_grouping();
+                }
+            }
         }
+
+        self.clause_context.query_mut().set_aggregation_indicated();
 
         result
     }
@@ -1163,8 +1187,8 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     fn handle_having(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("HAVING");
         self.expect_state("call45_types");
-        // println!("\nclause_context.group_by at HAVING generation \n{:#?}\n", self.clause_context.group_by());
         let (selection_type, selection) = self.handle_types(Some(&[SubgraphType::Val3]), None);
+        self.clause_context.query_mut().set_aggregation_indicated();
         self.expect_state("EXIT_HAVING");
         (selection_type, selection)
     }
