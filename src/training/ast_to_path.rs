@@ -1052,10 +1052,18 @@ impl PathGenerator {
             },
             any => unexpected_expr!(any),
         };
-        let selected_type = if check_group_by {
+        /// TODO: Solve column in GROUP BY stored as T.C, column
+        /// in SELECT stored as C, and vice versa.
+        /// NOTE: This can be solved by storig everything as T.C
+        /// in GroupByContents, with the help of FromContents
+        /// and when we search we also use FromContents to obtain T.C
+        let selected_type = match if check_group_by {
             self.clause_context.group_by().get_column_type_by_ident_components(&ident_components)
         } else {
             self.clause_context.from().get_column_type_by_ident_components(&ident_components)
+        } {
+            Ok(selected_type) => selected_type,
+            Err(err) => panic!("{err}"),
         };
         if !column_types.contains(&selected_type) {
             return Err(ConvertionError::new(format!(

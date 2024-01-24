@@ -147,7 +147,7 @@ impl QueryValueChooser for DeterministicValueChooser {
     fn choose_column_from(&mut self, from_contents: &FromContents, column_types: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>) {
         let ident_components = &self.chosen_columns_from.0[self.chosen_columns_from.1];
         self.chosen_columns_from.1 += 1;
-        let col_type = from_contents.get_column_type_by_ident_components(ident_components);
+        let col_type = from_contents.get_column_type_by_ident_components(ident_components).unwrap();
         if !column_types.contains(&col_type) {
             panic!("column_types = {:?} does not contain col_type = {:?}", column_types, col_type)
         }
@@ -160,7 +160,7 @@ impl QueryValueChooser for DeterministicValueChooser {
     fn choose_column_group_by(&mut self, group_by_contents: &GroupByContents, column_types: &Vec<SubgraphType>) -> (SubgraphType, Vec<Ident>) {
         let ident_components = &self.chosen_columns_group_by.0[self.chosen_columns_group_by.1];
         self.chosen_columns_group_by.1 += 1;
-        let col_type = group_by_contents.get_column_type_by_ident_components(ident_components);
+        let col_type = group_by_contents.get_column_type_by_ident_components(ident_components).unwrap();
         if !column_types.contains(&col_type) {
             panic!("column_types = {:?} does not contain col_type = {:?}", column_types, col_type)
         }

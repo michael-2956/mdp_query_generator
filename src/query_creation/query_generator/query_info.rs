@@ -1,4 +1,4 @@
-use std::{collections::{BTreeMap, HashMap, HashSet, BTreeSet}, path::Path, hash::Hash};
+use std::{collections::{BTreeMap, HashMap, HashSet, BTreeSet}, error::Error, fmt, hash::Hash, path::Path};
 
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
@@ -84,6 +84,25 @@ define_impersonation!(CreateTableSt, Statement, CreateTable, {
     on_commit: Option<OnCommit>,
     on_cluster: Option<String>,
 });
+
+#[derive(Debug)]
+pub struct ColumnRetrievalError {
+    reason: String,
+}
+
+impl Error for ColumnRetrievalError { }
+
+impl fmt::Display for ColumnRetrievalError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Column retrieval error: {}", self.reason)
+    }
+}
+
+impl ColumnRetrievalError {
+    pub fn new(reason: String) -> Self {
+        Self { reason }
+    }
+}
 
 pub struct DatabaseSchema {
     pub table_defs: Vec<CreateTableSt>
@@ -330,10 +349,12 @@ impl GroupByContents {
         self.columns.get_random_column_with_type(rng, graph_type, None)
     }
 
-    pub fn get_column_type_by_ident_components(&self, ident_components: &Vec<Ident>) -> SubgraphType {
+    pub fn get_column_type_by_ident_components(&self, ident_components: &Vec<Ident>) -> Result<SubgraphType, ColumnRetrievalError> {
         match self.columns.try_get_column_type_by_name(ident_components) {
-            Some(column_type) => column_type,
-            None => panic!("Couldn't find column named {}", ObjectName(ident_components.clone())),
+            Some(column_type) => Ok(column_type),
+            None => Err(ColumnRetrievalError::new(format!(
+                "Couldn't find column named {} GROUP BY: {:#?}", ObjectName(ident_components.clone()), self
+            ))),
         }
     }
 
@@ -421,7 +442,7 @@ impl FromContents {
         }
     }
 
-    pub fn get_column_type_by_ident_components(&self, ident_components: &Vec<Ident>) -> SubgraphType {
+    pub fn get_column_type_by_ident_components(&self, ident_components: &Vec<Ident>) -> Result<SubgraphType, ColumnRetrievalError> {
         let type_opt = match ident_components.as_slice() {
             [col_ident] => {
                 self.relations.iter().find_map(|(_, relation)|
@@ -434,8 +455,10 @@ impl FromContents {
             _ => None,
         };
         match type_opt {
-            Some(val) => val,
-            None => panic!("Couldn't find column named {}. FromContents: {:#?}", ObjectName(ident_components.clone()), self),
+            Some(val) => Ok(val),
+            None => Err(ColumnRetrievalError::new(format!(
+                "Couldn't find column named {}. FromContents: {:#?}", ObjectName(ident_components.clone()), self
+            ))),
         }
     }
 
