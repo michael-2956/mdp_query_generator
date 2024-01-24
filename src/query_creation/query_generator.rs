@@ -3,7 +3,7 @@ pub mod query_info;
 pub mod call_modifiers;
 pub mod value_choosers;
 pub mod expr_precedence;
-mod aggregate_function_settings;
+pub mod aggregate_function_settings;
 
 use std::path::PathBuf;
 
@@ -209,9 +209,9 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         std::mem::swap(&mut select_body.projection, &mut projection);
 
         if self.clause_context.group_by().is_grouping_active() && !self.clause_context.query().is_aggregation_indicated() {
-            // eprintln!("Grouping is active but wasn't indicated in any way. Add GROUP BY ()");
             if select_body.group_by.is_empty() {
-                // instead of group by (), because unsupported by parser
+                // Grouping is active but wasn't indicated in any way. Add GROUP BY ()
+                // instead of GROUP BY (), because unsupported by parser
                 select_body.group_by = vec![Expr::Value(Value::Boolean(true))]
             }
         }
@@ -626,7 +626,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         if unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList).len() == 2 {
             todo!(
                 "The number subgraph cannot yet choose between types / perform mixed type \
-                operations / type casts. It only accepts either integer or numeric, but not both"
+                operations / type casts. It only accepts either integer, numeric or bigint, but not both"
             );
         }
         let (number_type, number) = match self.next_state().as_str() {
@@ -1004,19 +1004,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 };
                 (args_type, args_expr, return_type)
             },
-            "aggregate_select_type_integer" => {
-                let return_type = SubgraphType::Integer;
-                let (args_type, args_expr) = match self.next_state().as_str() {
-                    "arg_integer" => {
-                        self.expect_state("call71_types");
-                        (AggregateFunctionAgruments::TypeList(vec![SubgraphType::Integer]), vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(
-                            self.handle_types(Some(&[SubgraphType::Integer]), None).1
-                        ))])
-                    },
-                    any => self.panic_unexpected(any),
-                };
-                (args_type, args_expr, return_type)
-            },
             arm @ ("aggregate_select_type_numeric" | "aggregate_select_type_text") => {
                 let (return_type, states) = match arm {
                     "aggregate_select_type_text" => (SubgraphType::Text, &["arg_double_text", "call74_types", "arg_single_text", "call63_types"]),
@@ -1042,10 +1029,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 let args_type = AggregateFunctionAgruments::TypeList(args_type_v);
                 (args_type, args_expr_v, return_type)
             },
-            arm @ ("aggregate_select_type_bool" | "aggregate_select_type_date") => {
+            arm @ ("aggregate_select_type_bool" | "aggregate_select_type_date" | "aggregate_select_type_integer") => {
                 let (return_type, states) = match arm {
                     "aggregate_select_type_bool" => (SubgraphType::Val3, &["arg_single_3vl", "call64_types"]),
                     "aggregate_select_type_date" => (SubgraphType::Date, &["arg_date", "call72_types"]),
+                    "aggregate_select_type_integer" => (SubgraphType::Integer, &["arg_integer", "call71_types"]),
                     any => self.panic_unexpected(any),
                 };
                 let args_type = AggregateFunctionAgruments::TypeList(vec![return_type.clone()]);
@@ -1059,7 +1047,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         };
 
         let aggr_name = self.config.aggregate_functions_distribution.get_func_name(
-            aggr_args_type, aggr_return_type.clone()
+            &aggr_args_type, &aggr_return_type
         );
 
         let expr = Expr::Function(ast::Function {

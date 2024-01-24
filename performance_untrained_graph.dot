@@ -139,7 +139,7 @@ digraph G {
         SELECT_DISTINCT [label="DISTINCT"]
         SELECT -> SELECT_DISTINCT
 
-        SELECT_list [label="SELECT list"]
+        SELECT_list [label="SELECT list\nset value: 'grouping_enabled'", set_value="grouping_enabled"]
         SELECT_DISTINCT -> SELECT_list
         SELECT -> SELECT_list
         SELECT_list_multiple_values [label="Multiple values\nmod.: 'single column' -> OFF", modifier="single column", modifier_mode="off"]

@@ -139,7 +139,7 @@ digraph G {
         SELECT_DISTINCT [label="DISTINCT"]
         SELECT -> SELECT_DISTINCT
 
-        SELECT_list [label="SELECT list"]
+        SELECT_list [label="SELECT list\nset value: 'grouping_enabled'", set_value="grouping_enabled"]
         SELECT_DISTINCT -> SELECT_list
         SELECT -> SELECT_list
         SELECT_list_multiple_values [label="Multiple values\nmod.: 'single column' -> OFF", modifier="single column", modifier_mode="off"]
@@ -150,7 +150,7 @@ digraph G {
         SELECT_list -> SELECT_unnamed_expr
         SELECT_list -> SELECT_expr_with_alias
 
-        select_expr [label="Expression\nset value: 'grouping_enabled'", set_value="grouping_enabled"]
+        select_expr [label="Expression"]
         SELECT_unnamed_expr -> select_expr
         SELECT_expr_with_alias -> select_expr
         select_expr_done [label="Expression done"]

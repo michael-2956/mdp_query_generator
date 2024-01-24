@@ -1,11 +1,11 @@
-use std::{error::Error, fmt, path::PathBuf, str::FromStr, io::Write, collections::HashMap};
+use std::{collections::HashMap, error::Error, fmt, io::Write, path::PathBuf, str::FromStr};
 
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
-use sqlparser::ast::{Query, ObjectName, Expr, SetExpr, SelectItem, Value, BinaryOperator, UnaryOperator, Ident, DataType, TrimWhereField, TableWithJoins, FunctionArg,};
+use sqlparser::ast::{self, BinaryOperator, DataType, Expr, FunctionArg, FunctionArgExpr, Ident, ObjectName, Query, Select, SelectItem, SetExpr, TableWithJoins, TrimWhereField, UnaryOperator, Value};
 
-use crate::{query_creation::{query_generator::{query_info::{DatabaseSchema, ClauseContext}, call_modifiers::{ValueSetterValue, TypesTypeValue, WildcardRelationsValue}, Unnested, QueryGenerator, value_choosers::{RandomValueChooser, DeterministicValueChooser}}, state_generator::{subgraph_type::SubgraphType, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::{CallModifiers, MarkovChain}, DynClone, ChainStateMemory}, substitute_models::{DeterministicModel, SubstituteModel, PathModel, AntiCallModel}, CallTypes}}, config::{TomlReadable, Config, MainConfig}, unwrap_variant, unwrap_variant_or_else};
+use crate::{query_creation::{query_generator::{aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, call_modifiers::{TypesTypeValue, ValueSetterValue, WildcardRelationsValue}, query_info::{DatabaseSchema, ClauseContext}, value_choosers::{RandomValueChooser, DeterministicValueChooser}, QueryGenerator, Unnested}, state_generator::{subgraph_type::SubgraphType, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::{CallModifiers, MarkovChain}, DynClone, ChainStateMemory}, substitute_models::{DeterministicModel, SubstituteModel, PathModel, AntiCallModel}, CallTypes}}, config::{TomlReadable, Config, MainConfig}, unwrap_variant, unwrap_variant_or_else};
 
 pub struct AST2PathTestingConfig {
     pub schema: PathBuf,
@@ -37,6 +37,7 @@ impl TestAST2Path {
             path_generator: PathGenerator::new(
                 DatabaseSchema::parse_schema(&config.ast2path_testing_config.schema),
                 &config.chain_config,
+                config.generator_config.aggregate_functions_distribution.clone(),
             )?,
             config: config.ast2path_testing_config,
             main_config: config.main_config,
@@ -115,17 +116,23 @@ pub struct PathGenerator {
     state_generator: MarkovChainGenerator<MaxProbStateChooser>,
     state_selector: DeterministicModel,
     clause_context: ClauseContext,
+    aggregate_functions_distribution: AggregateFunctionDistribution,
     rng: ChaCha8Rng,
 }
 
 impl PathGenerator {
-    pub fn new(database_schema: DatabaseSchema, chain_config: &StateGeneratorConfig) -> Result<Self, SyntaxError> {
+    pub fn new(
+        database_schema: DatabaseSchema,
+        chain_config: &StateGeneratorConfig,
+        aggregate_functions_distribution: AggregateFunctionDistribution,
+    ) -> Result<Self, SyntaxError> {
         Ok(Self {
             current_path: vec![],
             database_schema,
             state_generator: MarkovChainGenerator::<MaxProbStateChooser>::with_config(chain_config)?,
             state_selector: DeterministicModel::new(),
             clause_context: ClauseContext::new(),
+            aggregate_functions_distribution,
             rng: ChaCha8Rng::seed_from_u64(1),
         })
     }
@@ -246,6 +253,12 @@ impl PathGenerator {
         self.current_path = checkpoint.current_path.clone();
     }
 
+    fn restore_checkpoint_consume(&mut self, checkpoint: Checkpoint) {
+        self.clause_context = checkpoint.clause_context;
+        self.state_generator.set_chain_state(checkpoint.chain_state_memory);
+        self.current_path = checkpoint.current_path;
+    }
+
     /// subgraph def_Query
     fn handle_query(&mut self, query: &Box<Query>) -> Result<Vec<(Option<Ident>, SubgraphType)>, ConvertionError> {
         self.clause_context.on_query_begin();
@@ -261,17 +274,28 @@ impl PathGenerator {
             self.handle_where(selection)?;
         }
 
-        // in struct select: pub group_by: Vec<Expr>,
-        self.try_push_state("call0_GROUP_BY")?;
-        self.handle_group_by(&select_body.group_by)?;
-
-        if let Some(ref having) = select_body.having {
-            self.try_push_state("call0_HAVING")?;
-            self.handle_having(having)?;
-        }
-
-        self.try_push_state("call0_SELECT")?;
-        let mut column_idents_and_graph_types = self.handle_select(select_body.distinct, &select_body.projection)?;
+        let mut column_idents_and_graph_types = if select_body.group_by.len() != 0 {
+            self.handle_query_after_group_by(select_body, true)?
+        } else {
+            let implicit_group_by_checkpoint = self.get_checkpoint();
+            match self.handle_query_after_group_by(select_body, false) {
+                Ok(res) => res,
+                Err(err_no_grouping) => {
+                    self.restore_checkpoint_consume(implicit_group_by_checkpoint);
+                    match self.handle_query_after_group_by(select_body, true) {
+                        Ok(res) => res,
+                        Err(err_grouping) => {
+                            return Err(ConvertionError::new(format!(
+                                "Error converting query: {query}\n\
+                                Tried without implicit groping, got an error: {:#?}\n\
+                                Tried with implicit groping, got an error: {:#?}",
+                                err_no_grouping, err_grouping
+                            )))
+                        }
+                    }
+                }
+            }
+        };
 
         self.try_push_state("call0_LIMIT")?;
         self.handle_limit(&query.limit)?;
@@ -287,6 +311,31 @@ impl PathGenerator {
         }
 
         return Ok(column_idents_and_graph_types)
+    }
+
+    fn handle_query_after_group_by(&mut self, select_body: &Box<Select>, with_group_by: bool) -> Result<Vec<(Option<Ident>, SubgraphType)>, ConvertionError> {
+        if with_group_by {
+            self.try_push_state("call0_GROUP_BY")?;
+            self.handle_group_by(&select_body.group_by)?;
+        }
+
+        if let Some(ref having) = select_body.having {
+            if self.clause_context.group_by().is_grouping_active() {
+                self.try_push_state("call0_HAVING")?;
+                self.handle_having(having)?;
+            } else {
+                return Err(ConvertionError::new(format!(
+                    "HAVING was used but with_grouping was set to false"
+                )))
+            }
+        }
+
+        self.try_push_state("call0_SELECT")?;
+        let column_idents_and_graph_types = self.handle_select(
+            select_body.distinct, &select_body.projection
+        )?;
+
+        Ok(column_idents_and_graph_types)
     }
 
     fn handle_from(&mut self, from: &Vec<TableWithJoins>) -> Result<(), ConvertionError> {
@@ -336,6 +385,12 @@ impl PathGenerator {
             _ => false,
         };
 
+        let select_item_state = if self.clause_context.group_by().is_grouping_active() {
+            "call73_types"
+        } else {
+            "call54_types"
+        };
+
         for (i, select_item) in projection.iter().enumerate() {
             if i > 0 {
                 if single_column_mod {
@@ -350,19 +405,21 @@ impl PathGenerator {
             self.try_push_state("SELECT_list")?;
             match select_item {
                 SelectItem::UnnamedExpr(expr) => {
-                    self.try_push_states(&["SELECT_unnamed_expr", "call54_types"])?;
+                    self.try_push_states(&["SELECT_unnamed_expr", "select_expr", select_item_state])?;
                     let alias = match expr.unnested() {
                         Expr::Identifier(ident) => Some(ident.clone()),
                         Expr::CompoundIdentifier(idents) => Some(idents.last().unwrap().clone()),
+                        Expr::Function(func) => Some(func.name.0.last().unwrap().clone()),
                         _ => None,
                     };
-                    column_idents_and_graph_types.push((
-                        alias, self.handle_types(expr, None, None)?
-                    ));
+                    let expr = self.handle_types(expr, None, None)?;
+                    self.try_push_state("select_expr_done")?;
+                    column_idents_and_graph_types.push((alias, expr));
                 },
                 SelectItem::ExprWithAlias { expr, alias } => {
-                    self.try_push_states(&["SELECT_expr_with_alias", "call54_types"])?;
+                    self.try_push_states(&["SELECT_expr_with_alias", "select_expr", select_item_state])?;
                     let expr = self.handle_types(expr, None, None)?;
+                    self.try_push_state("select_expr_done")?;
                     self.push_node(PathNode::SelectAlias(alias.clone()));  // the order is important
                     column_idents_and_graph_types.push((Some(alias.clone()), expr));
                 },
@@ -575,10 +632,10 @@ impl PathGenerator {
     /// subgraph def_numeric
     fn handle_number(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
         self.try_push_state("number")?;
-        if unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList).len() == 2 {
+        if unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList).len() > 1 {
             todo!(
                 "The number subgraph cannot yet choose between types / perform mixed type \
-                operations / type casts. It only accepts either integer or numeric, but not both"
+                operations / type casts. It only accepts either integer, numeric or bigint, but not both"
             );
         }
         let number_type = match expr {
@@ -727,7 +784,6 @@ impl PathGenerator {
 
         let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
         let modifiers = unwrap_variant!(self.state_generator.get_fn_modifiers().clone(), CallModifiers::StaticList);
-        let mut error_mem = HashMap::new();
 
         let selected_type = match expr {
             Expr::Value(Value::Null) => {
@@ -735,158 +791,13 @@ impl PathGenerator {
                 SubgraphType::Undetermined
             },
             Expr::Cast { expr, data_type } if *expr == Box::new(Expr::Value(Value::Null)) => {
-                let null_type = SubgraphType::from_data_type(data_type);
-                if !selected_types.contains(&null_type) {
-                    unexpected_subgraph_type!(null_type)
-                }
-                self.try_push_state(match &null_type {
-                    SubgraphType::BigInt => "types_select_type_bigint",
-                    SubgraphType::Integer => "types_select_type_integer",
-                    SubgraphType::Numeric => "types_select_type_numeric",
-                    SubgraphType::Val3 => "types_select_type_3vl",
-                    SubgraphType::Text => "types_select_type_text",
-                    SubgraphType::Date => "types_select_type_date",
-                    any => unexpected_subgraph_type!(any),
-                })?;
-                self.try_push_state("types_return_typed_null")?;
-                null_type
+                self.handle_types_typed_null(selected_types, data_type)?
             },
-            expr => {
-                let types_before_state_selection = self.get_checkpoint();
-                let mut selected_types_iter = selected_types.iter();
-                // try out different allowed types to find the actual one (or not)
-                loop {
-                    match selected_types_iter.next() {
-                        Some(subgraph_type) => {
-                            self.try_push_state(match subgraph_type {
-                                SubgraphType::BigInt => "types_select_type_bigint",
-                                SubgraphType::Integer => "types_select_type_integer",
-                                SubgraphType::Numeric => "types_select_type_numeric",
-                                SubgraphType::Val3 => "types_select_type_3vl",
-                                SubgraphType::Text => "types_select_type_text",
-                                SubgraphType::Date => "types_select_type_date",
-                                any => unexpected_subgraph_type!(any),
-                            })?;
-                            let types_after_state_selection = self.get_checkpoint();
-                            let allowed_type_list = unwrap_variant!(
-                                self.state_generator.get_named_value::<TypesTypeValue>().unwrap(),
-                                ValueSetterValue::TypesType
-                            );
-                            let allowed_type_list = allowed_type_list.selected_types.clone();
-                            match expr {
-                                Expr::Function(_function) => {
-                                    /// TODO: inspect for bugs
-                                    if modifiers.contains(&SmolStr::new("no aggregate")) {
-                                        unexpected_expr!(expr)
-                                    }
-                                    self.try_push_state("call0_aggregate_function")?;
-                                    match self.handle_aggregate_function(allowed_type_list, expr) {
-                                        Ok(_expr_type) => {
-                                            // TODO
-                                        },
-                                        Err(err) => {
-                                            add_error(&mut error_mem, "Aggregate function", subgraph_type.clone(), err);
-                                            self.restore_checkpoint(&types_before_state_selection)
-                                        },
-                                    }
-                                },
-                                Expr::Subquery(subquery) => {
-                                    if modifiers.contains(&SmolStr::new("no subquery")) {
-                                        unexpected_expr!(expr)
-                                    }
-                                    self.try_push_states(&["types_select_special_expression", "call1_Query"])?;
-                                    self.state_generator.set_known_list(allowed_type_list);
-                                    match self.handle_query(subquery) {
-                                        Ok(col_type_list) => {
-                                            if matches!(col_type_list.as_slice(), [(.., query_subgraph_type)] if query_subgraph_type == subgraph_type) {
-                                                break subgraph_type.clone()
-                                            } else {
-                                                panic!("Query did not return the requested type. Requested: {:?} Got: {:?}\nQuery: {subquery}", subgraph_type, col_type_list);
-                                            }
-                                        },
-                                        Err(err) => {
-                                            add_error(&mut error_mem, "Subquery", subgraph_type.clone(), err);
-                                            self.restore_checkpoint(&types_before_state_selection)
-                                        },
-                                    }
-                                }
-                                expr => {
-                                    match {
-                                        match self.try_push_states(&["types_select_special_expression", "call0_column_spec"]) {
-                                            Ok(..) => {
-                                                if modifiers.contains(&SmolStr::new("no column spec")) {
-                                                    panic!("'no column spec' modifier is present, but call0_column_spec was successfully selected");
-                                                }
-                                                self.state_generator.set_known_list(allowed_type_list);
-                                                self.handle_column_spec(expr)
-                                            },
-                                            Err(err) => Err(err),
-                                        }
-                                    } {
-                                        Ok(col_subgraph_type) => break col_subgraph_type,
-                                        Err(err) => {
-                                            add_error(&mut error_mem, "column identifier", subgraph_type.clone(), err);
-                                            self.restore_checkpoint(&types_after_state_selection);
-                                            match match subgraph_type {
-                                                SubgraphType::BigInt => {
-                                                    self.try_push_state("call2_number")?;
-                                                    self.handle_number(expr)
-                                                },
-                                                SubgraphType::Integer => {
-                                                    self.try_push_state("call1_number")?;
-                                                    self.handle_number(expr)
-                                                },
-                                                SubgraphType::Numeric => {
-                                                    self.try_push_state("call0_number")?;
-                                                    self.handle_number(expr)
-                                                },
-                                                SubgraphType::Val3 => {
-                                                    self.try_push_state("call1_VAL_3")?;
-                                                    self.handle_val_3(expr)
-                                                },
-                                                SubgraphType::Text => {
-                                                    self.try_push_state("call0_text")?;
-                                                    self.handle_text(expr)
-                                                },
-                                                SubgraphType::Date => {
-                                                    self.try_push_state("call0_date")?;
-                                                    self.handle_date(expr)
-                                                },
-                                                any => unexpected_subgraph_type!(any),
-                                            } {
-                                                Ok(actual_type) => {
-                                                    if actual_type == *subgraph_type {
-                                                        break subgraph_type.clone()
-                                                    } else {
-                                                        panic!("Subgraph did not return the requested type. Requested: {:?} Got: {:?}", subgraph_type, actual_type);
-                                                    }
-                                                },
-                                                Err(err) => {
-                                                    add_error(&mut error_mem, "type expr.", subgraph_type.clone(), err);
-                                                    self.restore_checkpoint(&types_before_state_selection)
-                                                },
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        None => return Err(ConvertionError::new(
-                            format!(
-                                "Types didn't find a suitable type for expression, among:\n{:#?}\n\
-                                Expression:\n{:#?}\nPrinted: {}\nErrors: {}\n",
-                                selected_types, expr, expr, get_errors_str(&error_mem)
-                            )
-                        )),
-                    }
-                }
-            },
+            expr => self.handle_types_expr(selected_types, modifiers, expr)?,
         };
         self.try_push_state("EXIT_types")?;
 
-        // TODO: this code is repeated here and in random query generator.
-        // NOTE: Will be solved after out_types are implemented, so that all of this is managed
-        // in the state generator
+        // TODO: this code any many other code is repeated here and in random query generator.
         if let Some(generators) = check_generated_by_one_of {
             if !generators.iter().any(|as_what| selected_type.is_same_or_more_determined_or_undetermined(&as_what)) {
                 self.state_generator.print_stack();
@@ -898,6 +809,221 @@ impl PathGenerator {
         }
 
         return Ok(selected_type)
+    }
+
+    fn handle_types_typed_null(&mut self, selected_types: Vec<SubgraphType>, data_type: &DataType) -> Result<SubgraphType, ConvertionError> {
+        let null_type = SubgraphType::from_data_type(data_type);
+        if !selected_types.contains(&null_type) {
+            unexpected_subgraph_type!(null_type)
+        }
+        self.try_push_state(match &null_type {
+            SubgraphType::BigInt => "types_select_type_bigint",
+            SubgraphType::Integer => "types_select_type_integer",
+            SubgraphType::Numeric => "types_select_type_numeric",
+            SubgraphType::Val3 => "types_select_type_3vl",
+            SubgraphType::Text => "types_select_type_text",
+            SubgraphType::Date => "types_select_type_date",
+            any => unexpected_subgraph_type!(any),
+        })?;
+        self.try_push_state("types_return_typed_null")?;
+        Ok(null_type)
+    }
+
+    fn handle_types_expr(&mut self, selected_types: Vec<SubgraphType>, modifiers: Vec<SmolStr>, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+        let mut error_mem: HashMap<String, Vec<(SubgraphType, ConvertionError)>> = HashMap::new();
+        let types_before_state_selection = self.get_checkpoint();
+        let mut selected_types_iter = selected_types.iter();
+
+        // try out different allowed types to find the actual one (or not)
+        let subgraph_type = loop {
+            let subgraph_type = match selected_types_iter.next() {
+                Some(subgraph_type) => subgraph_type,
+                None => return Err(ConvertionError::new(
+                    format!(
+                        "Types didn't find a suitable type for expression, among:\n{:#?}\n\
+                        Expression:\n{:#?}\nPrinted: {}\nErrors: {}\n",
+                        selected_types, expr, expr, get_errors_str(&error_mem)
+                    )
+                )),
+            };
+
+            match self.try_push_state(match subgraph_type {
+                SubgraphType::BigInt => "types_select_type_bigint",
+                SubgraphType::Integer => "types_select_type_integer",
+                SubgraphType::Numeric => "types_select_type_numeric",
+                SubgraphType::Val3 => "types_select_type_3vl",
+                SubgraphType::Text => "types_select_type_text",
+                SubgraphType::Date => "types_select_type_date",
+                any => unexpected_subgraph_type!(any),
+            }) {
+                Ok(_) => {},
+                Err(err) => {
+                    add_error(&mut error_mem, "Type not allowed", subgraph_type.clone(), err);
+                    self.restore_checkpoint(&types_before_state_selection);
+                    continue;
+                },
+            };
+
+            let allowed_type_list = unwrap_variant!(
+                self.state_generator.get_named_value::<TypesTypeValue>().unwrap(),
+                ValueSetterValue::TypesType
+            ).selected_types.clone();
+
+            match expr {
+                Expr::Function(function) => {
+                    match self.handle_types_expr_aggr_function(subgraph_type, &modifiers, allowed_type_list, function) {
+                        Ok(tp) => break tp,
+                        Err(err) => {
+                            add_error(&mut error_mem, "Aggregate function", subgraph_type.clone(), err);
+                            self.restore_checkpoint(&types_before_state_selection)
+                        },
+                    }
+                },
+                Expr::Subquery(subquery) => {
+                    match self.handle_types_subquery(subgraph_type, &modifiers, allowed_type_list, subquery) {
+                        Ok(tp) => break tp,
+                        Err(err) => {
+                            add_error(&mut error_mem, "Subquery", subgraph_type.clone(), err);
+                            self.restore_checkpoint(&types_before_state_selection)
+                        },
+                    }
+                }
+                expr => {
+                    let types_after_state_selection = self.get_checkpoint();
+                    match self.handle_types_column_expr(subgraph_type, &modifiers, allowed_type_list, expr) {
+                        Ok(tp) => break tp,
+                        Err(err) => {
+                            add_error(&mut error_mem, "column identifier", subgraph_type.clone(), err);
+                            self.restore_checkpoint(&types_after_state_selection);
+                        }
+                    }
+                    match self.handle_types_expr_formula(subgraph_type, &modifiers, expr) {
+                        Ok(tp) => break tp,
+                        Err(err) => {
+                            add_error(&mut error_mem, "type expr.", subgraph_type.clone(), err);
+                            self.restore_checkpoint(&types_before_state_selection)
+                        },
+                    }
+                }
+            }
+        };
+
+        Ok(subgraph_type)
+    }
+
+    fn handle_types_expr_aggr_function(
+        &mut self,
+        subgraph_type: &SubgraphType,
+        modifiers: &Vec<SmolStr>,
+        allowed_type_list: Vec<SubgraphType>,
+        function: &ast::Function
+    ) -> Result<SubgraphType, ConvertionError> {
+        if modifiers.contains(&SmolStr::new("no aggregate")) {
+            unexpected_expr!(function)
+        }
+        self.try_push_states(&["types_select_special_expression", "call0_aggregate_function"])?;
+        self.state_generator.set_known_list(allowed_type_list);
+        match self.handle_aggregate_function(function) {
+            Ok(aggr_type) => {
+                if aggr_type == *subgraph_type {
+                    Ok(aggr_type)
+                } else {
+                    panic!("Aggregate function did not return requested type. Requested: {subgraph_type} Got: {aggr_type}")
+                }
+            },
+            Err(err) => Err(err),
+        }
+    }
+
+    fn handle_types_subquery(
+        &mut self,
+        subgraph_type: &SubgraphType,
+        modifiers: &Vec<SmolStr>,
+        allowed_type_list: Vec<SubgraphType>,
+        subquery: &Box<Query>, 
+    ) -> Result<SubgraphType, ConvertionError> {
+        if modifiers.contains(&SmolStr::new("no subquery")) {
+            unexpected_expr!(subquery)
+        }
+        self.try_push_states(&["types_select_special_expression", "call1_Query"])?;
+        self.state_generator.set_known_list(allowed_type_list);
+        match self.handle_query(subquery) {
+            Ok(col_type_list) => {
+                if matches!(col_type_list.as_slice(), [(.., query_subgraph_type)] if query_subgraph_type == subgraph_type) {
+                    Ok(subgraph_type.clone())
+                } else {
+                    panic!("Query did not return the requested type. Requested: {:?} Got: {:?}\nQuery: {subquery}", subgraph_type, col_type_list);
+                }
+            },
+            Err(err) => Err(err),
+        }
+    }
+
+    fn handle_types_column_expr(
+        &mut self,
+        subgraph_type: &SubgraphType,
+        modifiers: &Vec<SmolStr>,
+        allowed_type_list: Vec<SubgraphType>,
+        expr: &Expr,
+    ) -> Result<SubgraphType, ConvertionError> {
+        self.try_push_states(&["types_select_special_expression", "call0_column_spec"])?;
+        if modifiers.contains(&SmolStr::new("no column spec")) {
+            panic!("'no column spec' modifier is present, but call0_column_spec was successfully selected");
+        }
+        self.state_generator.set_known_list(allowed_type_list);
+        let column_type = self.handle_column_spec(expr)?;
+        if *subgraph_type == column_type {
+            Ok(column_type)
+        } else {
+            panic!("Column did not return the requested type. Requested: {subgraph_type} Got: {column_type}")
+        }
+    }
+
+    fn handle_types_expr_formula(
+        &mut self,
+        subgraph_type: &SubgraphType,
+        modifiers: &Vec<SmolStr>,
+        expr: &Expr,
+    ) -> Result<SubgraphType, ConvertionError> {
+        if modifiers.contains(&SmolStr::new("no type expr")) {
+            unexpected_expr!(expr)
+        }
+        match match subgraph_type {
+            SubgraphType::BigInt => {
+                self.try_push_state("call2_number")?;
+                self.handle_number(expr)
+            },
+            SubgraphType::Integer => {
+                self.try_push_state("call1_number")?;
+                self.handle_number(expr)
+            },
+            SubgraphType::Numeric => {
+                self.try_push_state("call0_number")?;
+                self.handle_number(expr)
+            },
+            SubgraphType::Val3 => {
+                self.try_push_state("call1_VAL_3")?;
+                self.handle_val_3(expr)
+            },
+            SubgraphType::Text => {
+                self.try_push_state("call0_text")?;
+                self.handle_text(expr)
+            },
+            SubgraphType::Date => {
+                self.try_push_state("call0_date")?;
+                self.handle_date(expr)
+            },
+            any => unexpected_subgraph_type!(any),
+        } {
+            Ok(actual_type) => {
+                if actual_type == *subgraph_type {
+                    Ok(actual_type)
+                } else {
+                    panic!("Subgraph did not return the requested type. Requested: {:?} Got: {:?}", subgraph_type, actual_type);
+                }
+            },
+            Err(err) => Err(err),
+        }
     }
 
     /// subgraph def_column_spec
@@ -961,206 +1087,198 @@ impl PathGenerator {
     }
 
     /// subgraph def_having
-    // like WHERE?
     fn handle_having(&mut self, selection: &Expr) -> Result<SubgraphType, ConvertionError> {
-        self.try_push_state("having")?;
+        self.try_push_state("HAVING")?;
         self.try_push_state("call45_types")?;
         let tp = self.handle_types(selection, Some(&[SubgraphType::Val3]), None)?;
-        self.try_push_state("EXIT_having")?;
+        self.clause_context.query_mut().set_aggregation_indicated();
+        self.try_push_state("EXIT_HAVING")?;
         Ok(tp)
     }
 
-    // subgraph def_aggregater_functions
-    // TODO: run through all possible types in loop
-    fn handle_aggregate_function(&mut self, return_type: Vec<SubgraphType>, function: &Expr) -> Result<SubgraphType, ConvertionError> {
+    // subgraph def_aggregater_function
+    fn handle_aggregate_function(&mut self, function: &ast::Function) -> Result<SubgraphType, ConvertionError> {
         self.try_push_state("aggregate_function")?;
-        let _expr_details = match function {
-            Expr::Function(sqlparser::ast::Function {
-                name: obj_fun_name,
-                args: function_args,
-                over: None,
-                distinct: is_distinct,
-                special: _,
-            }) => {
-                if is_distinct.clone() {
-                    self.try_push_state("aggregate_distinct")?;
-                }
-                self.try_push_state("aggregate_select_return_type")?;
-                
-                match return_type.as_slice() {
-                    arm @ ([SubgraphType::Val3] | [SubgraphType::Date] | [SubgraphType::Text]) => {
-                        let arg = match function_args.as_slice() {
-                            [
-                                FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(arg)),
-                            ] => {
-                                arg
-                            },
-                            _ => panic!("Function args of wrong type."),
-                        };
-                        match arm {
-                            [SubgraphType::Date] => {
-                                self.try_push_state("aggregate_select_type_date")?;
-                                self.try_push_state("arg_date")?;
-                                self.try_push_state("call72_types")?;
-                                let _tp = self.handle_types(arg, Some(&[SubgraphType::Date]), None)?;
-                            },
-                            [SubgraphType::Text] => {
-                                // TODO rename node
-                                self.try_push_state("aggregate_select_type_text")?;
-                                self.try_push_state("arg_single_text")?;
-                                self.try_push_state("call63_types")?;
-                                let _tp = self.handle_types(arg, Some(&[SubgraphType::Text]), None)?;
-                            },
-                            [SubgraphType::Val3] => {
-                                // TODO rename node
-                                self.try_push_state("aggregate_select_type_bool")?;
-                                self.try_push_state("arg_single_val3")?;
-                                self.try_push_state("call64_types")?;
-                                let _tp = self.handle_types(arg, Some(&[SubgraphType::Val3]), None)?;
-                            },
-                            _ => panic!("Expected one of [Date, Text, Val3], got{}!", arm[0]),
-                        }
-                    },
-                    [SubgraphType::Numeric] => {
-                        self.try_push_state("aggregate_select_type_numeric")?;
-                        let first_arg;
-                        let second_arg;
-                        match function_args.as_slice().len() {
-                            1 => {
-                                self.try_push_state("arg_single_numeric")?;
-                                second_arg = match function_args.as_slice() {
-                                    [
-                                        FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(second_arg)),
-                                    ] => {
-                                        second_arg
-                                    },
-                                    _ => panic!("Function args of wrong type."),
-                                };
-                            },
-                            2 => {
-                                self.try_push_state("arg_double_numeric")?;
-                                (first_arg, second_arg) = match function_args.as_slice() {
-                                    [
-                                        FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(first_arg)),
-                                        FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(second_arg)),
-                                    ] => {
-                                        (first_arg, second_arg)
-                                    },
-                                    _ => panic!("Function args of wrong type."),
-                                };
-                                self.try_push_state("call68_types")?;
-                                // do i need tp1 & tp2?
-                                let _tp1 = self.handle_types(first_arg, Some(&[SubgraphType::Numeric]), None)?;
-                            },
-                            any => panic!("Unexpected number of args in numeric aggregate function: {any}"),
-                        };
-                        self.try_push_state("call66_types")?;
-                        // do i need tp1 & tp2?
-                        let _tp2 = self.handle_types(second_arg, Some(&[SubgraphType::Numeric]), None)?;
-                    },
-                    [SubgraphType::Integer] => {
-                        self.try_push_state("aggregate_select_type_integer")?;
-                        let arg = match function_args.as_slice() {
-                            [
-                                FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(arg)),
-                            ] => {
-                                arg
-                            },
-                            _ => panic!("Function args of wrong type."),
-                        };
-                        match obj_fun_name.0[0].value.clone().as_str() {
-                            "COUNT" => {
-                                self.try_push_state("COUNT")?;
-                                match function_args.as_slice() {
-                                    [FunctionArg::Unnamed(
-                                        sqlparser::ast::FunctionArgExpr::Wildcard,
-                                    )] => {
-                                        self.try_push_state("COUNT_wildcard")?;
-                                    },
-                                    _ => {
-                                        self.try_push_state("call65_types")?;
-                                        let _tp = self.handle_types(arg, Some(&[SubgraphType::Undetermined]), None)?;
-                                    },  
-                                };
-                            },
-                            _ => {
-                                self.try_push_state("arg_integer")?;
-                                self.try_push_state("call71_types")?;
-                                let _tp = self.handle_types(arg, Some(&[SubgraphType::Integer]), None)?;
-                            },
-                        }
-                    },
-                    _ => panic!("Unexpected return type of function!"),
-                }
 
-            },
-            _ => panic!("Expected funciton, got {}!", function),
+        let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
+
+        let return_type = match selected_types.as_slice() {
+            &[ref tp] => tp,
+            any => panic!("Aggregate function can only have one selected type. Got: {:?}", any),
         };
+
+        let ast::Function {
+            name: aggr_name,
+            args: aggr_arg_expr_v,
+            over: _,
+            distinct,
+            special: _,
+        } = function;
+
+        if *distinct {
+            self.try_push_state("aggregate_distinct")?;
+        } else {
+            self.try_push_state("aggregate_not_distinct")?;
+        }
+
+        self.try_push_state("aggregate_select_return_type")?;
+
+        match (return_type, aggr_arg_expr_v.as_slice()) {
+            // * AS AN ARGUMENT: BIGINT
+            (SubgraphType::BigInt, &[FunctionArg::Unnamed(FunctionArgExpr::Wildcard)])
+            if self.aggregate_functions_distribution.func_names_include(
+                &AggregateFunctionAgruments::Wildcard,
+                &return_type, aggr_name
+            ) => {
+                self.try_push_states(&["aggregate_select_type_bigint", "arg_star"])?;
+            },
+
+            // SINGLE SAME TYPE ARGUMENT: VAL3, DATE, INTEGER, NUMERIC, TEXT, BIGINT
+            (
+                SubgraphType::Val3 | SubgraphType::Date | SubgraphType::Integer |
+                SubgraphType::Numeric | SubgraphType::Text | SubgraphType::BigInt,
+                &[FunctionArg::Unnamed(FunctionArgExpr::Expr(ref arg_expr))]
+            ) if self.aggregate_functions_distribution.func_names_include(
+                &AggregateFunctionAgruments::TypeList(vec![return_type.clone()]),
+                &return_type, aggr_name
+            ) => {
+                self.try_push_states(match return_type {
+                    SubgraphType::Val3 => &["aggregate_select_type_bool", "arg_single_3vl", "call64_types"],
+                    SubgraphType::Date => &["aggregate_select_type_date", "arg_date", "call72_types"],
+                    SubgraphType::Integer => &["aggregate_select_type_integer", "arg_integer", "call71_types"],
+                    SubgraphType::Text => &["aggregate_select_type_text", "arg_single_text", "call63_types"],
+                    SubgraphType::Numeric => &["aggregate_select_type_numeric", "arg_single_numeric", "call66_types"],
+                    SubgraphType::BigInt => &["aggregate_select_type_bigint", "arg_bigint", "call75_types"],
+                    _ => panic!("Something wrong with match arm"),
+                })?;
+                self.handle_types(arg_expr, Some(&[return_type.clone()]), None)?;
+            },
+
+            // ANY SINGLE ARGUMENT: BIGINT
+            (SubgraphType::BigInt, &[FunctionArg::Unnamed(FunctionArgExpr::Expr(ref arg_expr))])
+            if self.aggregate_functions_distribution.func_names_include(
+                &AggregateFunctionAgruments::AnyType,
+                &return_type, aggr_name
+            ) => {
+                self.try_push_states(&["aggregate_select_type_bigint", "arg_bigint_any", "call65_types"])?;
+                self.handle_types(arg_expr, None, None)?;
+            },
+
+            // DOUBLE ARGUMENT: NUMERIC, TEXT
+            (
+                SubgraphType::Numeric | SubgraphType::Text,
+                &[
+                    FunctionArg::Unnamed(FunctionArgExpr::Expr(ref arg_expr_1)),
+                    FunctionArg::Unnamed(FunctionArgExpr::Expr(ref arg_expr_2))
+                ]
+            ) if self.aggregate_functions_distribution.func_names_include(
+                &AggregateFunctionAgruments::TypeList(vec![return_type.clone(), return_type.clone()]),
+                &return_type, aggr_name
+            ) => {
+                let states = match return_type {
+                    SubgraphType::Text => &["aggregate_select_type_text", "arg_double_text", "call74_types", "call63_types"],
+                    SubgraphType::Numeric => &["aggregate_select_type_numeric", "arg_double_numeric", "call68_types", "call66_types"],
+                    _ => panic!("Something wrong with match arm"),
+                };
+                self.try_push_states(&states[..3])?;
+                self.handle_types(arg_expr_1, Some(&[return_type.clone()]), None)?;
+                self.try_push_state(states[3])?;
+                self.handle_types(arg_expr_2, Some(&[return_type.clone()]), None)?;
+            },
+
+            _ => {
+                unexpected_expr!(function);
+            },
+        }
         self.try_push_state("EXIT_aggregate_function")?;
 
-        // TODO what to return?
-        if let Some(first_element) = return_type.first() {
-            return Ok(first_element.clone());
-        } else {
-            panic!("Empty return type");
-        }
+        Ok(return_type.clone())
     }
 
     /// subgraph def_group_by
-    fn handle_group_by(&mut self, grouping: &Vec<Expr>) -> Result<Vec<(Expr, SubgraphType)>, ConvertionError> {
+    fn handle_group_by(&mut self, grouping_exprs: &Vec<Expr>) -> Result<(), ConvertionError> {
         self.try_push_state("GROUP_BY")?;
-        let mut column_idents_and_graph_types = vec![];
-        match grouping.as_slice() {
-            arm @ ([Expr::GroupingSets(arg)] | [Expr::Rollup(arg)] | [Expr::Cube(arg)]) => {
-                match arm {
-                    [Expr::GroupingSets(_)] => {
-                        self.try_push_state("grouping_set")?;
-                    },
-                    [Expr::Rollup(_)] => {
-                        self.try_push_state("grouping_rollup")?;
-                    },
-                    [Expr::Cube(_)] => {
-                        self.try_push_state("grouping_cube")?;
-                    },
-                    _ => panic!("Wrong grouping type"),
-                };
-                for arg_element in arg.as_slice() {
-                    self.try_push_state("set_list")?;
-                    for column_listed in arg_element.as_slice() {
-                        self.try_push_state("new_set")?;
-                        let column_idents = match column_listed {
-                            Expr::Identifier(ident) => vec![ident.clone()],
-                            Expr::CompoundIdentifier(vec_of_ident) => vec_of_ident.clone(),
-                            Expr::CompositeAccess { expr: _, key } => vec![key.clone()],
-                            _ => panic!("Unexpected element in set CUBE/ROLLUP/SET"),
-                        };
-                        self.try_push_state("call69_types")?;
-                        let tp = self.handle_types(column_listed, None, None)?;
-                        self.clause_context.group_by_mut().append_column(column_idents, tp.clone());
-                        column_idents_and_graph_types.push((column_listed.clone(), tp.clone()));
+        if grouping_exprs.len() == 0 || grouping_exprs == &[Expr::Value(Value::Boolean(true))] {
+            self.clause_context.group_by_mut().set_single_group_grouping();
+            self.clause_context.group_by_mut().set_single_row_grouping();
+            self.try_push_states(&["group_by_single_group", "EXIT_GROUP_BY"])?;
+            return Ok(())
+        } else {
+            self.try_push_state("has_accessible_columns")?;
+        }
+        for grouping_expr in grouping_exprs {
+            self.try_push_state("grouping_column_list")?;
+            match grouping_expr {
+                special_grouping @ (
+                    Expr::GroupingSets(..) |
+                    Expr::Rollup(..) |
+                    Expr::Cube(..)
+                ) => {
+                    self.try_push_state("special_grouping")?;
+                    let (set_list, groupping_type_str) = match special_grouping {
+                        Expr::GroupingSets(set_list) => (set_list, "grouping_set"),
+                        Expr::Rollup(set_list) => (set_list, "grouping_rollup"),
+                        Expr::Cube(set_list) => (set_list, "grouping_cube"),
+                        any => unexpected_expr!(any)
+                    };
+                    self.try_push_state(groupping_type_str)?;
+                    for current_set in set_list {
+                        self.try_push_state("set_list")?;
+                        if current_set.len() == 0 {
+                            self.try_push_state("set_list_empty_allowed")?;
+                        } else {
+                            for (expr_i, column_expr) in current_set.iter().enumerate() {
+                                if expr_i > 0 {
+                                    self.try_push_state("set_multiple")?;
+                                }
+                                self.try_push_state("call69_types")?;
+                                let column_type = self.handle_types(column_expr, None, None)?;
+                                let column_name = match column_expr {
+                                    Expr::Identifier(ident) => vec![ident.clone()],
+                                    Expr::CompoundIdentifier(ident_components) => ident_components.clone(),
+                                    any => panic!("Unexpected expression for GROUP BY column: {:#?}", any),
+                                };
+                                self.clause_context.group_by_mut().append_column(column_name, column_type);
+                            }
+                        }
                     }
-                }
-            },
-            list @ &[..] => {
-                self.try_push_state("grouping_column_list")?;
-                for column_listed in list {
-                    self.try_push_state("list_of_relations")?;
-                    let column_idents = match column_listed {
+                    if set_list.last().unwrap().len() > 0 {
+                        // exit though set_multiple for non-empty sets
+                        self.try_push_state("set_multiple")?;
+                    }
+                },
+                column_expr @ (
+                    Expr::Identifier(..) |
+                    Expr::CompoundIdentifier(..)
+                ) => {
+                    self.try_push_state("call70_types")?;
+                    let column_type = self.handle_types(column_expr, None, None)?;
+                    let chosen_column_ident = match column_expr {
                         Expr::Identifier(ident) => vec![ident.clone()],
                         Expr::CompoundIdentifier(vec_of_ident) => vec_of_ident.clone(),
-                        Expr::CompositeAccess { expr: _, key } => vec![key.clone()],
-                        _ => panic!("Unexpected element in set CUBE/ROLLUP/SET"),
+                        any => panic!("Unexpected expression for GROUP BY column: {:#?}", any),
                     };
-                    self.try_push_state("call60_types?")?;
-                    let tp = self.handle_types(column_listed, None, None)?;
-                    self.clause_context.group_by_mut().append_column(column_idents, tp.clone());
-                    column_idents_and_graph_types.push((column_listed.clone(), tp.clone()));
-                    // do i need push node? it's pushed in handle_column_spec... 
-                };
-            },
+                    self.clause_context.group_by_mut().append_column(chosen_column_ident, column_type);
+                },
+                any => unexpected_expr!(any)
+            }
         }
-        self.try_push_state("EXIT_group_by")?;
-        return Ok(column_idents_and_graph_types);
+
+        // For cases such as: GROUPING SETS ( (), (), () )
+        if !self.clause_context.group_by().contains_columns() {
+            self.clause_context.group_by_mut().set_single_group_grouping();
+            // Check is GROUPING SETS ( () )
+            if let &[Expr::GroupingSets(ref set_list)] = grouping_exprs.as_slice() {
+                if set_list.len() == 1 {
+                    self.clause_context.group_by_mut().set_single_row_grouping();
+                }
+            }
+        }
+
+        self.clause_context.query_mut().set_aggregation_indicated();
+
+        self.try_push_state("EXIT_GROUP_BY")?;
+        Ok(())
     }
 
 }

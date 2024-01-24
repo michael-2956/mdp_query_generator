@@ -333,7 +333,7 @@ impl GroupByContents {
     pub fn get_column_type_by_ident_components(&self, ident_components: &Vec<Ident>) -> SubgraphType {
         match self.columns.try_get_column_type_by_name(ident_components) {
             Some(column_type) => column_type,
-            None => panic!("Couldn't find column named {}.", ObjectName(ident_components.clone())),
+            None => panic!("Couldn't find column named {}", ObjectName(ident_components.clone())),
         }
     }
 

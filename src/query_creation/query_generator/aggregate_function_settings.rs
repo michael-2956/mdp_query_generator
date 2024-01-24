@@ -52,7 +52,9 @@ impl AggregateFunctionDistribution {
             let mut domain_type_map: HashMap<AggregateFunctionAgruments, BTreeMap<String, f64>> = HashMap::new();
             for (domain_type_str, name_weight_map) in domain_map {
                 let domain_types = parse_type_list(domain_type_str);
-                domain_type_map.insert(domain_types, BTreeMap::from_iter(name_weight_map.into_iter()));
+                domain_type_map.insert(domain_types, BTreeMap::from_iter(name_weight_map.into_iter().map(
+                    |(f_name, w)| (f_name.to_uppercase(), w)
+                )));
             }
             func_map.insert(return_types, domain_type_map);
         }
@@ -63,8 +65,8 @@ impl AggregateFunctionDistribution {
         }
     }  
 
-    pub fn get_func_name(&mut self, arguments: AggregateFunctionAgruments, return_type: SubgraphType) -> sqlparser::ast::ObjectName {
-        let aggr_weight_map = &self.func_map[&return_type][&arguments];
+    pub fn get_func_name(&mut self, arguments: &AggregateFunctionAgruments, return_type: &SubgraphType) -> ObjectName {
+        let aggr_weight_map = &self.func_map[return_type][arguments];
         let dist = WeightedIndex::new(
             aggr_weight_map.iter().map(|item| *item.1)
         ).unwrap();
@@ -73,5 +75,9 @@ impl AggregateFunctionDistribution {
             value: selected_name.clone(),
             quote_style: (None),
         }])
+    }
+
+    pub fn func_names_include(&mut self, arguments: &AggregateFunctionAgruments, return_type: &SubgraphType, aggr_name: &ObjectName) -> bool {
+        self.func_map[return_type][arguments].contains_key(&aggr_name.0[0].value.to_uppercase())
     }
 }

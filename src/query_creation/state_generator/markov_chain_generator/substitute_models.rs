@@ -64,7 +64,9 @@ impl SubstituteModel for PathModel {
         self.index += 1;
         if node_outgoing.iter().find(|(.., node)| node.node_common.name == *node_name).is_none() {
             Err(StateGenerationError::new(format!(
-                "Did not find {node_name} among {:?}", node_outgoing
+                "Did not find {node_name} among {:?}", node_outgoing.iter().map(
+                    |(.., node)| node.node_common.name.to_string()
+                ).collect::<Vec<_>>()
             )))
         } else {
             Ok(node_outgoing.into_iter().map(
@@ -104,7 +106,9 @@ impl SubstituteModel for DeterministicModel {
         let node_name = self.state_to_choose.take().unwrap();
         if node_outgoing.iter().find(|(.., node)| node.node_common.name == node_name).is_none() {
             Err(StateGenerationError::new(format!(
-                "Did not find {node_name} among {:?}", node_outgoing
+                "Did not find {node_name} among {:?}", node_outgoing.iter().map(
+                    |(.., node)| node.node_common.name.to_string()
+                ).collect::<Vec<_>>()
             )))
         } else {
             Ok(node_outgoing.into_iter().map(

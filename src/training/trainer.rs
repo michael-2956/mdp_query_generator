@@ -44,6 +44,7 @@ impl SQLTrainer {
             path_generator: PathGenerator::new(
                 DatabaseSchema::parse_schema(&config.training_config.training_schema),
                 &config.chain_config,
+                config.generator_config.aggregate_functions_distribution.clone(),
             )?,
             path_query_generator: QueryGenerator::from_state_generator_and_schema(
                 MarkovChainGenerator::with_config(&config.chain_config).unwrap(),

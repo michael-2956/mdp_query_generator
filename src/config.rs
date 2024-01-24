@@ -11,9 +11,9 @@ pub struct ProgramArgs {
     /// config file
     #[structopt(parse(from_os_str), default_value = "config.toml")]
     pub config_path: PathBuf,
-    /// Number of queries to generate (if provided, otherwise sourced from config)
-    #[structopt(short = "n", long = "num_generate")]
-    pub num_generate: Option<usize>,
+    /// Number of queries to generate/test (if provided, otherwise sourced from config)
+    #[structopt(short = "n", long = "num_queries")]
+    pub num_queries: Option<usize>,
     /// Print generated queries, overriding config file settings
     #[structopt(short = "p", long = "print")]
     pub print: bool,
@@ -77,8 +77,9 @@ impl Config {
     }
 
     pub fn update_from_args(&mut self, program_args: &ProgramArgs) {
-        if let Some(num_generate) = program_args.num_generate {
-            self.main_config.num_generate = num_generate;
+        if let Some(num_queries) = program_args.num_queries {
+            self.main_config.num_generate = num_queries;
+            self.ast2path_testing_config.n_tests = num_queries;
         }
         if program_args.print {
             self.generator_config.print_queries = true;
