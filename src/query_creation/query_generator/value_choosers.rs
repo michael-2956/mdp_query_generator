@@ -13,7 +13,7 @@ pub trait QueryValueChooser {
 
     fn choose_column_from(&mut self, from_contents: &FromContents, column_types: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>);
 
-    fn choose_column_group_by(&mut self, group_by_contents: &GroupByContents, column_types: &Vec<SubgraphType>) -> (SubgraphType, Vec<Ident>);
+    fn choose_column_group_by(&mut self, from_contents: &FromContents, group_by_contents: &GroupByContents, column_types: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>);
 
     fn choose_bigint(&mut self) -> String;
     
@@ -46,11 +46,17 @@ impl QueryValueChooser for RandomValueChooser {
     }
 
     fn choose_column_from(&mut self, from_contents: &FromContents, column_types: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>) {
-        from_contents.get_random_column_with_type_of(&mut self.rng, column_types, qualified)
+        from_contents.get_random_column_with_type_of(&mut self.rng, column_types, qualified, None)
     }
 
-    fn choose_column_group_by(&mut self, group_by_contents: &GroupByContents, column_types: &Vec<SubgraphType>) -> (SubgraphType, Vec<Ident>) {
-        group_by_contents.get_random_column_with_type_of(&mut self.rng, column_types)
+    fn choose_column_group_by(&mut self, from_contents: &FromContents, group_by_contents: &GroupByContents, column_types: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>) {
+        if !qualified {
+            from_contents.get_random_column_with_type_of(&mut self.rng, column_types, qualified,
+                Some(group_by_contents.get_column_name_set())
+            )
+        } else {
+            group_by_contents.get_random_column_with_type_of(&mut self.rng, column_types)
+        }
     }
 
     fn choose_bigint(&mut self) -> String {
@@ -157,14 +163,14 @@ impl QueryValueChooser for DeterministicValueChooser {
         (col_type, ident_components.clone())
     }
 
-    fn choose_column_group_by(&mut self, group_by_contents: &GroupByContents, column_types: &Vec<SubgraphType>) -> (SubgraphType, Vec<Ident>) {
-        let ident_components = &self.chosen_columns_group_by.0[self.chosen_columns_group_by.1];
+    fn choose_column_group_by(&mut self, _from_contents: &FromContents, group_by_contents: &GroupByContents, column_types: &Vec<SubgraphType>, _qualified: bool) -> (SubgraphType, Vec<Ident>) {
+        let ident_components = self.chosen_columns_group_by.0[self.chosen_columns_group_by.1].clone();
         self.chosen_columns_group_by.1 += 1;
-        let col_type = group_by_contents.get_column_type_by_ident_components(ident_components).unwrap();
+        let col_type = group_by_contents.get_column_type_by_ident_components(&ident_components).unwrap();
         if !column_types.contains(&col_type) {
             panic!("column_types = {:?} does not contain col_type = {:?}", column_types, col_type)
         }
-        (col_type, ident_components.clone())
+        (col_type, ident_components)
     }
 
     fn choose_bigint(&mut self) -> String {

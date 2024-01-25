@@ -894,50 +894,30 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList, || self.state_generator.print_stack()
         );
         self.expect_state("column_spec_choose_source");
-        let (selected_type, ident) = match self.next_state().as_str() {
-            "get_column_spec_from_group_by" => {
-                self.expect_state("column_spec_choose_qualified");
-                // println!("flag_before_valuechooser");
-                // println!("context group_by: {:#?}", self.clause_context.group_by());
-                // println!("column_types: {:#?}", column_types);
-                
-                let (selected_type, mut column_name) = self.value_chooser.choose_column_group_by(
-                    self.clause_context.group_by(), &column_types
-                );
-                // println!("flag_after_valuechooser");
-                match self.next_state().as_str() {
-                    "unqualified_column_name" => {
-                        (selected_type, Expr::Identifier(column_name.last().unwrap().clone()))
-                    },
-                    "qualified_column_name" => {
-                        if let &[ref col_ident] = column_name.as_slice() {
-                            let rel_ident = self.clause_context.from().get_relation_alias_by_column_name(col_ident);
-                            column_name = vec![rel_ident, col_ident.clone()];
-                        }
-                        (selected_type, Expr::CompoundIdentifier(column_name))
-                    },
-                    any => self.panic_unexpected(any)
-                }
-            },
-            "get_column_spec_from_from" => {
-                self.expect_state("column_spec_choose_qualified");
-                match self.next_state().as_str() {
-                    "unqualified_column_name" => {
-                        let (selected_type, ident_components) = self.value_chooser.choose_column_from(
-                            self.clause_context.from(), &column_types, false
-                        );
-                        (selected_type, Expr::Identifier(ident_components.last().unwrap().clone()))
-                    },
-                    "qualified_column_name" => {
-                        let (selected_type, ident_components) = self.value_chooser.choose_column_from(
-                            self.clause_context.from(), &column_types, true
-                        );
-                        (selected_type, Expr::CompoundIdentifier(ident_components))
-                    },
-                    any => self.panic_unexpected(any)
-                }
-            },
+        let group_by_column = match self.next_state().as_str() {
+            "get_column_spec_from_group_by" => true,
+            "get_column_spec_from_from" => false,
             any => self.panic_unexpected(any),
+        };
+        self.expect_state("column_spec_choose_qualified");
+        let qualified = match self.next_state().as_str() {
+            "qualified_column_name" => true,
+            "unqualified_column_name" => false,
+            any => self.panic_unexpected(any)
+        };
+        let (selected_type, qualified_column_name) = if group_by_column {
+            self.value_chooser.choose_column_group_by(
+                self.clause_context.from(),
+                self.clause_context.group_by(),
+                &column_types, qualified
+            )
+        } else {
+            self.value_chooser.choose_column_from(self.clause_context.from(), &column_types, qualified)
+        };
+        let ident = if qualified {
+            Expr::CompoundIdentifier(qualified_column_name)
+        } else {
+            Expr::Identifier(qualified_column_name.last().unwrap().clone())
         };
         self.expect_state("EXIT_column_spec");
         (selected_type, ident)
@@ -1085,13 +1065,9 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     let (column_type, column_expr) = self.handle_types(
                         None, None
                     );
-                    result.push(column_expr.clone());
-                    let chosen_column_ident = match column_expr {
-                        Expr::Identifier(ident) => vec![ident],
-                        Expr::CompoundIdentifier(vec_of_ident) => vec_of_ident,
-                        any => panic!("Unexpected expression for GROUP BY column: {:#?}", any),
-                    };
-                    self.clause_context.group_by_mut().append_column(chosen_column_ident, column_type);
+                    let column_name = self.clause_context.from().get_qualified_ident_components(&column_expr);
+                    result.push(column_expr);
+                    self.clause_context.group_by_mut().append_column(column_name, column_type);
 
                     match self.next_state().as_str() {
                         "grouping_column_list" => { },
@@ -1113,12 +1089,8 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                             match self.next_state().as_str() {
                                 "call69_types" => {
                                     let (column_type, column_expr) = self.handle_types(None, None);
-                                    current_set.push(column_expr.clone());
-                                    let column_name = match column_expr {
-                                        Expr::Identifier(ident) => vec![ident],
-                                        Expr::CompoundIdentifier(ident_components) => ident_components,
-                                        any => panic!("Unexpected expression for GROUP BY column: {:#?}", any),
-                                    };
+                                    let column_name = self.clause_context.from().get_qualified_ident_components(&column_expr);
+                                    current_set.push(column_expr);
                                     self.clause_context.group_by_mut().append_column(column_name, column_type);
                                 },
                                 "set_multiple" => { },

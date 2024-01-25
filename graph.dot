@@ -610,21 +610,21 @@ digraph G {
         column_spec_choose_source [label="Choose column source"]
         column_spec -> column_spec_choose_source
 
-        column_spec_choose_qualified [label="Choose if qualified (R.COL/COL)\nset value:'do_unique_column_names_exist_for_selected_types'", set_value="do_unique_column_names_exist_for_selected_types"]
+        column_spec_choose_qualified [label="Choose if qualified\n[set value]", set_value="do_unique_column_names_exist_for_selected_types"]
 
-        get_column_spec_from_group_by [label="GROUP BY", modifier="group by columns", modifier_mode="on"]
+        get_column_spec_from_group_by [label="GROUP BY\nmod. 'group by columns' -> ON", modifier="group by columns", modifier_mode="on"]
         column_spec_choose_source -> get_column_spec_from_group_by
         get_column_spec_from_group_by -> column_spec_choose_qualified
 
-        get_column_spec_from_from [label="FROM", modifier="group by columns", modifier_mode="off"]
+        get_column_spec_from_from [label="FROM\nmod. 'group by columns' -> OFF", modifier="group by columns", modifier_mode="off"]
         column_spec_choose_source -> get_column_spec_from_from
         get_column_spec_from_from -> column_spec_choose_qualified
 
-        qualified_column_name [label="Qualified\n(R.COL)"]
+        qualified_column_name [label="Qualified (R.COL)"]
         column_spec_choose_qualified -> qualified_column_name
         qualified_column_name -> EXIT_column_spec
 
-        unqualified_column_name [label="Unqualified (COL)\ncall mod.: 'has_unique...'", call_modifier="has_unique_column_names_for_selected_types"]
+        unqualified_column_name [label="Unqualified (COL)\n[call mod]", call_modifier="has_unique_column_names_for_selected_types"]
         column_spec_choose_qualified -> unqualified_column_name
         unqualified_column_name -> EXIT_column_spec
     }

@@ -94,7 +94,7 @@ fn run_training(config: Config) {
 
 fn test_ast_to_path(config: Config) {
     let mut tester = match TestAST2Path::with_config(config) {
-        Ok(trainer) => trainer,
+        Ok(tester) => tester,
         Err(err) => {
             println!("{}", err);
             return;

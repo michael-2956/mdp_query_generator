@@ -56,8 +56,14 @@ impl TestAST2Path {
         for i in 0..self.config.n_tests {
             // println!("\n\n\n ================== Beggining GENERATION ================== \n\n\n");
             let query = Box::new(self.random_query_generator.generate());
-            // println!("\n\n\nQuery: {query}");
-            let path = self.path_generator.get_query_path(&query)?;
+            // 3700
+            let path = match self.path_generator.get_query_path(&query) {
+                Ok(path) => path,
+                Err(err) => {
+                    println!("Tested query: {query}");
+                    return Err(err)
+                },
+            };
             let generated_query = self.path_query_generator.generate_with_substitute_model_and_value_chooser(
                 Box::new(PathModel::from_path_nodes(&path)),
                 Box::new(DeterministicValueChooser::from_path_nodes(&path))
@@ -66,7 +72,7 @@ impl TestAST2Path {
                 println!("\nAST -> path -> AST mismatch!\nOriginal  query: {}\nGenerated query: {}", query, generated_query);
                 println!("Path: {:?}", path);
             }
-            if i % 50 == 0 {
+            if i % 10 == 0 {
                 if self.main_config.print_progress {
                     print!("{}/{}      \r", i, self.config.n_tests);
                 }
@@ -641,21 +647,7 @@ impl PathGenerator {
         let number_type = match expr {
             Expr::Value(Value::Number(number_str, false)) => {
                 self.try_push_state("number_literal")?;
-                // assume that literals are the smallest type that they fit into
-                // (this is now postgres determines them)
-                if number_str.parse::<u32>().is_ok() {
-                    self.try_push_state("number_literal_integer")?;
-                    self.push_node(PathNode::IntegerValue(number_str.clone()));
-                    SubgraphType::Integer
-                } else if number_str.parse::<u64>().is_ok() {
-                    self.try_push_state("number_literal_bigint")?;
-                    self.push_node(PathNode::BigIntValue(number_str.clone()));
-                    SubgraphType::BigInt
-                } else {
-                    self.try_push_state("number_literal_numeric")?;
-                    self.push_node(PathNode::NumericValue(number_str.clone()));
-                    SubgraphType::Numeric
-                }
+                self.handle_number_determine_literal_type(number_str)?
             },
             Expr::BinaryOp { left, op, right } => {
                 self.try_push_states(&["BinaryNumberOp", "call48_types"])?;
@@ -704,6 +696,42 @@ impl PathGenerator {
         };
         self.try_push_state("EXIT_number")?;
         Ok(number_type)
+    }
+
+    fn handle_number_determine_literal_type(&mut self, number_str: &String) -> Result<SubgraphType, ConvertionError> {
+        // assume that literals are the smallest type that they fit into
+        // (this is now postgres determines them)
+        let err_int_str = match number_str.parse::<u32>() {
+            Ok(..) => {
+                match self.try_push_state("number_literal_integer") {
+                    Ok(..) => {
+                        self.push_node(PathNode::IntegerValue(number_str.clone()));
+                        return Ok(SubgraphType::Integer)
+                    },
+                    Err(err_int) => format!("{err_int}"),
+                }
+            },
+            Err(err_int) => format!("{err_int}")
+        };
+        if number_str.parse::<u64>().is_ok() {
+            match self.try_push_state("number_literal_bigint") {
+                Ok(..) => {
+                    self.push_node(PathNode::BigIntValue(number_str.clone()));
+                    Ok(SubgraphType::BigInt)
+                },
+                Err(err_bigint) => {
+                    Err(ConvertionError::new(format!(
+                        "Error trying to find '{number_str}' literal type.\
+                        Tried Integer, got: {err_int_str}\
+                        Tried BigInt, got: {err_bigint}"
+                    )))
+                },
+            }
+        } else {
+            self.try_push_state("number_literal_numeric")?;
+            self.push_node(PathNode::NumericValue(number_str.clone()));
+            Ok(SubgraphType::Numeric)
+        }
     }
 
     /// subgraph def_text
@@ -1041,29 +1069,27 @@ impl PathGenerator {
             false
         };
         self.try_push_state("column_spec_choose_qualified")?;
-        let ident_components = match expr {
-            Expr::CompoundIdentifier(idents) if idents.len() == 2 => {
-                self.try_push_state("qualified_column_name")?;
-                idents.clone()
-            },
+        let mut ident_components = match expr {
             Expr::Identifier(ident) => {
                 self.try_push_state("unqualified_column_name")?;
                 vec![ident.clone()]
             },
+            Expr::CompoundIdentifier(idents) if idents.len() == 2 => {
+                self.try_push_state("qualified_column_name")?;
+                idents.clone()
+            },
             any => unexpected_expr!(any),
         };
-        /// TODO: Solve column in GROUP BY stored as T.C, column
-        /// in SELECT stored as C, and vice versa.
-        /// NOTE: This can be solved by storig everything as T.C
-        /// in GroupByContents, with the help of FromContents
-        /// and when we search we also use FromContents to obtain T.C
+        if check_group_by {
+            ident_components = self.clause_context.from().qualify_column(ident_components);
+        }
         let selected_type = match if check_group_by {
             self.clause_context.group_by().get_column_type_by_ident_components(&ident_components)
         } else {
             self.clause_context.from().get_column_type_by_ident_components(&ident_components)
         } {
             Ok(selected_type) => selected_type,
-            Err(err) => panic!("{err}"),
+            Err(err) => return Err(ConvertionError::new(format!("{err}"))),
         };
         if !column_types.contains(&selected_type) {
             return Err(ConvertionError::new(format!(
@@ -1241,11 +1267,7 @@ impl PathGenerator {
                                 }
                                 self.try_push_state("call69_types")?;
                                 let column_type = self.handle_types(column_expr, None, None)?;
-                                let column_name = match column_expr {
-                                    Expr::Identifier(ident) => vec![ident.clone()],
-                                    Expr::CompoundIdentifier(ident_components) => ident_components.clone(),
-                                    any => panic!("Unexpected expression for GROUP BY column: {:#?}", any),
-                                };
+                                let column_name = self.clause_context.from().get_qualified_ident_components(column_expr);
                                 self.clause_context.group_by_mut().append_column(column_name, column_type);
                             }
                         }
@@ -1261,12 +1283,8 @@ impl PathGenerator {
                 ) => {
                     self.try_push_state("call70_types")?;
                     let column_type = self.handle_types(column_expr, None, None)?;
-                    let chosen_column_ident = match column_expr {
-                        Expr::Identifier(ident) => vec![ident.clone()],
-                        Expr::CompoundIdentifier(vec_of_ident) => vec_of_ident.clone(),
-                        any => panic!("Unexpected expression for GROUP BY column: {:#?}", any),
-                    };
-                    self.clause_context.group_by_mut().append_column(chosen_column_ident, column_type);
+                    let column_name = self.clause_context.from().get_qualified_ident_components(column_expr);
+                    self.clause_context.group_by_mut().append_column(column_name, column_type);
                 },
                 any => unexpected_expr!(any)
             }

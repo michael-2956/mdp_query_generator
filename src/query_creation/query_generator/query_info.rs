@@ -5,7 +5,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use crate::query_creation::state_generator::subgraph_type::SubgraphType;
 
-use sqlparser::{ast::{Ident, ObjectName, Statement, ColumnDef, HiveDistributionStyle, TableConstraint, HiveFormat, SqlOption, FileFormat, Query, OnCommit, TableAlias}, dialect::PostgreSqlDialect, parser::Parser};
+use sqlparser::{ast::{ColumnDef, Expr, FileFormat, HiveDistributionStyle, HiveFormat, Ident, ObjectName, OnCommit, Query, SqlOption, Statement, TableAlias, TableConstraint}, dialect::PostgreSqlDialect, parser::Parser};
 
 macro_rules! define_impersonation {
     ($impersonator:ident, $enum_name:ident, $variant:ident, { $($field:ident: $type:ty),* $(,)? }) => {
@@ -327,6 +327,9 @@ impl GroupByContents {
     }
 
     pub fn append_column(&mut self, column_name: Vec<Ident>, graph_type: SubgraphType) {
+        if column_name.len() != 2 {
+            panic!("GroupByContents only accepts qualified identifiers. Got: {:?}", column_name)
+        }
         self.columns.append_column(column_name, graph_type)
     }
 
@@ -356,6 +359,12 @@ impl GroupByContents {
                 "Couldn't find column named {} GROUP BY: {:#?}", ObjectName(ident_components.clone()), self
             ))),
         }
+    }
+
+    pub fn get_column_name_set(&self) -> HashSet<Ident> {
+        HashSet::from_iter(self.columns.get_column_names_iter().map(
+            |idents| idents.last().unwrap().clone()
+        ))
     }
 
     pub fn get_column_names_iter(&self) -> impl Iterator<Item = &Vec<Ident>> {
@@ -397,11 +406,18 @@ impl FromContents {
 
     /// checks if FROM has columns with names that are unique for all its tables,
     /// for any of the specified types
-    pub fn has_unique_columns_for_types(&self, graph_types: &Vec<SubgraphType>) -> bool {
-        let allowed_columns = self.get_unique_columns();
+    pub fn has_unique_columns_for_types(
+        &self,
+        graph_types: &Vec<SubgraphType>,
+        allowed_col_names: Option<HashSet<Ident>>,
+    ) -> bool {
+        let mut unique_columns = self.get_unique_columns();
+        if let Some(allowed_col_names) = allowed_col_names {
+            unique_columns = unique_columns.intersection(&allowed_col_names).cloned().collect();
+        }
         graph_types.iter().any(|graph_type|
             self.relations.iter().any(|(_, relation)| relation.is_type_accessible(
-                graph_type, Some(&allowed_columns)
+                graph_type, Some(&unique_columns)
             ))
         )
     }
@@ -421,9 +437,18 @@ impl FromContents {
 
     /// if qualified is false, returns only the column name, only considering columns which
     /// have names unique among all the tables
-    pub fn get_random_column_with_type_of(&self, rng: &mut ChaCha8Rng, column_types: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>) {
+    pub fn get_random_column_with_type_of(
+        &self, rng: &mut ChaCha8Rng,
+        column_types: &Vec<SubgraphType>,
+        qualified: bool,
+        allowed_col_names: Option<HashSet<Ident>>,
+    ) -> (SubgraphType, Vec<Ident>) {
         let allowed_columns_opt = if !qualified {
-            Some(self.get_unique_columns())
+            let mut allowed_columns = self.get_unique_columns();
+            if let Some(allowed_col_names) = allowed_col_names {
+                allowed_columns = allowed_columns.intersection(&allowed_col_names).cloned().collect()
+            }
+            Some(allowed_columns)
         } else { None };
         let available_graph_types = column_types.into_iter().filter(
             |x| self.is_type_available(x, allowed_columns_opt.as_ref())
@@ -439,6 +464,26 @@ impl FromContents {
             relation.alias.clone()
         } else {
             panic!("Couldn't find column named {}.", column_name)
+        }
+    }
+
+    pub fn get_qualified_ident_components(&self, column_expr: &Expr) -> Vec<Ident> {
+        match column_expr {
+            Expr::Identifier(ident) => self.qualify_column(vec![ident.clone()]),
+            Expr::CompoundIdentifier(ident_components) => ident_components.clone(),
+            any => panic!("Unexpected expression for GROUP BY column: {:#?}", any),
+        }
+    }
+
+    pub fn qualify_column(&self, ident_components: Vec<Ident>) -> Vec<Ident> {
+        match ident_components.len() {
+            1 => {
+                let col_ident = ident_components.into_iter().next().unwrap();
+                let rel_ident = self.get_relation_alias_by_column_name(&col_ident);
+                vec![rel_ident, col_ident]
+            },
+            2 => ident_components,
+            _ => panic!("Can't qualify {:?}", ident_components),
         }
     }
 

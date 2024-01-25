@@ -152,9 +152,14 @@ impl ValueSetter for HasUniqueColumnNamesForTypeValueSetter {
         let column_types = unwrap_variant!(
             &function_context.call_params.selected_types, CallTypes::TypeList
         );
+        let allowed_col_names = if function_context.call_params.modifiers.contains(
+            &SmolStr::new("group by columns")
+        ) {
+            Some(clause_context.group_by().get_column_name_set())
+        } else { None };
         // in any clause context the column ambiguity is determined by FROM
         ValueSetterValue::HasUniqueColumnNamesForType(HasUniqueColumnNamesForSelectedTypesValue {
-            value: clause_context.from().has_unique_columns_for_types(column_types)
+            value: clause_context.from().has_unique_columns_for_types(column_types, allowed_col_names)
         })
     }
 }
@@ -403,7 +408,7 @@ impl ValueSetter for HasAccessibleColumnsValueSetter {
 
     fn get_value(&self, clause_context: &ClauseContext, _function_context: &FunctionContext) -> ValueSetterValue {
         ValueSetterValue::HasAccessibleColumns(HasAccessibleColumnsValue {
-            available: clause_context.from().has_unique_columns_for_types(&vec![SubgraphType::Undetermined]),
+            available: clause_context.from().has_unique_columns_for_types(&vec![SubgraphType::Undetermined], None),
         })
     }
 }
