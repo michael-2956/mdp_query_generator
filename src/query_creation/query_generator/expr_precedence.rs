@@ -214,16 +214,27 @@ impl ExpressionPriority for Expr {
             Expr::ArrayIndex { obj, indexes } => Expr::ArrayIndex { obj: obj.p_nest_l(parent_priority), indexes },
             Expr::MapAccess { column, keys } => Expr::MapAccess { column: column.p_nest_l(parent_priority), keys },
             Expr::UnaryOp { op, expr } => {
+                // Exists will just be negated by the parser otherwise
                 if op == UnaryOperator::Not {
                     if let Expr::Exists { subquery: _, negated: _ } = *expr {
-                        // exists will just be negated by the parser otherwise
                         return Expr::UnaryOp { op, expr: Box::new(Expr::Nested(expr)) }
                     }
                 }
+
+                // Postgres can't separate @ from - in @-3, and -- is a comment in SQL.
+                // Solution: introduce nesting
                 if matches!(*expr, Expr::UnaryOp { .. }) {
-                    // Postgres can't separate @ from - in @-3, and -- is a comment in SQL.
                     return Expr::UnaryOp { op, expr: Box::new(Expr::Nested(expr)) }
                 }
+                // do the same if unary op is left of a binary op.
+                let mut expr_ref = &*expr;
+                while let Expr::BinaryOp { left, op: _, right: _ } = expr_ref {
+                    if matches!(**left, Expr::UnaryOp { .. }) {
+                        return Expr::UnaryOp { op, expr: Box::new(Expr::Nested(expr)) }
+                    }
+                    expr_ref = left;
+                }
+
                 Expr::UnaryOp { op, expr: expr.p_nest_r(parent_priority) }  // p_nest_r is because unary operations are prefix ones.
             },
             Expr::BinaryOp { left, op, right } => {
