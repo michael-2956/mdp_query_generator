@@ -76,7 +76,7 @@
 
 digraph G {
     subgraph def_Query {
-        Query [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[single column, single row]", label="Query\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[single column, single row]", shape=octagon, style=filled, color=green]
+        Query [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[single column, single row]", label="Query\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods=[single column, single row]", shape=octagon, style=filled, color=green]
         EXIT_Query [label="EXIT Query"]
 
         call0_FROM [label="FROM", shape=rectangle, color=cornflowerblue, style=filled]
@@ -133,7 +133,7 @@ digraph G {
     }
 
     subgraph def_SELECT {
-        SELECT [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[single column]", label="SELECT\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[single column]", shape=rectangle, style=filled, color=bisque]
+        SELECT [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[single column]", label="SELECT\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods=[single column]", shape=rectangle, style=filled, color=bisque]
         EXIT_SELECT [label="EXIT SELECT", shape=rectangle]
 
         SELECT_DISTINCT [label="DISTINCT"]
@@ -529,7 +529,7 @@ digraph G {
     }
 
     subgraph def_types {
-        types [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[no type expr, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no aggregate]", label="TYPE(S) (generic):\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods=[no type expr, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[no case, no type expr, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no aggregate]", label="TYPE(S) (generic):\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods=[no case, no type expr, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
         types_select_type_bigint[TYPE_NAME="bigint", label="bigint?", set_value="types_type"]
@@ -578,6 +578,10 @@ digraph G {
         types_select_special_expression -> call0_aggregate_function
         call0_aggregate_function -> EXIT_types
 
+        // call0_case [TYPES="[known]", modifier="no case", modifier_mode="off", label="CASE\nTYPE: known\nmod.: 'no case' -> OFF", shape=rectangle, style=filled, color=aquamarine]
+        // types_select_special_expression -> call0_case
+        // call0_case -> EXIT_types
+
         call2_number [label="number\nTYPES: [bigint]\nMODS: [...mods]\nmod.: 'no type expr' -> OFF", TYPES="[bigint]", MODS="[...]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
         types_select_type_bigint -> call2_number
         call2_number -> EXIT_types
@@ -603,8 +607,13 @@ digraph G {
         call0_date -> EXIT_types
     }
 
+    // subgraph def_case {
+    //     case [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[group by columns, no column spec]", label="case\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods=[group by columns, no column spec]", shape=octagon, style=filled, color=aquamarine]
+    //     EXIT_case [label="EXIT case", shape=rectangle]
+    // }
+
     subgraph def_column_spec {
-        column_spec [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[group by columns]", label="column specifier\ntypes=[numeric, integer, 3VL Value, text, date]\nmods=[group by columns]", shape=octagon, style=filled, color=gold]
+        column_spec [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[group by columns]", label="column specifier\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods=[group by columns]", shape=octagon, style=filled, color=gold]
         EXIT_column_spec [label="EXIT column specifier", shape=rectangle]
 
         column_spec_choose_source [label="Choose column source"]
@@ -630,7 +639,7 @@ digraph G {
     }
 
     subgraph def_list_expr {
-        list_expr [TYPES="[numeric, integer, 3VL Value, text, date]", MODS="[no column spec]", label="list expr\ntypes=[numeric, integer, 3VL Value, text, date]\nmods: [no column spec]", shape=octagon, style=filled, color=blue]
+        list_expr [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[no column spec]", label="list expr\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods: [no column spec]", shape=octagon, style=filled, color=blue]
         EXIT_list_expr[label="EXIT list expr"]
 
         call16_types [TYPES="[...]", MODS="[...]", label="TYPES: [...types]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
@@ -660,7 +669,7 @@ digraph G {
         grouping_column_list [label="columns list\n[call mod]", call_modifier="has_accessible_cols_mod"]
         has_accessible_columns -> grouping_column_list
 
-        call70_types[TYPES="[any]", label="TYPES: [any]\nMODS: [no type expr, no typed nulls,\nno subquery, no aggregate]", MODS="[no type expr, no typed nulls, no subquery, no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        call70_types[TYPES="[any]", label="TYPES: [any]\nMODS: [no type expr, no typed nulls,\nno subquery, no aggregate, no case]", MODS="[no type expr, no typed nulls, no subquery, no aggregate, no case]", shape=rectangle, style=filled, color=lightblue]
         grouping_column_list -> call70_types
         call70_types -> grouping_column_list
         call70_types -> EXIT_GROUP_BY
@@ -686,7 +695,7 @@ digraph G {
         special_grouping -> grouping_set
         grouping_set -> set_list
 
-        call69_types [TYPES="[any]", label="TYPES: [any]\n MODS: [no type expr, no typed nulls,\nno subquery, no aggregate]", MODS="[no type expr, no typed nulls, no subquery, no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        call69_types [TYPES="[any]", label="TYPES: [any]\n MODS: [no type expr, no typed nulls,\nno subquery, no aggregate, no case]", MODS="[no type expr, no typed nulls, no subquery, no aggregate, no case]", shape=rectangle, style=filled, color=lightblue]
         set_list -> call69_types
         // call69_types -> set_list
         set_multiple [label="multiple cols in set"]
