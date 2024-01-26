@@ -200,7 +200,7 @@ digraph G {
     }
 
     subgraph def_VAL_3 {
-        VAL_3 [shape=rectangle, label="3VL Value\nmods: [no column spec]", MODS="[no column spec]", style=filled, color=red]
+        VAL_3 [shape=rectangle, label="3VL Value\n[mods]", MODS="[]", style=filled, color=red]
         EXIT_VAL_3 [shape=rectangle, label="EXIT 3VL Value"]
 
         IsNull [label="IS NULL"]
@@ -373,7 +373,7 @@ digraph G {
     }
 
     subgraph def_number {
-        number [shape=rectangle, label="number\ntypes=[integer, numeric, bigint]\nmods: [no column spec]", TYPES="[integer, numeric, bigint]", MODS="[no column spec]", style=filled, color=chocolate]
+        number [shape=rectangle, label="number\ntypes=[integer, numeric, bigint]\n[mods]", TYPES="[integer, numeric, bigint]", MODS="[]", style=filled, color=chocolate]
         EXIT_number [label="EXIT number"]
 
         number_literal[label="literal", literal="t"]
@@ -460,7 +460,7 @@ digraph G {
     }
 
     subgraph def_text {
-        text [label="text\nmods: [no column spec]", MODS="[no column spec]", shape=rectangle, style=filled, color=pink]
+        text [label="text\n[mods]", MODS="[]", shape=rectangle, style=filled, color=pink]
         EXIT_text [label="EXIT text"]
 
         text_literal [label="random text literal", literal="t"]
@@ -520,7 +520,7 @@ digraph G {
     }
 
     subgraph def_date {
-        date [label="date\nmods: [no column spec]", MODS="[no column spec]", shape=rectangle, style=filled, color=cadetblue4]
+        date [label="date\n[mods]", MODS="[]", shape=rectangle, style=filled, color=cadetblue4]
         EXIT_date [label="EXIT date"]
 
         date_literal [label="DATE literal"]
@@ -639,7 +639,7 @@ digraph G {
     }
 
     subgraph def_list_expr {
-        list_expr [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[no column spec]", label="list expr\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods: [no column spec]", shape=octagon, style=filled, color=blue]
+        list_expr [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[]", label="list expr\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\n[mods]", shape=octagon, style=filled, color=blue]
         EXIT_list_expr[label="EXIT list expr"]
 
         call16_types [TYPES="[...]", MODS="[...]", label="TYPES: [...types]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]

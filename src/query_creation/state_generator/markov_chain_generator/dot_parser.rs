@@ -536,9 +536,7 @@ fn parse_function_options(
                 .filter(|el| el.len() > 0)
                 .collect::<Vec<_>>();
 
-            if mods.len() > 0 {
-                modifiers = Some(mods);
-            }
+            modifiers = Some(mods);
         } else {
             return Err(SyntaxError::new(format!(
                 "{node_name}[MODS=.. should take bracketed form: MODS=\"[.., ]\""
