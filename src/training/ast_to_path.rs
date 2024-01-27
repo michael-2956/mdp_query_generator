@@ -897,25 +897,16 @@ impl PathGenerator {
                 ValueSetterValue::TypesType
             ).selected_types.clone();
 
-            match expr {
-                Expr::Function(function) => {
-                    match self.handle_types_expr_aggr_function(subgraph_type, &modifiers, allowed_type_list, function) {
-                        Ok(tp) => break tp,
-                        Err(err) => {
-                            add_error(&mut error_mem, "Aggregate function", subgraph_type.clone(), err);
-                            self.restore_checkpoint(&types_before_state_selection)
-                        },
-                    }
-                },
-                Expr::Subquery(subquery) => {
-                    match self.handle_types_subquery(subgraph_type, &modifiers, allowed_type_list, subquery) {
-                        Ok(tp) => break tp,
-                        Err(err) => {
-                            add_error(&mut error_mem, "Subquery", subgraph_type.clone(), err);
-                            self.restore_checkpoint(&types_before_state_selection)
-                        },
-                    }
-                }
+            let (tp_res, error_key) = match expr {
+                Expr::Case { .. } => (
+                    self.handle_types_expr_case(subgraph_type, &modifiers, allowed_type_list, expr), "CASE"
+                ),
+                Expr::Function(function) => (
+                    self.handle_types_expr_aggr_function(subgraph_type, &modifiers, allowed_type_list, function), "Aggregate function"
+                ),
+                Expr::Subquery(subquery) => (
+                    self.handle_types_subquery(subgraph_type, &modifiers, allowed_type_list, subquery), "Subquery"
+                ),
                 expr => {
                     let types_after_state_selection = self.get_checkpoint();
                     match self.handle_types_column_expr(subgraph_type, &modifiers, allowed_type_list, expr) {
@@ -925,18 +916,43 @@ impl PathGenerator {
                             self.restore_checkpoint(&types_after_state_selection);
                         }
                     }
-                    match self.handle_types_expr_formula(subgraph_type, &modifiers, expr) {
-                        Ok(tp) => break tp,
-                        Err(err) => {
-                            add_error(&mut error_mem, "type expr.", subgraph_type.clone(), err);
-                            self.restore_checkpoint(&types_before_state_selection)
-                        },
-                    }
+                    (self.handle_types_expr_formula(subgraph_type, &modifiers, expr), "type expr.")
                 }
+            };
+            match tp_res {
+                Ok(tp) => break tp,
+                Err(err) => {
+                    add_error(&mut error_mem, error_key, subgraph_type.clone(), err);
+                    self.restore_checkpoint(&types_before_state_selection)
+                },
             }
         };
 
         Ok(subgraph_type)
+    }
+
+    fn handle_types_expr_case(
+        &mut self,
+        subgraph_type: &SubgraphType,
+        modifiers: &Vec<SmolStr>,
+        allowed_type_list: Vec<SubgraphType>,
+        expr: &Expr
+    ) -> Result<SubgraphType, ConvertionError> {
+        if modifiers.contains(&SmolStr::new("no case")) {
+            unexpected_expr!(expr)
+        }
+        self.try_push_states(&["types_select_special_expression", "call0_case"])?;
+        self.state_generator.set_known_list(allowed_type_list);
+        match self.handle_case(expr) {
+            Ok(aggr_type) => {
+                if aggr_type == *subgraph_type {
+                    Ok(aggr_type)
+                } else {
+                    panic!("CASE did not return requested type. Requested: {subgraph_type} Got: {aggr_type}")
+                }
+            },
+            Err(err) => Err(err),
+        }
     }
 
     fn handle_types_expr_aggr_function(
@@ -1128,6 +1144,60 @@ impl PathGenerator {
         self.clause_context.query_mut().set_aggregation_indicated();
         self.try_push_state("EXIT_HAVING")?;
         Ok(tp)
+    }
+
+    /// subgraph def_case
+    fn handle_case(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+        self.try_push_state("case")?;
+
+        let (operand, conditions, results, else_result) = if let Expr::Case {
+            operand, conditions, results, else_result
+        } = expr {
+            (operand, conditions, results, else_result)
+        } else { panic!("handle_case reveived {expr}") };
+
+        self.try_push_states(&["case_first_result", "call82_types"])?;
+        let out_type = self.handle_types(&results[0], None, None)?;
+
+        if let Some(operand_expr) = operand {
+            self.try_push_states(&["simple_case", "simple_case_operand", "call78_types"])?;
+            let operand_type = self.handle_types(operand_expr, None, None)?;
+            
+            for i in 0..conditions.len() {
+                self.try_push_states(&["simple_case_condition", "call79_types"])?;
+                self.state_generator.set_compatible_list(operand_type.get_compat_types());
+                self.handle_types(&conditions[i], None, Some(operand_type.clone()))?;
+
+                if i+1 < results.len() {
+                    self.try_push_states(&["simple_case_result", "call80_types"])?;
+                    self.state_generator.set_compatible_list(out_type.get_compat_types());
+                    self.handle_types(&results[i+1], None, Some(out_type.clone()))?;
+                }
+            }
+        } else {
+            self.try_push_state("searched_case")?;
+
+            for i in 0..conditions.len() {
+                self.try_push_states(&["searched_case_condition", "call76_types"])?;
+                self.handle_types(&conditions[i], Some(&[SubgraphType::Val3]), None)?;
+
+                if i+1 < results.len() {
+                    self.try_push_states(&["searched_case_result", "call77_types"])?;
+                    self.state_generator.set_compatible_list(out_type.get_compat_types());
+                    self.handle_types(&results[i+1], None, Some(out_type.clone()))?;
+                }
+            }
+        }
+
+        self.try_push_state("case_else")?;
+        if let Some(else_expr) = else_result {
+            self.try_push_state("call81_types")?;
+            self.state_generator.set_compatible_list(out_type.get_compat_types());
+            self.handle_types(else_expr, None, Some(out_type.clone()))?;
+        }
+        self.try_push_state("EXIT_case")?;
+
+        Ok(out_type)
     }
 
     // subgraph def_aggregater_function
