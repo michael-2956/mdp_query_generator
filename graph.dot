@@ -578,9 +578,9 @@ digraph G {
         types_select_special_expression -> call0_aggregate_function
         call0_aggregate_function -> EXIT_types
 
-        // call0_case [TYPES="[known]", modifier="no case", modifier_mode="off", label="CASE\nTYPE: known\nmod.: 'no case' -> OFF", shape=rectangle, style=filled, color=aquamarine]
-        // types_select_special_expression -> call0_case
-        // call0_case -> EXIT_types
+        call0_case [TYPES="[known]", modifier="no case", modifier_mode="off", label="CASE\nTYPE: known\nmod.: 'no case' -> OFF", shape=rectangle, style=filled, color=aquamarine]
+        types_select_special_expression -> call0_case
+        call0_case -> EXIT_types
 
         call2_number [label="number\nTYPES: [bigint]\nMODS: [...mods]\nmod.: 'no type expr' -> OFF", TYPES="[bigint]", MODS="[...]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
         types_select_type_bigint -> call2_number
@@ -607,10 +607,56 @@ digraph G {
         call0_date -> EXIT_types
     }
 
-    // subgraph def_case {
-    //     case [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[group by columns, no column spec]", label="case\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods=[group by columns, no column spec]", shape=octagon, style=filled, color=aquamarine]
-    //     EXIT_case [label="EXIT case", shape=rectangle]
-    // }
+    subgraph def_case {
+        case [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[]", label="CASE\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\n[mods]", shape=rectangle, style=filled, color=aquamarine]
+        EXIT_case [label="EXIT case", shape=rectangle]
+
+        case_first_result [label="First result"]
+        case -> case_first_result
+        call82_types [TYPES="[...]", label="TYPES: [...types] -> TP1\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        case_first_result -> call82_types
+        
+        case_else [label="ELSE"]
+        call81_types [TYPES="[compatible]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        case_else -> call81_types
+        call81_types -> EXIT_case
+        case_else -> EXIT_case
+
+        simple_case [label="Simple CASE"]
+        call82_types -> simple_case
+
+        simple_case_operand [label="Operand"]
+        simple_case -> simple_case_operand
+        call78_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY -> TP2\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        simple_case_operand -> call78_types
+
+        simple_case_condition [label="Condition"]
+        call78_types -> simple_case_condition
+        call79_types [TYPES="[compatible]", label="TYPES: [compatible(TP2)]\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        simple_case_condition -> call79_types
+        call79_types -> case_else
+
+        simple_case_result [label="Add result"]
+        call79_types -> simple_case_result
+        call80_types [TYPES="[compatible]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        simple_case_result -> call80_types
+        call80_types -> simple_case_condition
+
+        searched_case [label="Searched CASE"]
+        call82_types -> searched_case
+
+        searched_case_condition [label="Condition"]
+        searched_case -> searched_case_condition
+        call76_types [TYPES="[3VL Value]", label="TYPES: [3VL Value]\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        searched_case_condition -> call76_types
+        call76_types -> case_else
+
+        searched_case_result [label="Add result"]
+        call76_types -> searched_case_result
+        call77_types [TYPES="[compatible]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        searched_case_result -> call77_types
+        call77_types -> searched_case_condition
+    }
 
     subgraph def_column_spec {
         column_spec [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[group by columns]", label="column specifier\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods=[group by columns]", shape=octagon, style=filled, color=gold]
@@ -818,11 +864,12 @@ digraph G {
         EXIT_GROUP_BY -> HAVING [color=none]
 
         EXIT_VAL_3 -> number [color=none, weight=10]
-        EXIT_number -> text [color=none, weight=10]
+        EXIT_number -> text [color=none]
         EXIT_text -> date [color=none]
 
         EXIT_types -> column_spec [color=none, weight=10]
-        EXIT_column_spec -> list_expr[color=none]
+        EXIT_column_spec -> list_expr[color=none, weight=10]
         EXIT_list_expr -> aggregate_function [color=none]
+        EXIT_aggregate_function -> case [color=none]
     }
 }

@@ -843,13 +843,12 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 })
             }
             "types_select_special_expression" => {
+                self.state_generator.set_known_list(allowed_type_list);
                 match self.next_state().as_str() {
-                    "call0_column_spec" => {
-                        self.state_generator.set_known_list(allowed_type_list);
-                        self.handle_column_spec()
-                    }
+                    "call0_case" => self.handle_case(),
+                    "call0_column_spec" => self.handle_column_spec(),
+                    "call0_aggregate_function" => self.handle_aggregate_function(),
                     "call1_Query" => {
-                        self.state_generator.set_known_list(allowed_type_list);
                         let (subquery, column_types) = self.handle_query();
                         let selected_type = match column_types.len() {
                             1 => column_types[0].1.clone(),
@@ -857,11 +856,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                         };
                         (selected_type, Expr::Subquery(Box::new(subquery)))
                     },
-                    "call0_aggregate_function" => {
-                        self.state_generator.set_known_list(allowed_type_list);
-                        let return_val = self.handle_aggregate_function();
-                        (return_val.0, return_val.1)
-                    }
                     any => self.panic_unexpected(any)
                 }
             },
@@ -945,6 +939,82 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             }
             any => self.panic_unexpected(any)
         }
+    }
+
+    /// subgraph def_case
+    fn handle_case(&mut self) -> (SubgraphType, Expr) {
+        self.expect_state("case");
+
+        self.expect_state("case_first_result");
+        self.expect_state("call82_types");
+        let (out_type, first_result) = self.handle_types(None, None);
+        let mut results = vec![first_result];
+        let mut conditions = vec![];
+
+        let operand = match self.next_state().as_str() {
+            "simple_case" => {
+                self.expect_state("simple_case_operand");
+                self.expect_state("call78_types");
+                let (operand_type, operand_expr) = self.handle_types(None, None);
+
+                loop {
+                    self.expect_state("simple_case_condition");
+                    self.expect_state("call79_types");
+                    self.state_generator.set_compatible_list(operand_type.get_compat_types());
+                    let condition_expr = self.handle_types(None, Some(operand_type.clone())).1;
+                    conditions.push(condition_expr);
+
+                    match self.next_state().as_str() {
+                        "simple_case_result" => {
+                            self.expect_state("call80_types");
+                            self.state_generator.set_compatible_list(out_type.get_compat_types());
+                            let result_expr = self.handle_types(None, Some(out_type.clone())).1;
+                            results.push(result_expr);
+                        },
+                        "case_else" => break,
+                        any => self.panic_unexpected(any),
+                    }
+                }
+
+                Some(Box::new(operand_expr))
+            },
+            "searched_case" => {
+                loop {
+                    self.expect_state("searched_case_condition");
+                    self.expect_state("call76_types");
+                    let condition_expr = self.handle_types(Some(&[SubgraphType::Val3]), None).1;
+                    conditions.push(condition_expr);
+
+                    match self.next_state().as_str() {
+                        "searched_case_result" => {
+                            self.expect_state("call77_types");
+                            self.state_generator.set_compatible_list(out_type.get_compat_types());
+                            let result_expr = self.handle_types(None, Some(out_type.clone())).1;
+                            results.push(result_expr);
+                        },
+                        "case_else" => break,
+                        any => self.panic_unexpected(any),
+                    }
+                }
+                None
+            },
+            any => self.panic_unexpected(any),
+        };
+
+        let else_result = match self.next_state().as_str() {
+            "call81_types" => {
+                self.state_generator.set_compatible_list(out_type.get_compat_types());
+                let else_expr = self.handle_types(None, Some(out_type.clone())).1;
+                self.expect_state("EXIT_case");
+                Some(Box::new(else_expr))
+            },
+            "EXIT_case" => None,
+            any => self.panic_unexpected(any),
+        };
+
+        (out_type, Expr::Case {
+            operand, conditions, results, else_result
+        })
     }
 
     /// subgraph def_aggregate_function
