@@ -859,7 +859,7 @@ digraph G {
     subgraph ignore {
         EXIT_FROM -> WHERE [color=none, weight=10]
         EXIT_WHERE -> SELECT [color=none, weight=10]
-        EXIT_SELECT -> LIMIT [color=none]
+        EXIT_SELECT -> LIMIT [color=none, weight=10]
         EXIT_LIMIT -> GROUP_BY [color=none]
         EXIT_GROUP_BY -> HAVING [color=none]
 
@@ -868,7 +868,7 @@ digraph G {
         EXIT_text -> date [color=none]
 
         EXIT_types -> column_spec [color=none, weight=10]
-        EXIT_column_spec -> list_expr[color=none, weight=10]
+        EXIT_column_spec -> list_expr[color=none]
         EXIT_list_expr -> aggregate_function [color=none]
         EXIT_aggregate_function -> case [color=none]
     }
