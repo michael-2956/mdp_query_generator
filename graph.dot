@@ -659,7 +659,7 @@ digraph G {
     }
 
     subgraph def_column_spec {
-        column_spec [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[group by columns]", label="column specifier\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods=[group by columns]", shape=octagon, style=filled, color=gold]
+        column_spec [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[group by columns]", label="column specifier\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods=[group by columns]", shape=rectangle, style=filled, color=gold]
         EXIT_column_spec [label="EXIT column specifier", shape=rectangle]
 
         column_spec_choose_source [label="Choose column source"]
@@ -685,7 +685,7 @@ digraph G {
     }
 
     subgraph def_list_expr {
-        list_expr [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[]", label="list expr\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\n[mods]", shape=octagon, style=filled, color=blue]
+        list_expr [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[]", label="list expr\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\n[mods]", shape=rectangle, style=filled, color=blue]
         EXIT_list_expr[label="EXIT list expr"]
 
         call16_types [TYPES="[...]", MODS="[...]", label="TYPES: [...types]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
@@ -753,7 +753,7 @@ digraph G {
 
 
     subgraph def_aggregate_function {
-        aggregate_function [TYPES="[bigint, integer, numeric, 3VL Value, text, date]", label="aggregate function\nTYPES=[bigint, integer, numeric, 3VL Value, text, date]", shape=octagon, style=filled, color=peru]
+        aggregate_function [TYPES="[bigint, integer, numeric, 3VL Value, text, date]", label="aggregate function\nTYPES=[bigint, integer, numeric, 3VL Value, text, date]", shape=rectangle, style=filled, color=peru]
         EXIT_aggregate_function [label="EXIT aggregate function"]
 
         aggregate_select_return_type [label="select\nreturn type"]
