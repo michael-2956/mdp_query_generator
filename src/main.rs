@@ -26,7 +26,8 @@ fn run_generation<SubMod: SubstituteModel, StC: StateChooser>(
 
     let mut accumulated_time_ns = 0;
     let mut num_equivalent = 0;
-    for i in 0..config.main_config.num_generate {
+    let mut i = 0;
+    loop {
         let start_time = Instant::now();
         let query_ast;
         (predictor_model, query_ast) = if let Some(model) = predictor_model {
@@ -36,34 +37,38 @@ fn run_generation<SubMod: SubstituteModel, StC: StateChooser>(
             (None, generator.generate())
         };
         accumulated_time_ns += (Instant::now() - start_time).as_nanos();
-        if config.main_config.assert_parcing_equivalence || print_queries {
-            let query_string = query_ast.to_string();
 
-            if let Some(parsed_ast) = string_to_query(&query_string) {
-                if config.main_config.assert_parcing_equivalence {
-                    if *parsed_ast != query_ast {
-                        println!("AST mismatch! For query: {query_string}");
-                        let mut f_g = std::fs::File::create(format!("{i}-g")).unwrap();
-                        write!(f_g, "{:#?}", query_ast).unwrap();
-                        let mut f_p = std::fs::File::create(format!("{i}-p")).unwrap();
-                        write!(f_p, "{:#?}", parsed_ast).unwrap();
-                    }
-                }
+        let query_string = query_ast.to_string();
 
-                // only print parceable queries
-                if print_queries {
-                    println!("\n{};\n", query_string);
+        if let Some(parsed_ast) = string_to_query(&query_string) {
+            if config.main_config.assert_parcing_equivalence {
+                if *parsed_ast != query_ast {
+                    println!("AST mismatch! For query: {query_string}");
+                    let mut f_g = std::fs::File::create(format!("{i}-g")).unwrap();
+                    write!(f_g, "{:#?}", query_ast).unwrap();
+                    let mut f_p = std::fs::File::create(format!("{i}-p")).unwrap();
+                    write!(f_p, "{:#?}", parsed_ast).unwrap();
                 }
             }
+
+            // only print & count parceable queries
+            i += 1;
+            if print_queries {
+                println!("\n{};\n", query_string);
+            }
         }
+
         if config.main_config.count_equivalence {
             num_equivalent += check_query(Box::new(query_ast)) as usize;
         }
         if i % 100 == 0 {
             if config.main_config.print_progress {
-                print!("{}/{}      \r", i, config.main_config.num_generate);
+                eprint!("{}/{}      \r", i, config.main_config.num_generate);
             }
             std::io::stdout().flush().unwrap();
+        }
+        if i >= config.main_config.num_generate {
+            break
         }
     }
     if config.main_config.measure_generation_time {

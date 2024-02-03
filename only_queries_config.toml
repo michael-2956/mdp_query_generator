@@ -13,7 +13,7 @@ assert_parcing_equivalence=false
 # (TODO): check the queries run without errors on the schema
 assert_runs_on_schema=false
 # Pring how many queries were already generated
-print_progress=false
+print_progress=true
 
 [model]
 # which model to use. Can be: "subgraph", "full_function_context"

@@ -163,13 +163,11 @@ impl SubstituteModel for AntiCallModel {
     }
 
     fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError> {
-        let prob_multiplier = if self.stats.current_stack_length > 3 {
-            f64::ln(self.stats.current_state_num as f64)  // can set to 0.5, this may be better actually?
-        } else { 1f64 };
+        let prob_multiplier = if self.stats.current_stack_length > 6 { 100f64 } else { 0f64 };
         Ok(node_outgoing.into_iter().map(|(l_p, node)| {(
-            l_p - (node.min_calls_until_function_exit as f64) * f64::ln(prob_multiplier),
+            l_p - (node.min_calls_until_function_exit as f64) * prob_multiplier,
             node
-        )}).collect())
+        )}).collect::<Vec<_>>())
     }
 
     fn notify_subquery_creation_begin(&mut self) {

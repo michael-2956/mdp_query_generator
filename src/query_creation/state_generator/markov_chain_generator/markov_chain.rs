@@ -197,13 +197,13 @@ impl Function {
 
 #[derive(Clone, Eq, PartialEq)]
 struct BinaryHeapNode {
-    calls_from_src: usize,
+    calls_from_start_node: usize,
     node_name: SmolStr
 }
 
 impl Ord for BinaryHeapNode {
     fn cmp(&self, other: &Self) -> Ordering {
-        other.calls_from_src.cmp(&self.calls_from_src).then_with(
+        other.calls_from_start_node.cmp(&self.calls_from_start_node).then_with(
             || self.node_name.cmp(&other.node_name)
         )
     }
@@ -225,7 +225,7 @@ impl MarkovChain {
             node_params
         ) = MarkovChain::parse_functions_and_params(&source)?;
         MarkovChain::perform_type_checks(&functions, &node_params)?;
-        MarkovChain::fill_paths_to_exit_with_call_nums(&mut functions, &node_params);
+        MarkovChain::fill_paths_to_exit_with_call_nums(&mut functions);
         Ok(MarkovChain { functions })
     }
 
@@ -443,56 +443,108 @@ impl MarkovChain {
         Ok(())
     }
 
-    fn fill_paths_to_exit_with_call_nums(functions: &mut HashMap<SmolStr, Function>, node_params: &HashMap<SmolStr, NodeParams>) {
-        let mut min_calls_till_exit = HashMap::<SmolStr, usize>::new();
-        for (_, function) in functions.iter() {
-            min_calls_till_exit.insert(function.exit_node_name.clone(), 0);
-            for (start_node_name, start_node_props) in node_params {
-                if !function.chain.contains_key(start_node_name) {
-                    continue;
-                }
-                if min_calls_till_exit.contains_key(start_node_name) {
-                    continue;
-                }
-                min_calls_till_exit.insert(start_node_name.clone(), usize::MAX);
+    fn get_node_min_calls_till_exit(node_name: &SmolStr, node_params: &NodeParams, function: &Function, func_min_calls: &HashMap<SmolStr, usize>) -> usize {
+        let mut answer = usize::MAX;
 
-                let mut priority_queue = BinaryHeap::<BinaryHeapNode>::new();
-                priority_queue.push(BinaryHeapNode {
-                    calls_from_src: 0, node_name: start_node_name.clone(),
-                });
-                let mut min_calls_from_src_map = HashMap::<SmolStr, usize>::new();
-                min_calls_from_src_map.insert(start_node_name.clone(), 0);
-                while let Some(BinaryHeapNode { calls_from_src, node_name }) = priority_queue.pop() {
-                    if node_name == function.exit_node_name {
-                        min_calls_till_exit.insert(start_node_name.clone(),
-                            calls_from_src + (start_node_props.call_params.is_some() as usize)
-                        );
-                        break;
+        let mut least_calls_first_pq = BinaryHeap::<BinaryHeapNode>::new();
+        least_calls_first_pq.push(BinaryHeapNode {
+            calls_from_start_node: 0, node_name: node_name.clone(),
+        });
+
+        let mut min_calls_from_start_map = HashMap::<SmolStr, usize>::new();
+        min_calls_from_start_map.insert(node_name.clone(), 0);
+
+        while let Some(BinaryHeapNode { calls_from_start_node, node_name }) = least_calls_first_pq.pop() {
+            if node_name == function.exit_node_name {
+                answer = calls_from_start_node + node_params.call_params.as_ref().map_or(
+                    0usize, |c| 1 + *func_min_calls.get(&c.func_name).unwrap()
+                );
+                break;
+            }
+
+            if let Some(min_calls_from_start) = min_calls_from_start_map.get(&node_name) {
+                if *min_calls_from_start < calls_from_start_node {
+                    continue;
+                }
+            }
+
+            for (_, out_node_params) in function.chain.get(&node_name).unwrap() {
+                let out_node_calls_from_src = calls_from_start_node + out_node_params.call_params.as_ref().map_or(
+                    0usize, |c| 1 + *func_min_calls.get(&c.func_name).unwrap()
+                );
+
+                let mut min_updated = false;
+
+                if let Some(current_min_calls_from_start) = min_calls_from_start_map.get_mut(&out_node_params.node_common.name) {
+                    if out_node_calls_from_src < *current_min_calls_from_start {
+                        *current_min_calls_from_start = out_node_calls_from_src;
+                        min_updated = true;
                     }
-                    if let Some(min_calls_from_src_map_value) = min_calls_from_src_map.get(&node_name) {
-                        if *min_calls_from_src_map_value < calls_from_src {
-                            continue;
-                        }
-                    }
-                    for out_node_name in function.chain.get_key_value(&node_name).unwrap().1 {
-                        // out_node_name.1.node_common.name
-                        let node_calls_from_src = calls_from_src + (out_node_name.1.call_params.is_some() as usize);
-                        let current_min_calls_from_src = min_calls_from_src_map.entry(
-                            out_node_name.1.node_common.name.clone()
-                        ).or_insert(usize::MAX);
-                        if node_calls_from_src < *current_min_calls_from_src {
-                            *current_min_calls_from_src = node_calls_from_src;
-                            priority_queue.push(BinaryHeapNode {
-                                calls_from_src: node_calls_from_src,
-                                node_name: out_node_name.1.node_common.name.clone(),
-                            });
-                        }
-                    }
+                } else {
+                    min_calls_from_start_map.insert(out_node_params.node_common.name.clone(), out_node_calls_from_src);
+                    min_updated = true;
+                }
+
+                if min_updated {
+                    least_calls_first_pq.push(BinaryHeapNode {
+                        calls_from_start_node: out_node_calls_from_src,
+                        node_name: out_node_params.node_common.name.clone(),
+                    });
                 }
             }
         }
-        for (_, function) in functions {
-            for (_, out_nodes) in function.chain.iter_mut() {
+
+        answer
+    }
+
+    fn fill_paths_to_exit_with_call_nums(functions: &mut HashMap<SmolStr, Function>) {
+        // find min calls till exit of all function source nodes
+        // in this code, we disregard modifiers and assume every node is on
+        let func_min_calls: HashMap<SmolStr, usize> = functions.keys().map(|func_name| (func_name.clone(), 0usize)).collect();
+        // as this approach doesn't work, we actually should think about usual modifiers and
+        // call modifiers. When FromContents has been filled out, that changes the 
+        // behaviour of all TYPES subgraphs, SELECT subgraph, etc.
+        // at that point, all "calls will exit" should be recalculated...
+
+        // for i in 0..1000 {
+        //     let mut did_update = false;
+        //     for function in functions.values() {
+        //         let node_name = &function.source_node_name;
+        //         let new_val = Self::get_node_min_calls_till_exit(
+        //             node_name, function.node_params.get(node_name).unwrap(),
+        //             function, &func_min_calls
+        //         );
+        //         let old_val = func_min_calls.insert(node_name.clone(), new_val);
+        //         did_update = did_update || if let Some(old_val) = old_val {
+        //             old_val != new_val
+        //         } else { true };
+        //     }
+        //     if did_update {
+        //         break
+        //     }
+        //     if i == 999 {
+        //         eprintln!("min calls till exit didn't converge after 1000 iterations");
+        //     }
+        // }
+        
+        // fill all the nodes in with min calls
+        let mut min_calls_till_exit = HashMap::<SmolStr, usize>::new();
+        for function in functions.values() {
+            min_calls_till_exit.insert(function.exit_node_name.clone(), 0);
+            for (node_name, node_params) in &function.node_params {
+                if min_calls_till_exit.contains_key(node_name) {
+                    continue;
+                }
+                min_calls_till_exit.insert(
+                    node_name.clone(),
+                    Self::get_node_min_calls_till_exit(node_name, node_params, function, &func_min_calls)
+                );
+            }
+        }
+
+        // validate & put all the results to the node params
+        for function in functions.values_mut() {
+            for out_nodes in function.chain.values_mut() {
                 for (_, out_node) in out_nodes {
                     if let Some(min_calls) = min_calls_till_exit.get(&out_node.node_common.name) {
                         if *min_calls == usize::MAX {
@@ -504,7 +556,7 @@ impl MarkovChain {
                     }
                 }
             }
-            for (_, node) in function.node_params.iter_mut() {
+            for node in function.node_params.values_mut() {
                 if let Some(min_calls) = min_calls_till_exit.get(&node.node_common.name) {
                     node.min_calls_until_function_exit = *min_calls;
                 }

@@ -17,6 +17,10 @@ types_select_type_text -> types_return_typed_null
 types_select_type_date -> types_return_typed_null
 types_return_typed_null -> EXIT_types
 
+call0_case [TYPES="[known]", MODS="[...]", modifier="no case", modifier_mode="off", label="CASE\nTYPE: known\nmod.: 'no case' -> OFF", shape=rectangle, style=filled, color=aquamarine]
+types_select_special_expression -> call0_case
+call0_case -> EXIT_types
+
 set_list_empty_allowed -> set_list
 
 call69_types -> set_list
