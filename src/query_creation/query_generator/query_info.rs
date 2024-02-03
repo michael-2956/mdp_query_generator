@@ -147,22 +147,22 @@ impl DatabaseSchema {
 #[derive(Debug, Clone)]
 pub struct ClauseContext {
     query_props_stack: Vec<QueryProps>,
-    from_contents_stack: Vec<FromContents>,
+    all_accessible_froms: AllAccessibleFroms,
     group_by_contents_stack: Vec<GroupByContents>,
 }
 
 impl ClauseContext {
-    pub fn new() -> Self{
+    pub fn new() -> Self {
         Self {
             query_props_stack: vec![],
-            from_contents_stack: vec![],
+            all_accessible_froms: AllAccessibleFroms::new(),
             group_by_contents_stack: vec![],
         }
     }
 
     pub fn on_query_begin(&mut self) {
+        self.all_accessible_froms.on_query_begin();
         self.query_props_stack.push(QueryProps::new());
-        self.from_contents_stack.push(FromContents::new());
         self.group_by_contents_stack.push(GroupByContents::new());
     }
 
@@ -175,11 +175,11 @@ impl ClauseContext {
     }
 
     pub fn from(&self) -> &FromContents {
-        self.from_contents_stack.last().unwrap()
+        self.all_accessible_froms.active_from()
     }
 
-    pub fn from_mut(&mut self) -> &mut FromContents {
-        self.from_contents_stack.last_mut().unwrap()
+    pub fn from_mut(&mut self) -> &mut AllAccessibleFroms {
+        &mut self.all_accessible_froms
     }
 
     pub fn group_by(&self) -> &GroupByContents {
@@ -191,9 +191,67 @@ impl ClauseContext {
     }
 
     pub fn on_query_end(&mut self) {
+        self.all_accessible_froms.on_query_end();
         self.query_props_stack.pop();
-        self.from_contents_stack.pop();
         self.group_by_contents_stack.pop();
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AllAccessibleFroms {
+    from_contents_stack: Vec<FromContents>,
+    current_subfrom: Option<FromContents>,
+}
+
+impl AllAccessibleFroms {
+    fn new() -> Self {
+        Self {
+            from_contents_stack: vec![],
+            current_subfrom: None,
+        }
+    }
+
+    pub fn append_table(&mut self, create_table_st: &CreateTableSt) -> TableAlias {
+        let top_from_alias = self.top_from_mut().append_table(create_table_st, None);
+        if let Some(ref mut subfrom) = self.current_subfrom {
+            subfrom.append_table(create_table_st, Some(top_from_alias))
+        } else { top_from_alias }
+    }
+
+    pub fn append_query(&mut self, column_idents_and_graph_types: Vec<(Option<Ident>, SubgraphType)>) -> TableAlias {
+        let top_from_alias = self.top_from_mut().append_query(column_idents_and_graph_types.clone(), None);
+        if let Some(ref mut subfrom) = self.current_subfrom {
+            subfrom.append_query(column_idents_and_graph_types, Some(top_from_alias))
+        } else { top_from_alias }
+    }
+
+    fn active_from(&self) -> &FromContents {
+        self.current_subfrom.as_ref().unwrap_or(self.top_from())
+    }
+
+    fn top_from(&self) -> &FromContents {
+        self.from_contents_stack.last().unwrap()
+    }
+
+    fn top_from_mut(&mut self) -> &mut FromContents {
+        self.from_contents_stack.last_mut().unwrap()
+    }
+
+    pub fn create_empty_subfrom(&mut self) {
+        self.current_subfrom = Some(FromContents::new());
+    }
+
+    pub fn delete_subfrom(&mut self) {
+        self.current_subfrom.take();
+    }
+
+    fn on_query_begin(&mut self) {
+        self.from_contents_stack.push(FromContents::new());
+    }
+
+    fn on_query_end(&mut self) {
+        self.current_subfrom.take();
+        self.from_contents_stack.pop();
     }
 }
 
@@ -386,16 +444,6 @@ impl FromContents {
         Self { relations: BTreeMap::new(), free_relation_name_index: 0 }
     }
 
-    fn create_alias(&mut self) -> SmolStr {
-        let name = SmolStr::new(format!("T{}", self.free_relation_name_index));
-        self.free_relation_name_index += 1;
-        name
-    }
-
-    fn get_table_alias(alias: SmolStr) -> TableAlias {
-        TableAlias { name: Ident { value: alias.to_string(), quote_style: None }, columns: vec![] }
-    }
-
     /// Checks if the type is accessible in any of the relations
     /// 
     /// the allowed_columns_opt is set when we want to only allow columns that are non-duplicate
@@ -543,18 +591,26 @@ impl FromContents {
         self.relations.iter()
     }
 
-    pub fn append_table(&mut self, create_table_st: &CreateTableSt) -> TableAlias {
-        let alias = self.create_alias();
-        let relation = Relation::from_table(alias.clone(), create_table_st);
-        self.relations.insert(relation.alias.clone(), relation);
-        Self::get_table_alias(alias)
+    fn create_relation_alias(&mut self, with_alias: Option<TableAlias>) -> TableAlias {
+        with_alias.unwrap_or({
+            let alias = format!("T{}", self.free_relation_name_index);
+            self.free_relation_name_index += 1;
+            TableAlias { name: Ident { value: alias, quote_style: None }, columns: vec![] }
+        })
     }
 
-    pub fn append_query(&mut self, column_idents_and_graph_types: Vec<(Option<Ident>, SubgraphType)>) -> TableAlias {
-        let alias = self.create_alias();
-        let relation = Relation::from_query(alias.clone(), column_idents_and_graph_types);
+    fn append_table(&mut self, create_table_st: &CreateTableSt, with_alias: Option<TableAlias>) -> TableAlias {
+        let alias = self.create_relation_alias(with_alias);
+        let relation = Relation::from_table(SmolStr::new(alias.name.value.clone()), create_table_st);
         self.relations.insert(relation.alias.clone(), relation);
-        Self::get_table_alias(alias)
+        alias
+    }
+
+    fn append_query(&mut self, column_idents_and_graph_types: Vec<(Option<Ident>, SubgraphType)>, with_alias: Option<TableAlias>) -> TableAlias {
+        let alias = self.create_relation_alias(with_alias);
+        let relation = Relation::from_query(SmolStr::new(alias.name.value.clone()), column_idents_and_graph_types);
+        self.relations.insert(relation.alias.clone(), relation);
+        alias
     }
 }
 

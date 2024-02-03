@@ -349,7 +349,7 @@ impl PathGenerator {
         for table_with_joins in from.iter() {
             match &table_with_joins.relation {
                 sqlparser::ast::TableFactor::Table { name, .. } => {
-                    self.try_push_state("Table")?;
+                    self.try_push_state("FROM_table")?;
                     self.push_node(PathNode::SelectedTableName(name.clone()));
                     let create_table_st = self.database_schema.get_table_def_by_name(name);
                     self.clause_context.from_mut().append_table(create_table_st);
@@ -361,7 +361,7 @@ impl PathGenerator {
                 },
                 any => unexpected_expr!(any)
             }
-            self.try_push_state("FROM_multiple_relations")?;
+            self.try_push_state("FROM_cartesian_product")?;
         }
         self.try_push_state("EXIT_FROM")?;
 

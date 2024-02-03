@@ -195,39 +195,39 @@
 <path fill="none" stroke="none" d="M533.28,-2473.78C533.28,-2458.76 533.28,-2436.78 533.28,-2419.3"/>
 <polygon fill="none" stroke="none" points="536.78,-2419.58 533.28,-2409.58 529.78,-2419.58 536.78,-2419.58"/>
 </g>
-<!-- FROM_multiple_relations -->
+<!-- FROM_cartesian_product -->
 <g id="node12" class="node">
-<title>FROM_multiple_relations</title>
+<title>FROM_cartesian_product</title>
 <ellipse fill="none" stroke="black" cx="534.28" cy="-2610.4" rx="76.43" ry="18"/>
 <text text-anchor="middle" x="534.28" y="-2605.35" font-family="Times,serif" font-size="14.00">multiple relations</text>
 </g>
-<!-- FROM_multiple_relations&#45;&gt;EXIT_FROM -->
+<!-- FROM_cartesian_product&#45;&gt;EXIT_FROM -->
 <g id="edge20" class="edge">
-<title>FROM_multiple_relations&#45;&gt;EXIT_FROM</title>
+<title>FROM_cartesian_product&#45;&gt;EXIT_FROM</title>
 <path fill="none" stroke="black" d="M534.13,-2592C533.97,-2573.23 533.71,-2543.07 533.52,-2521"/>
 <polygon fill="black" stroke="black" points="537.02,-2521.27 533.43,-2511.3 530.02,-2521.33 537.02,-2521.27"/>
 </g>
-<!-- FROM_multiple_relations&#45;&gt;Table -->
+<!-- FROM_cartesian_product&#45;&gt;Table -->
 <g id="edge16" class="edge">
-<title>FROM_multiple_relations&#45;&gt;Table</title>
+<title>FROM_cartesian_product&#45;&gt;Table</title>
 <path fill="none" stroke="black" d="M539.77,-2628.82C541.11,-2641.23 541.38,-2658.19 540.6,-2672.49"/>
 <polygon fill="black" stroke="black" points="537.05,-2672 539.74,-2682.24 544.03,-2672.55 537.05,-2672"/>
 </g>
-<!-- FROM_multiple_relations&#45;&gt;call0_Query -->
+<!-- FROM_cartesian_product&#45;&gt;call0_Query -->
 <g id="edge19" class="edge">
-<title>FROM_multiple_relations&#45;&gt;call0_Query</title>
+<title>FROM_cartesian_product&#45;&gt;call0_Query</title>
 <path fill="none" stroke="black" d="M542.31,-2592.25C554.89,-2572.85 578.71,-2541.05 597.23,-2518.72"/>
 <polygon fill="black" stroke="black" points="600.5,-2521.27 604.28,-2511.38 595.15,-2516.75 600.5,-2521.27"/>
 </g>
-<!-- Table&#45;&gt;FROM_multiple_relations -->
+<!-- Table&#45;&gt;FROM_cartesian_product -->
 <g id="edge15" class="edge">
-<title>Table&#45;&gt;FROM_multiple_relations</title>
+<title>Table&#45;&gt;FROM_cartesian_product</title>
 <path fill="none" stroke="black" d="M528.83,-2683.24C527.47,-2670.89 527.18,-2653.94 527.95,-2639.61"/>
 <polygon fill="black" stroke="black" points="531.51,-2640.06 528.8,-2629.82 524.53,-2639.51 531.51,-2640.06"/>
 </g>
-<!-- call0_Query&#45;&gt;FROM_multiple_relations -->
+<!-- call0_Query&#45;&gt;FROM_cartesian_product -->
 <g id="edge18" class="edge">
-<title>call0_Query&#45;&gt;FROM_multiple_relations</title>
+<title>call0_Query&#45;&gt;FROM_cartesian_product</title>
 <path fill="none" stroke="black" d="M614.11,-2510.54C601.37,-2530.14 577.35,-2562.18 558.84,-2584.45"/>
 <polygon fill="black" stroke="black" points="555.59,-2581.86 551.79,-2591.75 560.93,-2586.39 555.59,-2581.86"/>
 </g>

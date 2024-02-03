@@ -23,10 +23,10 @@ pub fn string_to_query(input: &str) -> Option<Box<Query>> {
                     eprintln!("Parsing error! {}", err);
                     eprintln!("Query length: {}", input.len());
                 } else {
-                    eprintln!("Skipped a query of length {} (parser bug)", input.len());
+                    eprintln!("Query parsing: Skipped a query of length {} (parser bug)", input.len());
                 }
             } else {
-                eprintln!("Skipped a query of length {} (parser recursion limit)", input.len());
+                eprintln!("Query parsing: Skipped a query of length {} (parser recursion limit)", input.len());
             }
             None
         },

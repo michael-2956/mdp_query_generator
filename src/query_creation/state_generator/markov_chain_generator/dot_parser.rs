@@ -247,16 +247,20 @@ impl<'a> Iterator for DotTokenizer<'a> {
 
     /// parse the tokens returned by lexer and return parsed code units one by one
     fn next(&mut self) -> Option<Self::Item> {
-        let mut ignore_subgraph = false;
+        let mut ignore_subgraph_depth = 0;
         loop {
-            if ignore_subgraph {
+            if ignore_subgraph_depth > 0 {
                 match self.lexer.next()? {
                     DotToken::OpenDeclaration => {
-                        break Some(Err(SyntaxError::new(format!(
-                            "Nested braces {{}} in subgraphs are not supported"
-                        ))))
+                        ignore_subgraph_depth += 1;
+                        continue;
                     }
-                    DotToken::CloseDeclaration => ignore_subgraph = false,
+                    DotToken::CloseDeclaration => {
+                        ignore_subgraph_depth -= 1;
+                        if ignore_subgraph_depth > 0 {
+                            continue;
+                        }
+                    },
                     _ => continue,
                 }
             }
@@ -284,7 +288,7 @@ impl<'a> Iterator for DotTokenizer<'a> {
                             }
                         },
                         _ => match self.lexer.next()? {
-                            DotToken::OpenDeclaration => ignore_subgraph = true,
+                            DotToken::OpenDeclaration => ignore_subgraph_depth = 1,
                             _ => break Some(Err(SyntaxError::new(
                                 format!("Expected subgraph body: {}", self.lexer.slice())
                             )))

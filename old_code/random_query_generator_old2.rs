@@ -1042,10 +1042,10 @@ impl QueryGenerator {
                 // ===== subgraph Query
                 "Query" => self.handle_query(info),
                 "EXIT_Query" => self.handle_query_exit(info),
-                "Table" => self.handle_from_table(info),
+                "FROM_table" => self.handle_from_table(info),
                 "call0_Query" => {},
                 "Rcall0_Query" => self.handle_from_subquery_r(info),
-                "FROM_multiple_relations" => self.handle_multiple_relations(info),
+                "FROM_cartesian_product" => self.handle_multiple_relations(info),
                 "EXIT_FROM" => {},
                 "WHERE" => {},
                 "call0_VAL_3" => {},

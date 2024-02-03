@@ -107,20 +107,53 @@ digraph G {
         FROM [shape=rectangle, color=cornflowerblue, style=filled]
         EXIT_FROM [label="EXIT FROM", shape=rectangle]
 
-        FROM_multiple_relations [label="multiple relations"]
+        // FROM -> EXIT_FROM
 
-        Table []
-        FROM -> Table
-        Table -> FROM_multiple_relations
-        FROM_multiple_relations -> Table
-
+        FROM_table [label="Table"]
+        FROM -> FROM_table
         call0_Query [label="Query", shape=rectangle, TYPES="[any]", MODS="[]", style=filled, color=green]
         FROM -> call0_Query
-        call0_Query -> FROM_multiple_relations
-        FROM_multiple_relations -> call0_Query
 
-        // FROM -> EXIT_FROM
-        FROM_multiple_relations -> EXIT_FROM
+        FROM_join_by [label="join by"]
+        call0_Query -> FROM_join_by
+        FROM_table -> FROM_join_by
+
+        FROM_join_to [label="join to"]
+
+        FROM_join_join [label="JOIN"]
+        FROM_join_by -> FROM_join_join
+        FROM_join_join -> FROM_join_to
+        FROM_left_join [label="LEFT JOIN"]
+        FROM_join_by -> FROM_left_join
+        FROM_left_join -> FROM_join_to
+        FROM_right_join [label="RIGHT JOIN"]
+        FROM_join_by -> FROM_right_join
+        FROM_right_join -> FROM_join_to
+        // Reason for turning off: FULL JOIN is only supported with merge-joinable or hash-joinable join conditions
+        // To turn this on, you have to provide 'no subquery' and possibly other mods to 'on' in case of full outer join
+        // FROM_full_join [label="FULL JOIN"]
+        // FROM_join_by -> FROM_full_join
+        // FROM_full_join -> FROM_join_to
+
+        FROM_join_on [label="ON"]
+        FROM_join_table [label="Table"]
+        FROM_join_to -> FROM_join_table
+        FROM_join_table -> FROM_join_on
+        call5_Query [label="Query", shape=rectangle, TYPES="[any]", MODS="[]", style=filled, color=green]
+        FROM_join_to -> call5_Query
+        call5_Query -> FROM_join_on
+
+        call83_types [TYPES="[3VL Value]", MODS="[no aggregate]", label="TYPES: 3VL Value\nMODS: [no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        FROM_join_on -> call83_types
+        call83_types -> FROM_join_by
+
+        FROM_cartesian_product [label="Cartesian product"]
+        FROM_cartesian_product -> EXIT_FROM
+        FROM_table -> FROM_cartesian_product
+        FROM_cartesian_product -> FROM_table
+        call0_Query -> FROM_cartesian_product
+        FROM_cartesian_product -> call0_Query
+        call83_types -> FROM_cartesian_product
     }
 
     subgraph def_WHERE {
@@ -578,7 +611,7 @@ digraph G {
         types_select_special_expression -> call0_aggregate_function
         call0_aggregate_function -> EXIT_types
 
-        call0_case [TYPES="[known]", modifier="no case", modifier_mode="off", label="CASE\nTYPE: known\nmod.: 'no case' -> OFF", shape=rectangle, style=filled, color=aquamarine]
+        call0_case [TYPES="[known]", MODS="[...]", modifier="no case", modifier_mode="off", label="CASE\nTYPE: known\nmod.: 'no case' -> OFF", shape=rectangle, style=filled, color=aquamarine]
         types_select_special_expression -> call0_case
         call0_case -> EXIT_types
 
@@ -857,6 +890,8 @@ digraph G {
 
     # cosmetic
     subgraph ignore {
+        { rank = same; "call0_Query"; "FROM_table"; }
+
         EXIT_FROM -> WHERE [color=none, weight=10]
         EXIT_WHERE -> SELECT [color=none, weight=10]
         EXIT_SELECT -> LIMIT [color=none, weight=10]

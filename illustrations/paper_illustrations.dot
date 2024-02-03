@@ -87,19 +87,19 @@ digraph G {
     //     FROM [shape=rectangle, color=cornflowerblue, style=filled]
     //     EXIT_FROM [label="EXIT FROM", shape=rectangle]
 
-    //     FROM_multiple_relations [label="Multiple Relations"]
+    //     FROM_cartesian_product [label="Multiple Relations"]
 
     //     Table []
     //     FROM -> Table
-    //     Table -> FROM_multiple_relations
-    //     FROM_multiple_relations -> Table
+    //     Table -> FROM_cartesian_product
+    //     FROM_cartesian_product -> Table
 
     //     call0_Query [label="Query", shape=rectangle, TYPES="[any]", MODS="[]", style=filled, color=green]
     //     FROM -> call0_Query
-    //     call0_Query -> FROM_multiple_relations
-    //     FROM_multiple_relations -> call0_Query
+    //     call0_Query -> FROM_cartesian_product
+    //     FROM_cartesian_product -> call0_Query
 
-    //     FROM_multiple_relations -> EXIT_FROM
+    //     FROM_cartesian_product -> EXIT_FROM
     // }
 
     subgraph pruning {

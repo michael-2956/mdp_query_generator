@@ -53,14 +53,14 @@ impl DeterministicStateChooser {
 
         for (i, table_with_joins) in select_body.from.iter().enumerate() {
             match table_with_joins.relation {
-                TableFactor::Table { .. } => self.push_state("Table"),
+                TableFactor::Table { .. } => self.push_state("FROM_table"),
                 TableFactor::Derived { subquery, .. } => {
                     self.push_state("call0_Query");
                     self.process_query(*subquery);
                 },
                 any => panic_unexpected_struct!(any),
             }
-            self.push_state("FROM_multiple_relations");
+            self.push_state("FROM_cartesian_product");
         }
         self.push_state("EXIT_FROM");
 

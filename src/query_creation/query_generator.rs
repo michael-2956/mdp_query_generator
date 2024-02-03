@@ -11,9 +11,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
-    Expr, Ident, Query, Select, SetExpr, TableFactor,
-    TableWithJoins, Value, BinaryOperator, UnaryOperator, TrimWhereField, SelectItem, WildcardAdditionalOptions, DataType, ObjectName,
-    FunctionArg, self, FunctionArgExpr,
+    self, BinaryOperator, DataType, Expr, FunctionArg, FunctionArgExpr, Ident, Join, ObjectName, Query, Select, SelectItem, SetExpr, TableFactor, TableWithJoins, TrimWhereField, UnaryOperator, Value, WildcardAdditionalOptions
 };
 
 use crate::{config::TomlReadable, training::models::PathwayGraphModel};
@@ -247,34 +245,79 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         let mut from: Vec<TableWithJoins> = vec![];
 
         loop {
+            self.clause_context.from_mut().create_empty_subfrom();
             from.push(TableWithJoins { relation: match self.next_state().as_str() {
-                "Table" => {
-                    let create_table_st = self.value_chooser.choose_table(&self.database_schema);
-                    let alias = self.clause_context.from_mut().append_table(create_table_st);
-                    TableFactor::Table {
-                        name: create_table_st.name.clone(),
-                        alias: Some(alias),
-                        args: None,
-                        with_hints: vec![],
-                        columns_definition: None,
-                    }
-                },
-                "call0_Query" => {
-                    let (query, column_idents_and_graph_types) = self.handle_query();
-                    let alias = self.clause_context.from_mut().append_query(column_idents_and_graph_types);
-                    TableFactor::Derived {
-                        lateral: false,
-                        subquery: Box::new(query),
-                        alias: Some(alias)
-                    }
-                },
+                "FROM_table" => self.handle_from_table(),
+                "call0_Query" => self.handle_from_query(),
                 "EXIT_FROM" => break,
                 any => self.panic_unexpected(any)
             }, joins: vec![] });
-            self.expect_state("FROM_multiple_relations");
+
+            match self.next_state().as_str() {
+                "FROM_cartesian_product" => { },
+                "FROM_join_by" => {
+                    let joins = &mut from.last_mut().unwrap().joins;
+                    loop {
+                        let join_type = match self.next_state().as_str() {
+                            s @ ( "FROM_join_join" | "FROM_left_join" | "FROM_right_join" | "FROM_full_join" ) => s.to_string(),
+                            any => self.panic_unexpected(any)
+                        };
+                        self.expect_state("FROM_join_to");
+                        let relation = match self.next_state().as_str() {
+                            "FROM_join_table" => self.handle_from_table(),
+                            "call5_Query" => self.handle_from_query(),
+                            any => self.panic_unexpected(any)
+                        };
+                        self.expect_states(&["FROM_join_on", "call83_types"]);
+                        let join_on = ast::JoinConstraint::On(
+                            self.handle_types(Some(&[SubgraphType::Val3]), None).1
+                        );
+                        joins.push(Join {
+                            relation,
+                            join_operator: match join_type.as_str() {
+                                "FROM_join_join" => ast::JoinOperator::Inner(join_on),
+                                "FROM_left_join" => ast::JoinOperator::LeftOuter(join_on),
+                                "FROM_right_join" => ast::JoinOperator::RightOuter(join_on),
+                                "FROM_full_join" => ast::JoinOperator::FullOuter(join_on),
+                                any => self.panic_unexpected(any)
+                            },
+                        });
+                        match self.next_state().as_str() {
+                            "FROM_join_by" => { },
+                            "FROM_cartesian_product" => break,
+                            any => self.panic_unexpected(any)
+                        }
+                    }
+                },
+                any => self.panic_unexpected(any)
+            }
+
+            self.clause_context.from_mut().delete_subfrom();
         }
 
         from
+    }
+
+    fn handle_from_table(&mut self) -> TableFactor {
+        let create_table_st = self.value_chooser.choose_table(&self.database_schema);
+        let alias = self.clause_context.from_mut().append_table(create_table_st);
+        TableFactor::Table {
+            name: create_table_st.name.clone(),
+            alias: Some(alias),
+            args: None,
+            with_hints: vec![],
+            columns_definition: None,
+        }
+    }
+
+    fn handle_from_query(&mut self) -> TableFactor {
+        let (query, column_idents_and_graph_types) = self.handle_query();
+        let alias = self.clause_context.from_mut().append_query(column_idents_and_graph_types);
+        TableFactor::Derived {
+            lateral: false,
+            subquery: Box::new(query),
+            alias: Some(alias)
+        }
     }
 
     fn handle_where(&mut self) -> (SubgraphType, Expr) {
