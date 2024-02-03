@@ -9,3 +9,5 @@ data/
 training_dbs/
 weights/
 weights_in_dot/
+parser_bugs.sql
+t.sql

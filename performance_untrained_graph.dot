@@ -611,9 +611,9 @@ digraph G {
         types_select_special_expression -> call0_aggregate_function
         call0_aggregate_function -> EXIT_types
 
-        // call0_case [TYPES="[known]", MODS="[...]", modifier="no case", modifier_mode="off", label="CASE\n// TYPE: known\n// mod.: 'no case' -> OFF", shape=rectangle, style=filled, color=aquamarine]
-        // types_select_special_expression -> call0_case
-        // call0_case -> EXIT_types
+        call0_case [TYPES="[known]", MODS="[...]", modifier="no case", modifier_mode="off", label="CASE\n// TYPE: known\n// mod.: 'no case' -> OFF", shape=rectangle, style=filled, color=aquamarine]
+        types_select_special_expression -> call0_case
+        call0_case -> EXIT_types
 
         call2_number [label="number\nTYPES: [bigint]\nMODS: [...mods]\nmod.: 'no type expr' -> OFF", TYPES="[bigint]", MODS="[...]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
         types_select_type_bigint -> call2_number

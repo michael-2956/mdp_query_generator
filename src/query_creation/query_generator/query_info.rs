@@ -3,9 +3,11 @@ use std::{collections::{BTreeMap, HashMap, HashSet, BTreeSet}, error::Error, fmt
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
-use crate::query_creation::state_generator::subgraph_type::SubgraphType;
+use crate::{query_creation::state_generator::subgraph_type::SubgraphType, unwrap_variant};
 
-use sqlparser::{ast::{ColumnDef, Expr, FileFormat, HiveDistributionStyle, HiveFormat, Ident, ObjectName, OnCommit, Query, SqlOption, Statement, TableAlias, TableConstraint}, dialect::PostgreSqlDialect, parser::Parser};
+use sqlparser::{ast::{ColumnDef, DataType, Expr, FileFormat, HiveDistributionStyle, HiveFormat, Ident, ObjectName, OnCommit, Query, SelectItem, SetExpr, SqlOption, Statement, TableAlias, TableConstraint}, dialect::PostgreSqlDialect, parser::Parser};
+
+use super::Unnested;
 
 macro_rules! define_impersonation {
     ($impersonator:ident, $enum_name:ident, $variant:ident, { $($field:ident: $type:ty),* $(,)? }) => {
@@ -264,6 +266,56 @@ impl QueryProps {
     fn new() -> QueryProps {
         Self {
             is_aggregation_indicated: false
+        }
+    }
+
+    pub fn extract_alias(expr: &Expr) -> Option<Ident> {
+        match &expr.unnested() {
+            Expr::Identifier(ident) => Some(ident.clone()),
+            Expr::CompoundIdentifier(idents) => Some(idents.last().unwrap().clone()),
+            // unnnamed aggregation can be referred to by function name in postgres
+            Expr::Function(func) => Some(func.name.0.last().unwrap().clone()),
+            Expr::Case { operand: _, conditions: _, results: _, else_result } => {
+                else_result.as_ref()
+                    .and_then(|else_expr| if matches!(
+                        else_expr.unnested(), Expr::Value(sqlparser::ast::Value::Boolean(_))
+                    ) || matches!(
+                        else_expr.unnested(), Expr::TypedString { data_type, value: _ } if *data_type == DataType::Date
+                    ) { None } else {
+                        Self::extract_alias(else_expr)
+                    })
+                    .or(
+                        if else_result.as_ref().map_or(
+                            false, |x| matches!(**x, Expr::Subquery(..))
+                        ) { None } else {
+                            Some(Ident { value: "case".to_string(), quote_style: Some('"') })
+                        }
+                    )
+            }
+            Expr::Value(value) => {
+                let value = match value {
+                    sqlparser::ast::Value::Boolean(_) => Some("bool".to_string()),
+                    sqlparser::ast::Value::Number(_, _) => None,
+                    sqlparser::ast::Value::SingleQuotedString(_) => None,
+                    sqlparser::ast::Value::Null => None,
+                    any => panic!("Unexpected value type: {:?}", any),
+                };
+                value.map(|value| Ident { value, quote_style: Some('"') })
+            },
+            Expr::TypedString {
+                data_type, value: _,
+            } if *data_type == DataType::Date => {
+                Some(Ident { value: "date".to_string(), quote_style: Some('"') })
+            },
+            Expr::Subquery(query) => {
+                let select_body = unwrap_variant!(&*query.body, SetExpr::Select);
+                match select_body.projection.as_slice() {
+                    &[SelectItem::UnnamedExpr(ref expr)] => Self::extract_alias(expr),
+                    &[SelectItem::ExprWithAlias { expr: _, ref alias }] => Some(alias.clone()),
+                    _ => None,
+                }
+            },
+            _ => None,
         }
     }
 

@@ -5,7 +5,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{self, BinaryOperator, DataType, Expr, FunctionArg, FunctionArgExpr, Ident, ObjectName, Query, Select, SelectItem, SetExpr, TableWithJoins, TrimWhereField, UnaryOperator, Value};
 
-use crate::{query_creation::{query_generator::{aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, call_modifiers::{TypesTypeValue, ValueSetterValue, WildcardRelationsValue}, query_info::{DatabaseSchema, ClauseContext}, value_choosers::{RandomValueChooser, DeterministicValueChooser}, QueryGenerator, Unnested}, state_generator::{subgraph_type::SubgraphType, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, MarkovChainGenerator, markov_chain_generator::{StateGeneratorConfig, error::SyntaxError, markov_chain::{CallModifiers, MarkovChain}, DynClone, ChainStateMemory}, substitute_models::{DeterministicModel, SubstituteModel, PathModel, AntiCallModel}, CallTypes}}, config::{TomlReadable, Config, MainConfig}, unwrap_variant, unwrap_variant_or_else};
+use crate::{config::{Config, MainConfig, TomlReadable}, query_creation::{query_generator::{aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, call_modifiers::{TypesTypeValue, ValueSetterValue, WildcardRelationsValue}, query_info::{ClauseContext, DatabaseSchema, QueryProps}, value_choosers::{DeterministicValueChooser, RandomValueChooser}, QueryGenerator}, state_generator::{markov_chain_generator::{error::SyntaxError, markov_chain::{CallModifiers, MarkovChain}, ChainStateMemory, DynClone, StateGeneratorConfig}, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, subgraph_type::SubgraphType, substitute_models::{AntiCallModel, DeterministicModel, PathModel, SubstituteModel}, CallTypes, MarkovChainGenerator}}, unwrap_variant, unwrap_variant_or_else};
 
 pub struct AST2PathTestingConfig {
     pub schema: PathBuf,
@@ -412,12 +412,7 @@ impl PathGenerator {
             match select_item {
                 SelectItem::UnnamedExpr(expr) => {
                     self.try_push_states(&["SELECT_unnamed_expr", "select_expr", select_item_state])?;
-                    let alias = match expr.unnested() {
-                        Expr::Identifier(ident) => Some(ident.clone()),
-                        Expr::CompoundIdentifier(idents) => Some(idents.last().unwrap().clone()),
-                        Expr::Function(func) => Some(func.name.0.last().unwrap().clone()),
-                        _ => None,
-                    };
+                    let alias = QueryProps::extract_alias(&expr);
                     let expr = self.handle_types(expr, None, None)?;
                     self.try_push_state("select_expr_done")?;
                     column_idents_and_graph_types.push((alias, expr));

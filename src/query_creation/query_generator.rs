@@ -17,7 +17,7 @@ use sqlparser::ast::{
 use crate::{config::TomlReadable, training::models::PathwayGraphModel};
 
 use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generator::{CallTypes, markov_chain_generator::subgraph_type::SubgraphType}};
-use self::{query_info::{DatabaseSchema, ClauseContext}, aggregate_function_settings::{AggregateFunctionDistribution, AggregateFunctionAgruments}, expr_precedence::ExpressionPriority, call_modifiers::{TypesTypeValue, ValueSetterValue, WildcardRelationsValue}, value_choosers::QueryValueChooser};
+use self::{aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, call_modifiers::{TypesTypeValue, ValueSetterValue, WildcardRelationsValue}, expr_precedence::ExpressionPriority, query_info::{ClauseContext, DatabaseSchema, QueryProps}, value_choosers::QueryValueChooser};
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
 
@@ -348,8 +348,8 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 "SELECT_tables_eligible_for_wildcard" => {
                     match self.next_state().as_str() {
                         "SELECT_wildcard" => {
-                            column_idents_and_graph_types.extend(self.clause_context
-                                .from().get_wildcard_columns().into_iter()
+                            column_idents_and_graph_types.extend(
+                                self.clause_context.from().get_wildcard_columns().into_iter()
                             );
                             projection.push(SelectItem::Wildcard(WildcardAdditionalOptions {
                                 opt_exclude: None, opt_except: None, opt_rename: None,
@@ -384,13 +384,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     self.expect_state("select_expr_done");
                     let (alias, select_item) = match alias_node {
                         "SELECT_unnamed_expr" => {
-                            let alias = match &expr.unnested() {
-                                Expr::Identifier(ident) => Some(ident.clone()),
-                                Expr::CompoundIdentifier(idents) => Some(idents.last().unwrap().clone()),
-                                // unnnamed aggregation can be referred to by function name in postgres
-                                Expr::Function(func) => Some(func.name.0.last().unwrap().clone()),
-                                _ => None,
-                            };
+                            let alias = QueryProps::extract_alias(&expr);
                             (alias, SelectItem::UnnamedExpr(expr))
                         },
                         "SELECT_expr_with_alias" => {

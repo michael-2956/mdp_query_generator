@@ -6,6 +6,9 @@ use sqlparser::ast::{
 };
 use sqlparser::dialect::PostgreSqlDialect;
 
+use std::io::Write;
+use std::fs::OpenOptions;
+
 pub fn string_to_query(input: &str) -> Option<Box<Query>> {
     let dialect = PostgreSqlDialect {};
     match Parser::parse_sql(&dialect, input) {
@@ -23,7 +26,10 @@ pub fn string_to_query(input: &str) -> Option<Box<Query>> {
                     eprintln!("Parsing error! {}", err);
                     eprintln!("Query length: {}", input.len());
                 } else {
-                    eprintln!("Query parsing: Skipped a query of length {} (parser bug)", input.len());
+                    let mut parser_bugs = OpenOptions::new()
+                        .create(true).write(true).append(true).open("parser_bugs.sql").unwrap();
+                    write!(parser_bugs, "{};\n", input).unwrap();
+                    eprintln!("Query parsing: Skipped a query of length {} (assumed parser bug)", input.len());
                 }
             } else {
                 eprintln!("Query parsing: Skipped a query of length {} (parser recursion limit)", input.len());
