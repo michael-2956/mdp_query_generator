@@ -107,8 +107,8 @@ impl SubgraphType {
     pub fn get_compat_types(&self) -> Vec<SubgraphType> {
         let (inner_type, wrapper): (&Box<SubgraphType>, Box<dyn Fn(SubgraphType) -> SubgraphType>) = match self {
             SubgraphType::ListExpr(inner) => (inner, Box::new(|x| SubgraphType::ListExpr(Box::new(x)))),
-            SubgraphType::Numeric => return vec![SubgraphType::Numeric, SubgraphType::Integer],
-            SubgraphType::Integer => return vec![SubgraphType::Integer, SubgraphType::BigInt],
+            SubgraphType::Numeric => return vec![SubgraphType::Numeric, SubgraphType::BigInt, SubgraphType::Integer],
+            SubgraphType::BigInt => return vec![SubgraphType::BigInt, SubgraphType::Integer],
             any => return vec![any.clone()],
         };
         inner_type.get_compat_types()
