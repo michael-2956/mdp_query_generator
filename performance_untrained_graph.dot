@@ -98,8 +98,12 @@ digraph G {
         call0_GROUP_BY -> call0_HAVING
         call0_HAVING -> call0_SELECT
 
+        // call0_ORDER_BY [label="ORDER BY", shape=rectangle, style=filled, color=deepskyblue]
+        // call0_SELECT -> call0_ORDER_BY
+
         call0_LIMIT [label="LIMIT\nMODS: [?single row]", MODS="[?single row]", shape=rectangle, style=filled, color=brown]
         call0_SELECT -> call0_LIMIT
+        // call0_ORDER_BY -> call0_LIMIT
         call0_LIMIT -> EXIT_Query
     }
 
@@ -158,7 +162,7 @@ digraph G {
 
     subgraph def_WHERE {
         WHERE [label="WHERE", shape=rectangle, style=filled, color=darkgoldenrod1]
-        EXIT_WHERE [label="EXIT WHERE"]
+        EXIT_WHERE [label="EXIT WHERE", shape=rectangle]
 
         call53_types [TYPES="[3VL Value]", MODS="[no aggregate]", label="TYPES: 3VL Value\nMODS: [no aggregate]", shape=rectangle, style=filled, color=lightblue]
         WHERE -> call53_types
@@ -209,6 +213,58 @@ digraph G {
         // SELECT_wildcard -> EXIT_SELECT
         // SELECT_qualified_wildcard -> SELECT_list_multiple_values
         // SELECT_qualified_wildcard -> EXIT_SELECT
+    }
+
+    subgraph def_ORDER_BY {
+        ORDER_BY [label="ORDER BY", shape=rectangle, style=filled, color=deepskyblue]
+        EXIT_ORDER_BY [label="EXIT ORDER BY", shape=rectangle]
+
+        ORDER_BY -> EXIT_ORDER_BY
+
+        // order by basically functions like SELECT w/o aliases
+        // but no literals are allowed, and you also can
+        // reference SELECT by aliases/numbers, and the priority
+        // is on the SELECT, when ambiguous between select and from.
+
+        order_by_list [label="ORDER BY list\nset value: 'grouping_enabled'", set_value="grouping_enabled"]
+        ORDER_BY -> order_by_list
+        order_by_expr_done [label="Expression done"]
+
+        order_by_select_reference [label="SELECT reference"]
+        order_by_list -> order_by_select_reference
+        order_by_select_reference_by_alias [label="by alias"]
+        order_by_select_reference -> order_by_select_reference_by_alias
+        order_by_select_reference_by_alias -> order_by_expr_done
+
+        order_by_expr [label="Expression"]
+        order_by_list -> order_by_expr
+
+        call84_types [label="TYPES: [...types]\nMODS: [group by columns, no literals]\ncall mod.: 'grouping mode switch'", TYPES="[...]", MODS="[group by columns, no literals]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
+        order_by_expr -> call84_types
+        call84_types -> order_by_expr_done
+        call85_types [label="TYPES: [...types]\nMODS: [no aggregate, no literals]\ncall mod.: 'grouping mode switch'", TYPES="[...]", MODS="[no aggregate, no literals]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
+        order_by_expr -> call85_types
+        call85_types -> order_by_expr_done
+
+        order_by_order_selected [label="order selected"]
+        order_by_expr_done -> order_by_order_selected
+        order_by_asc [label="asc"]
+        order_by_expr_done -> order_by_asc
+        order_by_asc -> order_by_order_selected
+        order_by_desc [label="desc"]
+        order_by_expr_done -> order_by_desc
+        order_by_desc -> order_by_order_selected
+
+        order_by_nulls_first_selected [label="nulls order selected"]
+        order_by_order_selected -> order_by_nulls_first_selected
+        order_by_nulls_first_selected -> order_by_list
+        order_by_nulls_first_selected -> EXIT_ORDER_BY
+        order_by_nulls_first [label="NULLS FIRST"]
+        order_by_order_selected -> order_by_nulls_first
+        order_by_nulls_first -> order_by_nulls_first_selected
+        order_by_nulls_last [label="NULLS LAST"]
+        order_by_order_selected -> order_by_nulls_last
+        order_by_nulls_last -> order_by_nulls_first_selected
     }
 
     subgraph def_LIMIT {
@@ -385,13 +441,6 @@ digraph G {
         // BinaryBooleanOpV3XOR -> call28_types
         call28_types -> EXIT_VAL_3
 
-        true [literal="t"]
-        VAL_3 -> true
-        true -> EXIT_VAL_3
-        false [literal="t"]
-        VAL_3 -> false
-        false -> EXIT_VAL_3
-
         Nested_VAL_3[label="([expr])"]
         VAL_3 -> Nested_VAL_3
         call29_types [MODS="[...]", TYPES="[3VL Value]", label="TYPES: 3VL Value\nmodif.: [...mods]", shape=rectangle, style=filled, color=lightblue]
@@ -408,18 +457,6 @@ digraph G {
     subgraph def_number {
         number [shape=rectangle, label="number\ntypes=[integer, numeric, bigint]\n[mods]", TYPES="[integer, numeric, bigint]", MODS="[]", style=filled, color=chocolate]
         EXIT_number [label="EXIT number"]
-
-        number_literal[label="literal", literal="t"]
-        number -> number_literal
-        number_literal_integer[label="random integer\ntn(i)", TYPE_NAME="integer", literal="t"]
-        number_literal -> number_literal_integer
-        number_literal_integer -> EXIT_number
-        number_literal_numeric[label="random numeric\ntn(num)", TYPE_NAME="numeric", literal="t"]
-        number_literal -> number_literal_numeric
-        number_literal_numeric -> EXIT_number
-        number_literal_bigint[label="random bigint\ntn(bi)", TYPE_NAME="bigint", literal="t"]
-        number_literal -> number_literal_bigint
-        number_literal_bigint -> EXIT_number
 
         BinaryNumberOp[label="binary op."]
         call47_types [TYPES="[...]", MODS="[...]", label="TYPES: [...types]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
@@ -496,10 +533,6 @@ digraph G {
         text [label="text\n[mods]", MODS="[]", shape=rectangle, style=filled, color=pink]
         EXIT_text [label="EXIT text"]
 
-        text_literal [label="random text literal", literal="t"]
-        text -> text_literal
-        text_literal -> EXIT_text
-
         text_nested [label="(text)", literal="t"]
         text -> text_nested
         call62_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
@@ -556,13 +589,15 @@ digraph G {
         date [label="date\n[mods]", MODS="[]", shape=rectangle, style=filled, color=cadetblue4]
         EXIT_date [label="EXIT date"]
 
-        date_literal [label="DATE literal"]
-        date -> date_literal
-        date_literal -> EXIT_date
+        date_nested [label="(date)"]
+        date -> date_nested
+        call86_types [TYPES="[date]", MODS="[...]", label="TYPES: date\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        date_nested -> call86_types
+        call86_types -> EXIT_date
     }
 
     subgraph def_types {
-        types [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[no case, no type expr, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no aggregate]", label="TYPE(S) (generic):\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods=[no case, no type expr, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[no literals, no case, no type expr, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no aggregate]", label="TYPE(S) (generic):\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods=[no literals, no case, no type expr, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
         types_select_type_bigint[TYPE_NAME="bigint", label="bigint?", set_value="types_type"]
@@ -611,33 +646,78 @@ digraph G {
         types_select_special_expression -> call0_aggregate_function
         call0_aggregate_function -> EXIT_types
 
-        call0_case [TYPES="[known]", MODS="[...]", modifier="no case", modifier_mode="off", label="CASE\nTYPE: known\nmod.: 'no case' -> OFF", shape=rectangle, style=filled, color=aquamarine]
+        // cancel 'no literals' here
+        // and also... well cancel if for types calls in all 
+        // type expression subgraphs.
+        // the problem is that in that way
+        // too much new code is introduced into the type expression subgraphs.
+        // we can solve this by introducing a separate subgraph just for literals
+        // so basically cancellig would be needed, but only here.
+        // added benefit of potentially more literals
+        // but have to rewrite everything else
+        call0_case [TYPES="[known]", MODS="[..., -no literals]", modifier="no case", modifier_mode="off", label="CASE\nTYPE: known\nMODS: [..., -no literals]\nmod.: 'no case' -> OFF", shape=rectangle, style=filled, color=aquamarine]
         types_select_special_expression -> call0_case
         call0_case -> EXIT_types
 
-        call2_number [label="number\nTYPES: [bigint]\nMODS: [...mods]\nmod.: 'no type expr' -> OFF", TYPES="[bigint]", MODS="[...]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
+        call0_literals [TYPES="[known]", modifier="no literals", modifier_mode="off", label="Literals\nTYPE: known\nmod.: 'no literals' -> OFF", shape=rectangle, style=filled, color=hotpink]
+        types_select_special_expression -> call0_literals
+        call0_literals -> EXIT_types
+
+        call2_number [label="number\nTYPES: [bigint]\nMODS: [..., -no literals]\nmod.: 'no type expr' -> OFF", TYPES="[bigint]", MODS="[..., -no literals]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
         types_select_type_bigint -> call2_number
         call2_number -> EXIT_types
 
-        call1_number [label="number\nTYPES: [integer]\nMODS: [...mods]\nmod.: 'no type expr' -> OFF", TYPES="[integer]", MODS="[...]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
+        call1_number [label="number\nTYPES: [integer]\nMODS: [..., -no literals]\nmod.: 'no type expr' -> OFF", TYPES="[integer]", MODS="[..., -no literals]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
         types_select_type_integer -> call1_number
         call1_number -> EXIT_types
 
-        call0_number [label="number\nTYPES: [numeric]\nMODS: [...mods]\nmod.: 'no type expr' -> OFF", TYPES="[numeric]", MODS="[...]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
+        call0_number [label="number\nTYPES: [numeric]\nMODS: [..., -no literals]\nmod.: 'no type expr' -> OFF", TYPES="[numeric]", MODS="[..., -no literals]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
         types_select_type_numeric -> call0_number
         call0_number -> EXIT_types
 
-        call1_VAL_3 [label="3VL Value\nMODS: [...mods]\nmod.: 'no type expr' -> OFF", MODS="[...]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=red]
+        call1_VAL_3 [label="3VL Value\nMODS: [..., -no literals]\nmod.: 'no type expr' -> OFF", MODS="[..., -no literals]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=red]
         types_select_type_3vl -> call1_VAL_3
         call1_VAL_3 -> EXIT_types
 
-        call0_text [label="text\nMODS: [...mods]\nmod.: 'no type expr' -> OFF", MODS="[...]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=pink]
+        call0_text [label="text\nMODS: [..., -no literals]\nmod.: 'no type expr' -> OFF", MODS="[..., -no literals]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=pink]
         types_select_type_text -> call0_text
         call0_text -> EXIT_types
 
-        call0_date [label="date\nMODS: [...mods]\nmod.: 'no type expr' -> OFF", MODS="[...]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=cadetblue4]
+        call0_date [label="date\nMODS: [..., -no literals]\nmod.: 'no type expr' -> OFF", MODS="[..., -no literals]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=cadetblue4]
         types_select_type_date -> call0_date
         call0_date -> EXIT_types
+    }
+
+    subgraph def_literals {
+        literals [label="Literals\ntypes=[numeric, integer, bigint, 3VL Value, text, date]", TYPES="[numeric, integer, bigint, 3VL Value, text, date]", shape=rectangle, style=filled, color=hotpink]
+        EXIT_literals [label="EXIT Literals", shape=rectangle]
+
+        bool_literal [label="boolean literal\ntn(bool)", TYPE_NAME="3VL Value"]
+        literals -> bool_literal
+        true []
+        bool_literal -> true
+        true -> EXIT_literals
+        false []
+        bool_literal -> false
+        false -> EXIT_literals
+
+        number_literal_integer[label="random integer\ntn(i)", TYPE_NAME="integer"]
+        literals -> number_literal_integer
+        number_literal_integer -> EXIT_literals
+        number_literal_numeric[label="random numeric\ntn(num)", TYPE_NAME="numeric"]
+        literals -> number_literal_numeric
+        number_literal_numeric -> EXIT_literals
+        number_literal_bigint[label="random bigint\ntn(bi)", TYPE_NAME="bigint"]
+        literals -> number_literal_bigint
+        number_literal_bigint -> EXIT_literals
+
+        text_literal [label="random text literal\ntn(text)", TYPE_NAME="text"]
+        literals -> text_literal
+        text_literal -> EXIT_literals
+
+        date_literal [label="DATE literal\ntn(date)", TYPE_NAME="date"]
+        literals -> date_literal
+        date_literal -> EXIT_literals
     }
 
     subgraph def_case {
@@ -748,7 +828,7 @@ digraph G {
         grouping_column_list [label="columns list\n[call mod]", call_modifier="has_accessible_cols_mod"]
         has_accessible_columns -> grouping_column_list
 
-        call70_types[TYPES="[any]", label="TYPES: [any]\nMODS: [no type expr, no typed nulls,\nno subquery, no aggregate, no case]", MODS="[no type expr, no typed nulls, no subquery, no aggregate, no case]", shape=rectangle, style=filled, color=lightblue]
+        call70_types[TYPES="[any]", label="TYPES: [any]\nMODS: [no literals, no type expr, no typed nulls,\nno subquery, no aggregate, no case]", MODS="[no literals, no type expr, no typed nulls, no subquery, no aggregate, no case]", shape=rectangle, style=filled, color=lightblue]
         grouping_column_list -> call70_types
         call70_types -> grouping_column_list
         call70_types -> EXIT_GROUP_BY
@@ -774,7 +854,7 @@ digraph G {
         special_grouping -> grouping_set
         grouping_set -> set_list
 
-        call69_types [TYPES="[any]", label="TYPES: [any]\n MODS: [no type expr, no typed nulls,\nno subquery, no aggregate, no case]", MODS="[no type expr, no typed nulls, no subquery, no aggregate, no case]", shape=rectangle, style=filled, color=lightblue]
+        call69_types [TYPES="[any]", label="TYPES: [any]\n MODS: [no literals, no type expr, no typed nulls,\nno subquery, no aggregate, no case]", MODS="[no literals, no type expr, no typed nulls, no subquery, no aggregate, no case]", shape=rectangle, style=filled, color=lightblue]
         set_list -> call69_types
         // call69_types -> set_list
         set_multiple [label="multiple cols in set"]
@@ -783,7 +863,6 @@ digraph G {
         set_multiple -> EXIT_GROUP_BY
         set_multiple -> grouping_column_list
     }
-
 
     subgraph def_aggregate_function {
         aggregate_function [TYPES="[bigint, integer, numeric, 3VL Value, text, date]", label="aggregate function\nTYPES=[bigint, integer, numeric, 3VL Value, text, date]", shape=rectangle, style=filled, color=peru]

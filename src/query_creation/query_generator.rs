@@ -7,11 +7,11 @@ pub mod aggregate_function_settings;
 
 use std::path::PathBuf;
 
-use rand::SeedableRng;
+use rand::{seq::SliceRandom, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
-    self, BinaryOperator, DataType, Expr, FunctionArg, FunctionArgExpr, Ident, Join, ObjectName, Query, Select, SelectItem, SetExpr, TableFactor, TableWithJoins, TrimWhereField, UnaryOperator, Value, WildcardAdditionalOptions
+    self, BinaryOperator, DataType, Expr, FunctionArg, FunctionArgExpr, Ident, Join, ObjectName, OrderByExpr, Query, Select, SelectItem, SetExpr, TableFactor, TableWithJoins, TrimWhereField, UnaryOperator, Value, WildcardAdditionalOptions
 };
 
 use crate::{config::TomlReadable, training::models::PathwayGraphModel};
@@ -214,6 +214,10 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             }
         }
 
+        // self.expect_state("call0_ORDER_BY");
+        // let order_by = self.handle_order_by(&column_idents_and_graph_types);
+        let order_by = vec![];
+
         self.expect_state("call0_LIMIT");
         let select_limit = self.handle_limit().1;
 
@@ -231,12 +235,82 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         (Query {
             with: None,
             body: Box::new(SetExpr::Select(Box::new(select_body))),
-            order_by: vec![],
+            order_by,
             limit: select_limit,
             offset: None,
             fetch: None,
             locks: vec![],
         }, column_idents_and_graph_types)
+    }
+
+    fn handle_order_by(&mut self, column_idents_and_graph_types: &Vec<(Option<Ident>, SubgraphType)>) -> Vec<OrderByExpr> {
+        self.expect_state("ORDER_BY");
+        let mut order_by = vec![];
+        match self.next_state().as_str() {
+            "EXIT_ORDER_BY" => return order_by,
+            "order_by_list" => { },
+            any => self.panic_unexpected(any),
+        };
+        self.expect_state("order_by_list");
+        loop {
+            let expr = match self.next_state().as_str() {
+                "order_by_select_reference" => {
+                    self.expect_state("order_by_select_reference_by_alias");
+                    let aliases = column_idents_and_graph_types.iter().flat_map(
+                        |(alias, _)| alias.as_ref()
+                    ).collect::<Vec<_>>();
+                    let alias = (**aliases.choose(&mut self.rng).as_ref().unwrap()).clone();
+                    Expr::Identifier(alias)
+                },
+                "order_by_expr" => {
+                    self.expect_state("order_by_expr");
+                    match self.next_state().as_str() {
+                        "call84_types" => { },
+                        "call85_types" => { },
+                        any => self.panic_unexpected(any)
+                    };
+                    self.handle_types(None, None).1
+                },
+                any => self.panic_unexpected(any),
+            };
+            self.expect_state("order_by_expr_done");
+            let mut order_by_expr = OrderByExpr {
+                expr: expr,
+                asc: None,
+                nulls_first: None,
+            };
+            match self.next_state().as_str() {
+                "order_by_order_selected" => { },
+                "order_by_asc" => {
+                    order_by_expr.asc = Some(true);
+                    self.expect_state("order_by_order_selected");
+                },
+                "order_by_desc" => {
+                    order_by_expr.asc = Some(false);
+                    self.expect_state("order_by_order_selected");
+                },
+                any => self.panic_unexpected(any),
+            }
+            match self.next_state().as_str() {
+                "order_by_nulls_first_selected" => { },
+                "order_by_nulls_first" => {
+                    order_by_expr.nulls_first = Some(true);
+                    self.expect_state("order_by_nulls_first_selected");
+                },
+                "order_by_nulls_last" => {
+                    order_by_expr.nulls_first = Some(false);
+                    self.expect_state("order_by_nulls_first_selected");
+                },
+                any => self.panic_unexpected(any),
+            }
+            order_by.push(order_by_expr);
+            match self.next_state().as_str() {
+                "order_by_list" => {},
+                "EXIT_ORDER_BY" => break,
+                any => self.panic_unexpected(any),
+            }
+        }
+        order_by
     }
 
     fn handle_from(&mut self) -> Vec<TableWithJoins> {
@@ -639,8 +713,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     right: Box::new(types_value_2)
                 }
             },
-            "true" => Expr::Value(Value::Boolean(true)),
-            "false" => Expr::Value(Value::Boolean(false)),
             "Nested_VAL_3" => {
                 self.expect_state("call29_types");
                 Expr::Nested(Box::new(self.handle_types(Some(&[SubgraphType::Val3]), None).1))
@@ -667,26 +739,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             );
         }
         let (number_type, number) = match self.next_state().as_str() {
-            "number_literal" => {
-                let (number_type, number_str) = match self.next_state().as_str() {
-                    "number_literal_bigint" => {
-                        // NOTE:
-                        // - if bigint is too small, it will be interp. as an int by postgres.
-                        // however, int can be cast to bigint (if required), so no problem for now.
-                        // - in AST->path, the extracted 'int' path will produce the same query,
-                        // even though the intended type could be bigint, if it is too small.
-                        (SubgraphType::BigInt, self.value_chooser.choose_bigint())
-                    },
-                    "number_literal_integer" => {
-                        (SubgraphType::Integer, self.value_chooser.choose_integer())
-                    },
-                    "number_literal_numeric" => {
-                        (SubgraphType::Numeric, (self.value_chooser.choose_numeric()))
-                    },
-                    any => self.panic_unexpected(any)
-                };
-                (number_type, Expr::Value(Value::Number(number_str, false)))
-            },
             "BinaryNumberOp" => {
                 self.expect_state("call48_types");
                 let (number_type, types_value_1) = self.handle_types(None, None);
@@ -754,7 +806,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     fn handle_text(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("text");
         let string = match self.next_state().as_str() {
-            "text_literal" => Expr::Value(Value::SingleQuotedString("HJeihfbwei".to_string())),  // TODO: hardcoded
             "text_nested" => {
                 self.expect_state("call62_types");
                 Expr::Nested(Box::new(
@@ -830,11 +881,13 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     /// subgarph def_date
     fn handle_date(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("date");
-        self.expect_state("date_literal");
-        let date = Expr::TypedString {
-            data_type: DataType::Date,
-            value: "2023-08-27".to_string(),
-        };
+
+        self.expect_state("date_nested");
+        self.expect_state("call86_types");
+        let date = Expr::Nested(Box::new(self.handle_types(
+            Some(&[SubgraphType::Date]), None
+        ).1));
+
         self.expect_state("EXIT_date");
         (SubgraphType::Date, date)
     }
@@ -883,6 +936,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 self.state_generator.set_known_list(allowed_type_list);
                 match self.next_state().as_str() {
                     "call0_case" => self.handle_case(),
+                    "call0_literals" => self.handle_literals(),
                     "call0_column_spec" => self.handle_column_spec(),
                     "call0_aggregate_function" => self.handle_aggregate_function(),
                     "call1_Query" => {
@@ -916,6 +970,53 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             self.expect_compat(&selected_type, &with);
         }
         (selected_type, types_value.nest_children_if_needed())
+    }
+
+    /// subgraph def_literals
+    fn handle_literals(&mut self) -> (SubgraphType, Expr) {
+        self.expect_state("literals");
+
+        let (tp, expr) = match self.next_state().as_str() {
+            "bool_literal" => {
+                (SubgraphType::Val3, match self.next_state().as_str() {
+                    "true" => Expr::Value(Value::Boolean(true)),
+                    "false" => Expr::Value(Value::Boolean(false)),
+                    any => self.panic_unexpected(any),
+                })
+            },
+            st @ (
+                "number_literal_bigint" | "number_literal_integer" | "number_literal_numeric"
+            ) => {
+                let (number_type, number_str) = match st {
+                    "number_literal_bigint" => {
+                        // NOTE:
+                        // - if bigint is too small, it will be interp. as an int by postgres.
+                        // however, int can be cast to bigint (if required), so no problem for now.
+                        // - in AST->path, the extracted 'int' path will produce the same query,
+                        // even though the intended type could be bigint, if it is too small.
+                        (SubgraphType::BigInt, self.value_chooser.choose_bigint())
+                    },
+                    "number_literal_integer" => {
+                        (SubgraphType::Integer, self.value_chooser.choose_integer())
+                    },
+                    "number_literal_numeric" => {
+                        (SubgraphType::Numeric, (self.value_chooser.choose_numeric()))
+                    },
+                    _ => unreachable!(),
+                };
+                (number_type, Expr::Value(Value::Number(number_str, false)))
+            },
+            "text_literal" => (SubgraphType::Text, Expr::Value(Value::SingleQuotedString("HJeihfbwei".to_string()))),  // TODO: hardcoded
+            "date_literal" => (SubgraphType::Date, Expr::TypedString {
+                data_type: DataType::Date,
+                value: "2023-08-27".to_string(),
+            }),
+            any => self.panic_unexpected(any),
+        };
+
+        self.expect_state("EXIT_literals");
+
+        (tp, expr)
     }
 
     /// subgraph def_column_spec

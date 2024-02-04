@@ -675,9 +675,19 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         // finally, deal with modifiers
         call_params.modifiers = match call_params.modifiers {
             CallModifiers::PassThroughWithAddedMods(modifiers) => {
+                let mut parent_mods = self.get_fn_modifiers().clone().to_vec();
+                let cancel_mods = modifiers.iter().filter_map(|m| match m {
+                    ModifierWithFields::CancelModifier(ref cancel_mod) => Some(cancel_mod.clone()),
+                    _ => None,
+                }).collect::<Vec<_>>();
+                parent_mods.retain(|m| !cancel_mods.contains(m));
                 CallModifiers::StaticList([
-                    &(self.get_fn_modifiers().clone().to_vec())[..],
-                    &modifiers[..]
+                    parent_mods,
+                    modifiers.into_iter().filter_map(|x| match x {
+                        ModifierWithFields::Modifier(modifier_name) => Some(modifier_name),
+                        ModifierWithFields::CancelModifier(..) => None,
+                        ModifierWithFields::PassThrough(..) => None,
+                    }).collect(),
                 ].concat())
             },
             CallModifiers::StaticListWithFields(modifiers) => {
@@ -689,6 +699,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
                             Some(modifier_name)
                         } else { None }
                     },
+                    ModifierWithFields::CancelModifier(..) => None,
                 }).collect())
             },
             CallModifiers::None => {

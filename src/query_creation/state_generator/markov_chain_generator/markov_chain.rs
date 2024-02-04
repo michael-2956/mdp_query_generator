@@ -22,13 +22,28 @@ pub struct NodeParams {
     pub node_common: NodeCommon,
     pub call_params: Option<CallParams>,
     pub literal: bool,
-    pub min_calls_until_function_exit: usize,
+    pub min_calls_until_function_exit: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ModifierWithFields {
     Modifier(SmolStr),
     PassThrough(SmolStr),
+    CancelModifier(SmolStr),
+}
+
+impl ModifierWithFields {
+    fn from_strings(modifiers: Vec<SmolStr>) -> Vec<Self> {
+        modifiers.into_iter().map(|x|
+            if x.starts_with('-') {
+                ModifierWithFields::CancelModifier(SmolStr::new(&x[1..x.len()]))
+            } else if x.starts_with('?') {
+                ModifierWithFields::PassThrough(SmolStr::new(&x[1..x.len()]))
+            } else {
+                ModifierWithFields::Modifier(x)
+            }
+        ).collect()
+    }
 }
 
 /// represents modifiers passed in call parameters.
@@ -38,13 +53,13 @@ pub enum ModifierWithFields {
 pub enum CallModifiers {
     /// none of the modifiers are activated
     None,
-    /// Used to specify a static list of modifiers
     StaticList(Vec<SmolStr>),
+    /// Used to specify a static list of modifiers
+    /// a list of modifiers with optional fields (?mod name)
+    StaticListWithFields(Vec<ModifierWithFields>),
     /// Used when we want to pass the function's modifiers further
     /// Optionally, adds new modifiers. ([..., added modifier])
-    PassThroughWithAddedMods(Vec<SmolStr>),
-    /// a list of modifiers with optional fields (?mod name)
-    StaticListWithFields(Vec<ModifierWithFields>)
+    PassThroughWithAddedMods(Vec<ModifierWithFields>),
 }
 
 impl CallModifiers {
@@ -197,7 +212,7 @@ impl Function {
 
 #[derive(Clone, Eq, PartialEq)]
 struct BinaryHeapNode {
-    calls_from_start_node: usize,
+    calls_from_start_node: i64,
     node_name: SmolStr
 }
 
@@ -286,15 +301,9 @@ impl MarkovChain {
                         Some(mut modifiers) => {
                             if modifiers.contains(&SmolStr::new("...")) {
                                 modifiers.retain(|x| x != "...");
-                                CallModifiers::PassThroughWithAddedMods(modifiers)
+                                CallModifiers::PassThroughWithAddedMods(ModifierWithFields::from_strings(modifiers))
                             } else if modifiers.iter().any(|x| x.starts_with('?')) {
-                                CallModifiers::StaticListWithFields(modifiers.into_iter().map(|x|
-                                    if x.starts_with('?') {
-                                        ModifierWithFields::PassThrough(SmolStr::new(&x[1..x.len()]))
-                                    } else {
-                                        ModifierWithFields::Modifier(x)
-                                    }
-                                ).collect())
+                                CallModifiers::StaticListWithFields(ModifierWithFields::from_strings(modifiers))
                             } else  {
                                 CallModifiers::StaticList(modifiers)
                             }
@@ -393,17 +402,18 @@ impl MarkovChain {
 
                     if call_params.modifiers != CallModifiers::None {
                         if let Some(ref func_modifiers) = function.accepted_modifiers {
-                            let modifiers = match &call_params.modifiers {
+                            let checked_modifiers = match &call_params.modifiers {
                                 CallModifiers::None => vec![],
-                                CallModifiers::PassThroughWithAddedMods(modifiers)
-                                | CallModifiers::StaticList(modifiers) => modifiers.iter().collect(),
+                                CallModifiers::StaticList(modifiers) => modifiers.iter().collect(),
+                                CallModifiers::PassThroughWithAddedMods(ref modifiers) |
                                 CallModifiers::StaticListWithFields(ref modifiers) => {
                                     let function = functions.iter().find(
                                         |(_, function)| function.chain.contains_key(node_name)
                                     ).unwrap().1;
                                     for pass_through_mod in modifiers.iter().filter_map(|x| match x {
                                         ModifierWithFields::Modifier(..) => None,
-                                        ModifierWithFields::PassThrough(mod_name) => Some(mod_name)
+                                        ModifierWithFields::PassThrough(mod_name) => Some(mod_name),
+                                        ModifierWithFields::CancelModifier(mod_name) => Some(mod_name),
                                     }) {
                                         if !function.accepted_modifiers.as_ref().unwrap().contains(pass_through_mod) {
                                             return Err(SyntaxError::new(gen_type_error(format!(
@@ -413,13 +423,14 @@ impl MarkovChain {
                                         }
                                     }
                                     modifiers.iter()
-                                        .map(|x| match x {
+                                        .filter_map(|x| match x {
                                             ModifierWithFields::Modifier(mod_name) |
-                                            ModifierWithFields::PassThrough(mod_name) => mod_name
+                                            ModifierWithFields::PassThrough(mod_name) => Some(mod_name),
+                                            ModifierWithFields::CancelModifier(..) => None,
                                         }).collect()
                                 },
                             };
-                            for c_mod in modifiers {
+                            for c_mod in checked_modifiers {
                                 if !func_modifiers.contains(&c_mod) {
                                     return Err(SyntaxError::new(gen_type_error(format!(
                                         "Modifier {} is not in {:?}", c_mod, func_modifiers
@@ -443,21 +454,21 @@ impl MarkovChain {
         Ok(())
     }
 
-    fn get_node_min_calls_till_exit(node_name: &SmolStr, node_params: &NodeParams, function: &Function, func_min_calls: &HashMap<SmolStr, usize>) -> usize {
-        let mut answer = usize::MAX;
+    fn get_node_min_calls_till_exit(node_name: &SmolStr, node_params: &NodeParams, function: &Function, func_min_calls: &HashMap<SmolStr, i64>) -> i64 {
+        let mut answer = i64::MAX;
 
         let mut least_calls_first_pq = BinaryHeap::<BinaryHeapNode>::new();
         least_calls_first_pq.push(BinaryHeapNode {
             calls_from_start_node: 0, node_name: node_name.clone(),
         });
 
-        let mut min_calls_from_start_map = HashMap::<SmolStr, usize>::new();
+        let mut min_calls_from_start_map = HashMap::<SmolStr, i64>::new();
         min_calls_from_start_map.insert(node_name.clone(), 0);
 
         while let Some(BinaryHeapNode { calls_from_start_node, node_name }) = least_calls_first_pq.pop() {
             if node_name == function.exit_node_name {
                 answer = calls_from_start_node + node_params.call_params.as_ref().map_or(
-                    0usize, |c| 1 + *func_min_calls.get(&c.func_name).unwrap()
+                    0i64, |c| 1 + *func_min_calls.get(&c.func_name).unwrap()
                 );
                 break;
             }
@@ -470,7 +481,7 @@ impl MarkovChain {
 
             for (_, out_node_params) in function.chain.get(&node_name).unwrap() {
                 let out_node_calls_from_src = calls_from_start_node + out_node_params.call_params.as_ref().map_or(
-                    0usize, |c| 1 + *func_min_calls.get(&c.func_name).unwrap()
+                    0i64, |c| 1 + *func_min_calls.get(&c.func_name).unwrap()
                 );
 
                 let mut min_updated = false;
@@ -500,11 +511,13 @@ impl MarkovChain {
     fn fill_paths_to_exit_with_call_nums(functions: &mut HashMap<SmolStr, Function>) {
         // find min calls till exit of all function source nodes
         // in this code, we disregard modifiers and assume every node is on
-        let func_min_calls: HashMap<SmolStr, usize> = functions.keys().map(|func_name| (func_name.clone(), 0usize)).collect();
         // as this approach doesn't work, we actually should think about usual modifiers and
         // call modifiers. When FromContents has been filled out, that changes the 
         // behaviour of all TYPES subgraphs, SELECT subgraph, etc.
         // at that point, all "calls will exit" should be recalculated...
+        let mut func_min_calls: HashMap<SmolStr, i64> = functions.keys().map(|func_name| (func_name.clone(), 0i64)).collect();
+        func_min_calls.insert(SmolStr::new("literals"), -1);  // hack to encourage literals (this subgraph has no inner calls)
+        func_min_calls.insert(SmolStr::new("column_spec"), -1);  // hack to encourage columns (this subgraph has no inner calls)
 
         // for i in 0..1000 {
         //     let mut did_update = false;
@@ -528,7 +541,7 @@ impl MarkovChain {
         // }
         
         // fill all the nodes in with min calls
-        let mut min_calls_till_exit = HashMap::<SmolStr, usize>::new();
+        let mut min_calls_till_exit = HashMap::<SmolStr, i64>::new();
         for function in functions.values() {
             min_calls_till_exit.insert(function.exit_node_name.clone(), 0);
             for (node_name, node_params) in &function.node_params {
@@ -547,7 +560,7 @@ impl MarkovChain {
             for out_nodes in function.chain.values_mut() {
                 for (_, out_node) in out_nodes {
                     if let Some(min_calls) = min_calls_till_exit.get(&out_node.node_common.name) {
-                        if *min_calls == usize::MAX {
+                        if *min_calls == i64::MAX {
                             panic!("Node {} does not reach function exit", out_node.node_common.name);
                         }
                         out_node.min_calls_until_function_exit = *min_calls;
