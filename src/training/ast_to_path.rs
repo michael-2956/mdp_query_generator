@@ -344,27 +344,65 @@ impl PathGenerator {
         Ok(column_idents_and_graph_types)
     }
 
+    /// subgraph def_FROM
     fn handle_from(&mut self, from: &Vec<TableWithJoins>) -> Result<(), ConvertionError> {
         self.try_push_state("FROM")?;
         for table_with_joins in from.iter() {
+            self.clause_context.from_mut().create_empty_subfrom();
             match &table_with_joins.relation {
                 sqlparser::ast::TableFactor::Table { name, .. } => {
                     self.try_push_state("FROM_table")?;
-                    self.push_node(PathNode::SelectedTableName(name.clone()));
-                    let create_table_st = self.database_schema.get_table_def_by_name(name);
-                    self.clause_context.from_mut().append_table(create_table_st);
+                    self.handle_from_table(name)?;
                 },
                 sqlparser::ast::TableFactor::Derived { subquery, .. } => {
                     self.try_push_state("call0_Query")?;
-                    let column_idents_and_graph_types = self.handle_query(&subquery)?;
-                    self.clause_context.from_mut().append_query(column_idents_and_graph_types);
+                    self.handle_from_query(subquery)?;
                 },
                 any => unexpected_expr!(any)
             }
+            for join in &table_with_joins.joins {
+                self.try_push_state("FROM_join_by")?;
+                let (join_type, join_on) = match &join.join_operator {
+                    ast::JoinOperator::Inner(join_on) => ("FROM_join_join", join_on),
+                    ast::JoinOperator::LeftOuter(join_on) => ("FROM_left_join", join_on),
+                    ast::JoinOperator::RightOuter(join_on) => ("FROM_right_join", join_on),
+                    ast::JoinOperator::FullOuter(join_on) => ("FROM_full_join", join_on),
+                    any => unexpected_expr!(any),
+                };
+                let join_on = unwrap_variant!(join_on, ast::JoinConstraint::On);
+                self.try_push_state(join_type)?;
+                self.try_push_state("FROM_join_to")?;
+                match &join.relation {
+                    sqlparser::ast::TableFactor::Table { name, .. } => {
+                        self.try_push_state("FROM_join_table")?;
+                        self.handle_from_table(name)?;
+                    },
+                    sqlparser::ast::TableFactor::Derived { subquery, .. } => {
+                        self.try_push_state("call5_Query")?;
+                        self.handle_from_query(subquery)?;
+                    },
+                    any => unexpected_expr!(any)
+                }
+                self.try_push_states(&["FROM_join_on", "call83_types"])?;
+                self.handle_types(join_on, Some(&[SubgraphType::Val3]), None)?;
+            }
             self.try_push_state("FROM_cartesian_product")?;
+            self.clause_context.from_mut().delete_subfrom();
         }
         self.try_push_state("EXIT_FROM")?;
+        Ok(())
+    }
 
+    fn handle_from_table(&mut self, name: &ObjectName) -> Result<(), ConvertionError> {
+        self.push_node(PathNode::SelectedTableName(name.clone()));
+        let create_table_st = self.database_schema.get_table_def_by_name(name);
+        self.clause_context.from_mut().append_table(create_table_st);
+        Ok(())
+    }
+
+    fn handle_from_query(&mut self, subquery: &Box<Query>) -> Result<(), ConvertionError> {
+        let column_idents_and_graph_types = self.handle_query(subquery)?;
+        self.clause_context.from_mut().append_query(column_idents_and_graph_types);
         Ok(())
     }
 
@@ -855,6 +893,7 @@ impl PathGenerator {
     fn handle_types_expr(&mut self, selected_types: Vec<SubgraphType>, modifiers: Vec<SmolStr>, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
         let mut error_mem: HashMap<String, Vec<(SubgraphType, ConvertionError)>> = HashMap::new();
         let types_before_state_selection = self.get_checkpoint();
+        let selected_types = SubgraphType::sort_by_compatibility(selected_types);
         let mut selected_types_iter = selected_types.iter();
 
         // try out different allowed types to find the actual one (or not)

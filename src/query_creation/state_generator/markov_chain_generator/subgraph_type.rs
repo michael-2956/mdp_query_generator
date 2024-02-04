@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{cmp::Ordering, fmt::Display};
 
 use serde::{Serialize, Deserialize};
 use sqlparser::ast::{DataType, ExactNumberInfo};
@@ -102,6 +102,22 @@ impl Display for SubgraphType {
 }
 
 impl SubgraphType {
+    /// Sorted in a way that latter are convertible
+    /// to former, if any compatibility exists
+    pub fn sort_by_compatibility(mut type_vec: Vec<SubgraphType>) -> Vec<SubgraphType> {
+        type_vec.sort_unstable_by(
+            |tp1, tp2| 
+            if tp1.get_compat_types().contains(tp2) {
+                Ordering::Less
+            } else if tp2.get_compat_types().contains(tp1) {
+                Ordering::Greater
+            } else {
+                Ordering::Equal
+            }
+        );
+        type_vec
+    }
+
     /// get a list of compatible types\
     /// if the returned vector includes the needed type, this type is compatible
     pub fn get_compat_types(&self) -> Vec<SubgraphType> {
