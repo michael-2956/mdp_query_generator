@@ -2,6 +2,8 @@
 
 rm parser_bugs.sql
 
+python3 create_perf_version.py 
+
 cargo run --release -- only_queries_config.toml -n 10000 > generated_queries.sql
 
 psql tpch -f generated_queries.sql 2>&1 >/dev/null
