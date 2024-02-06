@@ -199,38 +199,28 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             any => self.panic_unexpected(any),
         }
 
-        let (
-            mut column_idents_and_graph_types,
-            (distinct, mut projection)
-        ) = self.handle_select();
+        let (distinct, mut projection) = self.handle_select();
         select_body.distinct = distinct;
         std::mem::swap(&mut select_body.projection, &mut projection);
 
         if self.clause_context.group_by().is_grouping_active() && !self.clause_context.query().is_aggregation_indicated() {
             if select_body.group_by.is_empty() {
-                // Grouping is active but wasn't indicated in any way. Add GROUP BY ()
+                // Grouping is active but wasn't indicated in any way. Add GROUP BY true
                 // instead of GROUP BY (), because unsupported by parser
                 select_body.group_by = vec![Expr::Value(Value::Boolean(true))]
             }
         }
 
-        // self.expect_state("call0_ORDER_BY");
-        // let order_by = self.handle_order_by(&column_idents_and_graph_types);
-        let order_by = vec![];
+        self.expect_state("call0_ORDER_BY");
+        let order_by = self.handle_order_by();
 
         self.expect_state("call0_LIMIT");
         let select_limit = self.handle_limit().1;
 
         self.expect_state("EXIT_Query");
+        let output_type = self.clause_context.query_mut().pop_output_type();
         self.substitute_model.notify_subquery_creation_end();
         self.clause_context.on_query_end();
-
-        // select pg_typeof((select null)); -- returns text
-        for (_, column_type) in column_idents_and_graph_types.iter_mut() {
-            if *column_type == SubgraphType::Undetermined {
-                *column_type = SubgraphType::Text;
-            }
-        }
 
         (Query {
             with: None,
@@ -240,10 +230,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             offset: None,
             fetch: None,
             locks: vec![],
-        }, column_idents_and_graph_types)
+        }, output_type)
     }
 
-    fn handle_order_by(&mut self, column_idents_and_graph_types: &Vec<(Option<Ident>, SubgraphType)>) -> Vec<OrderByExpr> {
+    /// subgraph def_ORDER_BY
+    fn handle_order_by(&mut self) -> Vec<OrderByExpr> {
         self.expect_state("ORDER_BY");
         let mut order_by = vec![];
         match self.next_state().as_str() {
@@ -251,19 +242,17 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             "order_by_list" => { },
             any => self.panic_unexpected(any),
         };
-        self.expect_state("order_by_list");
         loop {
             let expr = match self.next_state().as_str() {
                 "order_by_select_reference" => {
                     self.expect_state("order_by_select_reference_by_alias");
-                    let aliases = column_idents_and_graph_types.iter().flat_map(
+                    let aliases = self.clause_context.query().select_type().iter().flat_map(
                         |(alias, _)| alias.as_ref()
                     ).collect::<Vec<_>>();
                     let alias = (**aliases.choose(&mut self.rng).as_ref().unwrap()).clone();
                     Expr::Identifier(alias)
                 },
                 "order_by_expr" => {
-                    self.expect_state("order_by_expr");
                     match self.next_state().as_str() {
                         "call84_types" => { },
                         "call85_types" => { },
@@ -313,6 +302,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         order_by
     }
 
+    /// subgraph def_FROM
     fn handle_from(&mut self) -> Vec<TableWithJoins> {
         self.expect_state("FROM");
 
@@ -394,6 +384,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         }
     }
 
+    /// subgraph def_WHERE
     fn handle_where(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("WHERE");
         self.expect_state("call53_types");
@@ -403,7 +394,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     }
 
     /// subgraph def_SELECT
-    fn handle_select(&mut self) -> (Vec<(Option<Ident>, SubgraphType)>, (bool, Vec<SelectItem>)) {
+    fn handle_select(&mut self) -> (bool, Vec<SelectItem>) {
         self.expect_state("SELECT");
         let distinct = match self.next_state().as_str() {
             "SELECT_DISTINCT" => {
@@ -414,7 +405,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             any => self.panic_unexpected(any)
         };
 
-        let mut column_idents_and_graph_types = vec![];
+        let mut column_idents_and_graph_types: Vec<(Option<Ident>, SubgraphType)> = vec![];
         let mut projection = vec![];
 
         loop {
@@ -481,7 +472,9 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             };
         }
 
-        (column_idents_and_graph_types, (distinct, projection))
+        self.clause_context.query_mut().set_select_type(column_idents_and_graph_types);
+
+        (distinct, projection)
     }
 
     /// subgraph def_LIMIT

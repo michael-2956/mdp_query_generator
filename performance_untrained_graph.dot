@@ -98,12 +98,11 @@ digraph G {
         call0_GROUP_BY -> call0_HAVING
         call0_HAVING -> call0_SELECT
 
-        // call0_ORDER_BY [label="ORDER BY", shape=rectangle, style=filled, color=deepskyblue]
-        // call0_SELECT -> call0_ORDER_BY
+        call0_ORDER_BY [label="ORDER BY", shape=rectangle, style=filled, color=deepskyblue]
+        call0_SELECT -> call0_ORDER_BY
 
         call0_LIMIT [label="LIMIT\nMODS: [?single row]", MODS="[?single row]", shape=rectangle, style=filled, color=brown]
-        call0_SELECT -> call0_LIMIT
-        // call0_ORDER_BY -> call0_LIMIT
+        call0_ORDER_BY -> call0_LIMIT
         call0_LIMIT -> EXIT_Query
     }
 
@@ -230,19 +229,20 @@ digraph G {
         ORDER_BY -> order_by_list
         order_by_expr_done [label="Expression done"]
 
-        order_by_select_reference [label="SELECT reference"]
-        order_by_list -> order_by_select_reference
-        order_by_select_reference_by_alias [label="by alias"]
-        order_by_select_reference -> order_by_select_reference_by_alias
-        order_by_select_reference_by_alias -> order_by_expr_done
+        // сall mod here to ccheck whether aliased columns exist
+        // order_by_select_reference [label="SELECT reference"]
+        // order_by_list -> order_by_select_reference
+        // order_by_select_reference_by_alias [label="by alias"]
+        // order_by_select_reference -> order_by_select_reference_by_alias
+        // order_by_select_reference_by_alias -> order_by_expr_done
 
         order_by_expr [label="Expression"]
         order_by_list -> order_by_expr
 
-        call84_types [label="TYPES: [...types]\nMODS: [group by columns, no literals]\ncall mod.: 'grouping mode switch'", TYPES="[...]", MODS="[group by columns, no literals]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
+        call84_types [label="TYPES: any\nMODS: [group by columns, no literals]\ncall mod.: 'grouping mode switch'", TYPES="[any]", MODS="[group by columns, no literals]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
         order_by_expr -> call84_types
         call84_types -> order_by_expr_done
-        call85_types [label="TYPES: [...types]\nMODS: [no aggregate, no literals]\ncall mod.: 'grouping mode switch'", TYPES="[...]", MODS="[no aggregate, no literals]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
+        call85_types [label="TYPES: any\nMODS: [no aggregate, no literals]\ncall mod.: 'grouping mode switch'", TYPES="[any]", MODS="[no aggregate, no literals]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
         order_by_expr -> call85_types
         call85_types -> order_by_expr_done
 

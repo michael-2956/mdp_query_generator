@@ -280,16 +280,16 @@ impl PathGenerator {
             self.handle_where(selection)?;
         }
 
-        let mut column_idents_and_graph_types = if select_body.group_by.len() != 0 {
-            self.handle_query_after_group_by(select_body, true)?
+        if select_body.group_by.len() != 0 {
+            self.handle_query_after_group_by(select_body, true)?;
         } else {
             let implicit_group_by_checkpoint = self.get_checkpoint();
             match self.handle_query_after_group_by(select_body, false) {
-                Ok(res) => res,
+                Ok(..) => { },
                 Err(err_no_grouping) => {
                     self.restore_checkpoint_consume(implicit_group_by_checkpoint);
                     match self.handle_query_after_group_by(select_body, true) {
-                        Ok(res) => res,
+                        Ok(..) => { },
                         Err(err_grouping) => {
                             return Err(ConvertionError::new(format!(
                                 "Error converting query: {query}\n\
@@ -307,19 +307,13 @@ impl PathGenerator {
         self.handle_limit(&query.limit)?;
 
         self.try_push_state("EXIT_Query")?;
+        let output_type = self.clause_context.query_mut().pop_output_type();
         self.clause_context.on_query_end();
 
-        for (_, column_type) in column_idents_and_graph_types.iter_mut() {
-            // select pg_typeof((select null)); -- returns text
-            if *column_type == SubgraphType::Undetermined {
-                *column_type = SubgraphType::Text;
-            }
-        }
-
-        return Ok(column_idents_and_graph_types)
+        return Ok(output_type)
     }
 
-    fn handle_query_after_group_by(&mut self, select_body: &Box<Select>, with_group_by: bool) -> Result<Vec<(Option<Ident>, SubgraphType)>, ConvertionError> {
+    fn handle_query_after_group_by(&mut self, select_body: &Box<Select>, with_group_by: bool) -> Result<(), ConvertionError> {
         if with_group_by {
             self.try_push_state("call0_GROUP_BY")?;
             self.handle_group_by(&select_body.group_by)?;
@@ -337,11 +331,9 @@ impl PathGenerator {
         }
 
         self.try_push_state("call0_SELECT")?;
-        let column_idents_and_graph_types = self.handle_select(
-            select_body.distinct, &select_body.projection
-        )?;
+        self.handle_select(select_body.distinct, &select_body.projection)?;
 
-        Ok(column_idents_and_graph_types)
+        Ok(())
     }
 
     /// subgraph def_FROM
@@ -416,7 +408,7 @@ impl PathGenerator {
     }
 
     /// subgraph def_SELECT
-    fn handle_select(&mut self, distinct: bool, projection: &Vec<SelectItem>) -> Result<Vec<(Option<Ident>, SubgraphType)>, ConvertionError> {
+    fn handle_select(&mut self, distinct: bool, projection: &Vec<SelectItem>) -> Result<(), ConvertionError> {
         self.try_push_state("SELECT")?;
         if distinct {
             self.try_push_state("SELECT_DISTINCT")?;
@@ -490,7 +482,9 @@ impl PathGenerator {
         }
         self.try_push_state("EXIT_SELECT")?;
 
-        Ok(column_idents_and_graph_types)
+        self.clause_context.query_mut().set_select_type(column_idents_and_graph_types);
+
+        Ok(())
     }
 
     /// subgraph def_LIMIT

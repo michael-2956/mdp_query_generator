@@ -2,6 +2,7 @@ use smol_str::SmolStr;
 use sqlparser::ast::Ident;
 
 use core::fmt::Debug;
+use std::collections::HashMap;
 
 use crate::{query_creation::state_generator::{CallTypes, markov_chain_generator::{FunctionContext, subgraph_type::SubgraphType}}, unwrap_variant};
 
@@ -20,6 +21,7 @@ pub enum ValueSetterValue {
     WildcardRelations(WildcardRelationsValue),
     DistinctAggregation(DistinctAggregationValue),
     HasAccessibleColumns(HasAccessibleColumnsValue),
+    SelectHasAccessibleColumns(SelectHasAccessibleColumnsValue),
     HasUniqueColumnNamesForType(HasUniqueColumnNamesForSelectedTypesValue),
 }
 
@@ -326,9 +328,10 @@ impl StatelessCallModifier for GroupingModeSwitchModifier {
     fn run(&self, function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
         let grouping_enabled = unwrap_variant!(associated_value.unwrap(), ValueSetterValue::GroupingEnabled).enabled;
         match function_context.current_node.node_common.name.as_str() {
-            "call76_types" => grouping_enabled,
             "call73_types" => grouping_enabled,
             "call54_types" => !grouping_enabled,
+            "call84_types" => grouping_enabled,
+            "call85_types" => !grouping_enabled,
             any => panic!("grouping mode switch cannot be called at {any}")
         }
     }
@@ -528,5 +531,60 @@ impl StatelessCallModifier for CanSkipLimitModifier {
 
     fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
         unwrap_variant!(associated_value.unwrap(), ValueSetterValue::CanSkipLimit).can_skip
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SelectHasAccessibleColumnsValue {
+    /// has accessible columns
+    pub has_columns: bool,
+}
+
+impl NamedValue for SelectHasAccessibleColumnsValue {
+    fn name() -> SmolStr {
+        SmolStr::new("select_has_accessible_columns")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SelectHasAccessibleColumnsValueSetter { }
+
+impl ValueSetter for SelectHasAccessibleColumnsValueSetter {
+    fn get_value_name(&self) -> SmolStr {
+        SelectHasAccessibleColumnsValue::name()
+    }
+
+    fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
+        ValueSetterValue::SelectHasAccessibleColumns(SelectHasAccessibleColumnsValue {
+            has_columns: match function_context.current_node.node_common.name.as_str() {
+                "order_by_select_reference" => {
+                    clause_context.query().select_type().iter().filter_map(
+                        // get all aliases
+                        |(alias, ..)| alias.as_ref()
+                    ).fold(HashMap::new(),|mut acc, ident| {
+                        // count them
+                        *acc.entry(ident.value.clone()).or_insert(0) += 1; acc
+                    }).iter().any(|(_, count)| *count == 1)  // check that they are unique
+                },
+                any => panic!("{any} unexpectedly triggered the select_has_accessible_columns value setter"),
+            },
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SelectHasAccessibleColumnsModifier {}
+
+impl StatelessCallModifier for SelectHasAccessibleColumnsModifier {
+    fn get_name(&self) -> SmolStr {
+        SmolStr::new("select_has_accessible_columns_mod")
+    }
+
+    fn get_associated_value_name(&self) -> Option<SmolStr> {
+        Some(SelectHasAccessibleColumnsValue::name())
+    }
+
+    fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
+        unwrap_variant!(associated_value.unwrap(), ValueSetterValue::SelectHasAccessibleColumns).has_columns
     }
 }

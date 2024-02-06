@@ -13,7 +13,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use take_until::TakeUntilExt;
 
-use crate::{unwrap_variant, query_creation::{state_generator::markov_chain_generator::markov_chain::FunctionTypes, query_generator::{query_info::ClauseContext, call_modifiers::{StatelessCallModifier, StatefulCallModifier, IsColumnTypeAvailableModifier, TypesTypeValueSetter, ValueSetter, NamedValue, ValueSetterValue, HasUniqueColumnNamesForSelectedTypesModifier, WildcardRelationsValueSetter, IsWildcardAvailableModifier, HasUniqueColumnNamesForTypeValueSetter, GroupingEnabledValueSetter, GroupingModeSwitchModifier, IsGroupingSetsValueSetter, IsEmptySetAllowedModifier, HasAccessibleColumnsValueSetter, HasAccessibleColumnsModifier, DistinctAggregationValueSetter, DistinctAggregationModifier, CanSkipLimitValueSetter, CanSkipLimitModifier}}}, config::TomlReadable, training::models::{PathwayGraphModel, ModelPredictionResult}};
+use crate::{config::TomlReadable, query_creation::{query_generator::{call_modifiers::{CanSkipLimitModifier, CanSkipLimitValueSetter, DistinctAggregationModifier, DistinctAggregationValueSetter, GroupingEnabledValueSetter, GroupingModeSwitchModifier, HasAccessibleColumnsModifier, HasAccessibleColumnsValueSetter, HasUniqueColumnNamesForSelectedTypesModifier, HasUniqueColumnNamesForTypeValueSetter, IsColumnTypeAvailableModifier, IsEmptySetAllowedModifier, IsGroupingSetsValueSetter, IsWildcardAvailableModifier, NamedValue, SelectHasAccessibleColumnsModifier, SelectHasAccessibleColumnsValueSetter, StatefulCallModifier, StatelessCallModifier, TypesTypeValueSetter, ValueSetter, ValueSetterValue, WildcardRelationsValueSetter}, query_info::ClauseContext}, state_generator::markov_chain_generator::markov_chain::FunctionTypes}, training::models::{ModelPredictionResult, PathwayGraphModel}, unwrap_variant};
 
 use self::{
     markov_chain::{
@@ -547,6 +547,8 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         _self.register_stateless_call_modifier(DistinctAggregationModifier {});
         _self.register_value_setter(CanSkipLimitValueSetter {});
         _self.register_stateless_call_modifier(CanSkipLimitModifier {});
+        _self.register_value_setter(SelectHasAccessibleColumnsValueSetter {});
+        _self.register_stateless_call_modifier(SelectHasAccessibleColumnsModifier {});
         _self.fill_function_modifier_info();
         _self.reset();
         Ok(_self)

@@ -260,13 +260,34 @@ impl AllAccessibleFroms {
 #[derive(Debug, Clone)]
 pub struct QueryProps {
     is_aggregation_indicated: bool,
+    column_idents_and_graph_types: Option<Vec<(Option<Ident>, SubgraphType)>>,
 }
 
 impl QueryProps {
     fn new() -> QueryProps {
         Self {
-            is_aggregation_indicated: false
+            is_aggregation_indicated: false,
+            column_idents_and_graph_types: None,
         }
+    }
+
+    pub fn set_select_type(&mut self, column_idents_and_graph_types: Vec<(Option<Ident>, SubgraphType)>) {
+        self.column_idents_and_graph_types = Some(column_idents_and_graph_types);
+    }
+
+    pub fn select_type(&self) -> &Vec<(Option<Ident>, SubgraphType)> {
+        &self.column_idents_and_graph_types.as_ref().unwrap()
+    }
+
+    pub fn pop_output_type(&mut self) -> Vec<(Option<Ident>, SubgraphType)> {
+        let mut column_idents_and_graph_types = self.column_idents_and_graph_types.take().unwrap();
+        // select pg_typeof((select null)); -- returns text
+        for (_, column_type) in column_idents_and_graph_types.iter_mut() {
+            if *column_type == SubgraphType::Undetermined {
+                *column_type = SubgraphType::Text;
+            }
+        }
+        column_idents_and_graph_types
     }
 
     pub fn extract_alias(expr: &Expr) -> Option<Ident> {
@@ -739,7 +760,7 @@ impl Relation {
             )))
     }
 
-    /// get all columns with their types, including the unnamed ones and ambiguous ones, by reference
+    /// get all column types, including the unnamed ones and ambiguous ones
     pub fn get_column_types(&self) -> Vec<SubgraphType> {
         self.get_columns_with_types_iter().map(|(_, col_type)| col_type.clone()).collect()
     }
