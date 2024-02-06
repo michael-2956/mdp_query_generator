@@ -412,6 +412,7 @@ impl PathGenerator {
         self.try_push_state("SELECT")?;
         if distinct {
             self.try_push_state("SELECT_DISTINCT")?;
+            self.clause_context.query_mut().set_distinct();
         }
 
         let mut column_idents_and_graph_types = vec![];

@@ -225,7 +225,7 @@ digraph G {
         // reference SELECT by aliases/numbers, and the priority
         // is on the SELECT, when ambiguous between select and from.
 
-        order_by_list [label="ORDER BY list\nset value: 'grouping_enabled'", set_value="grouping_enabled"]
+        order_by_list [label="ORDER BY list\n[set value]", set_value="select_is_not_distinct"]
         ORDER_BY -> order_by_list
         order_by_expr_done [label="Expression done"]
 
@@ -235,7 +235,7 @@ digraph G {
         order_by_select_reference -> order_by_select_reference_by_alias
         order_by_select_reference_by_alias -> order_by_expr_done
 
-        order_by_expr [label="Expression"]
+        order_by_expr [label="Expression\n[call mod]\n[set value]", call_modifier="select_is_not_distinct_mod", set_value="grouping_enabled"]
         order_by_list -> order_by_expr
 
         call84_types [label="TYPES: any\nMODS: [group by columns, no literals]\ncall mod.: 'grouping mode switch'", TYPES="[any]", MODS="[group by columns, no literals]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]

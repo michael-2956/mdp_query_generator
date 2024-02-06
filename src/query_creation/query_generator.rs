@@ -199,9 +199,8 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             any => self.panic_unexpected(any),
         }
 
-        let (distinct, mut projection) = self.handle_select();
-        select_body.distinct = distinct;
-        std::mem::swap(&mut select_body.projection, &mut projection);
+        select_body.projection = self.handle_select();
+        select_body.distinct = self.clause_context.query().is_distinct();
 
         if self.clause_context.group_by().is_grouping_active() && !self.clause_context.query().is_aggregation_indicated() {
             if select_body.group_by.is_empty() {
@@ -394,16 +393,16 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     }
 
     /// subgraph def_SELECT
-    fn handle_select(&mut self) -> (bool, Vec<SelectItem>) {
+    fn handle_select(&mut self) -> Vec<SelectItem> {
         self.expect_state("SELECT");
-        let distinct = match self.next_state().as_str() {
+        match self.next_state().as_str() {
             "SELECT_DISTINCT" => {
+                self.clause_context.query_mut().set_distinct();
                 self.expect_state("SELECT_list");
-                true
             },
-            "SELECT_list" => false,
+            "SELECT_list" => { },
             any => self.panic_unexpected(any)
-        };
+        }
 
         let mut column_idents_and_graph_types: Vec<(Option<Ident>, SubgraphType)> = vec![];
         let mut projection = vec![];
@@ -474,7 +473,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
 
         self.clause_context.query_mut().set_select_type(column_idents_and_graph_types);
 
-        (distinct, projection)
+        projection
     }
 
     /// subgraph def_LIMIT

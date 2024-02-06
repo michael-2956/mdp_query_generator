@@ -259,6 +259,7 @@ impl AllAccessibleFroms {
 
 #[derive(Debug, Clone)]
 pub struct QueryProps {
+    distinct: bool,
     is_aggregation_indicated: bool,
     column_idents_and_graph_types: Option<Vec<(Option<Ident>, SubgraphType)>>,
 }
@@ -266,9 +267,18 @@ pub struct QueryProps {
 impl QueryProps {
     fn new() -> QueryProps {
         Self {
+            distinct: false,
             is_aggregation_indicated: false,
             column_idents_and_graph_types: None,
         }
+    }
+
+    pub fn is_distinct(&self) -> bool {
+        self.distinct
+    }
+
+    pub fn set_distinct(&mut self) {
+        self.distinct = true;
     }
 
     pub fn set_select_type(&mut self, column_idents_and_graph_types: Vec<(Option<Ident>, SubgraphType)>) {

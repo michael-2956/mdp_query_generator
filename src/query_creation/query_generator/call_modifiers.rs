@@ -20,6 +20,7 @@ pub enum ValueSetterValue {
     GroupingEnabled(GroupingEnabledValue),
     WildcardRelations(WildcardRelationsValue),
     DistinctAggregation(DistinctAggregationValue),
+    SelectIsNotDistinct(SelectIsNotDistinctValue),
     HasAccessibleColumns(HasAccessibleColumnsValue),
     SelectHasAccessibleColumns(SelectHasAccessibleColumnsValue),
     HasUniqueColumnNamesForType(HasUniqueColumnNamesForSelectedTypesValue),
@@ -586,5 +587,52 @@ impl StatelessCallModifier for SelectHasAccessibleColumnsModifier {
 
     fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
         unwrap_variant!(associated_value.unwrap(), ValueSetterValue::SelectHasAccessibleColumns).has_columns
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SelectIsNotDistinctValue {
+    /// is not distinct
+    pub is_not_distinct: bool,
+}
+
+impl NamedValue for SelectIsNotDistinctValue {
+    fn name() -> SmolStr {
+        SmolStr::new("select_is_not_distinct")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SelectIsNotDistinctValueSetter { }
+
+impl ValueSetter for SelectIsNotDistinctValueSetter {
+    fn get_value_name(&self) -> SmolStr {
+        SelectIsNotDistinctValue::name()
+    }
+
+    fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
+        ValueSetterValue::SelectIsNotDistinct(SelectIsNotDistinctValue {
+            is_not_distinct: match function_context.current_node.node_common.name.as_str() {
+                "order_by_list" => !clause_context.query().is_distinct(),
+                any => panic!("{any} unexpectedly triggered the select_is_not_distinct value setter"),
+            },
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SelectIsNotDistinctModifier {}
+
+impl StatelessCallModifier for SelectIsNotDistinctModifier {
+    fn get_name(&self) -> SmolStr {
+        SmolStr::new("select_is_not_distinct_mod")
+    }
+
+    fn get_associated_value_name(&self) -> Option<SmolStr> {
+        Some(SelectIsNotDistinctValue::name())
+    }
+
+    fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
+        unwrap_variant!(associated_value.unwrap(), ValueSetterValue::SelectIsNotDistinct).is_not_distinct
     }
 }
