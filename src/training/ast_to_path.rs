@@ -287,10 +287,11 @@ impl PathGenerator {
             match self.handle_query_after_group_by(select_body, false) {
                 Ok(..) => { },
                 Err(err_no_grouping) => {
-                    self.restore_checkpoint_consume(implicit_group_by_checkpoint);
+                    self.restore_checkpoint(&implicit_group_by_checkpoint);
                     match self.handle_query_after_group_by(select_body, true) {
                         Ok(..) => { },
                         Err(err_grouping) => {
+                            self.restore_checkpoint_consume(implicit_group_by_checkpoint);
                             return Err(ConvertionError::new(format!(
                                 "Error converting query: {query}\n\
                                 Tried without implicit groping, got an error: {:#?}\n\
@@ -645,10 +646,6 @@ impl PathGenerator {
             }
             Expr::Value(Value::Boolean(true)) => self.try_push_state("true")?,
             Expr::Value(Value::Boolean(false)) => self.try_push_state("false")?,
-            Expr::Nested(expr) => {
-                self.try_push_states(&["Nested_VAL_3", "call29_types"])?;
-                self.handle_types(expr, Some(&[SubgraphType::Val3]), None)?;
-            },
             Expr::UnaryOp { op, expr } if *op == UnaryOperator::Not => {
                 self.try_push_states(&["UnaryNot_VAL_3", "call30_types"])?;
                 self.handle_types(
@@ -706,7 +703,11 @@ impl PathGenerator {
                     UnaryOperator::PGSquareRoot => "unary_number_sq_root",
                     any => unexpected_expr!(any),
                 })?;
-                self.try_push_state("call1_types")?;
+                if *op == UnaryOperator::Minus {
+                    self.try_push_state("call89_types")?;
+                } else {
+                    self.try_push_state("call1_types")?;
+                }
                 self.handle_types(expr, None, None)?
             },
             Expr::Position { expr, r#in } => {
@@ -715,10 +716,6 @@ impl PathGenerator {
                 self.try_push_states(&["string_position_in", "call3_types"])?;
                 self.handle_types(r#in, Some(&[SubgraphType::Text]), None)?;
                 SubgraphType::Integer
-            },
-            Expr::Nested(inner) => {
-                self.try_push_states(&["nested_number", "call4_types"])?;
-                self.handle_types(inner, Some(&[SubgraphType::Numeric, SubgraphType::Integer, SubgraphType::BigInt]), None)?
             },
             any => unexpected_expr!(any),
         };
@@ -729,6 +726,7 @@ impl PathGenerator {
     fn handle_number_determine_literal_type(&mut self, number_str: &String) -> Result<SubgraphType, ConvertionError> {
         // assume that literals are the smallest type that they fit into
         // (this is now postgres determines them)
+        let checkpoint = self.get_checkpoint();
         let err_int_str = match number_str.parse::<u32>() {
             Ok(..) => {
                 match self.try_push_state("number_literal_integer") {
@@ -736,10 +734,16 @@ impl PathGenerator {
                         self.push_node(PathNode::IntegerValue(number_str.clone()));
                         return Ok(SubgraphType::Integer)
                     },
-                    Err(err_int) => format!("{err_int}"),
+                    Err(err_int) => {
+                        self.restore_checkpoint(&checkpoint);
+                        format!("{err_int}")
+                    },
                 }
             },
-            Err(err_int) => format!("{err_int}")
+            Err(err_int) => {
+                self.restore_checkpoint(&checkpoint);
+                format!("{err_int}")
+            }
         };
         if number_str.parse::<u64>().is_ok() {
             match self.try_push_state("number_literal_bigint") {
@@ -748,6 +752,7 @@ impl PathGenerator {
                     Ok(SubgraphType::BigInt)
                 },
                 Err(err_bigint) => {
+                    self.restore_checkpoint_consume(checkpoint);
                     Err(ConvertionError::new(format!(
                         "Error trying to find '{number_str}' literal type.\
                         Tried Integer, got: {err_int_str}\
@@ -768,10 +773,6 @@ impl PathGenerator {
         match expr {
             Expr::Value(Value::SingleQuotedString(_)) => {
                 self.try_push_state("text_literal")?;
-            },
-            Expr::Nested(inner) => {
-                self.try_push_states(&["text_nested", "call62_types"])?;
-                self.handle_types(&inner, Some(&[SubgraphType::Text]), None)?;
             },
             Expr::Trim { expr, trim_where, trim_what } => {
                 self.try_push_state("text_trim")?;
@@ -816,12 +817,58 @@ impl PathGenerator {
         Ok(SubgraphType::Text)
     }
 
-    /// subgarph def_date
+    /// subgraph def_date
     fn handle_date(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
         self.try_push_state("date")?;
+
         match expr {
-            Expr::TypedString { data_type, .. } if *data_type == DataType::Date => {
-                self.try_push_state("date_literal")?;
+            Expr::BinaryOp {
+                left,
+                op,
+                right
+            } => {
+                let mut err_str: String = "".to_string();
+                let checkpoint = self.get_checkpoint();
+                for swap_arguments in [false, true] {
+                    let (date, int) = if swap_arguments {
+                        (right, left)
+                    } else { (left, right) };
+                    self.try_push_state("call86_types")?;
+                    match self.handle_types(
+                        date, Some(&[SubgraphType::Date]), None
+                    ) {
+                        Ok(..) => { },
+                        Err(err) => {
+                            self.restore_checkpoint(&checkpoint);
+                            err_str += format!("Tried swap_arguments = {swap_arguments}, got: {err}\n").as_str();
+                            continue;
+                        },
+                    };
+                    self.try_push_state("call88_types")?;
+                    match self.handle_types(
+                        int, Some(&[SubgraphType::Integer]), None
+                    ) {
+                        Ok(..) => { },
+                        Err(err) => {
+                            self.restore_checkpoint(&checkpoint);
+                            err_str += format!("Tried swap_arguments = {swap_arguments}, got: {err}\n").as_str();
+                            continue;
+                        },
+                    };
+                    self.try_push_state(match op {
+                        BinaryOperator::Plus => "date_add_subtract_plus",
+                        BinaryOperator::Minus => "date_add_subtract_minus",
+                        any => unexpected_expr!(any),
+                    })?;
+                    if swap_arguments {
+                        self.try_push_state("date_swap_arguments")?;
+                    }
+                    err_str = "".to_string();
+                    break;
+                }
+                if err_str != "" {
+                    return Err(ConvertionError::new(err_str))
+                }
             },
             any => unexpected_expr!(any),
         }
@@ -849,6 +896,10 @@ impl PathGenerator {
             Expr::Cast { expr, data_type } if *expr == Box::new(Expr::Value(Value::Null)) => {
                 self.handle_types_typed_null(selected_types, data_type)?
             },
+            Expr::Nested(expr) => {
+                self.try_push_states(&["types_nested", "call87_types"])?;
+                return self.handle_types(expr, check_generated_by_one_of, check_compatible_with);
+            }
             expr => self.handle_types_expr(selected_types, modifiers, expr)?,
         };
         self.try_push_state("EXIT_types")?;
@@ -860,8 +911,8 @@ impl PathGenerator {
                 panic!("Unexpected type: expected one of {:?}, got {:?}", generators, selected_type);
             }
         }
-        if let Some(with) = check_compatible_with {
-            self.expect_compat(&selected_type, &with);
+        if let Some(ref with) = check_compatible_with {
+            self.expect_compat(&selected_type, with);
         }
 
         return Ok(selected_type)

@@ -705,10 +705,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     right: Box::new(types_value_2)
                 }
             },
-            "Nested_VAL_3" => {
-                self.expect_state("call29_types");
-                Expr::Nested(Box::new(self.handle_types(Some(&[SubgraphType::Val3]), None).1))
-            },
             "UnaryNot_VAL_3" => {
                 self.expect_state("call30_types");
                 Expr::UnaryOp { op: UnaryOperator::Not, expr: Box::new( self.handle_types(
@@ -763,7 +759,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     "unary_number_sq_root" => UnaryOperator::PGSquareRoot,
                     any => self.panic_unexpected(any),
                 };
-                self.expect_state("call1_types");
+                if numeric_unary_op == UnaryOperator::Minus {
+                    self.expect_state("call89_types");
+                } else {
+                    self.expect_state("call1_types");
+                }
                 let (number_type, number) = self.handle_types(None, None);
                 (number_type, Expr::UnaryOp {
                     op: numeric_unary_op,
@@ -781,13 +781,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     r#in: Box::new(types_value_2)
                 })
             },
-            "nested_number" => {
-                self.expect_state("call4_types");
-                let (number_type, number) = self.handle_types(
-                    Some(&[SubgraphType::Numeric, SubgraphType::Integer, SubgraphType::BigInt]), None
-                );
-                (number_type, Expr::Nested(Box::new(number)))
-            },
             any => self.panic_unexpected(any)
         };
         self.expect_state("EXIT_number");
@@ -798,12 +791,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     fn handle_text(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("text");
         let string = match self.next_state().as_str() {
-            "text_nested" => {
-                self.expect_state("call62_types");
-                Expr::Nested(Box::new(
-                    self.handle_types(Some(&[SubgraphType::Text]), None).1
-                ))
-            },
             "text_trim" => {
                 let (trim_where, trim_what) = match self.next_state().as_str() {
                     "call6_types" => {
@@ -874,14 +861,45 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     fn handle_date(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("date");
 
-        self.expect_state("date_nested");
-        self.expect_state("call86_types");
-        let date = Expr::Nested(Box::new(self.handle_types(
-            Some(&[SubgraphType::Date]), None
-        ).1));
-
-        self.expect_state("EXIT_date");
-        (SubgraphType::Date, date)
+        let expr = match self.next_state().as_str() {
+            "date_binary" => {
+                let (mut date, op, mut right) = match self.next_state().as_str() {
+                    "date_add_subtract" => {
+                        self.expect_state("call86_types");
+                        let date = self.handle_types(
+                            Some(&[SubgraphType::Date]), None
+                        ).1;
+                        self.expect_state("call88_types");
+                        let int = self.handle_types(
+                            Some(&[SubgraphType::Integer]), None
+                        ).1;
+                        let op = match self.next_state().as_str() {
+                            "date_add_subtract_plus" => BinaryOperator::Plus,
+                            "date_add_subtract_minus" => BinaryOperator::Minus,
+                            any => self.panic_unexpected(any),
+                        };
+                        (date, op, int)
+                    },
+                    any => self.panic_unexpected(any),
+                };
+                match self.next_state().as_str() {
+                    "date_swap_arguments" => {
+                        std::mem::swap(&mut date, &mut right);
+                        self.expect_state("EXIT_date");
+                    },
+                    "EXIT_date" => { },
+                    any => self.panic_unexpected(any),
+                }
+                Expr::BinaryOp {
+                    left: Box::new(date),
+                    op,
+                    right: Box::new(right)
+                }
+            },
+            any => self.panic_unexpected(any),
+        };
+        
+        (SubgraphType::Date, expr)
     }
 
     /// subgraph def_types
@@ -900,6 +918,12 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 self.expect_state("EXIT_types");
                 return (SubgraphType::Undetermined, Expr::Value(Value::Null));
             },
+            "types_nested" => {
+                self.expect_state("call87_types");
+                let (tp, expr) = self.handle_types(check_generated_by_one_of, check_compatible_with);
+                self.expect_state("EXIT_types");
+                return (tp, Expr::Nested(Box::new(expr)))
+            }
             any => self.panic_unexpected(any),
         };
 
@@ -968,7 +992,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     fn handle_literals(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("literals");
 
-        let (tp, expr) = match self.next_state().as_str() {
+        let (tp, mut expr) = match self.next_state().as_str() {
             "bool_literal" => {
                 (SubgraphType::Val3, match self.next_state().as_str() {
                     "true" => Expr::Value(Value::Boolean(true)),
@@ -1006,7 +1030,14 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             any => self.panic_unexpected(any),
         };
 
-        self.expect_state("EXIT_literals");
+        match self.next_state().as_str() {
+            "number_literal_minus" => {
+                expr = Expr::UnaryOp { op: UnaryOperator::Minus, expr: Box::new(expr) };
+                self.expect_state("EXIT_literals");
+            },
+            "EXIT_literals" => { },
+            any => self.panic_unexpected(any),
+        }
 
         (tp, expr)
     }
