@@ -17,7 +17,7 @@ use sqlparser::ast::{
 use crate::{config::TomlReadable, training::models::PathwayGraphModel};
 
 use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generator::{CallTypes, markov_chain_generator::subgraph_type::SubgraphType}};
-use self::{aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, call_modifiers::{TypesTypeValue, ValueSetterValue, WildcardRelationsValue}, expr_precedence::ExpressionPriority, query_info::{ClauseContext, DatabaseSchema, QueryProps}, value_choosers::QueryValueChooser};
+use self::{aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, call_modifiers::{SelectAccessibleColumnsValue, TypesTypeValue, ValueSetterValue, WildcardRelationsValue}, expr_precedence::ExpressionPriority, query_info::{ClauseContext, DatabaseSchema, QueryProps}, value_choosers::QueryValueChooser};
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
 
@@ -218,6 +218,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
 
         self.expect_state("EXIT_Query");
         let output_type = self.clause_context.query_mut().pop_output_type();
+        // eprintln!("output: {:?}", output_type);
         self.substitute_model.notify_subquery_creation_end();
         self.clause_context.on_query_end();
 
@@ -245,11 +246,12 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             let expr = match self.next_state().as_str() {
                 "order_by_select_reference" => {
                     self.expect_state("order_by_select_reference_by_alias");
-                    let aliases = self.clause_context.query().select_type().iter().flat_map(
-                        |(alias, _)| alias.as_ref()
-                    ).collect::<Vec<_>>();
-                    let alias = (**aliases.choose(&mut self.rng).as_ref().unwrap()).clone();
-                    Expr::Identifier(alias)
+                    let aliases = &unwrap_variant!(self.state_generator
+                        .get_named_value::<SelectAccessibleColumnsValue>().unwrap(),
+                        ValueSetterValue::SelectAccessibleColumns
+                    ).accessible_columns.iter().collect::<Vec<_>>();
+                    let alias = **aliases.choose(&mut self.rng).as_ref().unwrap();
+                    Expr::Identifier(alias.clone().into())
                 },
                 "order_by_expr" => {
                     match self.next_state().as_str() {

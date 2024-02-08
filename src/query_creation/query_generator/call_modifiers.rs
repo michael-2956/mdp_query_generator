@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use crate::{query_creation::state_generator::{CallTypes, markov_chain_generator::{FunctionContext, subgraph_type::SubgraphType}}, unwrap_variant};
 
-use super::query_info::ClauseContext;
+use super::query_info::{ClauseContext, IdentName};
 
 pub trait NamedValue: Debug {
     fn name() -> SmolStr where Self : Sized;
@@ -22,7 +22,7 @@ pub enum ValueSetterValue {
     DistinctAggregation(DistinctAggregationValue),
     SelectIsNotDistinct(SelectIsNotDistinctValue),
     HasAccessibleColumns(HasAccessibleColumnsValue),
-    SelectHasAccessibleColumns(SelectHasAccessibleColumnsValue),
+    SelectAccessibleColumns(SelectAccessibleColumnsValue),
     HasUniqueColumnNamesForType(HasUniqueColumnNamesForSelectedTypesValue),
 }
 
@@ -536,36 +536,37 @@ impl StatelessCallModifier for CanSkipLimitModifier {
 }
 
 #[derive(Debug, Clone)]
-pub struct SelectHasAccessibleColumnsValue {
-    /// has accessible columns
-    pub has_columns: bool,
+pub struct SelectAccessibleColumnsValue {
+    /// accessible columns
+    pub accessible_columns: Vec<IdentName>,
 }
 
-impl NamedValue for SelectHasAccessibleColumnsValue {
+impl NamedValue for SelectAccessibleColumnsValue {
     fn name() -> SmolStr {
         SmolStr::new("select_has_accessible_columns")
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct SelectHasAccessibleColumnsValueSetter { }
+pub struct SelectAccessibleColumnsValueSetter { }
 
-impl ValueSetter for SelectHasAccessibleColumnsValueSetter {
+impl ValueSetter for SelectAccessibleColumnsValueSetter {
     fn get_value_name(&self) -> SmolStr {
-        SelectHasAccessibleColumnsValue::name()
+        SelectAccessibleColumnsValue::name()
     }
 
     fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
-        ValueSetterValue::SelectHasAccessibleColumns(SelectHasAccessibleColumnsValue {
-            has_columns: match function_context.current_node.node_common.name.as_str() {
+        ValueSetterValue::SelectAccessibleColumns(SelectAccessibleColumnsValue {
+            accessible_columns: match function_context.current_node.node_common.name.as_str() {
                 "order_by_select_reference" => {
                     clause_context.query().select_type().iter().filter_map(
                         // get all aliases
                         |(alias, ..)| alias.as_ref()
                     ).fold(HashMap::new(),|mut acc, ident| {
                         // count them
-                        *acc.entry(ident.value.clone()).or_insert(0) += 1; acc
-                    }).iter().any(|(_, count)| *count == 1)  // check that they are unique
+                        *acc.entry(IdentName::from(ident.clone())).or_insert(0) += 1; acc
+                        // retrieve ones mentioned once
+                    }).into_iter().filter(|(_, count)| *count == 1).map(|x| x.0).collect()
                 },
                 any => panic!("{any} unexpectedly triggered the select_has_accessible_columns value setter"),
             },
@@ -582,11 +583,14 @@ impl StatelessCallModifier for SelectHasAccessibleColumnsModifier {
     }
 
     fn get_associated_value_name(&self) -> Option<SmolStr> {
-        Some(SelectHasAccessibleColumnsValue::name())
+        Some(SelectAccessibleColumnsValue::name())
     }
 
     fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
-        unwrap_variant!(associated_value.unwrap(), ValueSetterValue::SelectHasAccessibleColumns).has_columns
+        let is_empty = unwrap_variant!(
+            associated_value.unwrap(), ValueSetterValue::SelectAccessibleColumns
+        ).accessible_columns.is_empty();
+        !is_empty
     }
 }
 

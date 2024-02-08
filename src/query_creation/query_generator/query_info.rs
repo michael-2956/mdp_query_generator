@@ -346,6 +346,25 @@ impl QueryProps {
                     _ => None,
                 }
             },
+            Expr::Trim { expr: _, trim_where, trim_what: _ } => {
+                let func_name = if let Some(trim_where) = trim_where {
+                    match trim_where {
+                        sqlparser::ast::TrimWhereField::Both => "btrim".to_string(),
+                        sqlparser::ast::TrimWhereField::Leading => "ltrim".to_string(),
+                        sqlparser::ast::TrimWhereField::Trailing => "rtrim".to_string(),
+                    }
+                } else {
+                    "btrim".to_string()
+                };
+                Some(Ident { value: func_name, quote_style: None })
+            },
+            Expr::Position { expr: _, r#in: _ } => Some(Ident { value: "position".to_string(), quote_style: Some('"') }),
+            Expr::Substring { expr: _, substring_from: _, substring_for: _ } => Some(Ident { value: "substring".to_string(), quote_style: Some('"') }),
+            Expr::Exists { subquery: _, negated } => {
+                if *negated { None } else {
+                    Some(Ident { value: "exists".to_string(), quote_style: Some('"') })
+                }
+            },
             _ => None,
         }
     }
@@ -502,14 +521,46 @@ impl GroupByContents {
         }
     }
 
-    pub fn get_column_name_set(&self) -> HashSet<Ident> {
+    pub fn get_column_name_set(&self) -> HashSet<IdentName> {
         HashSet::from_iter(self.columns.get_column_names_iter().map(
-            |idents| idents.last().unwrap().clone()
+            |idents| idents.last().unwrap().clone().into()
         ))
     }
+}
 
-    pub fn get_column_names_iter(&self) -> impl Iterator<Item = &Vec<Ident>> {
-        self.columns.get_column_names_iter()
+/// a custom ident that only compares and hashes the string
+#[derive(Clone, Debug, Eq, Ord)]
+pub struct IdentName {
+    ident: Ident
+}
+
+impl PartialEq for IdentName {
+    fn eq(&self, other: &Self) -> bool {
+        self.ident.value == other.ident.value
+    }
+}
+
+impl PartialOrd for IdentName {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.ident.value.partial_cmp(&other.ident.value)
+    }
+}
+
+impl Hash for IdentName {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.ident.value.hash(state);
+    }
+}
+
+impl From<Ident> for IdentName {
+    fn from(ident: Ident) -> Self {
+        Self { ident }
+    }
+}
+
+impl From<IdentName> for Ident {
+    fn from(ident_name: IdentName) -> Self {
+        ident_name.ident
     }
 }
 
@@ -531,7 +582,7 @@ impl FromContents {
     /// 
     /// the allowed_columns_opt is set when we want to only allow columns that are non-duplicate
     /// in any of the tables
-    pub fn is_type_available(&self, graph_type: &SubgraphType, allowed_columns_opt: Option<&HashSet<Ident>>) -> bool {
+    pub fn is_type_available(&self, graph_type: &SubgraphType, allowed_columns_opt: Option<&HashSet<IdentName>>) -> bool {
         self.relations.iter().any(|x| x.1.is_type_accessible(graph_type, allowed_columns_opt))
     }
 
@@ -540,7 +591,7 @@ impl FromContents {
     pub fn has_unique_columns_for_types(
         &self,
         graph_types: &Vec<SubgraphType>,
-        allowed_col_names: Option<HashSet<Ident>>,
+        allowed_col_names: Option<HashSet<IdentName>>,
     ) -> bool {
         let mut unique_columns = self.get_unique_columns();
         if let Some(allowed_col_names) = allowed_col_names {
@@ -554,15 +605,16 @@ impl FromContents {
     }
 
     /// get all the columns represented in only a single relation in FROM
-    fn get_unique_columns(&self) -> HashSet<Ident> {
+    fn get_unique_columns(&self) -> HashSet<IdentName> {
         self.relations.iter()
             .flat_map(|(_, rel)| rel.get_column_names_iter())
+            .map(|ident| ident.clone().into())
             .fold(HashMap::new(), |mut acc, x| {
                 *acc.entry(x).or_insert(0usize) += 1usize;
                 acc
             }).into_iter()
             .filter(|(_, num)| *num == 1)
-            .map(|(col_name, _)| col_name.clone())
+            .map(|(col_name, _)| col_name)
             .collect()
     }
 
@@ -572,7 +624,7 @@ impl FromContents {
         &self, rng: &mut ChaCha8Rng,
         column_types: &Vec<SubgraphType>,
         qualified: bool,
-        allowed_col_names: Option<HashSet<Ident>>,
+        allowed_col_names: Option<HashSet<IdentName>>,
     ) -> (SubgraphType, Vec<Ident>) {
         let allowed_columns_opt = if !qualified {
             let mut allowed_columns = self.get_unique_columns();
@@ -638,10 +690,10 @@ impl FromContents {
         }
     }
 
-    fn get_random_column_with_type(&self, rng: &mut ChaCha8Rng, graph_type: &SubgraphType, allowed_columns_opt: Option<&HashSet<Ident>>, qualified: bool) -> (SubgraphType, Vec<Ident>) {
+    fn get_random_column_with_type(&self, rng: &mut ChaCha8Rng, graph_type: &SubgraphType, allowed_columns_opt: Option<&HashSet<IdentName>>, qualified: bool) -> (SubgraphType, Vec<Ident>) {
         let relations_with_type: Vec<&Relation> = self.relations.iter()
-            .filter(|x| x.1.is_type_accessible(graph_type, allowed_columns_opt))
-            .map(|x| x.1)
+            .filter(|(_, relation)| relation.is_type_accessible(graph_type, allowed_columns_opt))
+            .map(|(_, relation)| relation)
             .collect::<Vec<_>>();
         let selected_relation = relations_with_type[rng.gen_range(0..relations_with_type.len())];
         selected_relation.get_random_column_with_type(rng, graph_type, allowed_columns_opt, qualified)
@@ -702,7 +754,7 @@ pub struct Relation {
     /// projection alias
     pub alias: Ident,
     /// A container of columns accessible by names
-    accessible_columns: ColumnContainer<Ident>,
+    accessible_columns: ColumnContainer<IdentName>,
     /// A list of unnamed column's types, as they
     /// can be referenced with wildcards
     pub unnamed_columns: Vec<SubgraphType>,
@@ -725,7 +777,7 @@ impl Relation {
         let mut _self = Relation::with_alias(alias);
         for column in &create_table.columns {
             let graph_type = SubgraphType::from_data_type(&column.data_type);
-            _self.accessible_columns.append_column(column.name.clone(), graph_type);
+            _self.accessible_columns.append_column(column.name.clone().into(), graph_type);
         }
         _self
     }
@@ -746,7 +798,7 @@ impl Relation {
         }
         for (column_name, graph_types) in names_to_types {
             match graph_types.as_slice() {
-                &[ref graph_type] => _self.accessible_columns.append_column(column_name, graph_type.clone()),
+                &[ref graph_type] => _self.accessible_columns.append_column(column_name.into(), graph_type.clone()),
                 other => {
                     _self.ambiguous_columns.extend(other.into_iter().map(|x| (column_name.clone(), x.clone())))
                 }
@@ -762,7 +814,7 @@ impl Relation {
     pub fn get_columns_with_types_iter(&self) -> impl Iterator<Item = (Option<&Ident>, &SubgraphType)> {
         self.accessible_columns.columns.iter()
             .flat_map(|(graph_type, column_names)| column_names.iter().map(
-                move |column_name| (Some(column_name), graph_type)
+                move |column_name| (Some(&column_name.ident), graph_type)
             ))
             .chain(self.unnamed_columns.iter().map(|x| (None, x)))
             .chain(self.ambiguous_columns.iter().map(|(column_name, graph_type)| (
@@ -780,25 +832,26 @@ impl Relation {
         self.get_columns_with_types_iter().map(|(x, y)| (x.cloned(), y.clone())).collect()
     }
     
-    pub fn is_type_accessible(&self, graph_type: &SubgraphType, allowed_columns_opt: Option<&HashSet<Ident>>) -> bool {
+    pub fn is_type_accessible(&self, graph_type: &SubgraphType, allowed_columns_opt: Option<&HashSet<IdentName>>) -> bool {
         self.accessible_columns.is_type_available(graph_type, allowed_columns_opt)
     }
 
     /// Retrieve an identifier vector of a random column of the specified type.
-    pub fn get_random_column_with_type(&self, rng: &mut ChaCha8Rng, graph_type: &SubgraphType, allowed_columns_opt: Option<&HashSet<Ident>>, qualified: bool) -> (SubgraphType, Vec<Ident>) {
+    pub fn get_random_column_with_type(&self, rng: &mut ChaCha8Rng, graph_type: &SubgraphType, allowed_columns_opt: Option<&HashSet<IdentName>>, qualified: bool) -> (SubgraphType, Vec<Ident>) {
         let (column_type, column_name) = self.accessible_columns.get_random_column_with_type(rng, graph_type, allowed_columns_opt);
-        let mut column_name = vec![column_name.clone()];
+        let mut column_name = vec![column_name.clone().into()];
         if qualified { column_name = [vec![self.alias.clone()], column_name ].concat(); }
         (column_type, column_name)
     }
 
     pub fn try_get_column_type_by_name(&self, column_name: &Ident) -> Option<SubgraphType> {
-        self.accessible_columns.try_get_column_type_by_name(column_name)
+        self.accessible_columns.try_get_column_type_by_name(&column_name.clone().into())
     }
 
     /// Returns accessible and ambiguous column names
     pub fn get_column_names_iter(&self) -> impl Iterator<Item = &Ident> {
         self.accessible_columns.get_column_names_iter()
+            .map(|x| &x.ident)
             .chain(self.ambiguous_columns.iter().map(|(x, ..)| x))
     }
 }
