@@ -6,6 +6,8 @@ ignore_errs = [
     "is out of range for type double precision",
     "negative substring length not allowed",
     "value overflows numeric format",
+    "value out of range: underflow",
+    "value out of range: overflow",
     "division by zero",
 ]
 

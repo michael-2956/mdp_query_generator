@@ -2,7 +2,7 @@ use smol_str::SmolStr;
 use sqlparser::ast::Ident;
 
 use core::fmt::Debug;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::{query_creation::state_generator::{CallTypes, markov_chain_generator::{FunctionContext, subgraph_type::SubgraphType}}, unwrap_variant};
 
@@ -562,7 +562,7 @@ impl ValueSetter for SelectAccessibleColumnsValueSetter {
                     clause_context.query().select_type().iter().filter_map(
                         // get all aliases
                         |(alias, ..)| alias.as_ref()
-                    ).fold(HashMap::new(),|mut acc, ident| {
+                    ).fold(BTreeMap::new(),|mut acc, ident| {
                         // count them
                         *acc.entry(IdentName::from(ident.clone())).or_insert(0) += 1; acc
                         // retrieve ones mentioned once
