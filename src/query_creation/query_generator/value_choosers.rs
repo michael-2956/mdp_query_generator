@@ -4,7 +4,7 @@ use sqlparser::ast::{ObjectName, Ident};
 
 use crate::{training::ast_to_path::PathNode, query_creation::state_generator::subgraph_type::SubgraphType};
 
-use super::{query_info::{DatabaseSchema, CreateTableSt, FromContents, Relation, GroupByContents}, call_modifiers::WildcardRelationsValue};
+use super::{call_modifiers::WildcardRelationsValue, query_info::{CreateTableSt, DatabaseSchema, FromContents, GroupByContents, IdentName, Relation}};
 
 pub trait QueryValueChooser {
     fn new() -> Self;
@@ -14,6 +14,8 @@ pub trait QueryValueChooser {
     fn choose_column_from(&mut self, from_contents: &FromContents, column_types: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>);
 
     fn choose_column_group_by(&mut self, from_contents: &FromContents, group_by_contents: &GroupByContents, column_types: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>);
+    
+    fn choose_select_alias_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident;
 
     fn choose_bigint(&mut self) -> String;
     
@@ -59,6 +61,10 @@ impl QueryValueChooser for RandomValueChooser {
         }
     }
 
+    fn choose_select_alias_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident {
+        (**aliases.choose(&mut self.rng).as_ref().unwrap()).clone().into()
+    }
+
     fn choose_bigint(&mut self) -> String {
         self.rng.gen_range(0..=5).to_string()
     }
@@ -96,6 +102,7 @@ pub struct DeterministicValueChooser {
     chosen_select_aliases: (Vec<Ident>, usize),
     chosen_columns_from: (Vec<Vec<Ident>>, usize),
     chosen_columns_group_by: (Vec<Vec<Ident>>, usize),
+    chosen_columns_order_by: (Vec<Ident>, usize),
     chosen_qualified_wildcard_tables: (Vec<Ident>, usize),
 }
 
@@ -123,6 +130,9 @@ impl DeterministicValueChooser {
             chosen_columns_group_by: (path.iter().filter_map(
                 |x| if let PathNode::SelectedColumnNameGROUPBY(ident) = x { Some(ident) } else { None }
             ).cloned().collect(), 0),
+            chosen_columns_order_by: (path.iter().filter_map(
+                |x| if let PathNode::SelectedColumnNameORDERBY(ident) = x { Some(ident) } else { None }
+            ).cloned().collect(), 0),
             chosen_qualified_wildcard_tables: (path.iter().filter_map(
                 |x| if let PathNode::QualifiedWildcardSelectedRelation(ident) = x { Some(ident) } else { None }
             ).cloned().collect(), 0),
@@ -140,6 +150,7 @@ impl QueryValueChooser for DeterministicValueChooser {
             chosen_select_aliases: (vec![], 0),
             chosen_columns_from: (vec![], 0),
             chosen_columns_group_by: (vec![], 0),
+            chosen_columns_order_by: (vec![], 0),
             chosen_qualified_wildcard_tables: (vec![], 0),
         }
     }
@@ -171,6 +182,15 @@ impl QueryValueChooser for DeterministicValueChooser {
             panic!("column_types = {:?} does not contain col_type = {:?}", column_types, col_type)
         }
         (col_type, ident_components)
+    }
+
+    fn choose_select_alias_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident {
+        let ident = self.chosen_columns_order_by.0[self.chosen_columns_order_by.1].clone();
+        self.chosen_columns_order_by.1 += 1;
+        if !aliases.contains(&&ident.clone().into()) {
+            panic!("Cannot choose {ident} in ORDER BY: it is not present among SELECT aliases: {:?}", aliases);
+        }
+        ident
     }
 
     fn choose_bigint(&mut self) -> String {

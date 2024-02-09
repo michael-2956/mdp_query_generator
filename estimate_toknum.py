@@ -3,7 +3,7 @@ nltk.download('punkt')  # Download the punkt tokenizer data (if not already down
 
 from nltk.tokenize import word_tokenize
 
-file_path = 'q.sql'  # Replace with the path to your text file
+file_path = 'generated_queries.sql'  # Replace with the path to your text file
 
 def count_tokens_in_file(file_path):
     with open(file_path, 'r') as file:

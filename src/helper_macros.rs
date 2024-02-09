@@ -10,6 +10,17 @@ macro_rules! unwrap_variant {
 }
 
 #[macro_export]
+macro_rules! unwrap_pat {
+    ($target: expr, $arg: pat, $ret: expr) => { {
+        if let $arg = $target {
+            $ret
+        } else {
+            panic!("Failed to unwrap pattern: {} to {}", stringify!($target), stringify!($arg));
+        }
+    } };
+}
+
+#[macro_export]
 macro_rules! unwrap_variant_ref {
     ($target: expr, $pat: path) => { {
         if let $pat(ref a) = $target {

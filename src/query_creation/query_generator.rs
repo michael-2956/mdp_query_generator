@@ -7,7 +7,7 @@ pub mod aggregate_function_settings;
 
 use std::path::PathBuf;
 
-use rand::{seq::SliceRandom, SeedableRng};
+use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
@@ -252,8 +252,8 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                         .get_named_value::<SelectAccessibleColumnsValue>().unwrap(),
                         ValueSetterValue::SelectAccessibleColumns
                     ).accessible_columns.iter().collect::<Vec<_>>();
-                    let alias = **aliases.choose(&mut self.rng).as_ref().unwrap();
-                    Expr::Identifier(alias.clone().into())
+                    let alias = self.value_chooser.choose_select_alias_order_by(aliases);
+                    Expr::Identifier(alias)
                 },
                 "order_by_expr" => {
                     match self.next_state().as_str() {
