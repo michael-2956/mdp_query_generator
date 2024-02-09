@@ -218,7 +218,9 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
 
         self.expect_state("EXIT_Query");
         let output_type = self.clause_context.query_mut().pop_output_type();
-        // eprintln!("output: {:?}", output_type);
+        // if output_type.iter().filter_map(|(o, _)| o.as_ref()).any(|o| o.value == "case") {
+        //     eprintln!("output: {:?}", output_type);
+        // }
         self.substitute_model.notify_subquery_creation_end();
         self.clause_context.on_query_end();
 

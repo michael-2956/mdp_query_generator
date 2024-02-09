@@ -317,7 +317,9 @@ impl QueryProps {
                     })
                     .or(
                         if else_result.as_ref().map_or(
-                            false, |x| matches!(*x.unnested(), Expr::Subquery(..))
+                            false, |x|
+                                matches!(*x.unnested(), Expr::Subquery(..)) ||
+                                matches!(*x.unnested(), Expr::Case { .. })
                         ) { None } else {
                             Some(Ident { value: "case".to_string(), quote_style: Some('"') })
                         }
