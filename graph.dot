@@ -708,6 +708,9 @@ digraph G {
         bool_literal -> false
         false -> EXIT_literals
 
+        literals_explicit_cast [label="Explicit type cast"]
+        literals_explicit_cast -> EXIT_literals
+
         number_literal_integer [label="random integer\ntn(i)", TYPE_NAME="integer"]
         literals -> number_literal_integer
         number_literal_integer -> EXIT_literals
@@ -716,11 +719,12 @@ digraph G {
         number_literal_numeric -> EXIT_literals
         number_literal_bigint [label="random bigint\ntn(bi)", TYPE_NAME="bigint"]
         literals -> number_literal_bigint
-        number_literal_bigint -> EXIT_literals
+        number_literal_bigint -> literals_explicit_cast
+
         number_literal_minus [label="-"]
+        literals_explicit_cast -> number_literal_minus
         number_literal_integer -> number_literal_minus
         number_literal_numeric -> number_literal_minus
-        number_literal_bigint -> number_literal_minus
         number_literal_minus -> EXIT_literals
 
         text_literal [label="random text literal\ntn(text)", TYPE_NAME="text"]

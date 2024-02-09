@@ -1034,7 +1034,15 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             any => self.panic_unexpected(any),
         };
 
-        match self.next_state().as_str() {
+        let next_st = match self.next_state().as_str() {
+            "literals_explicit_cast" => {
+                expr = Expr::Cast { expr: Box::new(expr), data_type: tp.to_data_type() };
+                self.next_state()
+            },
+            any => SmolStr::new(any),
+        };
+
+        match next_st.as_str() {
             "number_literal_minus" => {
                 expr = Expr::UnaryOp { op: UnaryOperator::Minus, expr: Box::new(expr) };
                 self.expect_state("EXIT_literals");

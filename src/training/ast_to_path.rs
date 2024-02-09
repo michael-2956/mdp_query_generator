@@ -5,7 +5,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{self, BinaryOperator, DataType, Expr, FunctionArg, FunctionArgExpr, Ident, ObjectName, OrderByExpr, Query, Select, SelectItem, SetExpr, TableWithJoins, TrimWhereField, UnaryOperator, Value};
 
-use crate::{config::{Config, MainConfig, TomlReadable}, query_creation::{query_generator::{aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, call_modifiers::{SelectAccessibleColumnsValue, TypesTypeValue, ValueSetterValue, WildcardRelationsValue}, query_info::{ClauseContext, DatabaseSchema, QueryProps}, value_choosers::{DeterministicValueChooser, RandomValueChooser}, QueryGenerator}, state_generator::{markov_chain_generator::{error::SyntaxError, markov_chain::{CallModifiers, MarkovChain}, ChainStateMemory, DynClone, StateGeneratorConfig}, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, subgraph_type::SubgraphType, substitute_models::{AntiCallModel, DeterministicModel, PathModel, SubstituteModel}, CallTypes, MarkovChainGenerator}}, unwrap_variant, unwrap_variant_or_else, unwrap_pat};
+use crate::{config::{Config, MainConfig, TomlReadable}, query_creation::{query_generator::{aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, call_modifiers::{SelectAccessibleColumnsValue, TypesTypeValue, ValueSetterValue, WildcardRelationsValue}, query_info::{ClauseContext, DatabaseSchema, QueryProps}, value_choosers::{DeterministicValueChooser, RandomValueChooser}, QueryGenerator}, state_generator::{markov_chain_generator::{error::SyntaxError, markov_chain::{CallModifiers, MarkovChain}, ChainStateMemory, DynClone, StateGeneratorConfig}, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, subgraph_type::SubgraphType, substitute_models::{AntiCallModel, DeterministicModel, PathModel, SubstituteModel}, CallTypes, MarkovChainGenerator}}, unwrap_variant, unwrap_variant_or_else};
 
 pub struct AST2PathTestingConfig {
     pub schema: PathBuf,
@@ -105,7 +105,7 @@ impl ConvertionError {
 #[derive(Debug, Clone)]
 pub enum PathNode {
     State(SmolStr),
-    NewFunction(SmolStr),
+    NewSubgraph(SmolStr),
     SelectedTableName(ObjectName),
     SelectedColumnNameFROM(Vec<Ident>),
     SelectedColumnNameGROUPBY(Vec<Ident>),
@@ -228,7 +228,7 @@ impl PathGenerator {
             panic!("State generator stopped prematurely");
         }
         if is_new_function_initial_state {
-            self.current_path.push(PathNode::NewFunction(state));
+            self.current_path.push(PathNode::NewSubgraph(state));
         } else {
             self.current_path.push(PathNode::State(state));
         }
@@ -312,6 +312,9 @@ impl PathGenerator {
 
         self.try_push_state("EXIT_Query")?;
         let output_type = self.clause_context.query_mut().pop_output_type();
+        // if output_type.iter().filter_map(|(o, _)| o.as_ref()).any(|o| o.value == "C12") {
+        //     eprintln!("output: {:?}", output_type);
+        // }
         self.clause_context.on_query_end();
 
         return Ok(output_type)
@@ -1143,7 +1146,9 @@ impl PathGenerator {
         if *subgraph_type == column_type {
             Ok(column_type)
         } else {
-            panic!("Column did not return the requested type. Requested: {subgraph_type} Got: {column_type}")
+            panic!(
+                "Column did not return the requested type. Requested: {subgraph_type} Got: {column_type}"
+            )
         }
     }
 
@@ -1201,17 +1206,11 @@ impl PathGenerator {
         let tp = match expr {
             Expr::Value(Value::Boolean(true)) => { self.try_push_states(&["bool_literal", "true"])?; SubgraphType::Val3 },
             Expr::Value(Value::Boolean(false)) => { self.try_push_states(&["bool_literal", "false"])?; SubgraphType::Val3 },
-            Expr::Value(Value::Number(number_str, false)) => self.handle_literals_determine_literal_type(number_str)?,
+            expr @ Expr::Value(Value::Number(_, false)) => self.handle_literals_determine_number_type(expr)?,
+            expr @ Expr::Cast { expr: _, data_type } if *data_type == DataType::BigInt(None) => self.handle_literals_determine_number_type(expr)?,
+            expr @ Expr::UnaryOp { op, expr: _ } if *op == UnaryOperator::Minus => self.handle_literals_determine_number_type(expr)?,
             Expr::Value(Value::SingleQuotedString(_)) => { self.try_push_state("text_literal")?; SubgraphType::Text },
             Expr::TypedString { data_type, value: _ } if *data_type == DataType::Date => { self.try_push_state("date_literal")?; SubgraphType::Date },
-            Expr::UnaryOp { op, expr } if (
-                *op == UnaryOperator::Minus && matches!(&**expr, Expr::Value(Value::Number(_, false)))
-            ) => {
-                let number_str = unwrap_pat!(**expr, Expr::Value(Value::Number(ref number_str, false)), number_str);
-                let tp = self.handle_literals_determine_literal_type(number_str)?;
-                self.try_push_state("number_literal_minus")?;
-                tp
-            }
             any => unexpected_expr!(any),
         };
 
@@ -1220,7 +1219,21 @@ impl PathGenerator {
         Ok(tp)
     }
     
-    fn handle_literals_determine_literal_type(&mut self, number_str: &String) -> Result<SubgraphType, ConvertionError> {
+    fn handle_literals_determine_number_type(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+        let number_str = match expr {
+            Expr::UnaryOp { op, expr } if *op == UnaryOperator::Minus => {
+                let tp = self.handle_literals_determine_number_type(expr)?;
+                self.try_push_state("number_literal_minus")?;
+                return Ok(tp)
+            },
+            Expr::Cast { expr, data_type } if *data_type == DataType::BigInt(None) => {
+                let tp = self.handle_literals_determine_number_type(expr)?;
+                self.try_push_state("literals_explicit_cast")?;
+                return Ok(tp)
+            },
+            Expr::Value(Value::Number(ref number_str, false)) => number_str,
+            any => unexpected_expr!(any),
+        };
         // assume that literals are the smallest type that they fit into
         // (this is now postgres determines them)
         let checkpoint = self.get_checkpoint();
@@ -1242,26 +1255,48 @@ impl PathGenerator {
                 format!("{err_int}")
             }
         };
-        if number_str.parse::<u64>().is_ok() {
-            match self.try_push_state("number_literal_bigint") {
-                Ok(..) => {
-                    self.push_node(PathNode::BigIntValue(number_str.clone()));
-                    Ok(SubgraphType::BigInt)
-                },
-                Err(err_bigint) => {
-                    self.restore_checkpoint_consume(checkpoint);
-                    Err(ConvertionError::new(format!(
-                        "Error trying to find '{number_str}' literal type.\
-                        Tried Integer, got: {err_int_str}\
-                        Tried BigInt, got: {err_bigint}"
-                    )))
-                },
+        let err_bigint_str = match number_str.parse::<u64>() {
+            Ok(..) => {
+                match self.try_push_state("number_literal_bigint") {
+                    Ok(..) => {
+                        self.push_node(PathNode::BigIntValue(number_str.clone()));
+                        return Ok(SubgraphType::BigInt)
+                    },
+                    Err(err_bigint) => {
+                        self.restore_checkpoint(&checkpoint);
+                        format!("{err_bigint}")
+                    },
+                }
+            },
+            Err(err_bigint) => {
+                self.restore_checkpoint(&checkpoint);
+                format!("{err_bigint}")
             }
-        } else {
-            self.try_push_state("number_literal_numeric")?;
-            self.push_node(PathNode::NumericValue(number_str.clone()));
-            Ok(SubgraphType::Numeric)
-        }
+        };
+        let err_numeric_str = match number_str.parse::<f64>() {
+            Ok(..) => {
+                match self.try_push_state("number_literal_numeric") {
+                    Ok(..) => {
+                        self.push_node(PathNode::NumericValue(number_str.clone()));
+                        return Ok(SubgraphType::Numeric)
+                    },
+                    Err(err_numeric) => {
+                        self.restore_checkpoint_consume(checkpoint);
+                        format!("{err_numeric}")
+                    },
+                }
+            },
+            Err(err_numeric) => {
+                self.restore_checkpoint_consume(checkpoint);
+                format!("{err_numeric}")
+            }
+        };
+        Err(ConvertionError::new(format!(
+            "Error trying to find '{number_str}' literal type.\
+            Tried Integer, got: {err_int_str}\
+            Tried BigInt, got: {err_bigint_str}\
+            Tried Numeric, got: {err_numeric_str}"
+        )))
     }
 
     /// subgraph def_column_spec

@@ -108,9 +108,9 @@ impl SubgraphType {
         type_vec.sort_unstable_by(
             |tp1, tp2| 
             if tp1.get_compat_types().contains(tp2) {
-                Ordering::Less
-            } else if tp2.get_compat_types().contains(tp1) {
                 Ordering::Greater
+            } else if tp2.get_compat_types().contains(tp1) {
+                Ordering::Less
             } else {
                 Ordering::Equal
             }
