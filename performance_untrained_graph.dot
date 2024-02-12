@@ -76,7 +76,7 @@
 
 digraph G {
     subgraph def_Query {
-        Query [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[single column, single row]", label="Query\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods=[single column, single row]", shape=octagon, style=filled, color=green]
+        Query [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval]", MODS="[single column, single row]", label="Query\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval]\nmods=[single column, single row]", shape=octagon, style=filled, color=green]
         EXIT_Query [label="EXIT Query"]
 
         call0_FROM [label="FROM", shape=rectangle, color=cornflowerblue, style=filled]
@@ -169,7 +169,7 @@ digraph G {
     }
 
     subgraph def_SELECT {
-        SELECT [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[single column]", label="SELECT\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods=[single column]", shape=rectangle, style=filled, color=bisque]
+        SELECT [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval]", MODS="[single column]", label="SELECT\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval]\nmods=[single column]", shape=rectangle, style=filled, color=bisque]
         EXIT_SELECT [label="EXIT SELECT", shape=rectangle]
 
         SELECT_DISTINCT [label="DISTINCT"]
@@ -598,7 +598,7 @@ digraph G {
     }
 
     subgraph def_types {
-        types [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[no nesting, no literals, no case, no type expr, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no aggregate]", label="TYPE(S) (generic):\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods=[no nesting, no literals, no case, no type expr, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval]", MODS="[no nesting, no literals, no case, no type expr, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no aggregate]", label="TYPE(S) (generic):\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval]\nmods=[no nesting, no literals, no case, no type expr, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
         types_select_type_bigint[TYPE_NAME="bigint", label="bigint?", set_value="types_type"]
@@ -696,7 +696,7 @@ digraph G {
     }
 
     subgraph def_literals {
-        literals [label="Literals\ntypes=[numeric, integer, bigint, 3VL Value, text, date]", TYPES="[numeric, integer, bigint, 3VL Value, text, date]", shape=rectangle, style=filled, color=hotpink]
+        literals [label="Literals\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval]", TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval]", shape=rectangle, style=filled, color=hotpink]
         EXIT_literals [label="EXIT Literals", shape=rectangle]
 
         bool_literal [label="boolean literal\ntn(bool)", TYPE_NAME="3VL Value"]
@@ -734,10 +734,19 @@ digraph G {
         date_literal [label="DATE literal\ntn(date)", TYPE_NAME="date"]
         literals -> date_literal
         date_literal -> EXIT_literals
+
+        interval_literal [label="INTERVAL literal", TYPE_NAME="interval"]
+        literals -> interval_literal
+        interval_literal_format_string [label="Formatted string"]
+        interval_literal -> interval_literal_format_string
+        interval_literal_format_string -> EXIT_literals
+        interval_literal_with_field [label="With field\n(ex.: '4' day)"]
+        interval_literal -> interval_literal_with_field
+        interval_literal_with_field -> EXIT_literals
     }
 
     subgraph def_case {
-        case [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[]", label="CASE\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\n[mods]", shape=rectangle, style=filled, color=aquamarine]
+        case [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval]", MODS="[]", label="CASE\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval]\n[mods]", shape=rectangle, style=filled, color=aquamarine]
         EXIT_case [label="EXIT case", shape=rectangle]
 
         case_first_result [label="First result"]
@@ -788,7 +797,7 @@ digraph G {
     }
 
     subgraph def_column_spec {
-        column_spec [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[group by columns]", label="column specifier\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\nmods=[group by columns]", shape=rectangle, style=filled, color=gold]
+        column_spec [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval]", MODS="[group by columns]", label="column specifier\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval]\nmods=[group by columns]", shape=rectangle, style=filled, color=gold]
         EXIT_column_spec [label="EXIT column specifier", shape=rectangle]
 
         column_spec_choose_source [label="Choose column source"]
@@ -814,7 +823,7 @@ digraph G {
     }
 
     subgraph def_list_expr {
-        list_expr [TYPES="[numeric, integer, bigint, 3VL Value, text, date]", MODS="[]", label="list expr\ntypes=[numeric, integer, bigint, 3VL Value, text, date]\n[mods]", shape=rectangle, style=filled, color=blue]
+        list_expr [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval]", MODS="[]", label="list expr\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval]\n[mods]", shape=rectangle, style=filled, color=blue]
         EXIT_list_expr[label="EXIT list expr"]
 
         call16_types [TYPES="[...]", MODS="[...]", label="TYPES: [...types]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
@@ -881,7 +890,7 @@ digraph G {
     }
 
     subgraph def_aggregate_function {
-        aggregate_function [TYPES="[bigint, integer, numeric, 3VL Value, text, date]", label="aggregate function\nTYPES=[bigint, integer, numeric, 3VL Value, text, date]", shape=rectangle, style=filled, color=peru]
+        aggregate_function [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval]", label="aggregate function\nTYPES=[numeric, integer, bigint, 3VL Value, text, date, interval]", shape=rectangle, style=filled, color=peru]
         EXIT_aggregate_function [label="EXIT aggregate function"]
 
         aggregate_select_return_type [label="select\nreturn type"]
