@@ -613,6 +613,8 @@ digraph G {
         types -> types_select_type_text
         types_select_type_date[TYPE_NAME="date", label="date?", set_value="types_type"]
         types -> types_select_type_date
+        types_select_type_interval[TYPE_NAME="interval", label="interval?", set_value="types_type"]
+        types -> types_select_type_interval
 
         types_null [label="Untyped null\nmod.: 'enable untyped null' -> ON", modifier="enable untyped null", modifier_mode="on"]
         types -> types_null
@@ -631,6 +633,7 @@ digraph G {
         // types_select_type_3vl -> types_return_typed_null
         // types_select_type_text -> types_return_typed_null
         // types_select_type_date -> types_return_typed_null
+        // types_select_type_interval -> types_return_typed_null
         // types_return_typed_null -> EXIT_types
 
         types_select_special_expression [label="select special expression"]
@@ -640,6 +643,7 @@ digraph G {
         types_select_type_3vl -> types_select_special_expression
         types_select_type_text -> types_select_special_expression
         types_select_type_date -> types_select_special_expression
+        types_select_type_interval -> types_select_special_expression
 
         call0_column_spec [TYPES="[known]", MODS="[?group by columns]", modifier="no column spec", modifier_mode="off", call_modifier="is_column_type_available", label="column specifier\nTYPE: known\nMODS: [?group by columns]\nmod.: 'no column spec' -> OFF\ncall.mod.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
         types_select_special_expression -> call0_column_spec
@@ -894,7 +898,7 @@ digraph G {
         EXIT_aggregate_function [label="EXIT aggregate function"]
 
         aggregate_select_return_type [label="select\nreturn type"]
-        aggregate_not_distinct[label="bypass\n[set value]", set_value="distinct_aggr"]
+        aggregate_not_distinct[label="no DISTINCT\n[set value]", set_value="distinct_aggr"]
         aggregate_function -> aggregate_not_distinct
         aggregate_not_distinct -> aggregate_select_return_type
         aggregate_distinct[label="DISTINCT\n[set value]", set_value="distinct_aggr"]
@@ -981,6 +985,16 @@ digraph G {
         call72_types [TYPES="[date]", label="TYPES: date\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
         arg_date -> call72_types
         call72_types -> EXIT_aggregate_function
+
+
+        aggregate_select_type_interval [TYPE_NAME="interval", label="interval?"]
+        aggregate_select_return_type -> aggregate_select_type_interval
+
+        arg_interval [label="[interval]"]
+        aggregate_select_type_interval -> arg_interval
+        call90_types [TYPES="[interval]", label="TYPES: interval\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        arg_interval -> call90_types
+        call90_types -> EXIT_aggregate_function
     }
 
     subgraph def_HAVING {

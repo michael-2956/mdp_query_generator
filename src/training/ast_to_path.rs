@@ -949,6 +949,7 @@ impl PathGenerator {
             SubgraphType::Val3 => "types_select_type_3vl",
             SubgraphType::Text => "types_select_type_text",
             SubgraphType::Date => "types_select_type_date",
+            SubgraphType::Interval => "types_select_type_interval",
             any => unexpected_subgraph_type!(any),
         })?;
         self.try_push_state("types_return_typed_null")?;
@@ -981,6 +982,7 @@ impl PathGenerator {
                 SubgraphType::Val3 => "types_select_type_3vl",
                 SubgraphType::Text => "types_select_type_text",
                 SubgraphType::Date => "types_select_type_date",
+                SubgraphType::Interval => "types_select_type_interval",
                 any => unexpected_subgraph_type!(any),
             }) {
                 Ok(_) => {},
@@ -1503,6 +1505,7 @@ impl PathGenerator {
                 self.try_push_states(match return_type {
                     SubgraphType::Val3 => &["aggregate_select_type_bool", "arg_single_3vl", "call64_types"],
                     SubgraphType::Date => &["aggregate_select_type_date", "arg_date", "call72_types"],
+                    SubgraphType::Interval => &["aggregate_select_type_interval", "arg_interval", "call90_types"],
                     SubgraphType::Integer => &["aggregate_select_type_integer", "arg_integer", "call71_types"],
                     SubgraphType::Text => &["aggregate_select_type_text", "arg_single_text", "call63_types"],
                     SubgraphType::Numeric => &["aggregate_select_type_numeric", "arg_single_numeric", "call66_types"],

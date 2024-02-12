@@ -38,7 +38,15 @@
     },
     "date": {
         "[date]": {
-            "MAX": 3.0, 
+            "MAX": 3.0,
+            "MIN": 3.0
+        }
+    },
+    "interval": {
+        "[interval]": {
+            "AVG": 3.0,
+            "SUM": 3.0,
+            "MAX": 3.0,
             "MIN": 3.0
         }
     },

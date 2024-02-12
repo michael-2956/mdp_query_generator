@@ -926,7 +926,8 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             "types_select_type_numeric" |
             "types_select_type_3vl" |
             "types_select_type_text" |
-            "types_select_type_date" => {},
+            "types_select_type_date" |
+            "types_select_type_interval" => {},
             "types_null" => {
                 self.expect_state("EXIT_types");
                 return (SubgraphType::Undetermined, Expr::Value(Value::Null));
@@ -1275,10 +1276,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 let args_type = AggregateFunctionAgruments::TypeList(args_type_v);
                 (args_type, args_expr_v, return_type)
             },
-            arm @ ("aggregate_select_type_bool" | "aggregate_select_type_date" | "aggregate_select_type_integer") => {
+            arm @ ("aggregate_select_type_bool" | "aggregate_select_type_date" | "aggregate_select_type_interval" | "aggregate_select_type_integer") => {
                 let (return_type, states) = match arm {
                     "aggregate_select_type_bool" => (SubgraphType::Val3, &["arg_single_3vl", "call64_types"]),
                     "aggregate_select_type_date" => (SubgraphType::Date, &["arg_date", "call72_types"]),
+                    "aggregate_select_type_interval" => (SubgraphType::Interval, &["arg_interval", "call90_types"]),
                     "aggregate_select_type_integer" => (SubgraphType::Integer, &["arg_integer", "call71_types"]),
                     any => self.panic_unexpected(any),
                 };
