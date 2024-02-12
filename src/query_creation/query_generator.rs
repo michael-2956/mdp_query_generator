@@ -11,13 +11,22 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
-    self, BinaryOperator, DataType, Expr, FunctionArg, FunctionArgExpr, Ident, Join, ObjectName, OrderByExpr, Query, Select, SelectItem, SetExpr, TableFactor, TableWithJoins, TrimWhereField, UnaryOperator, Value, WildcardAdditionalOptions
+    self, BinaryOperator, DataType, Expr, FunctionArg, FunctionArgExpr, Ident, Join,
+    ObjectName, OrderByExpr, Query, Select, SelectItem, SetExpr, TableFactor, TableWithJoins,
+    TrimWhereField, UnaryOperator, Value, WildcardAdditionalOptions
 };
 
 use crate::{config::TomlReadable, training::models::PathwayGraphModel};
 
-use super::{super::{unwrap_variant, unwrap_variant_or_else}, state_generator::{CallTypes, markov_chain_generator::subgraph_type::SubgraphType}};
-use self::{aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, call_modifiers::{SelectAccessibleColumnsValue, TypesTypeValue, ValueSetterValue, WildcardRelationsValue}, expr_precedence::ExpressionPriority, query_info::{ClauseContext, DatabaseSchema, QueryProps}, value_choosers::QueryValueChooser};
+use super::{
+    super::{unwrap_variant, unwrap_variant_or_else},
+    state_generator::{CallTypes, markov_chain_generator::subgraph_type::SubgraphType}
+};
+use self::{
+    aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution},
+    call_modifiers::{SelectAccessibleColumnsValue, TypesTypeValue, ValueSetterValue, WildcardRelationsValue},
+    expr_precedence::ExpressionPriority, query_info::{ClauseContext, DatabaseSchema, QueryProps}, value_choosers::QueryValueChooser
+};
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
 
@@ -1026,10 +1035,24 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 };
                 (number_type, Expr::Value(Value::Number(number_str, false)))
             },
-            "text_literal" => (SubgraphType::Text, Expr::Value(Value::SingleQuotedString("HJeihfbwei".to_string()))),  // TODO: hardcoded
+            "text_literal" => (SubgraphType::Text, Expr::Value(Value::SingleQuotedString(self.value_chooser.choose_string()))),  // TODO: hardcoded
             "date_literal" => (SubgraphType::Date, Expr::TypedString {
-                data_type: DataType::Date,
-                value: "2023-08-27".to_string(),
+                data_type: DataType::Date, value: self.value_chooser.choose_date(),
+            }),
+            "interval_literal" => (SubgraphType::Interval, {
+                let with_field = match self.next_state().as_str() {
+                    "interval_literal_format_string" => false,
+                    "interval_literal_with_field" => true,
+                    any => self.panic_unexpected(any),
+                };
+                let (str_value, leading_field) = self.value_chooser.choose_interval(with_field);
+                Expr::Interval {
+                    value: Box::new(Expr::Value(Value::SingleQuotedString(str_value.to_string()))),
+                    leading_field,
+                    leading_precision: None,
+                    last_field: None,
+                    fractional_seconds_precision: None
+                }
             }),
             any => self.panic_unexpected(any),
         };

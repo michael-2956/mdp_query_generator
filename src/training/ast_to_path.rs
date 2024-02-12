@@ -3,9 +3,9 @@ use std::{collections::HashMap, error::Error, fmt, io::Write, path::PathBuf, str
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
-use sqlparser::ast::{self, BinaryOperator, DataType, Expr, FunctionArg, FunctionArgExpr, Ident, ObjectName, OrderByExpr, Query, Select, SelectItem, SetExpr, TableWithJoins, TrimWhereField, UnaryOperator, Value};
+use sqlparser::ast::{self, BinaryOperator, DataType, DateTimeField, Expr, FunctionArg, FunctionArgExpr, Ident, ObjectName, OrderByExpr, Query, Select, SelectItem, SetExpr, TableWithJoins, TrimWhereField, UnaryOperator, Value};
 
-use crate::{config::{Config, MainConfig, TomlReadable}, query_creation::{query_generator::{aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, call_modifiers::{SelectAccessibleColumnsValue, TypesTypeValue, ValueSetterValue, WildcardRelationsValue}, query_info::{ClauseContext, DatabaseSchema, QueryProps}, value_choosers::{DeterministicValueChooser, RandomValueChooser}, QueryGenerator}, state_generator::{markov_chain_generator::{error::SyntaxError, markov_chain::{CallModifiers, MarkovChain}, ChainStateMemory, DynClone, StateGeneratorConfig}, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, subgraph_type::SubgraphType, substitute_models::{AntiCallModel, DeterministicModel, PathModel, SubstituteModel}, CallTypes, MarkovChainGenerator}}, unwrap_variant, unwrap_variant_or_else};
+use crate::{config::{Config, MainConfig, TomlReadable}, query_creation::{query_generator::{aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, call_modifiers::{SelectAccessibleColumnsValue, TypesTypeValue, ValueSetterValue, WildcardRelationsValue}, query_info::{ClauseContext, DatabaseSchema, QueryProps}, value_choosers::{DeterministicValueChooser, RandomValueChooser}, QueryGenerator}, state_generator::{markov_chain_generator::{error::SyntaxError, markov_chain::{CallModifiers, MarkovChain}, ChainStateMemory, DynClone, StateGeneratorConfig}, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, subgraph_type::SubgraphType, substitute_models::{AntiCallModel, DeterministicModel, PathModel, SubstituteModel}, CallTypes, MarkovChainGenerator}}, unwrap_pat, unwrap_variant, unwrap_variant_or_else};
 
 pub struct AST2PathTestingConfig {
     pub schema: PathBuf,
@@ -113,6 +113,9 @@ pub enum PathNode {
     NumericValue(String),
     IntegerValue(String),
     BigIntValue(String),
+    StringValue(String),
+    DateValue(String),
+    IntervalValue((String, Option<DateTimeField>)),
     QualifiedWildcardSelectedRelation(Ident),
     SelectAlias(Ident),
 }
@@ -1209,8 +1212,30 @@ impl PathGenerator {
             expr @ Expr::Value(Value::Number(_, false)) => self.handle_literals_determine_number_type(expr)?,
             expr @ Expr::Cast { expr: _, data_type } if *data_type == DataType::BigInt(None) => self.handle_literals_determine_number_type(expr)?,
             expr @ Expr::UnaryOp { op, expr: _ } if *op == UnaryOperator::Minus => self.handle_literals_determine_number_type(expr)?,
-            Expr::Value(Value::SingleQuotedString(_)) => { self.try_push_state("text_literal")?; SubgraphType::Text },
-            Expr::TypedString { data_type, value: _ } if *data_type == DataType::Date => { self.try_push_state("date_literal")?; SubgraphType::Date },
+            Expr::Value(Value::SingleQuotedString(v)) => {
+                self.try_push_state("text_literal")?;
+                self.push_node(PathNode::StringValue(v.clone()));
+                SubgraphType::Text
+            },
+            Expr::TypedString { data_type, value } if *data_type == DataType::Date => {
+                self.try_push_state("date_literal")?;
+                self.push_node(PathNode::DateValue(value.clone()));
+                SubgraphType::Date
+            },
+            Expr::Interval {
+                value, leading_field,
+                leading_precision: _, last_field: _, fractional_seconds_precision: _,
+            } => {
+                self.try_push_state("interval_literal")?;
+                self.try_push_state(if leading_field.is_some() {
+                    "interval_literal_with_field"
+                } else { "interval_literal_format_string" })?;
+                self.push_node(PathNode::IntervalValue((
+                    unwrap_pat!(&**value, Expr::Value(Value::SingleQuotedString(s)), s).clone(),
+                    leading_field.clone()
+                )));
+                SubgraphType::Interval
+            },
             any => unexpected_expr!(any),
         };
 

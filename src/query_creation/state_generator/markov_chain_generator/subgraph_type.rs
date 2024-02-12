@@ -11,6 +11,7 @@ use super::error::SyntaxError;
 pub enum SubgraphType {
     /// This type is used if the type is yet to be determined
     Undetermined,
+    Interval,
     Numeric,
     Integer,
     BigInt,
@@ -23,27 +24,28 @@ pub enum SubgraphType {
 impl SubgraphType {
     pub fn from_type_name(s: &str) -> Result<Self, SyntaxError> {
         match s {
-            "numeric" => Ok(SubgraphType::Numeric),
-            "integer" => Ok(SubgraphType::Integer),
-            "bigint" => Ok(SubgraphType::BigInt),
-            "3VL Value" => Ok(SubgraphType::Val3),
-            "list expr" => Ok(SubgraphType::ListExpr(Box::new(SubgraphType::Undetermined))),
-            "text" => Ok(SubgraphType::Text),
-            "date" => Ok(SubgraphType::Date),
+            "numeric" => Ok(Self::Numeric),
+            "integer" => Ok(Self::Integer),
+            "bigint" => Ok(Self::BigInt),
+            "3VL Value" => Ok(Self::Val3),
+            "list expr" => Ok(Self::ListExpr(Box::new(Self::Undetermined))),
+            "text" => Ok(Self::Text),
+            "date" => Ok(Self::Date),
+            "interval" => Ok(Self::Interval),
             any => Err(SyntaxError::new(format!("Type {any} does not exist!")))
         }
     }
 
     pub fn has_inner(&self) -> bool {
         match self {
-            SubgraphType::ListExpr(..) => true,
+            Self::ListExpr(..) => true,
             _ => false,
         }
     }
 
     pub fn inner(&self) -> SubgraphType {
         match self {
-            SubgraphType::ListExpr(inner) => *inner.clone(),
+            Self::ListExpr(inner) => *inner.clone(),
             any => panic!("{any} has no inner type"),
         }
     }
@@ -58,6 +60,7 @@ impl SubgraphType {
             DataType::Text => Self::Text,
             DataType::Numeric(_) => Self::Numeric,
             DataType::Date => Self::Date,
+            DataType::Interval => Self::Interval,
             DataType::Boolean => Self::Val3,
             any => panic!("DataType not implemented: {any}"),
         }
@@ -65,8 +68,8 @@ impl SubgraphType {
 
     pub fn is_determined(&self) -> bool {
         match self {
-            SubgraphType::Undetermined => false,
-            SubgraphType::ListExpr(inner) => inner.is_determined(),
+            Self::Undetermined => false,
+            Self::ListExpr(inner) => inner.is_determined(),
             _ => true
         }
     }
@@ -74,12 +77,13 @@ impl SubgraphType {
     /// Used only for null type casting. Fails if encounters "Undetermined"
     pub fn to_data_type(&self) -> DataType {
         match self {
-            SubgraphType::Numeric => DataType::Numeric(ExactNumberInfo::None),
-            SubgraphType::Integer => DataType::Integer(None),
-            SubgraphType::BigInt => DataType::BigInt(None),
-            SubgraphType::Val3 => DataType::Boolean,
-            SubgraphType::Text => DataType::Text,
-            SubgraphType::Date => DataType::Date,
+            Self::Numeric => DataType::Numeric(ExactNumberInfo::None),
+            Self::Integer => DataType::Integer(None),
+            Self::BigInt => DataType::BigInt(None),
+            Self::Val3 => DataType::Boolean,
+            Self::Text => DataType::Text,
+            Self::Date => DataType::Date,
+            Self::Interval => DataType::Interval,
             any => panic!("Can't convert {any} to DataType"),
         }
     }
@@ -88,14 +92,15 @@ impl SubgraphType {
 impl Display for SubgraphType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str = match self {
-            SubgraphType::Numeric => "numeric".to_string(),
-            SubgraphType::Integer => "integer".to_string(),
-            SubgraphType::BigInt => "bigint".to_string(),
-            SubgraphType::Val3 => "3VL Value".to_string(),
-            SubgraphType::ListExpr(inner) => format!("list expr[{}]", inner),
-            SubgraphType::Text => "text".to_string(),
-            SubgraphType::Undetermined => "undetermined".to_string(),
-            SubgraphType::Date => "date".to_string(),
+            Self::Numeric => "numeric".to_string(),
+            Self::Integer => "integer".to_string(),
+            Self::BigInt => "bigint".to_string(),
+            Self::Val3 => "3VL Value".to_string(),
+            Self::ListExpr(inner) => format!("list expr[{}]", inner),
+            Self::Text => "text".to_string(),
+            Self::Undetermined => "undetermined".to_string(),
+            Self::Date => "date".to_string(),
+            Self::Interval => "interval".to_string(),
         };
         write!(f, "{}", str)
     }

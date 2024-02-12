@@ -44,7 +44,7 @@ CREATE TABLE ORDERS (
   O_CUSTKEY        integer,
   O_ORDERSTATUS    char(1),
   O_TOTALPRICE     numeric,
-  O_ORDERDATE      date,  -- integer
+  O_ORDERDATE      date,
   O_ORDERPRIORITY  char(15),
   O_CLERK          char(15),
   O_SHIPPRIORITY   integer,
@@ -62,9 +62,9 @@ CREATE TABLE LINEITEM (
   L_TAX            numeric,
   L_RETURNFLAG     char(1),
   L_LINESTATUS     char(1),
-  L_SHIPDATE       date,  -- integer
-  L_COMMITDATE     date,  -- integer
-  L_RECEIPTDATE    date,  -- integer
+  L_SHIPDATE       date,
+  L_COMMITDATE     date,
+  L_RECEIPTDATE    date,
   L_SHIPINSTRUCT   char(25),
   L_SHIPMODE       char(10),
   L_COMMENT        varchar(44)
