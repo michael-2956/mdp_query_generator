@@ -946,6 +946,14 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     right: Box::new(right)
                 }
             },
+            "interval_unary_minus" => {
+                self.expect_state("call93_types");
+                let interval = self.handle_types(Some(&[SubgraphType::Interval]), None).1;
+                Expr::UnaryOp {
+                    op: UnaryOperator::Minus,
+                    expr: Box::new(interval)
+                }
+            },
             any => self.panic_unexpected(any),
         };
 
