@@ -18,6 +18,10 @@ while True:
     except EOFError:
         break
     if "ERROR" in line:
+        # if "is out of range for type double precision" in line:
+        #     print(line.replace("ERROR", colored("ERROR", 'red', attrs=['bold'])))
+        #     print()
+
         if all(line.find(ig) == -1 for ig in ignore_errs):
             print(line.replace("ERROR", colored("ERROR", 'red', attrs=['bold'])))
             total_errs += 1

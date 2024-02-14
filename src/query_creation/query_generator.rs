@@ -915,6 +915,45 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         (SubgraphType::Date, expr)
     }
 
+    /// subgarph def_interval
+    fn handle_interval(&mut self) -> (SubgraphType, Expr) {
+        self.expect_state("interval");
+
+        let expr = match self.next_state().as_str() {
+            "interval_binary" => {
+                let (left, op, right) = match self.next_state().as_str() {
+                    "interval_add_subtract" => {
+                        self.expect_state("call91_types");
+                        let interval_1 = self.handle_types(
+                            Some(&[SubgraphType::Interval]), None
+                        ).1;
+                        let op = match self.next_state().as_str() {
+                            "interval_add_subtract_plus" => BinaryOperator::Plus,
+                            "interval_add_subtract_minus" => BinaryOperator::Minus,
+                            any => self.panic_unexpected(any),
+                        };
+                        self.expect_state("call92_types");
+                        let interval_2 = self.handle_types(
+                            Some(&[SubgraphType::Interval]), None
+                        ).1;
+                        (interval_1, op, interval_2)
+                    },
+                    any => self.panic_unexpected(any),
+                };
+                Expr::BinaryOp {
+                    left: Box::new(left),
+                    op,
+                    right: Box::new(right)
+                }
+            },
+            any => self.panic_unexpected(any),
+        };
+
+        self.expect_state("EXIT_interval");
+        
+        (SubgraphType::Interval, expr)
+    }
+
     /// subgraph def_types
     fn handle_types(
         &mut self, check_generated_by_one_of: Option<&[SubgraphType]>, check_compatible_with: Option<SubgraphType>
@@ -986,6 +1025,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             "call1_VAL_3" => self.handle_val_3(),
             "call0_text" => self.handle_text(),
             "call0_date" => self.handle_date(),
+            "call0_interval" => self.handle_interval(),
             any => self.panic_unexpected(any)
         };
         self.expect_state("EXIT_types");

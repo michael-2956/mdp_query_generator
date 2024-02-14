@@ -597,6 +597,29 @@ digraph G {
         date_add_subtract_plus -> date_swap_arguments
     }
 
+    subgraph def_interval {
+        interval [label="interval\n[mods]", MODS="[]", shape=rectangle, style=filled, color=lightslateblue]
+        EXIT_interval [label="EXIT interval"]
+
+        interval_binary [label="Binary op."]
+        interval -> interval_binary
+
+        interval_add_subtract [label="+/-"]
+        interval_binary -> interval_add_subtract
+        call91_types [TYPES="[interval]", MODS="[...]", label="TYPES: interval\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        interval_add_subtract -> call91_types
+        call92_types [TYPES="[interval]", MODS="[...]", label="TYPES: interval\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call92_types -> EXIT_interval
+    
+        interval_add_subtract_plus [label="+"]
+        call91_types -> interval_add_subtract_plus
+        interval_add_subtract_plus -> call92_types
+
+        interval_add_subtract_minus [label="-"]
+        call91_types -> interval_add_subtract_minus
+        interval_add_subtract_minus -> call92_types
+    }
+
     subgraph def_types {
         types [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval]", MODS="[no nesting, no literals, no case, no type expr, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no aggregate]", label="TYPE(S) (generic):\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval]\nmods=[no nesting, no literals, no case, no type expr, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
@@ -697,6 +720,10 @@ digraph G {
         call0_date [label="date\nMODS: [..., -no literals]\nmod.: 'no type expr' -> OFF", MODS="[..., -no literals]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=cadetblue4]
         types_select_type_date -> call0_date
         call0_date -> EXIT_types
+
+        call0_interval [label="interval\nMODS: [..., -no literals]\nmod.: 'no type expr' -> OFF", MODS="[..., -no literals]", modifier="no type expr", modifier_mode="off", shape=rectangle, style=filled, color=cadetblue4]
+        types_select_type_interval -> call0_interval
+        call0_interval -> EXIT_types
     }
 
     subgraph def_literals {

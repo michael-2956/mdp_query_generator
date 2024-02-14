@@ -895,6 +895,33 @@ impl PathGenerator {
         Ok(SubgraphType::Date)
     }
 
+    /// subgraph def_interval
+    fn handle_interval(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+        self.try_push_state("interval")?;
+
+        match expr {
+            Expr::BinaryOp {
+                left,
+                op,
+                right
+            } => {
+                self.try_push_states(&["interval_binary", "interval_add_subtract", "call91_types"])?;
+                self.handle_types(left, Some(&[SubgraphType::Interval]), None)?; 
+                self.try_push_state(match op {
+                    BinaryOperator::Plus => "interval_add_subtract_plus",
+                    BinaryOperator::Minus => "interval_add_subtract_minus",
+                    any => unexpected_expr!(any),
+                })?;
+                self.try_push_state("call92_types")?;
+                self.handle_types(right, Some(&[SubgraphType::Interval]), None)?;
+            },
+            any => unexpected_expr!(any),
+        }
+
+        self.try_push_state("EXIT_interval")?;
+        Ok(SubgraphType::Interval)
+    }
+
     /// subgraph def_types
     fn handle_types(
         &mut self,
@@ -912,7 +939,7 @@ impl PathGenerator {
                 self.try_push_state("types_null")?;
                 SubgraphType::Undetermined
             },
-            Expr::Cast { expr, data_type } if *expr == Box::new(Expr::Value(Value::Null)) => {
+            Expr::Cast { expr, data_type } if **expr == Expr::Value(Value::Null) => {
                 self.handle_types_typed_null(selected_types, data_type)?
             },
             Expr::Nested(expr) => {
@@ -1190,6 +1217,10 @@ impl PathGenerator {
             SubgraphType::Date => {
                 self.try_push_state("call0_date")?;
                 self.handle_date(expr)
+            },
+            SubgraphType::Interval => {
+                self.try_push_state("call0_interval")?;
+                self.handle_interval(expr)
             },
             any => unexpected_subgraph_type!(any),
         } {
@@ -1496,7 +1527,8 @@ impl PathGenerator {
             // SINGLE SAME TYPE ARGUMENT: VAL3, DATE, INTEGER, NUMERIC, TEXT, BIGINT
             (
                 SubgraphType::Val3 | SubgraphType::Date | SubgraphType::Integer |
-                SubgraphType::Numeric | SubgraphType::Text | SubgraphType::BigInt,
+                SubgraphType::Numeric | SubgraphType::Text | SubgraphType::BigInt |
+                SubgraphType::Interval,
                 &[FunctionArg::Unnamed(FunctionArgExpr::Expr(ref arg_expr))]
             ) if self.aggregate_functions_distribution.func_names_include(
                 &AggregateFunctionAgruments::TypeList(vec![return_type.clone()]),
