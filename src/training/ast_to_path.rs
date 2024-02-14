@@ -901,9 +901,7 @@ impl PathGenerator {
 
         match expr {
             Expr::BinaryOp {
-                left,
-                op,
-                right
+                left, op, right
             } => {
                 self.try_push_states(&["interval_binary", "interval_add_subtract", "call91_types"])?;
                 self.handle_types(left, Some(&[SubgraphType::Interval]), None)?; 
@@ -916,8 +914,7 @@ impl PathGenerator {
                 self.handle_types(right, Some(&[SubgraphType::Interval]), None)?;
             },
             Expr::UnaryOp {
-                op,
-                expr: interval
+                op, expr: interval
             } if *op == UnaryOperator::Minus => {
                 self.try_push_states(&["interval_unary_minus", "call93_types"])?;
                 self.handle_types(interval, Some(&[SubgraphType::Interval]), None)?; 

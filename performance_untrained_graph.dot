@@ -618,6 +618,12 @@ digraph G {
         interval_add_subtract_minus [label="-"]
         call91_types -> interval_add_subtract_minus
         interval_add_subtract_minus -> call92_types
+
+        interval_unary_minus [label="-interval"]
+        interval -> interval_unary_minus
+        call93_types [TYPES="[interval]", MODS="[...]", label="TYPES: interval\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        interval_unary_minus -> call93_types
+        call93_types -> EXIT_interval
     }
 
     subgraph def_types {
