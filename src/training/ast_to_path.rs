@@ -892,7 +892,7 @@ impl PathGenerator {
         Ok(SubgraphType::Date)
     }
 
-    /// subgraph def_date
+    /// subgraph def_timestamp
     fn handle_timestamp(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
         self.try_push_state("timestamp")?;
 
@@ -1738,6 +1738,3 @@ impl PathGenerator {
     }
 
 }
-
-
-
