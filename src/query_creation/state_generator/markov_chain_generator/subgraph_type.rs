@@ -1,7 +1,7 @@
 use std::{cmp::Ordering, fmt::Display};
 
 use serde::{Serialize, Deserialize};
-use sqlparser::ast::{DataType, ExactNumberInfo};
+use sqlparser::ast::{DataType, ExactNumberInfo, TimezoneInfo};
 
 use crate::unwrap_variant;
 
@@ -11,12 +11,13 @@ use super::error::SyntaxError;
 pub enum SubgraphType {
     /// This type is used if the type is yet to be determined
     Undetermined,
+    ListExpr(Box<SubgraphType>),
+    Timestamp,
     Interval,
     Numeric,
     Integer,
     BigInt,
     Val3,
-    ListExpr(Box<SubgraphType>),
     Text,
     Date,
 }
@@ -32,6 +33,7 @@ impl SubgraphType {
             "text" => Ok(Self::Text),
             "date" => Ok(Self::Date),
             "interval" => Ok(Self::Interval),
+            "timestamp" => Ok(Self::Timestamp),
             any => Err(SyntaxError::new(format!("Type {any} does not exist!")))
         }
     }
@@ -52,16 +54,17 @@ impl SubgraphType {
 
     pub fn from_data_type(data_type: &DataType) -> Self {
         match data_type {
+            DataType::Timestamp(_, tz) if *tz == TimezoneInfo::None => Self::Timestamp,
+            DataType::CharVarying(_) => Self::Text,
+            DataType::Numeric(_) => Self::Numeric,
             DataType::Integer(_) => Self::Integer,
+            DataType::Interval => Self::Interval,
             DataType::BigInt(_) => Self::BigInt,
             DataType::Varchar(_) => Self::Text,
-            DataType::CharVarying(_) => Self::Text,
+            DataType::Boolean => Self::Val3,
             DataType::Char(_) => Self::Text,
             DataType::Text => Self::Text,
-            DataType::Numeric(_) => Self::Numeric,
             DataType::Date => Self::Date,
-            DataType::Interval => Self::Interval,
-            DataType::Boolean => Self::Val3,
             any => panic!("DataType not implemented: {any}"),
         }
     }
@@ -84,6 +87,7 @@ impl SubgraphType {
             Self::Text => DataType::Text,
             Self::Date => DataType::Date,
             Self::Interval => DataType::Interval,
+            Self::Timestamp => DataType::Timestamp(None, TimezoneInfo::None),
             any => panic!("Can't convert {any} to DataType"),
         }
     }
@@ -92,15 +96,16 @@ impl SubgraphType {
 impl Display for SubgraphType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str = match self {
+            Self::Undetermined => "undetermined".to_string(),
+            Self::ListExpr(inner) => format!("list expr[{}]", inner),
             Self::Numeric => "numeric".to_string(),
             Self::Integer => "integer".to_string(),
             Self::BigInt => "bigint".to_string(),
             Self::Val3 => "3VL Value".to_string(),
-            Self::ListExpr(inner) => format!("list expr[{}]", inner),
             Self::Text => "text".to_string(),
-            Self::Undetermined => "undetermined".to_string(),
             Self::Date => "date".to_string(),
             Self::Interval => "interval".to_string(),
+            Self::Timestamp => "timestamp".to_string(),
         };
         write!(f, "{}", str)
     }

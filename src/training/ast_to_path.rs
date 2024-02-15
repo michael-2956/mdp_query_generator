@@ -3,7 +3,7 @@ use std::{collections::HashMap, error::Error, fmt, io::Write, path::PathBuf, str
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
-use sqlparser::ast::{self, BinaryOperator, DataType, DateTimeField, Expr, FunctionArg, FunctionArgExpr, Ident, ObjectName, OrderByExpr, Query, Select, SelectItem, SetExpr, TableWithJoins, TrimWhereField, UnaryOperator, Value};
+use sqlparser::ast::{self, BinaryOperator, DataType, DateTimeField, Expr, FunctionArg, FunctionArgExpr, Ident, ObjectName, OrderByExpr, Query, Select, SelectItem, SetExpr, TableWithJoins, TimezoneInfo, TrimWhereField, UnaryOperator, Value};
 
 use crate::{config::{Config, MainConfig, TomlReadable}, query_creation::{query_generator::{aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, call_modifiers::{SelectAccessibleColumnsValue, TypesTypeValue, ValueSetterValue, WildcardRelationsValue}, query_info::{ClauseContext, DatabaseSchema, QueryProps}, value_choosers::{DeterministicValueChooser, RandomValueChooser}, QueryGenerator}, state_generator::{markov_chain_generator::{error::SyntaxError, markov_chain::{CallModifiers, MarkovChain}, ChainStateMemory, DynClone, StateGeneratorConfig}, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, subgraph_type::SubgraphType, substitute_models::{AntiCallModel, DeterministicModel, PathModel, SubstituteModel}, CallTypes, MarkovChainGenerator}}, unwrap_pat, unwrap_variant, unwrap_variant_or_else};
 
@@ -115,6 +115,7 @@ pub enum PathNode {
     BigIntValue(String),
     StringValue(String),
     DateValue(String),
+    TimestampValue(String),
     IntervalValue((String, Option<DateTimeField>)),
     QualifiedWildcardSelectedRelation(Ident),
     SelectAlias(Ident),
@@ -840,15 +841,11 @@ impl PathGenerator {
         self.try_push_state("date")?;
 
         match expr {
-            Expr::BinaryOp {
-                left,
-                op,
-                right
-            } => {
+            Expr::BinaryOp { left, op, right } => {
                 let mut err_str: String = "".to_string();
                 let checkpoint = self.get_checkpoint();
                 for swap_arguments in [false, true] {
-                    let (date, int) = if swap_arguments {
+                    let (date, integer) = if swap_arguments {
                         (right, left)
                     } else { (left, right) };
                     self.try_push_states(&["date_binary", "date_add_subtract", "call86_types"])?;
@@ -864,7 +861,7 @@ impl PathGenerator {
                     };
                     self.try_push_state("call88_types")?;
                     match self.handle_types(
-                        int, Some(&[SubgraphType::Integer]), None
+                        integer, Some(&[SubgraphType::Integer]), None
                     ) {
                         Ok(..) => { },
                         Err(err) => {
@@ -893,6 +890,62 @@ impl PathGenerator {
 
         self.try_push_state("EXIT_date")?;
         Ok(SubgraphType::Date)
+    }
+
+    /// subgraph def_date
+    fn handle_timestamp(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+        self.try_push_state("timestamp")?;
+
+        match expr {
+            Expr::BinaryOp { left, op, right } => {
+                let mut err_str: String = "".to_string();
+                let checkpoint = self.get_checkpoint();
+                for swap_arguments in [false, true] {
+                    let (timestamp, interval) = if swap_arguments {
+                        (right, left)
+                    } else { (left, right) };
+                    self.try_push_states(&["timestamp_binary", "timestamp_add_subtract", "call94_types"])?;
+                    match self.handle_types(
+                        timestamp, Some(&[SubgraphType::Date]), None
+                    ) {
+                        Ok(..) => { },
+                        Err(err) => {
+                            self.restore_checkpoint(&checkpoint);
+                            err_str += format!("Tried swap_arguments = {swap_arguments}, got: {err}\n").as_str();
+                            continue;
+                        },
+                    };
+                    self.try_push_state("call95_types")?;
+                    match self.handle_types(
+                        interval, Some(&[SubgraphType::Interval]), None
+                    ) {
+                        Ok(..) => { },
+                        Err(err) => {
+                            self.restore_checkpoint(&checkpoint);
+                            err_str += format!("Tried swap_arguments = {swap_arguments}, got: {err}\n").as_str();
+                            continue;
+                        },
+                    };
+                    self.try_push_state(match op {
+                        BinaryOperator::Plus => "timestamp_add_subtract_plus",
+                        BinaryOperator::Minus => "timestamp_add_subtract_minus",
+                        any => unexpected_expr!(any),
+                    })?;
+                    if swap_arguments {
+                        self.try_push_state("timestamp_swap_arguments")?;
+                    }
+                    err_str = "".to_string();
+                    break;
+                }
+                if err_str != "" {
+                    return Err(ConvertionError::new(err_str))
+                }
+            },
+            any => unexpected_expr!(any),
+        }
+
+        self.try_push_state("EXIT_timestamp")?;
+        Ok(SubgraphType::Timestamp)
     }
 
     /// subgraph def_interval
@@ -980,6 +1033,7 @@ impl PathGenerator {
             SubgraphType::Val3 => "types_select_type_3vl",
             SubgraphType::Text => "types_select_type_text",
             SubgraphType::Date => "types_select_type_date",
+            SubgraphType::Timestamp => "types_select_type_timestamp",
             SubgraphType::Interval => "types_select_type_interval",
             any => unexpected_subgraph_type!(any),
         })?;
@@ -1013,6 +1067,7 @@ impl PathGenerator {
                 SubgraphType::Val3 => "types_select_type_3vl",
                 SubgraphType::Text => "types_select_type_text",
                 SubgraphType::Date => "types_select_type_date",
+                SubgraphType::Timestamp => "types_select_type_timestamp",
                 SubgraphType::Interval => "types_select_type_interval",
                 any => unexpected_subgraph_type!(any),
             }) {
@@ -1222,6 +1277,10 @@ impl PathGenerator {
                 self.try_push_state("call0_date")?;
                 self.handle_date(expr)
             },
+            SubgraphType::Timestamp => {
+                self.try_push_state("call0_timestamp")?;
+                self.handle_timestamp(expr)
+            },
             SubgraphType::Interval => {
                 self.try_push_state("call0_interval")?;
                 self.handle_interval(expr)
@@ -1258,6 +1317,13 @@ impl PathGenerator {
                 self.try_push_state("date_literal")?;
                 self.push_node(PathNode::DateValue(value.clone()));
                 SubgraphType::Date
+            },
+            Expr::TypedString { data_type, value } if matches!(
+                *data_type, DataType::Timestamp(_, tz) if tz == TimezoneInfo::None
+            ) => {
+                self.try_push_state("timestamp_literal")?;
+                self.push_node(PathNode::TimestampValue(value.clone()));
+                SubgraphType::Timestamp
             },
             Expr::Interval {
                 value, leading_field,
@@ -1532,7 +1598,7 @@ impl PathGenerator {
             (
                 SubgraphType::Val3 | SubgraphType::Date | SubgraphType::Integer |
                 SubgraphType::Numeric | SubgraphType::Text | SubgraphType::BigInt |
-                SubgraphType::Interval,
+                SubgraphType::Timestamp | SubgraphType::Interval,
                 &[FunctionArg::Unnamed(FunctionArgExpr::Expr(ref arg_expr))]
             ) if self.aggregate_functions_distribution.func_names_include(
                 &AggregateFunctionAgruments::TypeList(vec![return_type.clone()]),
@@ -1541,6 +1607,7 @@ impl PathGenerator {
                 self.try_push_states(match return_type {
                     SubgraphType::Val3 => &["aggregate_select_type_bool", "arg_single_3vl", "call64_types"],
                     SubgraphType::Date => &["aggregate_select_type_date", "arg_date", "call72_types"],
+                    SubgraphType::Timestamp => &["aggregate_select_type_timestamp", "arg_timestamp", "call96_types"],
                     SubgraphType::Interval => &["aggregate_select_type_interval", "arg_interval", "call90_types"],
                     SubgraphType::Integer => &["aggregate_select_type_integer", "arg_integer", "call71_types"],
                     SubgraphType::Text => &["aggregate_select_type_text", "arg_single_text", "call63_types"],

@@ -15,6 +15,7 @@ types_select_type_numeric -> types_return_typed_null
 types_select_type_3vl -> types_return_typed_null
 types_select_type_text -> types_return_typed_null
 types_select_type_date -> types_return_typed_null
+types_select_type_timestamp -> types_return_typed_null
 types_select_type_interval -> types_return_typed_null
 types_return_typed_null -> EXIT_types
 

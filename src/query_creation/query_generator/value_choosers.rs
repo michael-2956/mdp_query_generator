@@ -27,6 +27,8 @@ pub trait QueryValueChooser {
 
     fn choose_date(&mut self) -> String;
 
+    fn choose_timestamp(&mut self) -> String;
+
     fn choose_interval(&mut self, with_field: bool) -> (String, Option<DateTimeField>);
 
     fn choose_qualified_wildcard_relation<'a>(&mut self, from_contents: &'a FromContents, wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation);
@@ -89,6 +91,10 @@ impl QueryValueChooser for RandomValueChooser {
 
     fn choose_date(&mut self) -> String {
         "2023-08-27".to_string()
+    }
+
+    fn choose_timestamp(&mut self) -> String {
+        "2023-01-30 14:37:05".to_string()
     }
 
     fn choose_interval(&mut self, with_field: bool) -> (String, Option<DateTimeField>) {
@@ -162,6 +168,7 @@ pub struct DeterministicValueChooser {
     chosen_numerics: VecWithIndex<String>,
     chosen_strings: VecWithIndex<String>,
     chosen_dates: VecWithIndex<String>,
+    chosen_timestamps: VecWithIndex<String>,
     chosen_intervals: VecWithIndex<(String, Option<DateTimeField>)>,
     chosen_tables: VecWithIndex<ObjectName>,
     chosen_select_aliases: VecWithIndex<Ident>,
@@ -179,6 +186,7 @@ impl DeterministicValueChooser {
             chosen_numerics: init_from_nodes!(path, String, NumericValue),
             chosen_strings: init_from_nodes!(path, String, StringValue),
             chosen_dates: init_from_nodes!(path, String, DateValue),
+            chosen_timestamps: init_from_nodes!(path, String, TimestampValue),
             chosen_intervals: init_from_nodes!(path, (String, Option<DateTimeField>), IntervalValue),
             chosen_tables: init_from_nodes!(path, ObjectName, SelectedTableName),
             chosen_select_aliases: init_from_nodes!(path, Ident, SelectAlias),
@@ -198,6 +206,7 @@ impl QueryValueChooser for DeterministicValueChooser {
             chosen_numerics: VecWithIndex::new(),
             chosen_strings: VecWithIndex::new(),
             chosen_dates: VecWithIndex::new(),
+            chosen_timestamps: VecWithIndex::new(),
             chosen_intervals: VecWithIndex::new(),
             chosen_tables: VecWithIndex::new(),
             chosen_select_aliases: VecWithIndex::new(),
@@ -233,7 +242,7 @@ impl QueryValueChooser for DeterministicValueChooser {
         }
         (col_type, ident_components)
     }
-
+    
     fn choose_select_alias_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident {
         let ident = self.chosen_columns_order_by.next();
         if !aliases.contains(&&ident.clone().into()) {
@@ -241,16 +250,18 @@ impl QueryValueChooser for DeterministicValueChooser {
         }
         ident
     }
-
+    
     fn choose_bigint(&mut self) -> String { self.chosen_bigints.next() }
-
+    
     fn choose_integer(&mut self) -> String { self.chosen_integers.next() }
-
+    
     fn choose_numeric(&mut self) -> String { self.chosen_numerics.next() }
-
+    
     fn choose_string(&mut self) -> String { self.chosen_strings.next() }
-
+    
     fn choose_date(&mut self) -> String { self.chosen_dates.next() }
+
+    fn choose_timestamp(&mut self) -> String { self.chosen_timestamps.next() }
 
     fn choose_interval(&mut self, with_field: bool) -> (String, Option<DateTimeField>) {
         let (value, field) = self.chosen_intervals.next();

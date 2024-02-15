@@ -63,6 +63,7 @@ impl ValueSetter for TypesTypeValueSetter {
             "types_select_type_text" => SubgraphType::Text,
             "types_select_type_date" => SubgraphType::Date,
             "types_select_type_interval" => SubgraphType::Interval,
+            "types_select_type_timestamp" => SubgraphType::Timestamp,
             any => panic!("{any} unexpectedly triggered the types_type value setter"),
         };
         let allowed_type_list = match selected_type {

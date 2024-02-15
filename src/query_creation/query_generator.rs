@@ -11,9 +11,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
-    self, BinaryOperator, DataType, Expr, FunctionArg, FunctionArgExpr, Ident, Join,
-    ObjectName, OrderByExpr, Query, Select, SelectItem, SetExpr, TableFactor, TableWithJoins,
-    TrimWhereField, UnaryOperator, Value, WildcardAdditionalOptions
+    self, BinaryOperator, DataType, Expr, FunctionArg, FunctionArgExpr, Ident, Join, ObjectName, OrderByExpr, Query, Select, SelectItem, SetExpr, TableFactor, TableWithJoins, TimezoneInfo, TrimWhereField, UnaryOperator, Value, WildcardAdditionalOptions
 };
 
 use crate::{config::TomlReadable, training::models::PathwayGraphModel};
@@ -876,14 +874,14 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
 
         let expr = match self.next_state().as_str() {
             "date_binary" => {
-                let (mut date, op, mut right) = match self.next_state().as_str() {
+                let (mut date, op, mut integer) = match self.next_state().as_str() {
                     "date_add_subtract" => {
                         self.expect_state("call86_types");
                         let date = self.handle_types(
                             Some(&[SubgraphType::Date]), None
                         ).1;
                         self.expect_state("call88_types");
-                        let int = self.handle_types(
+                        let integer = self.handle_types(
                             Some(&[SubgraphType::Integer]), None
                         ).1;
                         let op = match self.next_state().as_str() {
@@ -891,13 +889,14 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                             "date_add_subtract_minus" => BinaryOperator::Minus,
                             any => self.panic_unexpected(any),
                         };
-                        (date, op, int)
+                        (date, op, integer)
                     },
                     any => self.panic_unexpected(any),
                 };
                 match self.next_state().as_str() {
                     "date_swap_arguments" => {
-                        std::mem::swap(&mut date, &mut right);
+                        assert!(op == BinaryOperator::Plus);
+                        std::mem::swap(&mut date, &mut integer);
                         self.expect_state("EXIT_date");
                     },
                     "EXIT_date" => { },
@@ -906,13 +905,59 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 Expr::BinaryOp {
                     left: Box::new(date),
                     op,
-                    right: Box::new(right)
+                    right: Box::new(integer)
                 }
             },
             any => self.panic_unexpected(any),
         };
         
         (SubgraphType::Date, expr)
+    }
+
+    /// subgraph def_timestamp
+    fn handle_timestamp(&mut self) -> (SubgraphType, Expr) {
+        self.expect_state("timestamp");
+
+        let expr = match self.next_state().as_str() {
+            "timestamp_binary" => {
+                let (mut date, op, mut interval) = match self.next_state().as_str() {
+                    "timestamp_add_subtract" => {
+                        self.expect_state("call94_types");
+                        let date = self.handle_types(
+                            Some(&[SubgraphType::Date]), None
+                        ).1;
+                        self.expect_state("call95_types");
+                        let interval = self.handle_types(
+                            Some(&[SubgraphType::Interval]), None
+                        ).1;
+                        let op = match self.next_state().as_str() {
+                            "timestamp_add_subtract_plus" => BinaryOperator::Plus,
+                            "timestamp_add_subtract_minus" => BinaryOperator::Minus,
+                            any => self.panic_unexpected(any),
+                        };
+                        (date, op, interval)
+                    },
+                    any => self.panic_unexpected(any),
+                };
+                match self.next_state().as_str() {
+                    "timestamp_swap_arguments" => {
+                        assert!(op == BinaryOperator::Plus);
+                        std::mem::swap(&mut date, &mut interval);
+                        self.expect_state("EXIT_timestamp");
+                    },
+                    "EXIT_timestamp" => { },
+                    any => self.panic_unexpected(any),
+                }
+                Expr::BinaryOp {
+                    left: Box::new(date),
+                    op,
+                    right: Box::new(interval)
+                }
+            },
+            any => self.panic_unexpected(any),
+        };
+        
+        (SubgraphType::Timestamp, expr)
     }
 
     /// subgarph def_interval
@@ -974,6 +1019,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             "types_select_type_3vl" |
             "types_select_type_text" |
             "types_select_type_date" |
+            "types_select_type_timestamp" |
             "types_select_type_interval" => {},
             "types_null" => {
                 self.expect_state("EXIT_types");
@@ -1033,6 +1079,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             "call1_VAL_3" => self.handle_val_3(),
             "call0_text" => self.handle_text(),
             "call0_date" => self.handle_date(),
+            "call0_timestamp" => self.handle_timestamp(),
             "call0_interval" => self.handle_interval(),
             any => self.panic_unexpected(any)
         };
@@ -1087,6 +1134,9 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             "text_literal" => (SubgraphType::Text, Expr::Value(Value::SingleQuotedString(self.value_chooser.choose_string()))),  // TODO: hardcoded
             "date_literal" => (SubgraphType::Date, Expr::TypedString {
                 data_type: DataType::Date, value: self.value_chooser.choose_date(),
+            }),
+            "timestamp_literal" => (SubgraphType::Timestamp, Expr::TypedString {
+                data_type: DataType::Timestamp(None, TimezoneInfo::None), value: self.value_chooser.choose_timestamp(),
             }),
             "interval_literal" => (SubgraphType::Interval, {
                 let with_field = match self.next_state().as_str() {
@@ -1324,10 +1374,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 let args_type = AggregateFunctionAgruments::TypeList(args_type_v);
                 (args_type, args_expr_v, return_type)
             },
-            arm @ ("aggregate_select_type_bool" | "aggregate_select_type_date" | "aggregate_select_type_interval" | "aggregate_select_type_integer") => {
+            arm @ ("aggregate_select_type_bool" | "aggregate_select_type_date" | "aggregate_select_type_timestamp" | "aggregate_select_type_interval" | "aggregate_select_type_integer") => {
                 let (return_type, states) = match arm {
                     "aggregate_select_type_bool" => (SubgraphType::Val3, &["arg_single_3vl", "call64_types"]),
                     "aggregate_select_type_date" => (SubgraphType::Date, &["arg_date", "call72_types"]),
+                    "aggregate_select_type_timestamp" => (SubgraphType::Timestamp, &["arg_timestamp", "call96_types"]),
                     "aggregate_select_type_interval" => (SubgraphType::Interval, &["arg_interval", "call90_types"]),
                     "aggregate_select_type_integer" => (SubgraphType::Integer, &["arg_integer", "call71_types"]),
                     any => self.panic_unexpected(any),

@@ -42,6 +42,12 @@
             "MIN": 3.0
         }
     },
+    "timestamp": {
+        "[timestamp]": {
+            "MAX": 3.0,
+            "MIN": 3.0
+        }
+    },
     "interval": {
         "[interval]": {
             "AVG": 3.0,
