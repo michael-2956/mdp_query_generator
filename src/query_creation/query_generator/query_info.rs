@@ -1,4 +1,4 @@
-use std::{collections::{BTreeMap, HashMap, HashSet, BTreeSet}, error::Error, fmt, hash::Hash, path::Path};
+use std::{collections::{BTreeMap, BTreeSet, HashMap, HashSet}, error::Error, fmt, hash::Hash, path::Path};
 
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
@@ -139,7 +139,12 @@ impl DatabaseSchema {
     }
 
     pub fn get_table_def_by_name(&self, name: &ObjectName) -> &CreateTableSt {
-        &self.table_defs.iter().find(|x| &x.name == name).unwrap()
+        match self.table_defs.iter().find(
+            |x| x.name.to_string().to_uppercase() == name.to_string().to_uppercase()
+        ) {
+            Some(create_table_st) => create_table_st,
+            None => panic!("Couldn't find table {name} in the schema!"),
+        }
     }
 }
 
@@ -153,12 +158,73 @@ pub struct ClauseContext {
     group_by_contents_stack: Vec<GroupByContents>,
 }
 
+#[derive(Debug, Clone)]
+pub enum ClauseContextCheckpoint {
+    Full {
+        query_props_stack: Vec<QueryProps>,
+        all_accessible_froms: AllAccessibleFroms,
+        group_by_contents_stack: Vec<GroupByContents>,
+    },
+    CutOff {
+        query_props_length: usize,
+        query_props_last: QueryProps,
+        all_accessible_froms_checkpoint: AllAccessibleFromsCutoffCheckpoint,
+        group_by_contents_length: usize,
+        group_by_contents_last: GroupByContents,
+    }
+}
+
 impl ClauseContext {
     pub fn new() -> Self {
         Self {
             query_props_stack: vec![],
             all_accessible_froms: AllAccessibleFroms::new(),
             group_by_contents_stack: vec![],
+        }
+    }
+
+    pub fn get_checkpoint(&self, cutoff: bool) -> ClauseContextCheckpoint {
+        if cutoff {
+            ClauseContextCheckpoint::CutOff { 
+                query_props_length: self.query_props_stack.len(),
+                query_props_last: self.query_props_stack.last().unwrap().clone(),
+                all_accessible_froms_checkpoint: self.all_accessible_froms.get_cutoff_checkpoint(),
+                group_by_contents_length: self.group_by_contents_stack.len(),
+                group_by_contents_last: self.group_by_contents_stack.last().unwrap().clone(),
+            }
+        } else {
+            ClauseContextCheckpoint::Full {
+                query_props_stack: self.query_props_stack.clone(),
+                all_accessible_froms: self.all_accessible_froms.clone(),
+                group_by_contents_stack: self.group_by_contents_stack.clone(),
+            }
+        }
+    }
+
+    pub fn restore_checkpoint(&mut self, checkpoint: ClauseContextCheckpoint) {
+        match checkpoint {
+            ClauseContextCheckpoint::Full {
+                query_props_stack,
+                all_accessible_froms,
+                group_by_contents_stack
+            } => {
+                self.query_props_stack = query_props_stack;
+                self.all_accessible_froms = all_accessible_froms;
+                self.group_by_contents_stack = group_by_contents_stack;
+            },
+            ClauseContextCheckpoint::CutOff {
+                query_props_length,
+                query_props_last,
+                all_accessible_froms_checkpoint,
+                group_by_contents_length,
+                group_by_contents_last
+            } => {
+                self.query_props_stack.truncate(query_props_length);
+                *self.query_props_stack.last_mut().unwrap() = query_props_last;
+                self.all_accessible_froms.restore_from_cutoff_checkpoint(all_accessible_froms_checkpoint);
+                self.group_by_contents_stack.truncate(group_by_contents_length);
+                *self.group_by_contents_stack.last_mut().unwrap() = group_by_contents_last;
+            },
         }
     }
 
@@ -205,12 +271,33 @@ pub struct AllAccessibleFroms {
     current_subfrom: Option<FromContents>,
 }
 
+#[derive(Debug, Clone)]
+pub struct AllAccessibleFromsCutoffCheckpoint {
+    from_contents_length: usize,
+    from_contents_last: FromContents,
+    current_subfrom: Option<FromContents>,
+}
+
 impl AllAccessibleFroms {
     fn new() -> Self {
         Self {
             from_contents_stack: vec![],
             current_subfrom: None,
         }
+    }
+
+    fn get_cutoff_checkpoint(&self) -> AllAccessibleFromsCutoffCheckpoint {
+        AllAccessibleFromsCutoffCheckpoint {
+            from_contents_length: self.from_contents_stack.len(),
+            from_contents_last: self.from_contents_stack.last().unwrap().clone(),
+            current_subfrom: self.current_subfrom.clone(),
+        }
+    }
+
+    fn restore_from_cutoff_checkpoint(&mut self, checkpoint: AllAccessibleFromsCutoffCheckpoint) {
+        self.from_contents_stack.truncate(checkpoint.from_contents_length);
+        *self.from_contents_stack.last_mut().unwrap() = checkpoint.from_contents_last;
+        self.current_subfrom = checkpoint.current_subfrom;
     }
 
     pub fn append_table(&mut self, create_table_st: &CreateTableSt) -> TableAlias {
@@ -532,26 +619,38 @@ impl GroupByContents {
 }
 
 /// a custom ident that only compares and hashes the string
-#[derive(Clone, Debug, Eq, Ord)]
+#[derive(Clone, Debug, Eq)]
 pub struct IdentName {
     ident: Ident
 }
 
+impl ToString for IdentName {
+    fn to_string(&self) -> String {
+        self.ident.value.to_uppercase()
+    }
+}
+
 impl PartialEq for IdentName {
     fn eq(&self, other: &Self) -> bool {
-        self.ident.value == other.ident.value
+        self.to_string() == other.to_string()
+    }
+}
+
+impl Ord for IdentName {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.to_string().cmp(&other.to_string())
     }
 }
 
 impl PartialOrd for IdentName {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.ident.value.partial_cmp(&other.ident.value)
+        self.to_string().partial_cmp(&other.to_string())
     }
 }
 
 impl Hash for IdentName {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.ident.value.hash(state);
+        self.to_string().hash(state);
     }
 }
 

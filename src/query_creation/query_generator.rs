@@ -79,7 +79,7 @@ impl Unnested for Expr {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TypeAssertion<'a> {
     None,
     GeneratedBy(SubgraphType),
@@ -688,9 +688,8 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             any => self.panic_unexpected(any),
         };
 
-        let aggr_name = self.config.aggregate_functions_distribution.get_func_name(
-            &aggr_args_type, &aggr_return_type
-        );
+        let (func_names_iter, dist) = self.config.aggregate_functions_distribution.get_functions_and_dist(&aggr_args_type, &aggr_return_type);
+        let aggr_name = self.value_chooser.choose_aggregate_function_name(func_names_iter, dist);
 
         let expr = Expr::Function(ast::Function {
             name: aggr_name,

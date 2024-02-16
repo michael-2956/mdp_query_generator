@@ -1,4 +1,4 @@
-use rand::{SeedableRng, Rng, seq::SliceRandom};
+use rand::{distributions::{Distribution, WeightedIndex}, seq::SliceRandom, Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use sqlparser::ast::{DateTimeField, Ident, ObjectName};
 
@@ -16,6 +16,8 @@ pub trait QueryValueChooser {
     fn choose_column_group_by(&mut self, from_contents: &FromContents, group_by_contents: &GroupByContents, column_types: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>);
     
     fn choose_select_alias_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident;
+
+    fn choose_aggregate_function_name<'a>(&mut self, func_names_iter: impl Iterator::<Item = &'a String>, dist: WeightedIndex<f64>) -> ObjectName;
 
     fn choose_bigint(&mut self) -> String;
     
@@ -71,6 +73,14 @@ impl QueryValueChooser for RandomValueChooser {
 
     fn choose_select_alias_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident {
         (**aliases.choose(&mut self.rng).as_ref().unwrap()).clone().into()
+    }
+
+    fn choose_aggregate_function_name<'a>(&mut self, mut func_names_iter: impl Iterator::<Item = &'a String>, dist: WeightedIndex<f64>) -> ObjectName {
+        let selected_name = func_names_iter.nth(dist.sample(&mut self.rng)).unwrap();
+        ObjectName(vec![Ident {
+            value: selected_name.clone(),
+            quote_style: (None),
+        }])
     }
 
     fn choose_bigint(&mut self) -> String {
@@ -175,6 +185,7 @@ pub struct DeterministicValueChooser {
     chosen_columns_from: VecWithIndex<Vec<Ident>>,
     chosen_columns_group_by: VecWithIndex<Vec<Ident>>,
     chosen_columns_order_by: VecWithIndex<Ident>,
+    chosen_aggregate_functions: VecWithIndex<ObjectName>,
     chosen_qualified_wildcard_tables: VecWithIndex<Ident>,
 }
 
@@ -193,6 +204,7 @@ impl DeterministicValueChooser {
             chosen_columns_from: init_from_nodes!(path, Vec<Ident>, SelectedColumnNameFROM),
             chosen_columns_group_by: init_from_nodes!(path, Vec<Ident>, SelectedColumnNameGROUPBY),
             chosen_columns_order_by: init_from_nodes!(path, Ident, SelectedColumnNameORDERBY),
+            chosen_aggregate_functions: init_from_nodes!(path, ObjectName, SelectedAggregateFunctions),
             chosen_qualified_wildcard_tables: init_from_nodes!(path, Ident, QualifiedWildcardSelectedRelation),
         }
     }
@@ -213,6 +225,7 @@ impl QueryValueChooser for DeterministicValueChooser {
             chosen_columns_from: VecWithIndex::new(),
             chosen_columns_group_by: VecWithIndex::new(),
             chosen_columns_order_by: VecWithIndex::new(),
+            chosen_aggregate_functions: VecWithIndex::new(),
             chosen_qualified_wildcard_tables: VecWithIndex::new(),
         }
     }
@@ -249,6 +262,12 @@ impl QueryValueChooser for DeterministicValueChooser {
             panic!("Cannot choose {ident} in ORDER BY: it is not present among SELECT aliases: {:?}", aliases);
         }
         ident
+    }
+
+    fn choose_aggregate_function_name<'a>(&mut self, mut func_names_iter: impl Iterator::<Item = &'a String>, _dist: WeightedIndex<f64>) -> ObjectName {
+        let aggr_func = self.chosen_aggregate_functions.next();
+        assert!(func_names_iter.any(|func_name| *func_name == aggr_func.0[0].value), "Selected aggregate funcction is not available: {}", aggr_func);
+        aggr_func
     }
     
     fn choose_bigint(&mut self) -> String { self.chosen_bigints.next() }

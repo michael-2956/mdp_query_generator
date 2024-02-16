@@ -68,9 +68,16 @@ pub struct MarkovChainGenerator<StC: StateChooser> {
 }
 
 #[derive(Debug)]
-pub struct ChainStateMemory {
-    call_stack: Vec<StackFrame>,
-    pending_call: Option<CallParams>,
+pub enum ChainStateCheckpoint {
+    Full {
+        call_stack: Vec<StackFrame>,
+        pending_call: Option<CallParams>,
+    },
+    Cutoff {
+        call_stack_length: usize,
+        last_frame: StackFrame,
+        pending_call: Option<CallParams>,
+    }
 }
 
 #[derive(Debug)]
@@ -456,11 +463,18 @@ impl DynClone for Vec<StackFrame> {
     }
 }
 
-impl DynClone for ChainStateMemory {
+impl DynClone for ChainStateCheckpoint {
     fn dyn_clone(&self) -> Self {
-        Self {
-            call_stack: self.call_stack.dyn_clone(),
-            pending_call: self.pending_call.clone(),
+        match self {
+            Self::Full { call_stack, pending_call } => Self::Full {
+                call_stack: call_stack.dyn_clone(),
+                pending_call: pending_call.clone(),
+            },
+            Self::Cutoff { call_stack_length, last_frame, pending_call } => Self::Cutoff {
+                call_stack_length: *call_stack_length,
+                last_frame: last_frame.dyn_clone(),
+                pending_call: pending_call.clone(),
+            },
         }
     }
 }
@@ -641,16 +655,33 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         });
     }
 
-    pub fn get_chain_state(&self) -> ChainStateMemory {
-        ChainStateMemory {
-            call_stack: self.call_stack.dyn_clone(),
-            pending_call: self.pending_call.clone(),
+    pub fn get_chain_state_checkpoint(&self, cutoff: bool) -> ChainStateCheckpoint {
+        if cutoff {
+            ChainStateCheckpoint::Cutoff {
+                call_stack_length: self.call_stack.len(),
+                last_frame: self.call_stack.last().as_ref().unwrap().dyn_clone(),
+                pending_call: self.pending_call.clone(),
+            }
+        } else {
+            ChainStateCheckpoint::Full {
+                call_stack: self.call_stack.dyn_clone(),
+                pending_call: self.pending_call.clone(),
+            }
         }
     }
 
-    pub fn set_chain_state(&mut self, chain_state_memory: ChainStateMemory) {
-        self.call_stack = chain_state_memory.call_stack;
-        self.pending_call = chain_state_memory.pending_call;
+    pub fn restore_chain_state(&mut self, chain_state_checkpoint: ChainStateCheckpoint) {
+        match chain_state_checkpoint {
+            ChainStateCheckpoint::Full { call_stack, pending_call } => {
+                self.call_stack = call_stack;
+                self.pending_call = pending_call;
+            },
+            ChainStateCheckpoint::Cutoff { call_stack_length, last_frame, pending_call } => {
+                self.call_stack.truncate(call_stack_length);
+                *self.call_stack.last_mut().unwrap() = last_frame;
+                self.pending_call = pending_call;
+            },
+        }
     }
 
     /// push all the known data to fields of call params that

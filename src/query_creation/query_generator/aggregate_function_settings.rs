@@ -1,13 +1,8 @@
 use std::path::PathBuf;
 use std::collections::{HashMap, BTreeMap};
 use crate::query_creation::state_generator::markov_chain_generator::subgraph_type::SubgraphType;
-use rand_chacha::ChaCha8Rng;
-use sqlparser::ast::{
-    Ident, ObjectName, 
-};
+use sqlparser::ast::ObjectName;
 use rand::distributions::WeightedIndex;
-use rand::distributions::Distribution;
-use rand::SeedableRng;
 use std::fs;
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
@@ -21,7 +16,6 @@ pub enum AggregateFunctionAgruments {
 pub struct AggregateFunctionDistribution {
     /// return -> domain -> aggr name -> weight
     func_map: HashMap<SubgraphType, HashMap<AggregateFunctionAgruments, BTreeMap<String, f64>>>,
-    rng: ChaCha8Rng,
 }
 
 fn parse_type_list(mut types_str: String) -> AggregateFunctionAgruments {
@@ -61,20 +55,15 @@ impl AggregateFunctionDistribution {
 
         AggregateFunctionDistribution {
             func_map,
-            rng: ChaCha8Rng::seed_from_u64(1),
         }
-    }  
+    }
 
-    pub fn get_func_name(&mut self, arguments: &AggregateFunctionAgruments, return_type: &SubgraphType) -> ObjectName {
+    pub fn get_functions_and_dist(&self, arguments: &AggregateFunctionAgruments, return_type: &SubgraphType) -> (impl Iterator::<Item = &String>, WeightedIndex<f64>) {
         let aggr_weight_map = &self.func_map[return_type][arguments];
         let dist = WeightedIndex::new(
             aggr_weight_map.iter().map(|item| *item.1)
         ).unwrap();
-        let selected_name = aggr_weight_map.keys().nth(dist.sample(&mut self.rng)).unwrap();
-        ObjectName(vec![Ident {
-            value: selected_name.clone(),
-            quote_style: (None),
-        }])
+        (aggr_weight_map.keys(), dist)
     }
 
     pub fn func_names_include(&mut self, arguments: &AggregateFunctionAgruments, return_type: &SubgraphType, aggr_name: &ObjectName) -> bool {

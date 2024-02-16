@@ -92,7 +92,7 @@ fn select_sub_model_and_run_generation<StC: StateChooser>(config: Config) {
 fn run_training(config: Config) {
     let mut sql_trainer = SQLTrainer::with_config(&config).expect("Could not create trainer!");
     let model = config.model_config.create_model().expect("Coudn't create model!");
-    let model = sql_trainer.train(model).expect("Training error!");
+    let model = sql_trainer.train(model).unwrap_or_else(|err| panic!("Training error!\n{err}"));
     model.write_weights(&sql_trainer.config.save_weights_to).expect("Failed writing model!");
     model.print_weights();
 }
