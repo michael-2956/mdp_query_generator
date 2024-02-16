@@ -516,9 +516,10 @@ impl MarkovChain {
         // behaviour of all TYPES subgraphs, SELECT subgraph, etc.
         // at that point, all "calls will exit" should be recalculated...
         let mut func_min_calls: HashMap<SmolStr, i64> = functions.keys().map(|func_name| (func_name.clone(), 0i64)).collect();
-        func_min_calls.insert(SmolStr::new("literals"), -1);  // hack to encourage literals (this subgraph has no inner calls)
-        func_min_calls.insert(SmolStr::new("column_spec"), -1);  // hack to encourage columns (this subgraph has no inner calls)
-
+        // hack to encourage columns (these subgraphs have no inner calls)
+        func_min_calls.insert(SmolStr::new("literals"), -1);
+        func_min_calls.insert(SmolStr::new("column_spec"), -1);
+        func_min_calls.insert(SmolStr::new("select_date_field"), -1); 
         // for i in 0..1000 {
         //     let mut did_update = false;
         //     for function in functions.values() {

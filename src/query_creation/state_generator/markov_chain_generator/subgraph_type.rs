@@ -135,6 +135,7 @@ impl SubgraphType {
             SubgraphType::ListExpr(inner) => (inner, Box::new(|x| SubgraphType::ListExpr(Box::new(x)))),
             SubgraphType::Numeric => return vec![SubgraphType::Numeric, SubgraphType::BigInt, SubgraphType::Integer],
             SubgraphType::BigInt => return vec![SubgraphType::BigInt, SubgraphType::Integer],
+            SubgraphType::Timestamp => return vec![SubgraphType::Timestamp, SubgraphType::Date],
             any => return vec![any.clone()],
         };
         inner_type.get_compat_types()
