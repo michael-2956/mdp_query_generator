@@ -776,8 +776,8 @@ impl PathGenerator {
                 SubgraphType::Integer
             },
             Expr::Extract { field, expr } => {
-                self.try_push_states(&["number_extract_field_from_date", "call0_select_date_field"])?;
-                self.handle_select_date_field(field)?;
+                self.try_push_states(&["number_extract_field_from_date", "call0_select_datetime_field"])?;
+                self.handle_select_datetime_field(field)?;
                 self.try_push_state("call97_types")?;
                 self.state_generator.set_compatible_list([
                     SubgraphType::Interval.get_compat_types(),
@@ -787,8 +787,8 @@ impl PathGenerator {
                 SubgraphType::Numeric
             },
             // "number_extract_field_from_date" => {
-            //     self.expect_state("call0_select_date_field");
-            //     let field = self.handle_select_date_field();
+            //     self.expect_state("call0_select_datetime_field");
+            //     let field = self.handle_select_datetime_field();
             //     self.expect_state("call97_types");
             //     self.state_generator.set_compatible_list([
             //         SubgraphType::Interval.get_compat_types(),
@@ -963,26 +963,28 @@ impl PathGenerator {
         Ok(SubgraphType::Timestamp)
     }
 
-    /// subgraph def_select_date_field
-    fn handle_select_date_field(&mut self, field: &DateTimeField) -> Result<(), ConvertionError> {
-        self.try_push_state("select_date_field")?;
+    /// subgraph def_select_datetime_field
+    fn handle_select_datetime_field(&mut self, field: &DateTimeField) -> Result<(), ConvertionError> {
+        self.try_push_state("select_datetime_field")?;
         self.try_push_state(match field {
-            DateTimeField::Microseconds => "select_date_field_microseconds",
-            DateTimeField::Milliseconds => "select_date_field_milliseconds",
-            DateTimeField::Second => "select_date_field_second",
-            DateTimeField::Minute => "select_date_field_minute",
-            DateTimeField::Hour => "select_date_field_hour",
-            DateTimeField::Day => "select_date_field_day",
-            DateTimeField::Week => "select_date_field_week",
-            DateTimeField::Month => "select_date_field_month",
-            DateTimeField::Quarter => "select_date_field_quarter",
-            DateTimeField::Year => "select_date_field_year",
-            DateTimeField::Decade => "select_date_field_decade",
-            DateTimeField::Century => "select_date_field_century",
-            DateTimeField::Millennium => "select_date_field_millennium",
+            DateTimeField::Microseconds => "select_datetime_field_microseconds",
+            DateTimeField::Milliseconds => "select_datetime_field_milliseconds",
+            DateTimeField::Second => "select_datetime_field_second",
+            DateTimeField::Minute => "select_datetime_field_minute",
+            DateTimeField::Hour => "select_datetime_field_hour",
+            DateTimeField::Day => "select_datetime_field_day",
+            DateTimeField::Isodow => "select_datetime_field_isodow",
+            DateTimeField::Week => "select_datetime_field_week",
+            DateTimeField::Month => "select_datetime_field_month",
+            DateTimeField::Quarter => "select_datetime_field_quarter",
+            DateTimeField::Year => "select_datetime_field_year",
+            DateTimeField::Isoyear => "select_datetime_field_isoyear",
+            DateTimeField::Decade => "select_datetime_field_decade",
+            DateTimeField::Century => "select_datetime_field_century",
+            DateTimeField::Millennium => "select_datetime_field_millennium",
             any => unexpected_expr!(any),
         })?;
-        self.try_push_state("EXIT_select_date_field")?;
+        self.try_push_state("EXIT_select_datetime_field")?;
         Ok(())
     }
 

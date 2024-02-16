@@ -956,10 +956,10 @@ digraph G {
 
         number_extract_field_from_date [label="EXTRACT([field] from [date])\nTYPE_NAME=numeric?", TYPE_NAME="numeric"]
         number -> number_extract_field_from_date
-        call0_select_date_field [label="timestamp/interval/date field", shape=rectangle, style=filled, color=springgreen]
-        number_extract_field_from_date -> call0_select_date_field
+        call0_select_datetime_field [label="timestamp/interval/date field", shape=rectangle, style=filled, color=springgreen]
+        number_extract_field_from_date -> call0_select_datetime_field
         call97_types [TYPES="[compatible]", MODS="[...]", label="TYPES: compatible(timestamp, interval)\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        call0_select_date_field -> call97_types
+        call0_select_datetime_field -> call97_types
         call97_types -> EXIT_number
     }
 
@@ -1067,48 +1067,54 @@ digraph G {
         timestamp_add_subtract_plus -> timestamp_swap_arguments
     }
 
-    subgraph def_select_date_field {
-        select_date_field [label="timestamp/interval/date field", shape=rectangle, style=filled, color=springgreen]
-        EXIT_select_date_field [label="EXIT timestamp/interval/date field", shape=rectangle]
-        select_date_field_microseconds [label="microseconds"]
-        select_date_field -> select_date_field_microseconds
-        select_date_field_microseconds -> EXIT_select_date_field
-        select_date_field_milliseconds [label="milliseconds"]
-        select_date_field -> select_date_field_milliseconds
-        select_date_field_milliseconds -> EXIT_select_date_field
-        select_date_field_second [label="second"]
-        select_date_field -> select_date_field_second
-        select_date_field_second -> EXIT_select_date_field
-        select_date_field_minute [label="minute"]
-        select_date_field -> select_date_field_minute
-        select_date_field_minute -> EXIT_select_date_field
-        select_date_field_hour [label="hour"]
-        select_date_field -> select_date_field_hour
-        select_date_field_hour -> EXIT_select_date_field
-        select_date_field_day [label="day"]
-        select_date_field -> select_date_field_day
-        select_date_field_day -> EXIT_select_date_field
-        select_date_field_week [label="week"]
-        select_date_field -> select_date_field_week
-        select_date_field_week -> EXIT_select_date_field
-        select_date_field_month [label="month"]
-        select_date_field -> select_date_field_month
-        select_date_field_month -> EXIT_select_date_field
-        select_date_field_quarter [label="quarter"]
-        select_date_field -> select_date_field_quarter
-        select_date_field_quarter -> EXIT_select_date_field
-        select_date_field_year [label="year"]
-        select_date_field -> select_date_field_year
-        select_date_field_year -> EXIT_select_date_field
-        select_date_field_decade [label="decade"]
-        select_date_field -> select_date_field_decade
-        select_date_field_decade -> EXIT_select_date_field
-        select_date_field_century [label="century"]
-        select_date_field -> select_date_field_century
-        select_date_field_century -> EXIT_select_date_field
-        select_date_field_millennium [label="millennium"]
-        select_date_field -> select_date_field_millennium
-        select_date_field_millennium -> EXIT_select_date_field
+    subgraph def_select_datetime_field {
+        select_datetime_field [TYPES="[date, interval, timestamp]", label="timestamp/interval/date field\ntypes=[date, interval, timestamp]", shape=rectangle, style=filled, color=springgreen]
+        EXIT_select_datetime_field [label="EXIT timestamp/interval/date field", shape=rectangle]
+        select_datetime_field_microseconds [label="microseconds\ntn(intvl., tmst.)", TYPE_NAME="[interval, timestamp]"]
+        select_datetime_field -> select_datetime_field_microseconds
+        select_datetime_field_microseconds -> EXIT_select_datetime_field
+        select_datetime_field_milliseconds [label="milliseconds\ntn(intvl., tmst.)", TYPE_NAME="[interval, timestamp]"]
+        select_datetime_field -> select_datetime_field_milliseconds
+        select_datetime_field_milliseconds -> EXIT_select_datetime_field
+        select_datetime_field_second [label="second\ntn(intvl., tmst.)", TYPE_NAME="[interval, timestamp]"]
+        select_datetime_field -> select_datetime_field_second
+        select_datetime_field_second -> EXIT_select_datetime_field
+        select_datetime_field_minute [label="minute\ntn(intvl., tmst.)", TYPE_NAME="[interval, timestamp]"]
+        select_datetime_field -> select_datetime_field_minute
+        select_datetime_field_minute -> EXIT_select_datetime_field
+        select_datetime_field_hour [label="hour\ntn(intvl., tmst.)", TYPE_NAME="[interval, timestamp]"]
+        select_datetime_field -> select_datetime_field_hour
+        select_datetime_field_hour -> EXIT_select_datetime_field
+        select_datetime_field_day [label="day"]
+        select_datetime_field -> select_datetime_field_day
+        select_datetime_field_day -> EXIT_select_datetime_field
+        select_datetime_field_isodow [label="isodow\ntn(date, tmst.)", TYPE_NAME="[date, timestamp]"]
+        select_datetime_field -> select_datetime_field_isodow
+        select_datetime_field_isodow -> EXIT_select_datetime_field
+        select_datetime_field_week [label="week\ntn(date, tmst.)", TYPE_NAME="[date, timestamp]"]
+        select_datetime_field -> select_datetime_field_week
+        select_datetime_field_week -> EXIT_select_datetime_field
+        select_datetime_field_month [label="month"]
+        select_datetime_field -> select_datetime_field_month
+        select_datetime_field_month -> EXIT_select_datetime_field
+        select_datetime_field_quarter [label="quarter"]
+        select_datetime_field -> select_datetime_field_quarter
+        select_datetime_field_quarter -> EXIT_select_datetime_field
+        select_datetime_field_year [label="year"]
+        select_datetime_field -> select_datetime_field_year
+        select_datetime_field_year -> EXIT_select_datetime_field
+        select_datetime_field_isoyear [label="isoyear\ntn(date, tmst.)", TYPE_NAME="[date, timestamp]"]
+        select_datetime_field -> select_datetime_field_isoyear
+        select_datetime_field_isoyear -> EXIT_select_datetime_field
+        select_datetime_field_decade [label="decade"]
+        select_datetime_field -> select_datetime_field_decade
+        select_datetime_field_decade -> EXIT_select_datetime_field
+        select_datetime_field_century [label="century"]
+        select_datetime_field -> select_datetime_field_century
+        select_datetime_field_century -> EXIT_select_datetime_field
+        select_datetime_field_millennium [label="millennium"]
+        select_datetime_field -> select_datetime_field_millennium
+        select_datetime_field_millennium -> EXIT_select_datetime_field
     }
 
     subgraph def_interval {
@@ -1157,7 +1163,7 @@ digraph G {
         EXIT_text -> date [color=none]
 
         EXIT_timestamp -> interval [color=none]
-        EXIT_interval -> select_date_field [color=none]
+        EXIT_interval -> select_datetime_field [color=none]
 
         EXIT_types -> literals [color=none, weight=10]
         EXIT_literals -> column_spec [color=none, weight=10]

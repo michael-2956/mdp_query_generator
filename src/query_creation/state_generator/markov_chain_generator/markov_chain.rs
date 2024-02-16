@@ -519,7 +519,7 @@ impl MarkovChain {
         // hack to encourage columns (these subgraphs have no inner calls)
         func_min_calls.insert(SmolStr::new("literals"), -1);
         func_min_calls.insert(SmolStr::new("column_spec"), -1);
-        func_min_calls.insert(SmolStr::new("select_date_field"), -1); 
+        func_min_calls.insert(SmolStr::new("select_datetime_field"), -1); 
         // for i in 0..1000 {
         //     let mut did_update = false;
         //     for function in functions.values() {

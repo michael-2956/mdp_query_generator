@@ -362,6 +362,7 @@ impl QueryProps {
             },
             Expr::Position { expr: _, r#in: _ } => Some(Ident { value: "position".to_string(), quote_style: Some('"') }),
             Expr::Substring { expr: _, substring_from: _, substring_for: _ } => Some(Ident { value: "substring".to_string(), quote_style: Some('"') }),
+            Expr::Extract { field: _, expr: _ } => Some(Ident { value: "extract".to_string(), quote_style: Some('"') }),
             Expr::Exists { subquery: _, negated } => {
                 if *negated { None } else {
                     Some(Ident { value: "exists".to_string(), quote_style: Some('"') })

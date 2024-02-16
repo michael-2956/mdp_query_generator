@@ -946,7 +946,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 loop {
                     match self.next_state().as_str() {
                         "call49_types" => {
-                            list_expr.push(self.handle_types(TypeAssertion::GeneratedBy(inner_type.clone())).1);
+                            list_expr.push(self.handle_types(TypeAssertion::CompatibleWith(inner_type.clone())).1);
                         },
                         "EXIT_list_expr" => break,
                         any => self.panic_unexpected(any)
@@ -978,14 +978,14 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     self.expect_state("simple_case_condition");
                     self.expect_state("call79_types");
                     self.state_generator.set_compatible_list(operand_type.get_compat_types());
-                    let condition_expr = self.handle_types(TypeAssertion::GeneratedBy(operand_type.clone())).1;
+                    let condition_expr = self.handle_types(TypeAssertion::CompatibleWith(operand_type.clone())).1;
                     conditions.push(condition_expr);
 
                     match self.next_state().as_str() {
                         "simple_case_result" => {
                             self.expect_state("call80_types");
                             self.state_generator.set_compatible_list(out_type.get_compat_types());
-                            let result_expr = self.handle_types(TypeAssertion::GeneratedBy(out_type.clone())).1;
+                            let result_expr = self.handle_types(TypeAssertion::CompatibleWith(out_type.clone())).1;
                             results.push(result_expr);
                         },
                         "case_else" => break,
@@ -1006,7 +1006,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                         "searched_case_result" => {
                             self.expect_state("call77_types");
                             self.state_generator.set_compatible_list(out_type.get_compat_types());
-                            let result_expr = self.handle_types(TypeAssertion::GeneratedBy(out_type.clone())).1;
+                            let result_expr = self.handle_types(TypeAssertion::CompatibleWith(out_type.clone())).1;
                             results.push(result_expr);
                         },
                         "case_else" => break,
@@ -1021,7 +1021,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         let else_result = match self.next_state().as_str() {
             "call81_types" => {
                 self.state_generator.set_compatible_list(out_type.get_compat_types());
-                let else_expr = self.handle_types(TypeAssertion::GeneratedBy(out_type.clone())).1;
+                let else_expr = self.handle_types(TypeAssertion::CompatibleWith(out_type.clone())).1;
                 self.expect_state("EXIT_case");
                 Some(Box::new(else_expr))
             },
@@ -1314,8 +1314,8 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 })
             },
             "number_extract_field_from_date" => {
-                self.expect_state("call0_select_date_field");
-                let field = self.handle_select_date_field();
+                self.expect_state("call0_select_datetime_field");
+                let field = self.handle_select_datetime_field();
                 self.expect_state("call97_types");
                 self.state_generator.set_compatible_list([
                     SubgraphType::Interval.get_compat_types(),
@@ -1484,26 +1484,28 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         (SubgraphType::Timestamp, expr)
     }
 
-    /// subgraph def_select_date_field
-    fn handle_select_date_field(&mut self) -> DateTimeField {
-        self.expect_state("select_date_field");
+    /// subgraph def_select_datetime_field
+    fn handle_select_datetime_field(&mut self) -> DateTimeField {
+        self.expect_state("select_datetime_field");
         let field = match self.next_state().as_str() {
-            "select_date_field_microseconds" => DateTimeField::Microseconds,
-            "select_date_field_milliseconds" => DateTimeField::Milliseconds,
-            "select_date_field_second" => DateTimeField::Second,
-            "select_date_field_minute" => DateTimeField::Minute,
-            "select_date_field_hour" => DateTimeField::Hour,
-            "select_date_field_day" => DateTimeField::Day,
-            "select_date_field_week" => DateTimeField::Week,
-            "select_date_field_month" => DateTimeField::Month,
-            "select_date_field_quarter" => DateTimeField::Quarter,
-            "select_date_field_year" => DateTimeField::Year,
-            "select_date_field_decade" => DateTimeField::Decade,
-            "select_date_field_century" => DateTimeField::Century,
-            "select_date_field_millennium" => DateTimeField::Millennium,
+            "select_datetime_field_microseconds" => DateTimeField::Microseconds,
+            "select_datetime_field_milliseconds" => DateTimeField::Milliseconds,
+            "select_datetime_field_second" => DateTimeField::Second,
+            "select_datetime_field_minute" => DateTimeField::Minute,
+            "select_datetime_field_hour" => DateTimeField::Hour,
+            "select_datetime_field_day" => DateTimeField::Day,
+            "select_datetime_field_isodow" => DateTimeField::Isodow,
+            "select_datetime_field_week" => DateTimeField::Week,
+            "select_datetime_field_month" => DateTimeField::Month,
+            "select_datetime_field_quarter" => DateTimeField::Quarter,
+            "select_datetime_field_year" => DateTimeField::Year,
+            "select_datetime_field_isoyear" => DateTimeField::Isoyear,
+            "select_datetime_field_decade" => DateTimeField::Decade,
+            "select_datetime_field_century" => DateTimeField::Century,
+            "select_datetime_field_millennium" => DateTimeField::Millennium,
             any => self.panic_unexpected(any),
         };
-        self.expect_state("EXIT_select_date_field");
+        self.expect_state("EXIT_select_datetime_field");
         field
     }
 
