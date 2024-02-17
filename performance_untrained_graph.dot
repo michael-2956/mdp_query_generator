@@ -77,7 +77,7 @@
 digraph G {
     subgraph def_Query {
         Query [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[single column, single row]", label="Query\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[single column, single row]", shape=octagon, style=filled, color=green]
-        EXIT_Query [label="EXIT Query"]
+        EXIT_Query [label="EXIT Query", shape=rectangle]
 
         call0_FROM [label="FROM", shape=rectangle, color=cornflowerblue, style=filled]
         Query -> call0_FROM
@@ -523,15 +523,6 @@ digraph G {
         types_select_special_expression -> call0_aggregate_function
         call0_aggregate_function -> EXIT_types
 
-        // cancel 'no literals' here
-        // and also... well cancel if for types calls in all 
-        // type expression subgraphs.
-        // the problem is that in that way
-        // too much new code is introduced into the type expression subgraphs.
-        // we can solve this by introducing a separate subgraph just for literals
-        // so basically cancellig would be needed, but only here.
-        // added benefit of potentially more literals
-        // but have to rewrite everything else
         call0_case [TYPES="[known]", MODS="[..., -no literals]", modifier="no case", modifier_mode="off", label="CASE\nTYPE: known\nMODS: [..., -no literals]\nmod.: 'no case' -> OFF", shape=rectangle, style=filled, color=aquamarine]
         types_select_special_expression -> call0_case
         call0_case -> EXIT_types
@@ -540,37 +531,46 @@ digraph G {
         types_select_special_expression -> call0_literals
         call0_literals -> EXIT_types
 
-        call2_number [label="number\nTYPES: [bigint]\nMODS: [..., -no literals]\nmod.: 'no formulas' -> OFF", TYPES="[bigint]", MODS="[..., -no literals]", modifier="no formulas", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
-        types_select_type_bigint -> call2_number
-        call2_number -> EXIT_types
+        call0_formulas [TYPES="[known]", MODS="[..., -no literals]", modifier="no formulas", modifier_mode="off", label="Formulas\nTYPES: [known]\nMODS: [..., -no literals]\nmod.: 'no formulas' -> OFF", shape=rectangle, style=filled, color=darkcyan]
+        types_select_special_expression -> call0_formulas
+        call0_formulas -> EXIT_types
+    }
 
-        call1_number [label="number\nTYPES: [integer]\nMODS: [..., -no literals]\nmod.: 'no formulas' -> OFF", TYPES="[integer]", MODS="[..., -no literals]", modifier="no formulas", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
-        types_select_type_integer -> call1_number
-        call1_number -> EXIT_types
+    subgraph def_formulas {
+        formulas [label="Formulas\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\n[mods]", TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[]", shape=rectangle, style=filled, color=darkcyan]
+        EXIT_formulas [label="EXIT Formulas", shape=rectangle]
 
-        call0_number [label="number\nTYPES: [numeric]\nMODS: [..., -no literals]\nmod.: 'no formulas' -> OFF", TYPES="[numeric]", MODS="[..., -no literals]", modifier="no formulas", modifier_mode="off", shape=rectangle, style=filled, color=chocolate]
-        types_select_type_numeric -> call0_number
-        call0_number -> EXIT_types
+        call2_number [label="number\nTYPES: [bigint]\nMODS: [...]", TYPE_NAME="bigint", TYPES="[bigint]", MODS="[...]", shape=rectangle, style=filled, color=chocolate]
+        formulas -> call2_number
+        call2_number -> EXIT_formulas
 
-        call1_VAL_3 [label="3VL Value\nMODS: [..., -no literals]\nmod.: 'no formulas' -> OFF", MODS="[..., -no literals]", modifier="no formulas", modifier_mode="off", shape=rectangle, style=filled, color=red]
-        types_select_type_3vl -> call1_VAL_3
-        call1_VAL_3 -> EXIT_types
+        call1_number [label="number\nTYPES: [integer]\nMODS: [...]", TYPE_NAME="integer", TYPES="[integer]", MODS="[...]", shape=rectangle, style=filled, color=chocolate]
+        formulas -> call1_number
+        call1_number -> EXIT_formulas
 
-        call0_text [label="text\nMODS: [..., -no literals]\nmod.: 'no formulas' -> OFF", MODS="[..., -no literals]", modifier="no formulas", modifier_mode="off", shape=rectangle, style=filled, color=pink]
-        types_select_type_text -> call0_text
-        call0_text -> EXIT_types
+        call0_number [label="number\nTYPES: [numeric]\nMODS: [...]", TYPE_NAME="numeric", TYPES="[numeric]", MODS="[...]", shape=rectangle, style=filled, color=chocolate]
+        formulas -> call0_number
+        call0_number -> EXIT_formulas
 
-        call0_date [label="date\nMODS: [..., -no literals]\nmod.: 'no formulas' -> OFF", MODS="[..., -no literals]", modifier="no formulas", modifier_mode="off", shape=rectangle, style=filled, color=cadetblue4]
-        types_select_type_date -> call0_date
-        call0_date -> EXIT_types
+        call1_VAL_3 [label="3VL Value\nMODS: [...]", MODS="[...]", TYPE_NAME="3VL Value", shape=rectangle, style=filled, color=red]
+        formulas -> call1_VAL_3
+        call1_VAL_3 -> EXIT_formulas
 
-        call0_timestamp [label="timestamp\nMODS: [..., -no literals]\nmod.: 'no formulas' -> OFF", MODS="[..., -no literals]", modifier="no formulas", modifier_mode="off", shape=rectangle, style=filled, color=cadetblue4]
-        types_select_type_timestamp -> call0_timestamp
-        call0_timestamp -> EXIT_types
+        call0_text [label="text\nMODS: [...]", MODS="[...]", TYPE_NAME="text", shape=rectangle, style=filled, color=pink]
+        formulas -> call0_text
+        call0_text -> EXIT_formulas
 
-        call0_interval [label="interval\nMODS: [..., -no literals]\nmod.: 'no formulas' -> OFF", MODS="[..., -no literals]", modifier="no formulas", modifier_mode="off", shape=rectangle, style=filled, color=cadetblue4]
-        types_select_type_interval -> call0_interval
-        call0_interval -> EXIT_types
+        call0_date [label="date\nMODS: [...]", MODS="[...]", TYPE_NAME="date", shape=rectangle, style=filled, color=cadetblue4]
+        formulas -> call0_date
+        call0_date -> EXIT_formulas
+
+        call0_timestamp [label="timestamp\nMODS: [...]", MODS="[...]", TYPE_NAME="timestamp", shape=rectangle, style=filled, color=darkolivegreen]
+        formulas -> call0_timestamp
+        call0_timestamp -> EXIT_formulas
+
+        call0_interval [label="interval\nMODS: [...]", MODS="[...]", TYPE_NAME="interval", shape=rectangle, style=filled, color=lightslateblue]
+        formulas -> call0_interval
+        call0_interval -> EXIT_formulas
     }
 
     subgraph def_literals {
@@ -586,9 +586,6 @@ digraph G {
         bool_literal -> false
         false -> EXIT_literals
 
-        literals_explicit_cast [label="Explicit type cast"]
-        literals_explicit_cast -> EXIT_literals
-
         number_literal_integer [label="random integer\ntn(i)", TYPE_NAME="integer"]
         literals -> number_literal_integer
         number_literal_integer -> EXIT_literals
@@ -597,13 +594,18 @@ digraph G {
         number_literal_numeric -> EXIT_literals
         number_literal_bigint [label="random bigint\ntn(bi)", TYPE_NAME="bigint"]
         literals -> number_literal_bigint
-        number_literal_bigint -> literals_explicit_cast
+        // number_literal_bigint -> EXIT_literals
 
         number_literal_minus [label="-"]
-        literals_explicit_cast -> number_literal_minus
         number_literal_integer -> number_literal_minus
         number_literal_numeric -> number_literal_minus
+        // number_literal_bigint -> number_literal_minus
         number_literal_minus -> EXIT_literals
+
+        literals_explicit_cast [label="Explicit type cast"]
+        literals_explicit_cast -> EXIT_literals
+        number_literal_bigint -> literals_explicit_cast
+        literals_explicit_cast -> number_literal_minus
 
         text_literal [label="random text literal\ntn(text)", TYPE_NAME="text"]
         literals -> text_literal
@@ -1041,7 +1043,7 @@ digraph G {
     }
 
     subgraph def_timestamp {
-        timestamp [label="timestamp\n[mods]", MODS="[]", shape=rectangle, style=filled, color=cadetblue4]
+        timestamp [label="timestamp\n[mods]", MODS="[]", shape=rectangle, style=filled, color=darkolivegreen]
         EXIT_timestamp [label="EXIT timestamp"]
 
         timestamp_binary [label="Binary op."]
@@ -1158,16 +1160,17 @@ digraph G {
         EXIT_HAVING -> ORDER_BY [color=none]
         EXIT_ORDER_BY -> LIMIT [color=none]
 
+        EXIT_types -> formulas [color=none, weight=10]
+        EXIT_formulas -> literals [color=none, weight=10]
+        EXIT_literals -> column_spec [color=none]
+        EXIT_column_spec -> list_expr[color=none]
+        EXIT_list_expr -> case [color=none]
+
         EXIT_VAL_3 -> number [color=none, weight=10]
         EXIT_number -> text [color=none]
         EXIT_text -> date [color=none]
 
         EXIT_timestamp -> interval [color=none]
         EXIT_interval -> select_datetime_field [color=none]
-
-        EXIT_types -> literals [color=none, weight=10]
-        EXIT_literals -> column_spec [color=none, weight=10]
-        EXIT_column_spec -> list_expr[color=none]
-        EXIT_list_expr -> case [color=none]
     }
 }
