@@ -490,17 +490,6 @@ digraph G {
         types_nested -> call87_types
         call87_types -> EXIT_types
 
-        // types_return_typed_null [label="Typed null\nmod.: 'no typed nulls' -> OFF", modifier="no typed nulls", modifier_mode="off"]
-        // types_select_type_bigint -> types_return_typed_null
-        // types_select_type_integer -> types_return_typed_null
-        // types_select_type_numeric -> types_return_typed_null
-        // types_select_type_3vl -> types_return_typed_null
-        // types_select_type_text -> types_return_typed_null
-        // types_select_type_date -> types_return_typed_null
-        // types_select_type_timestamp -> types_return_typed_null
-        // types_select_type_interval -> types_return_typed_null
-        // types_return_typed_null -> EXIT_types
-
         types_select_special_expression [label="select special expression"]
         types_select_type_bigint -> types_select_special_expression
         types_select_type_integer -> types_select_special_expression
@@ -510,6 +499,10 @@ digraph G {
         types_select_type_date -> types_select_special_expression
         types_select_type_timestamp -> types_select_special_expression
         types_select_type_interval -> types_select_special_expression
+
+        // types_return_typed_null [label="Typed null\n// mod.: 'no typed nulls' -> OFF", modifier="no typed nulls", modifier_mode="off"]
+        // types_select_special_expression -> types_return_typed_null
+        // types_return_typed_null -> EXIT_types
 
         call0_column_spec [TYPES="[known]", MODS="[?group by columns]", modifier="no column spec", modifier_mode="off", call_modifier="is_column_type_available", label="column specifier\nTYPE: known\nMODS: [?group by columns]\nmod.: 'no column spec' -> OFF\ncall.mod.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
         types_select_special_expression -> call0_column_spec

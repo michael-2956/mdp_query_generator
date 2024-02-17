@@ -777,8 +777,23 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             ValueSetterValue::TypesType
         );
         let allowed_type_list = allowed_type_list.selected_types.clone();
+        self.expect_state("types_select_special_expression");
 
+        self.state_generator.set_known_list(allowed_type_list.clone());
         let (selected_type, types_value) = match self.next_state().as_str() {
+            "call0_case" => self.handle_case(),
+            "call0_formulas" => self.handle_formulas(),
+            "call0_literals" => self.handle_literals(),
+            "call0_column_spec" => self.handle_column_spec(),
+            "call0_aggregate_function" => self.handle_aggregate_function(),
+            "call1_Query" => {
+                let (subquery, column_types) = self.handle_query();
+                let selected_type = match column_types.len() {
+                    1 => column_types[0].1.clone(),
+                    any => panic!("Subquery should have selected a single column, but selected {any}. Subquery: {subquery}"),
+                };
+                (selected_type, Expr::Subquery(Box::new(subquery)))
+            },
             "types_return_typed_null" => {
                 let null_type = {
                     let allowed_type_list = allowed_type_list.into_iter()
@@ -792,28 +807,10 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     expr: Box::new(Expr::Value(Value::Null)),
                     data_type: null_type.to_data_type(),
                 })
-            }
-            "types_select_special_expression" => {
-                self.state_generator.set_known_list(allowed_type_list);
-                match self.next_state().as_str() {
-                    "call0_case" => self.handle_case(),
-                    "call0_formulas" => self.handle_formulas(),
-                    "call0_literals" => self.handle_literals(),
-                    "call0_column_spec" => self.handle_column_spec(),
-                    "call0_aggregate_function" => self.handle_aggregate_function(),
-                    "call1_Query" => {
-                        let (subquery, column_types) = self.handle_query();
-                        let selected_type = match column_types.len() {
-                            1 => column_types[0].1.clone(),
-                            any => panic!("Subquery should have selected a single column, but selected {any}. Subquery: {subquery}"),
-                        };
-                        (selected_type, Expr::Subquery(Box::new(subquery)))
-                    },
-                    any => self.panic_unexpected(any)
-                }
             },
             any => self.panic_unexpected(any)
         };
+
         self.expect_state("EXIT_types");
         type_assertion.check(&selected_type, &types_value);
         (selected_type, types_value.nest_children_if_needed())

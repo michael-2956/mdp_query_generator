@@ -8,15 +8,8 @@ call52_types [TYPES="[integer, numeric, bigint]", MODS="[no column spec, no aggr
 limit_num -> call52_types
 call52_types -> EXIT_LIMIT
 
-types_return_typed_null [label="Typed null\\nmod.: 'no typed nulls' -> OFF", modifier="no typed nulls", modifier_mode="off"]
-types_select_type_bigint -> types_return_typed_null
-types_select_type_integer -> types_return_typed_null
-types_select_type_numeric -> types_return_typed_null
-types_select_type_3vl -> types_return_typed_null
-types_select_type_text -> types_return_typed_null
-types_select_type_date -> types_return_typed_null
-types_select_type_timestamp -> types_return_typed_null
-types_select_type_interval -> types_return_typed_null
+types_return_typed_null [label="Typed null\nmod.: 'no typed nulls' -> OFF", modifier="no typed nulls", modifier_mode="off"]
+types_select_special_expression -> types_return_typed_null
 types_return_typed_null -> EXIT_types
 
 set_list_empty_allowed -> set_list

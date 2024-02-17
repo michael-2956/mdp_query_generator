@@ -1074,14 +1074,6 @@ impl PathGenerator {
                 self.try_push_state("types_null")?;
                 SubgraphType::Undetermined
             },
-            Expr::Cast { expr, data_type } if **expr == Expr::Value(Value::Null) => {
-                if continue_after != TypesContinueAfter::None {
-                    return Err(ConvertionError::new(format!(
-                        "Can't continue after {:?}, since expr is {expr}", continue_after
-                    )))
-                }
-                self.handle_types_typed_null(selected_types, data_type)?
-            },
             Expr::Nested(expr) => {
                 self.try_push_states(&["types_nested", "call87_types"])?;
                 self.handle_types_continue_after(expr, TypeAssertion::None, continue_after)?
@@ -1093,26 +1085,6 @@ impl PathGenerator {
         type_assertion.check(&selected_type, expr);
 
         return Ok(selected_type)
-    }
-
-    fn handle_types_typed_null(&mut self, selected_types: Vec<SubgraphType>, data_type: &DataType) -> Result<SubgraphType, ConvertionError> {
-        let null_type = SubgraphType::from_data_type(data_type);
-        if !selected_types.contains(&null_type) {
-            unexpected_subgraph_type!(null_type)
-        }
-        self.try_push_state(match &null_type {
-            SubgraphType::BigInt => "types_select_type_bigint",
-            SubgraphType::Integer => "types_select_type_integer",
-            SubgraphType::Numeric => "types_select_type_numeric",
-            SubgraphType::Val3 => "types_select_type_3vl",
-            SubgraphType::Text => "types_select_type_text",
-            SubgraphType::Date => "types_select_type_date",
-            SubgraphType::Timestamp => "types_select_type_timestamp",
-            SubgraphType::Interval => "types_select_type_interval",
-            any => unexpected_subgraph_type!(any),
-        })?;
-        self.try_push_state("types_return_typed_null")?;
-        Ok(null_type)
     }
 
     fn handle_types_expr(&mut self, selected_types: Vec<SubgraphType>, expr: &Expr, continue_after: TypesContinueAfter) -> Result<SubgraphType, ConvertionError> {
@@ -1171,6 +1143,15 @@ impl PathGenerator {
             self.state_generator.set_known_list(allowed_type_list);
 
             let (tp_res, subgraph_key) = match expr {
+                Expr::Cast { expr, data_type } if **expr == Expr::Value(Value::Null) => {
+                    let null_type = SubgraphType::from_data_type(data_type);
+                    (if *subgraph_type == null_type {
+                        self.try_push_state("types_return_typed_null")?;
+                        Ok(null_type)
+                    } else {
+                        Err(ConvertionError::new(format!("Wrong null type: {subgraph_type} for expr: {expr}::{data_type}")))
+                    }, "typed null")
+                },
                 Expr::Case { .. } => (self.handle_types_expr_case(expr), "CASE"),
                 Expr::Function(function) => (self.handle_types_expr_aggr_function(function), "Aggregate function"),
                 Expr::Subquery(subquery) => (self.handle_types_subquery(subquery), "Subquery"),
