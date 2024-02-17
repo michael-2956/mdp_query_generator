@@ -139,6 +139,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
 
     fn next_state(&mut self) -> SmolStr {
         let next_state = self.next_state_opt().unwrap();
+        // println!("{next_state}");
         if let Some(ref mut model) = self.train_model {
             model.process_state(
                 self.state_generator.call_stack_ref(),
@@ -164,6 +165,13 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     fn expect_states(&mut self, states: &[&str]) {
         for state in states {
             self.expect_state(*state)
+        }
+    }
+
+    fn assert_single_type_argument(&self) {
+        let arg_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
+        if arg_types.len() > 1 {
+            panic!("This subgraph does not accept multiple types as argument. Got: {:?}", arg_types);
         }
     }
 
@@ -789,6 +797,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 self.state_generator.set_known_list(allowed_type_list);
                 match self.next_state().as_str() {
                     "call0_case" => self.handle_case(),
+                    "call0_formulas" => self.handle_formulas(),
                     "call0_literals" => self.handle_literals(),
                     "call0_column_spec" => self.handle_column_spec(),
                     "call0_aggregate_function" => self.handle_aggregate_function(),
@@ -803,6 +812,18 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     any => self.panic_unexpected(any)
                 }
             },
+            any => self.panic_unexpected(any)
+        };
+        self.expect_state("EXIT_types");
+        type_assertion.check(&selected_type, &types_value);
+        (selected_type, types_value.nest_children_if_needed())
+    }
+
+    /// subgraph def_formulas
+    fn handle_formulas(&mut self) -> (SubgraphType, Expr) {
+        self.expect_state("formulas");
+        self.assert_single_type_argument();
+        let (selected_type, types_value) = match self.next_state().as_str() {
             "call2_number" |
             "call1_number" |
             "call0_number" => self.handle_number(),
@@ -813,9 +834,8 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             "call0_interval" => self.handle_interval(),
             any => self.panic_unexpected(any)
         };
-        self.expect_state("EXIT_types");
-        type_assertion.check(&selected_type, &types_value);
-        (selected_type, types_value.nest_children_if_needed())
+        self.expect_state("EXIT_formulas");
+        (selected_type, types_value)
     }
 
     /// subgraph def_literals
@@ -1251,12 +1271,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     /// subgraph def_numeric
     fn handle_number(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("number");
-        if unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList).len() == 2 {
-            todo!(
-                "The number subgraph cannot yet choose between types / perform mixed type \
-                operations / type casts. It only accepts either integer, numeric or bigint, but not both"
-            );
-        }
+        self.assert_single_type_argument();
         let (number_type, number) = match self.next_state().as_str() {
             "BinaryNumberOp" => {
                 self.expect_state("call48_types");
