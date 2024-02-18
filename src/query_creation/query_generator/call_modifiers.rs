@@ -4,7 +4,7 @@ use sqlparser::ast::Ident;
 use core::fmt::Debug;
 use std::collections::BTreeMap;
 
-use crate::{query_creation::state_generator::{CallTypes, markov_chain_generator::{FunctionContext, subgraph_type::SubgraphType}}, unwrap_variant};
+use crate::{query_creation::state_generator::{markov_chain_generator::{markov_chain::CallModifiers, subgraph_type::SubgraphType, FunctionContext}, CallTypes}, unwrap_variant};
 
 use super::query_info::{ClauseContext, IdentName};
 
@@ -60,8 +60,10 @@ pub trait StatefulCallModifier: Debug {
 
 #[derive(Debug, Clone)]
 pub struct IsColumnTypeAvailableValue {
-    /// is available
+    /// ccolumn type is available
     pub is_available: bool,
+    /// can let through in types
+    pub let_through: bool,
 }
 
 impl NamedValue for IsColumnTypeAvailableValue {
@@ -80,15 +82,42 @@ impl ValueSetter for IsColumnTypeAvailableValueSetter {
 
     fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
         let check_group_by = function_context.call_params.modifiers.contains(&SmolStr::new("group by columns"));
-        let argument_types = unwrap_variant!(function_context.call_params.selected_types.clone(), CallTypes::TypeList);
-        ValueSetterValue::IsColumnTypeAvailable(IsColumnTypeAvailableValue {
-            is_available: argument_types.iter().any(|x|
-                if check_group_by {
-                    clause_context.group_by().is_type_available(x)
-                } else {
-                    clause_context.from().is_type_available(x, None)
-                }
-            ),
+        let mut argument_types = unwrap_variant!(function_context.call_params.selected_types.clone(), CallTypes::TypeList);
+        let modifiers = unwrap_variant!(&function_context.call_params.modifiers, CallModifiers::StaticList);
+
+        let selected_type_opt = match function_context.current_node.node_common.name.as_str() {
+            "column_type_available" => None,
+            "types_select_type_bigint" => Some(SubgraphType::BigInt),
+            "types_select_type_integer" => Some(SubgraphType::Integer),
+            "types_select_type_numeric" => Some(SubgraphType::Numeric),
+            "types_select_type_3vl" => Some(SubgraphType::Val3),
+            "types_select_type_text" => Some(SubgraphType::Text),
+            "types_select_type_date" => Some(SubgraphType::Date),
+            "types_select_type_interval" => Some(SubgraphType::Interval),
+            "types_select_type_timestamp" => Some(SubgraphType::Timestamp),
+            any => panic!("{any} unexpectedly triggered the is_column_type_available_val value setter"),
+        };
+
+        if let Some(selected_type) = selected_type_opt {
+            argument_types = SubgraphType::filter_by_selected(&argument_types, selected_type);
+        }
+
+        let is_available = argument_types.iter().any(|x|
+            if check_group_by {
+                clause_context.group_by().is_type_available(x)
+            } else {
+                clause_context.from().is_type_available(x, None)
+            }
+        );
+
+        return ValueSetterValue::IsColumnTypeAvailable(IsColumnTypeAvailableValue {
+            is_available,
+            let_through: is_available || [
+                "no typed nulls", "no subquery", "no literals",
+                "no case", "no formulas",
+            ].into_iter().any(
+                |m| !modifiers.contains(&SmolStr::new(m))
+            )
         })
     }
 }
@@ -98,15 +127,20 @@ pub struct IsColumnTypeAvailableModifier {}
 
 impl StatelessCallModifier for IsColumnTypeAvailableModifier {
     fn get_name(&self) -> SmolStr {
-        SmolStr::new("is_column_type_available")
+        SmolStr::new("is_column_type_available_gate")
     }
 
     fn get_associated_value_name(&self) -> Option<SmolStr> {
         Some(IsColumnTypeAvailableValue::name())
     }
 
-    fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
-        unwrap_variant!(associated_value.unwrap(), ValueSetterValue::IsColumnTypeAvailable).is_available
+    fn run(&self, function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
+        let associated_value = unwrap_variant!(associated_value.unwrap(), ValueSetterValue::IsColumnTypeAvailable);
+        match function_context.current_node.node_common.name.as_str() {
+            "call0_types_value" => associated_value.let_through,
+            "call0_column_spec" => associated_value.is_available,
+            any => panic!("{any} unexpectedly triggered the is_column_type_available modifier"),
+        }
     }
 }
 
