@@ -8,9 +8,9 @@ call52_types [TYPES="[integer, numeric, bigint]", MODS="[no column spec, no aggr
 limit_num -> call52_types
 call52_types -> EXIT_LIMIT
 
-types_return_typed_null [label="Typed null\nmod.: 'no typed nulls' -> OFF", modifier="no typed nulls", modifier_mode="off"]
-types_select_special_expression -> types_return_typed_null
-types_return_typed_null -> EXIT_types
+types_value_typed_null [label="Typed null\nmod.: 'no typed nulls' -> OFF", modifier="no typed nulls", modifier_mode="off"]
+types_value -> types_value_typed_null
+types_value_typed_null -> EXIT_types_value
 
 set_list_empty_allowed -> set_list
 

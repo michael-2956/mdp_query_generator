@@ -1071,11 +1071,11 @@ impl PathGenerator {
         let selected_type = match expr {
             Expr::Value(Value::Null) => {
                 // todo: if this is on, we can now actually maybe continue_after and try different types?
-                self.try_push_state("types_null")?;
+                self.try_push_state("types_value_null")?;
                 SubgraphType::Undetermined
             },
             Expr::Nested(expr) => {
-                self.try_push_states(&["types_nested", "call87_types"])?;
+                self.try_push_states(&["types_value_nested", "call87_types"])?;
                 self.handle_types_continue_after(expr, TypeAssertion::None, continue_after)?
             },
             expr => self.handle_types_expr(selected_types, expr, continue_after)?,
@@ -1146,7 +1146,7 @@ impl PathGenerator {
                 Expr::Cast { expr, data_type } if **expr == Expr::Value(Value::Null) => {
                     let null_type = SubgraphType::from_data_type(data_type);
                     (if *subgraph_type == null_type {
-                        self.try_push_state("types_return_typed_null")?;
+                        self.try_push_state("types_value_typed_null")?;
                         Ok(null_type)
                     } else {
                         Err(ConvertionError::new(format!("Wrong null type: {subgraph_type} for expr: {expr}::{data_type}")))

@@ -759,11 +759,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             "types_select_type_date" |
             "types_select_type_timestamp" |
             "types_select_type_interval" => {},
-            "types_null" => {
+            "types_value_null" => {
                 self.expect_state("EXIT_types");
                 return (SubgraphType::Undetermined, Expr::Value(Value::Null));
             },
-            "types_nested" => {
+            "types_value_nested" => {
                 self.expect_state("call87_types");
                 let (tp, expr) = self.handle_types(type_assertion);
                 self.expect_state("EXIT_types");
@@ -772,15 +772,43 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             any => self.panic_unexpected(any),
         };
 
-        let allowed_type_list = unwrap_variant!(
+        self.state_generator.set_known_list(unwrap_variant!(
             self.state_generator.get_named_value::<TypesTypeValue>().unwrap(),
             ValueSetterValue::TypesType
-        );
-        let allowed_type_list = allowed_type_list.selected_types.clone();
-        self.expect_state("types_select_special_expression");
+        ).selected_types.clone());
+        self.expect_state("call0_types_value");
+        let (selected_type, types_value) = self.handle_types_value(type_assertion);
+        self.expect_state("EXIT_types");
+        (selected_type, types_value.nest_children_if_needed())
+    }
 
-        self.state_generator.set_known_list(allowed_type_list.clone());
+    /// subgraph def_types_value
+    fn handle_types_value(&mut self, type_assertion: TypeAssertion) -> (SubgraphType, Expr) {
+        self.expect_state("types_value");
+        let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
         let (selected_type, types_value) = match self.next_state().as_str() {
+            "types_value_nested" => {
+                self.expect_state("call87_types");
+                let (tp, expr) = self.handle_types(TypeAssertion::None);
+                (tp, Expr::Nested(Box::new(expr)))
+            },
+            "types_value_null" => {
+                (SubgraphType::Undetermined, Expr::Value(Value::Null))
+            },
+            "types_value_typed_null" => {
+                let null_type = {
+                    let types_without_inner = selected_types.into_iter()
+                        .filter(|x| !x.has_inner()).collect::<Vec<_>>();
+                    match types_without_inner.as_slice() {
+                        [tp] => tp.clone(),
+                        any => panic!("allowed_type_list must have single element here (got {:?})", any)
+                    }
+                };
+                (null_type.clone(), Expr::Cast {
+                    expr: Box::new(Expr::Value(Value::Null)),
+                    data_type: null_type.to_data_type(),
+                })
+            },
             "call0_case" => self.handle_case(),
             "call0_formulas" => self.handle_formulas(),
             "call0_literals" => self.handle_literals(),
@@ -794,26 +822,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 };
                 (selected_type, Expr::Subquery(Box::new(subquery)))
             },
-            "types_return_typed_null" => {
-                let null_type = {
-                    let allowed_type_list = allowed_type_list.into_iter()
-                        .filter(|x| !x.has_inner()).collect::<Vec<_>>();
-                    match allowed_type_list.as_slice() {
-                        [tp] => tp.clone(),
-                        any => panic!("allowed_type_list must have single element here (got {:?})", any)
-                    }
-                };
-                (null_type.clone(), Expr::Cast {
-                    expr: Box::new(Expr::Value(Value::Null)),
-                    data_type: null_type.to_data_type(),
-                })
-            },
-            any => self.panic_unexpected(any)
+            any => self.panic_unexpected(any),
         };
-
-        self.expect_state("EXIT_types");
         type_assertion.check(&selected_type, &types_value);
-        (selected_type, types_value.nest_children_if_needed())
+        self.expect_state("EXIT_types_value");
+        (selected_type, types_value)
     }
 
     /// subgraph def_formulas

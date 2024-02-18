@@ -357,7 +357,7 @@ impl DeterministicStateChooser {
                     any => self.panic_unexpected(any)
                 })
             },
-            "types_null" => (TypesSelectedType::Any, Expr::Value(Value::Null)),
+            "types_value_null" => (TypesSelectedType::Any, Expr::Value(Value::Null)),
             "call0_numeric" => (TypesSelectedType::Numeric, self.process_numeric()),
             "call1_VAL_3" => (TypesSelectedType::Val3, self.process_val_3()),
             "call0_string" => (TypesSelectedType::String, self.process_string()),

@@ -463,70 +463,83 @@ digraph G {
         types [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[no nesting, no literals, no case, no formulas, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no aggregate]", label="TYPE(S) (generic):\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[no nesting, no literals, no case, no formulas, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
+        call0_types_value [TYPES="[known]", MODS="[...]", label="Types value\nTYPES: [known]\nMODS: [...]", shape=rectangle, style=filled, color=orange]
+        call0_types_value -> EXIT_types
+
         types_select_type_bigint[TYPE_NAME="bigint", label="bigint?", set_value="types_type"]
         types -> types_select_type_bigint
+        types_select_type_bigint -> call0_types_value
+
         types_select_type_integer[TYPE_NAME="integer", label="integer?", set_value="types_type"]
         types -> types_select_type_integer
+        types_select_type_integer -> call0_types_value
+
         types_select_type_numeric[TYPE_NAME="numeric", label="numeric?", set_value="types_type"]
         types -> types_select_type_numeric
+        types_select_type_numeric -> call0_types_value
+
         types_select_type_3vl[TYPE_NAME="3VL Value", label="3VL Value?", set_value="types_type"]
         types -> types_select_type_3vl
+        types_select_type_3vl -> call0_types_value
+
         types_select_type_text[TYPE_NAME="text", label="text?", set_value="types_type"]
         types -> types_select_type_text
+        types_select_type_text -> call0_types_value
+
         types_select_type_date[TYPE_NAME="date", label="date?", set_value="types_type"]
         types -> types_select_type_date
+        types_select_type_date -> call0_types_value
+
         types_select_type_timestamp[TYPE_NAME="timestamp", label="timestamp?", set_value="types_type"]
         types -> types_select_type_timestamp
+        types_select_type_timestamp -> call0_types_value
+
         types_select_type_interval[TYPE_NAME="interval", label="interval?", set_value="types_type"]
         types -> types_select_type_interval
+        types_select_type_interval -> call0_types_value
+    }
 
-        types_null [label="Untyped null\nmod.: 'enable untyped null' -> ON", modifier="enable untyped null", modifier_mode="on"]
-        types -> types_null
-        types_null -> EXIT_types
+    subgraph def_types_value {
+        types_value [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[no nesting, no literals, no case, no formulas, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no aggregate]", label="Types value\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[no nesting, no literals, no case, no formulas, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=rectangle, style=filled, color=orange]
+        EXIT_types_value [shape=rectangle]
 
-        types_nested [label="(nested)\nmod.: 'no nesting' -> OFF", modifier="no nesting", modifier_mode="off"]
-        types -> types_nested
-        call87_types [TYPES="[...]", MODS="[...]", label="TYPES: [...]\nMODS: [...]", shape=rectangle, style=filled, color=lightblue]
-        types_nested -> call87_types
-        call87_types -> EXIT_types
+        types_value_nested [label="(nested)\nmod.: 'no nesting' -> OFF", modifier="no nesting", modifier_mode="off"]
+        types_value -> types_value_nested
+        call1_types_value [TYPES="[...]", MODS="[...]", label="Types value\nTYPES: [...]\nMODS: [...]", shape=rectangle, style=filled, color=orange]
+        types_value_nested -> call1_types_value
+        call1_types_value -> EXIT_types_value
 
-        types_select_special_expression [label="select special expression"]
-        types_select_type_bigint -> types_select_special_expression
-        types_select_type_integer -> types_select_special_expression
-        types_select_type_numeric -> types_select_special_expression
-        types_select_type_3vl -> types_select_special_expression
-        types_select_type_text -> types_select_special_expression
-        types_select_type_date -> types_select_special_expression
-        types_select_type_timestamp -> types_select_special_expression
-        types_select_type_interval -> types_select_special_expression
+        types_value_null [label="Untyped null\nmod.: 'enable untyped null' -> ON", modifier="enable untyped null", modifier_mode="on"]
+        types_value -> types_value_null
+        types_value_null -> EXIT_types_value
 
-        // types_return_typed_null [label="Typed null\n// mod.: 'no typed nulls' -> OFF", modifier="no typed nulls", modifier_mode="off"]
-        // types_select_special_expression -> types_return_typed_null
-        // types_return_typed_null -> EXIT_types
+        // types_value_typed_null [label="Typed null\n// mod.: 'no typed nulls' -> OFF", modifier="no typed nulls", modifier_mode="off"]
+        // types_value -> types_value_typed_null
+        // types_value_typed_null -> EXIT_types_value
 
         call0_column_spec [TYPES="[known]", MODS="[?group by columns]", modifier="no column spec", modifier_mode="off", call_modifier="is_column_type_available", label="column specifier\nTYPE: known\nMODS: [?group by columns]\nmod.: 'no column spec' -> OFF\ncall.mod.: 'is_column_type_available'", shape=rectangle, style=filled, color=gold]
-        types_select_special_expression -> call0_column_spec
-        call0_column_spec -> EXIT_types
+        types_value -> call0_column_spec
+        call0_column_spec -> EXIT_types_value
 
         call1_Query [TYPES="[known]", MODS="[single row, single column]", label="Query\nMODS: [single row, single column]\nTYPE: known\nmod.: 'no subquery' -> OFF", modifier="no subquery", modifier_mode="off", shape=rectangle, style=filled, color=green]
-        types_select_special_expression -> call1_Query
-        call1_Query -> EXIT_types
+        types_value -> call1_Query
+        call1_Query -> EXIT_types_value
 
         call0_aggregate_function [TYPES="[known]", modifier="no aggregate", modifier_mode="off", label="Aggregate function\nTYPE: known\nmod.: 'no aggregate' -> OFF", shape=rectangle, style=filled, color=peru]
-        types_select_special_expression -> call0_aggregate_function
-        call0_aggregate_function -> EXIT_types
+        types_value -> call0_aggregate_function
+        call0_aggregate_function -> EXIT_types_value
 
         call0_case [TYPES="[known]", MODS="[..., -no literals]", modifier="no case", modifier_mode="off", label="CASE\nTYPE: known\nMODS: [..., -no literals]\nmod.: 'no case' -> OFF", shape=rectangle, style=filled, color=aquamarine]
-        types_select_special_expression -> call0_case
-        call0_case -> EXIT_types
+        types_value -> call0_case
+        call0_case -> EXIT_types_value
 
         call0_literals [TYPES="[known]", modifier="no literals", modifier_mode="off", label="Literals\nTYPE: known\nmod.: 'no literals' -> OFF", shape=rectangle, style=filled, color=hotpink]
-        types_select_special_expression -> call0_literals
-        call0_literals -> EXIT_types
+        types_value -> call0_literals
+        call0_literals -> EXIT_types_value
 
         call0_formulas [TYPES="[known]", MODS="[..., -no literals]", modifier="no formulas", modifier_mode="off", label="Formulas\nTYPES: [known]\nMODS: [..., -no literals]\nmod.: 'no formulas' -> OFF", shape=rectangle, style=filled, color=darkcyan]
-        types_select_special_expression -> call0_formulas
-        call0_formulas -> EXIT_types
+        types_value -> call0_formulas
+        call0_formulas -> EXIT_types_value
     }
 
     subgraph def_formulas {
@@ -1153,8 +1166,9 @@ digraph G {
         EXIT_HAVING -> ORDER_BY [color=none]
         EXIT_ORDER_BY -> LIMIT [color=none]
 
-        EXIT_types -> formulas [color=none, weight=10]
-        EXIT_formulas -> literals [color=none, weight=10]
+        EXIT_types -> types_value [color=none, weight=10]
+        EXIT_types_value -> formulas [color=none, weight=10]
+        EXIT_formulas -> literals [color=none]
         EXIT_literals -> column_spec [color=none]
         EXIT_column_spec -> list_expr[color=none]
         EXIT_list_expr -> case [color=none]

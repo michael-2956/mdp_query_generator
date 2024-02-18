@@ -1805,29 +1805,29 @@
 <path fill="none" stroke="black" d="M1984.42,-4671.59C1991.26,-4658.97 1998.53,-4645.57 2004.62,-4634.32"/>
 <polygon fill="black" stroke="black" points="2008.16,-4636.14 2009.85,-4625.68 2002.01,-4632.8 2008.16,-4636.14"/>
 </g>
-<!-- types_null -->
+<!-- types_value_null -->
 <g id="node123" class="node">
-<title>types_null</title>
+<title>types_value_null</title>
 <ellipse fill="none" stroke="black" cx="1425" cy="-4512.82" rx="143.9" ry="28.99"/>
 <text text-anchor="middle" x="1425" y="-4516.02" font-family="Times,serif" font-size="14.00">Untyped null</text>
 <text text-anchor="middle" x="1425" y="-4499.52" font-family="Times,serif" font-size="14.00">mod.: &#39;enable untyped null&#39; &#45;&gt; ON</text>
 </g>
-<!-- types&#45;&gt;types_null -->
+<!-- types&#45;&gt;types_value_null -->
 <g id="edge162" class="edge">
-<title>types&#45;&gt;types_null</title>
+<title>types&#45;&gt;types_value_null</title>
 <path fill="none" stroke="black" d="M1559.81,-4682.82C1507.34,-4671.56 1464.62,-4656.35 1444,-4635.79 1422.66,-4614.51 1419.03,-4579.8 1420.09,-4552.84"/>
 <polygon fill="black" stroke="black" points="1423.63,-4553.4 1420.77,-4543.19 1416.64,-4552.95 1423.63,-4553.4"/>
 </g>
-<!-- types_nested -->
+<!-- types_value_nested -->
 <g id="node124" class="node">
-<title>types_nested</title>
+<title>types_value_nested</title>
 <ellipse fill="none" stroke="black" cx="1565" cy="-4606.8" rx="111.55" ry="28.99"/>
 <text text-anchor="middle" x="1565" y="-4610" font-family="Times,serif" font-size="14.00">(nested)</text>
 <text text-anchor="middle" x="1565" y="-4593.5" font-family="Times,serif" font-size="14.00">mod.: &#39;no nesting&#39; &#45;&gt; OFF</text>
 </g>
-<!-- types&#45;&gt;types_nested -->
+<!-- types&#45;&gt;types_value_nested -->
 <g id="edge164" class="edge">
-<title>types&#45;&gt;types_nested</title>
+<title>types&#45;&gt;types_value_nested</title>
 <path fill="none" stroke="black" d="M1800.22,-4671.35C1749.44,-4657.64 1695.29,-4643 1651.75,-4631.24"/>
 <polygon fill="black" stroke="black" points="1652.77,-4627.62 1642.21,-4628.39 1650.95,-4634.38 1652.77,-4627.62"/>
 </g>
@@ -1851,16 +1851,16 @@
 <path fill="none" stroke="none" d="M1941,-4282.57C1941,-4274.7 1941,-4265.03 1941,-4255.55"/>
 <polygon fill="none" stroke="none" points="1944.5,-4255.62 1941,-4245.62 1937.5,-4255.62 1944.5,-4255.62"/>
 </g>
-<!-- types_return_typed_null -->
+<!-- types_value_typed_null -->
 <g id="node126" class="node">
-<title>types_return_typed_null</title>
+<title>types_value_typed_null</title>
 <ellipse fill="none" stroke="black" cx="1903" cy="-4512.82" rx="126.4" ry="28.99"/>
 <text text-anchor="middle" x="1903" y="-4516.02" font-family="Times,serif" font-size="14.00">Typed null</text>
 <text text-anchor="middle" x="1903" y="-4499.52" font-family="Times,serif" font-size="14.00">mod.: &#39;no typed nulls&#39; &#45;&gt; OFF</text>
 </g>
-<!-- types_select_type_bigint&#45;&gt;types_return_typed_null -->
+<!-- types_select_type_bigint&#45;&gt;types_value_typed_null -->
 <g id="edge167" class="edge">
-<title>types_select_type_bigint&#45;&gt;types_return_typed_null</title>
+<title>types_select_type_bigint&#45;&gt;types_value_typed_null</title>
 <path fill="none" stroke="black" d="M2095.93,-4591.86C2088.25,-4587.09 2079.4,-4581.92 2071,-4577.81 2043.16,-4564.18 2011.64,-4551.49 1983.49,-4541.07"/>
 <polygon fill="black" stroke="black" points="1984.87,-4537.49 1974.28,-4537.34 1982.47,-4544.06 1984.87,-4537.49"/>
 </g>
@@ -1876,9 +1876,9 @@
 <path fill="none" stroke="black" d="M2122.87,-4588.93C2127.5,-4575.61 2134.06,-4556.76 2139.45,-4541.28"/>
 <polygon fill="black" stroke="black" points="2142.97,-4542.8 2142.95,-4532.2 2136.36,-4540.5 2142.97,-4542.8"/>
 </g>
-<!-- types_select_type_integer&#45;&gt;types_return_typed_null -->
+<!-- types_select_type_integer&#45;&gt;types_value_typed_null -->
 <g id="edge168" class="edge">
-<title>types_select_type_integer&#45;&gt;types_return_typed_null</title>
+<title>types_select_type_integer&#45;&gt;types_value_typed_null</title>
 <path fill="none" stroke="black" d="M2189.72,-4591.33C2181.56,-4586.51 2172.1,-4581.44 2163,-4577.81 2134.14,-4566.27 2064.49,-4549.33 2004.54,-4535.77"/>
 <polygon fill="black" stroke="black" points="2005.38,-4532.15 1994.85,-4533.37 2003.84,-4538.98 2005.38,-4532.15"/>
 </g>
@@ -1888,9 +1888,9 @@
 <path fill="none" stroke="black" d="M2200.74,-4589.35C2191.33,-4575.62 2177.74,-4555.78 2166.85,-4539.88"/>
 <polygon fill="black" stroke="black" points="2169.35,-4538.33 2160.81,-4532.05 2163.57,-4542.28 2169.35,-4538.33"/>
 </g>
-<!-- types_select_type_numeric&#45;&gt;types_return_typed_null -->
+<!-- types_select_type_numeric&#45;&gt;types_value_typed_null -->
 <g id="edge169" class="edge">
-<title>types_select_type_numeric&#45;&gt;types_return_typed_null</title>
+<title>types_select_type_numeric&#45;&gt;types_value_typed_null</title>
 <path fill="none" stroke="black" d="M2291.72,-4591.12C2282.67,-4586.21 2272.13,-4581.15 2262,-4577.81 2166.25,-4546.2 2137.17,-4560.05 2038,-4541.81 2027.21,-4539.82 2015.95,-4537.65 2004.74,-4535.42"/>
 <polygon fill="black" stroke="black" points="2005.52,-4531.81 1995.03,-4533.27 2004.14,-4538.67 2005.52,-4531.81"/>
 </g>
@@ -1900,9 +1900,9 @@
 <path fill="none" stroke="black" d="M2290.27,-4591.63C2263.08,-4576.65 2219.84,-4552.83 2188.36,-4535.49"/>
 <polygon fill="black" stroke="black" points="2190.44,-4532.1 2179.99,-4530.34 2187.07,-4538.23 2190.44,-4532.1"/>
 </g>
-<!-- types_select_type_3vl&#45;&gt;types_return_typed_null -->
+<!-- types_select_type_3vl&#45;&gt;types_value_typed_null -->
 <g id="edge170" class="edge">
-<title>types_select_type_3vl&#45;&gt;types_return_typed_null</title>
+<title>types_select_type_3vl&#45;&gt;types_value_typed_null</title>
 <path fill="none" stroke="black" d="M2406.36,-4591.05C2395.54,-4586.08 2382.95,-4580.99 2371,-4577.81 2227.14,-4539.54 2185.05,-4564.95 2038,-4541.81 2026.69,-4540.03 2014.88,-4537.93 2003.17,-4535.71"/>
 <polygon fill="black" stroke="black" points="2003.94,-4532.1 1993.46,-4533.63 2002.61,-4538.97 2003.94,-4532.1"/>
 </g>
@@ -1912,9 +1912,9 @@
 <path fill="none" stroke="black" d="M2404.41,-4591.44C2393.93,-4586.79 2382.06,-4581.8 2371,-4577.81 2320.01,-4559.4 2260.97,-4542.59 2216.61,-4530.82"/>
 <polygon fill="black" stroke="black" points="2217.79,-4527.25 2207.23,-4528.09 2216.01,-4534.02 2217.79,-4527.25"/>
 </g>
-<!-- types_select_type_text&#45;&gt;types_return_typed_null -->
+<!-- types_select_type_text&#45;&gt;types_value_typed_null -->
 <g id="edge171" class="edge">
-<title>types_select_type_text&#45;&gt;types_return_typed_null</title>
+<title>types_select_type_text&#45;&gt;types_value_typed_null</title>
 <path fill="none" stroke="black" d="M1740.26,-4591.89C1746.58,-4587.12 1753.93,-4581.94 1761,-4577.81 1782.96,-4564.97 1807.96,-4552.92 1830.79,-4542.82"/>
 <polygon fill="black" stroke="black" points="1832.01,-4545.67 1839.77,-4538.47 1829.21,-4539.26 1832.01,-4545.67"/>
 </g>
@@ -1924,9 +1924,9 @@
 <path fill="none" stroke="black" d="M1738.92,-4591.27C1745.34,-4586.2 1753.09,-4580.98 1761,-4577.81 1876.2,-4531.52 1916.04,-4565.03 2038,-4541.81 2053.47,-4538.86 2069.99,-4535.06 2085.43,-4531.21"/>
 <polygon fill="black" stroke="black" points="2086.1,-4534.4 2094.93,-4528.55 2084.38,-4527.62 2086.1,-4534.4"/>
 </g>
-<!-- types_select_type_date&#45;&gt;types_return_typed_null -->
+<!-- types_select_type_date&#45;&gt;types_value_typed_null -->
 <g id="edge172" class="edge">
-<title>types_select_type_date&#45;&gt;types_return_typed_null</title>
+<title>types_select_type_date&#45;&gt;types_value_typed_null</title>
 <path fill="none" stroke="black" d="M1816.09,-4591.43C1828.93,-4579.96 1847.45,-4563.42 1864.11,-4548.55"/>
 <polygon fill="black" stroke="black" points="1865.97,-4551.68 1871.1,-4542.41 1861.31,-4546.46 1865.97,-4551.68"/>
 </g>
@@ -1936,9 +1936,9 @@
 <path fill="none" stroke="black" d="M1816.95,-4591.5C1823.74,-4586.46 1831.86,-4581.2 1840,-4577.81 1922.55,-4543.37 1950.59,-4560.75 2038,-4541.81 2052.77,-4538.61 2068.56,-4534.84 2083.46,-4531.12"/>
 <polygon fill="black" stroke="black" points="2084.28,-4534.27 2093.12,-4528.43 2082.57,-4527.48 2084.28,-4534.27"/>
 </g>
-<!-- types_select_type_timestamp&#45;&gt;types_return_typed_null -->
+<!-- types_select_type_timestamp&#45;&gt;types_value_typed_null -->
 <g id="edge173" class="edge">
-<title>types_select_type_timestamp&#45;&gt;types_return_typed_null</title>
+<title>types_select_type_timestamp&#45;&gt;types_value_typed_null</title>
 <path fill="none" stroke="black" d="M1903,-4588.5C1903,-4578.43 1903,-4565.32 1903,-4552.9"/>
 <polygon fill="black" stroke="black" points="1906.5,-4553.25 1903,-4543.25 1899.5,-4553.25 1906.5,-4553.25"/>
 </g>
@@ -1948,9 +1948,9 @@
 <path fill="none" stroke="black" d="M1934.06,-4591.66C1944.46,-4587.08 1956.17,-4582.07 1967,-4577.81 2008.41,-4561.5 2055.87,-4544.88 2091.94,-4532.66"/>
 <polygon fill="black" stroke="black" points="2092.91,-4535.69 2101.27,-4529.18 2090.68,-4529.06 2092.91,-4535.69"/>
 </g>
-<!-- types_select_type_interval&#45;&gt;types_return_typed_null -->
+<!-- types_select_type_interval&#45;&gt;types_value_typed_null -->
 <g id="edge174" class="edge">
-<title>types_select_type_interval&#45;&gt;types_return_typed_null</title>
+<title>types_select_type_interval&#45;&gt;types_value_typed_null</title>
 <path fill="none" stroke="black" d="M1999.58,-4590.4C1984.93,-4578.78 1964.26,-4562.39 1945.8,-4547.76"/>
 <polygon fill="black" stroke="black" points="1948.52,-4544.65 1938.51,-4541.18 1944.17,-4550.13 1948.52,-4544.65"/>
 </g>
@@ -1960,9 +1960,9 @@
 <path fill="none" stroke="black" d="M2040.18,-4590.81C2060.85,-4576.19 2092.58,-4553.73 2116.46,-4536.84"/>
 <polygon fill="black" stroke="black" points="2118.05,-4539.3 2124.19,-4530.66 2114,-4533.58 2118.05,-4539.3"/>
 </g>
-<!-- types_null&#45;&gt;EXIT_types -->
+<!-- types_value_null&#45;&gt;EXIT_types -->
 <g id="edge163" class="edge">
-<title>types_null&#45;&gt;EXIT_types</title>
+<title>types_value_null&#45;&gt;EXIT_types</title>
 <path fill="none" stroke="black" d="M1451.92,-4483.91C1487.86,-4448.45 1555.16,-4388.16 1625,-4357.32 1696.44,-4325.78 1784.4,-4312.14 1849.37,-4306.26"/>
 <polygon fill="black" stroke="black" points="1849.33,-4309.69 1859,-4305.34 1848.73,-4302.71 1849.33,-4309.69"/>
 </g>
@@ -1973,9 +1973,9 @@
 <text text-anchor="middle" x="1629" y="-4516.02" font-family="Times,serif" font-size="14.00">TYPES: [...]</text>
 <text text-anchor="middle" x="1629" y="-4499.52" font-family="Times,serif" font-size="14.00">MODS: [...]</text>
 </g>
-<!-- types_nested&#45;&gt;call87_types -->
+<!-- types_value_nested&#45;&gt;call87_types -->
 <g id="edge165" class="edge">
-<title>types_nested&#45;&gt;call87_types</title>
+<title>types_value_nested&#45;&gt;call87_types</title>
 <path fill="none" stroke="black" d="M1584.2,-4578.2C1592.05,-4566.93 1601.12,-4553.89 1609.04,-4542.5"/>
 <polygon fill="black" stroke="black" points="1612.26,-4545 1615.1,-4534.79 1606.51,-4541 1612.26,-4545"/>
 </g>
@@ -1985,9 +1985,9 @@
 <path fill="none" stroke="black" d="M1627.23,-4492.02C1625.48,-4459.11 1627.18,-4393.23 1664,-4357.32 1690.05,-4331.92 1778.96,-4317.32 1849.11,-4309.53"/>
 <polygon fill="black" stroke="black" points="1849.19,-4312.94 1858.76,-4308.39 1848.44,-4305.98 1849.19,-4312.94"/>
 </g>
-<!-- types_return_typed_null&#45;&gt;EXIT_types -->
+<!-- types_value_typed_null&#45;&gt;EXIT_types -->
 <g id="edge175" class="edge">
-<title>types_return_typed_null&#45;&gt;EXIT_types</title>
+<title>types_value_typed_null&#45;&gt;EXIT_types</title>
 <path fill="none" stroke="black" d="M1803.72,-4494.47C1753.83,-4483.52 1700.85,-4467.68 1686,-4447.82 1661.91,-4415.61 1660.76,-4388.64 1686,-4357.32 1706.5,-4331.88 1784.83,-4317.49 1849.33,-4309.78"/>
 <polygon fill="black" stroke="black" points="1849.43,-4313.17 1858.96,-4308.55 1848.63,-4306.22 1849.43,-4313.17"/>
 </g>

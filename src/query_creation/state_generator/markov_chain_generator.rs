@@ -635,9 +635,9 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
     /// used to print the call stack of the markov chain functions
     pub fn print_stack(&self) {
-        println!("Call stack:");
+        eprintln!("Call stack:");
         for stack_item in &self.call_stack {
-            println!("{} ({:?} | {:?}) [{}]:", stack_item.function_context.call_params.func_name, stack_item.function_context.call_params.selected_types, stack_item.function_context.call_params.modifiers, stack_item.function_context.current_node.node_common.name)
+            eprintln!("{} ({:?} | {:?}) [{}]:", stack_item.function_context.call_params.func_name, stack_item.function_context.call_params.selected_types, stack_item.function_context.call_params.modifiers, stack_item.function_context.current_node.node_common.name)
         }
     }
 

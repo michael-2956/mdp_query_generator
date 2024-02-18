@@ -865,7 +865,7 @@ impl QueryGenerator {
     fn handle_types(&mut self, info: &mut QueryInfo) {
         match self.next_state().as_str() {
             "types_select_type" => self.handle_types_select_type(info),
-            "types_null" => {
+            "types_value_null" => {
                 push_var!(info, TypesSelectedType, TypesSelectedType::Any);
                 push_var!(info, TypesValue, Expr::Value(Value::Null));
             },
