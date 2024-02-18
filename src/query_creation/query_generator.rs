@@ -352,7 +352,10 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             from.push(TableWithJoins { relation: match self.next_state().as_str() {
                 "FROM_table" => self.handle_from_table(),
                 "call0_Query" => self.handle_from_query(),
-                "EXIT_FROM" => break,
+                "EXIT_FROM" => {
+                    self.clause_context.from_mut().delete_subfrom();
+                    break
+                },
                 any => self.panic_unexpected(any)
             }, joins: vec![] });
 
