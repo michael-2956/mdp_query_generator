@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, fmt, io::Write, path::PathBuf, str::FromStr};
+use std::{error::Error, fmt, io::Write, path::PathBuf, str::FromStr};
 
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -86,7 +86,7 @@ impl Error for ConvertionError { }
 
 impl fmt::Display for ConvertionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "AST to path convertion error: {}", self.reason)
+        write!(f, "AST to path convertion error:\n{}", self.reason.clone().get_indentated_string())
     }
 }
 
@@ -95,6 +95,26 @@ impl ConvertionError {
         Self {
             reason
         }
+    }
+}
+
+trait GetIndentated {
+    fn get_indentated_string(self) -> String;
+}
+
+impl GetIndentated for ConvertionError {
+    fn get_indentated_string(self) -> String {
+        let mut s = format!("  {self}");
+        s = s.replace("\n", "\n  ");
+        s
+    }
+}
+
+impl GetIndentated for String {
+    fn get_indentated_string(self) -> String {
+        let mut s = format!("  {self}");
+        s = s.replace("\n", "\n  ");
+        s
     }
 }
 
@@ -159,7 +179,7 @@ impl PathGenerator {
             Ok(..) => { },
             Err(err) => {
                 return Err(ConvertionError::new(format!(
-                    "Error converting query:\n{query}\nError:\n{err}"
+                    "Error converting query:\n{query}\nError: {err}"
                 )))
             },
         };
@@ -181,22 +201,6 @@ macro_rules! unexpected_subgraph_type {
     ($el: expr) => {{
         return Err(ConvertionError::new(format!("Unexpected subgraph type: {:#?}", $el)))
     }};
-}
-
-fn add_error(error_mem: &mut HashMap<String, Vec<(SubgraphType, ConvertionError)>>, key: &str, graph_type: SubgraphType, error: ConvertionError) {
-    error_mem.entry(key.to_string()).or_insert(vec![]).push((graph_type, error));
-}
-
-fn get_errors_str(error_mem: &HashMap<String, Vec<(SubgraphType, ConvertionError)>>) -> String {
-    error_mem.iter().fold(String::new(), |mut acc, x| {
-        acc += format!(
-            "\n\"{}\" ======> {}\n", x.0, x.1.iter().fold(String::new(), |mut acc, y| {
-                acc += format!("{:?}: {}\n", y.0, y.1).as_str();
-                acc
-            })
-        ).as_str();
-        acc
-    })
 }
 
 struct Checkpoint {
@@ -1088,7 +1092,7 @@ impl PathGenerator {
     }
 
     fn handle_types_expr(&mut self, selected_types: Vec<SubgraphType>, expr: &Expr, continue_after: TypesContinueAfter) -> Result<SubgraphType, ConvertionError> {
-        let mut error_mem: HashMap<String, Vec<(SubgraphType, ConvertionError)>> = HashMap::new();
+        let mut err_str = "".to_string();
         let types_before_state_selection = self.get_checkpoint();
         let selected_types = SubgraphType::sort_by_compatibility(selected_types);
         let mut selected_types_iter = selected_types.iter();
@@ -1108,8 +1112,8 @@ impl PathGenerator {
                 None => return Err(ConvertionError::new(
                     format!(
                         "Types didn't find a suitable type for expression, among:\n{:#?}\n\
-                        Expression:\n{:#?}\nPrinted: {}\nErrors: {}\n",
-                        selected_types, expr, expr, get_errors_str(&error_mem)
+                        Expression:\n{:#?}\nPrinted: {expr}\nErrors:\n{}\n",
+                        selected_types, expr, err_str.get_indentated_string()
                     )
                 )),
             };
@@ -1127,74 +1131,95 @@ impl PathGenerator {
             }) {
                 Ok(_) => {},
                 Err(err) => {
-                    add_error(&mut error_mem, "Type not allowed", subgraph_type.clone(), err);
+                    err_str += format!("{subgraph_type} => is not allowed (err: {err})\n").as_str();
                     self.restore_checkpoint(&types_before_state_selection);
                     continue;
                 },
             };
-
             let allowed_type_list = SubgraphType::filter_by_selected(&selected_types, subgraph_type.clone());
-
-            self.try_push_state("types_select_special_expression")?;
 
             self.state_generator.set_known_list(allowed_type_list);
 
-            let (tp_res, subgraph_key) = match expr {
-                Expr::Cast { expr, data_type } if **expr == Expr::Value(Value::Null) => {
-                    let null_type = SubgraphType::from_data_type(data_type);
-                    (if *subgraph_type == null_type {
-                        self.try_push_state("types_value_typed_null")?;
-                        Ok(null_type)
-                    } else {
-                        Err(ConvertionError::new(format!("Wrong null type: {subgraph_type} for expr: {expr}::{data_type}")))
-                    }, "typed null")
-                },
-                Expr::Case { .. } => (self.handle_types_expr_case(expr), "CASE"),
-                Expr::Function(function) => (self.handle_types_expr_aggr_function(function), "Aggregate function"),
-                Expr::Subquery(subquery) => (self.handle_types_subquery(subquery), "Subquery"),
-                expr => {
-                    let types_after_state_selection = self.get_checkpoint();
-                    let handlers: Vec<(Box<dyn FnMut(&mut PathGenerator) -> Result<SubgraphType, ConvertionError>>, &str)> = vec![
-                        (Box::new(|_self| _self.handle_types_column_expr(expr)), "column identifier"),
-                        (Box::new(|_self| _self.handle_types_literals(expr)), "literals"),
-                    ];
-                    handlers.into_iter().find_map(|(mut handler, subgraph_key)| match handler(self) {
-                        Ok(tp) => Some((Ok(tp), subgraph_key)),
-                        Err(err) => {
-                            add_error(&mut error_mem, subgraph_key, subgraph_type.clone(), err);
-                            self.restore_checkpoint(&types_after_state_selection);
-                            None
-                        },
-                    }).unwrap_or_else(|| (self.handle_types_expr_formula(expr), "type expr."))
-                },
-            };
-            match tp_res {
+            self.try_push_state("call0_types_value")?;
+            match self.handle_types_value(expr) {
                 Ok(tp) => {
                     if *subgraph_type == tp { break tp } else {
-                        panic!("{subgraph_key} did not return the requested type. Requested: {subgraph_type} Got: {tp}")
+                        panic!("types_value did not return the requested type. Requested: {subgraph_type} Got: {tp}")
                     }
                 },
                 Err(err) => {
-                    add_error(&mut error_mem, subgraph_key, subgraph_type.clone(), err);
+                    err_str += format!("{subgraph_type} =>\n{}\n", err.get_indentated_string()).as_str();
                     self.restore_checkpoint(&types_before_state_selection)
                 },
-            }
+            };
         };
 
         Ok(subgraph_type)
     }
 
-    fn handle_types_expr_case(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+    /// subgraph def_types_value
+    fn handle_types_value(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+        self.try_push_state("types_value")?;
+        let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
+        self.state_generator.set_known_list(selected_types.clone());
+
+        let mut err_str = "".to_string();
+
+        let checkpoint = self.get_checkpoint();
+
+        let (tp_res, subgraph_key) = match expr {
+            Expr::Cast { expr, data_type } if **expr == Expr::Value(Value::Null) => {
+                let null_type = SubgraphType::from_data_type(data_type);
+                (if selected_types.contains(&null_type) {
+                    self.try_push_state("types_value_typed_null")?;
+                    Ok(null_type)
+                } else {
+                    Err(ConvertionError::new(format!("Wrong null types: {:?} for expr: {expr}::{data_type}", selected_types)))
+                }, "typed null")
+            },
+            Expr::Case { .. } => (self.handle_types_value_expr_case(expr), "CASE"),
+            Expr::Function(function) => (self.handle_types_value_expr_aggr_function(function), "Aggregate function"),
+            Expr::Subquery(subquery) => (self.handle_types_value_subquery(subquery), "Subquery"),
+            expr => {
+                let handlers: Vec<(Box<dyn FnMut(&mut PathGenerator) -> Result<SubgraphType, ConvertionError>>, &str)> = vec![
+                    (Box::new(|_self| _self.handle_types_value_column_expr(expr)), "column identifier"),
+                    (Box::new(|_self| _self.handle_types_value_literals(expr)), "literals"),
+                ];
+                handlers.into_iter().find_map(|(mut handler, subgraph_key)| match handler(self) {
+                    Ok(tp) => Some((Ok(tp), subgraph_key)),
+                    Err(err) => {
+                        err_str += format!("Tried the {subgraph_key} handler, got: {err}\n").as_str();
+                        self.restore_checkpoint(&checkpoint);
+                        None
+                    },
+                }).unwrap_or_else(|| (self.handle_types_value_expr_formula(expr), "type expr."))
+            },
+        };
+        
+        match tp_res {
+            Ok(tp) => {
+                self.try_push_state("EXIT_types_value")?;
+                Ok(tp)
+            },
+            Err(err) => {
+                self.restore_checkpoint_consume(checkpoint);
+                err_str += format!("Tried the {subgraph_key} handler, got: {err}\n").as_str();
+                Err(ConvertionError::new(err_str))
+            },
+        }
+    }
+
+    fn handle_types_value_expr_case(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
         self.try_push_state("call0_case")?;
         self.handle_case(expr)
     }
     
-    fn handle_types_expr_aggr_function(&mut self, function: &ast::Function) -> Result<SubgraphType, ConvertionError> {
+    fn handle_types_value_expr_aggr_function(&mut self, function: &ast::Function) -> Result<SubgraphType, ConvertionError> {
         self.try_push_state("call0_aggregate_function")?;
         self.handle_aggregate_function(function)
     }
 
-    fn handle_types_subquery(&mut self, subquery: &Box<Query>) -> Result<SubgraphType, ConvertionError> {
+    fn handle_types_value_subquery(&mut self, subquery: &Box<Query>) -> Result<SubgraphType, ConvertionError> {
         self.try_push_state("call1_Query")?;
         let col_type_list = self.handle_query(subquery)?;
         if let [(.., query_subgraph_type)] = col_type_list.as_slice() {
@@ -1204,17 +1229,17 @@ impl PathGenerator {
         }
     }
 
-    fn handle_types_column_expr(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+    fn handle_types_value_column_expr(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
         self.try_push_state("call0_column_spec")?;
         self.handle_column_spec(expr)
     }
 
-    fn handle_types_literals(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+    fn handle_types_value_literals(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
         self.try_push_state("call0_literals")?;
         self.handle_literals(expr)
     }
 
-    fn handle_types_expr_formula(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+    fn handle_types_value_expr_formula(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
         self.try_push_state("call0_formulas")?;
         self.handle_formulas(expr)
     }
