@@ -616,9 +616,11 @@ impl PathGenerator {
                 self.handle_types(expr, TypeAssertion::None)?;
             },
             x @ (Expr::IsDistinctFrom(expr_1, expr_2) | Expr::IsNotDistinctFrom(expr_1, expr_2)) =>  {
-                self.try_push_states(&["IsDistinctFrom", "call56_types"])?;
-                self.handle_types_and_try(expr_1, TypeAssertion::None, |_self, returned_type| {
+                self.try_push_states(&["IsDistinctFrom", "call0_types_type"])?;
+                self.handle_types_type_and_try(TypeAssertion::None, |_self, returned_type| {
                     _self.state_generator.set_compatible_list(returned_type.get_compat_types());
+                    _self.try_push_state("call56_types")?;
+                    _self.handle_types(expr_1, TypeAssertion::CompatibleWith(returned_type.clone()))?;
                     if matches!(x, Expr::IsNotDistinctFrom(..)) { _self.try_push_state("IsDistinctNOT")?; }
                     _self.try_push_states(&["DISTINCT", "call21_types"])?;
                     _self.handle_types(expr_2, TypeAssertion::CompatibleWith(returned_type.clone()))?;
@@ -1140,6 +1142,74 @@ impl PathGenerator {
         };
 
         Ok(subgraph_type)
+    }
+
+    /// subgraph def_types_type
+    fn handle_types_type_and_try<F: Fn(&mut PathGenerator, SubgraphType) -> Result<(), ConvertionError>>(
+            &mut self, type_assertion: TypeAssertion, and_try: F
+        ) -> Result<SubgraphType, ConvertionError> {
+        // Use like:
+        // let returned_type = self.handle_types_type_and_try(TypeAssertion::None, |_self, returned_type| {
+        //     _self.something(...);
+        //     Ok(())
+        // })?;
+        let mut continue_after = TypesContinueAfter::None;
+        let mut err_msg = "".to_string();
+        let checkpoint = self.get_checkpoint();
+        loop {
+            let tp = match self.handle_types_type_continue_after(continue_after) {
+                Ok(tp) => tp,
+                Err(err) => break Err(ConvertionError::new(format!("{err}\n{}", err_msg.get_indentated_string()))),
+            };
+            type_assertion.check_type(&tp);
+            match and_try(self, tp.clone()) {
+                Ok(..) => break Ok(tp),
+                Err(err) => {
+                    err_msg += format!("Tried with {tp}, but got: {}\n", err.get_indentated_string()).as_str();
+                    self.restore_checkpoint(&checkpoint);
+                    continue_after = TypesContinueAfter::ExprType(tp);
+                },
+            };
+        }
+    }
+
+    fn handle_types_type_continue_after(&mut self, continue_after: TypesContinueAfter) -> Result<SubgraphType, ConvertionError> {
+        self.try_push_state("types_type")?;
+
+        let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
+        let selected_types = SubgraphType::sort_by_compatibility(selected_types);
+        let mut selected_types_iter = selected_types.iter();
+
+        if let TypesContinueAfter::ExprType(tp) = continue_after {
+            while let Some(subgraph_type) = selected_types_iter.next() {
+                if *subgraph_type == tp {
+                    break;
+                }
+            }
+        }
+
+        let subgraph_type = match selected_types_iter.next() {
+            Some(subgraph_type) => subgraph_type,
+            None => return Err(ConvertionError::new(format!(
+                "Types type didn't find a suitable type for expression, among:\n{:#?}", selected_types
+            ))),
+        };
+
+        self.try_push_state(match subgraph_type {
+            SubgraphType::BigInt => "types_type_bigint",
+            SubgraphType::Integer => "types_type_integer",
+            SubgraphType::Numeric => "types_type_numeric",
+            SubgraphType::Val3 => "types_type_3vl",
+            SubgraphType::Text => "types_type_text",
+            SubgraphType::Date => "types_type_date",
+            SubgraphType::Interval => "types_type_interval",
+            SubgraphType::Timestamp => "types_type_timestamp",
+            any => unexpected_subgraph_type!(any),
+        })?;
+
+        self.try_push_state("EXIT_types_type")?;
+
+        Ok(subgraph_type.clone())
     }
 
     /// subgraph def_types_value

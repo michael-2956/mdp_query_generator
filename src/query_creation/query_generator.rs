@@ -90,7 +90,19 @@ pub enum TypeAssertion<'a> {
 
 impl<'a> TypeAssertion<'a> {
     pub fn check(&'a self, selected_type: &SubgraphType, types_value: &Expr) {
-        let assertion_passed = match self {
+        if !self.assertion_passed(selected_type) {
+            panic!("types got an unexpected type: expected {:?}, got {:?}.\nExpr: {:?}", self, selected_type, types_value);
+        }
+    }
+
+    pub fn check_type(&'a self, selected_type: &SubgraphType) {
+        if !self.assertion_passed(selected_type) {
+            panic!("types got an unexpected type: expected {:?}, got {:?}", self, selected_type);
+        }
+    }
+
+    fn assertion_passed(&'a self, selected_type: &SubgraphType) -> bool {
+        match self {
             TypeAssertion::None => true,
             TypeAssertion::GeneratedBy(by) => selected_type.is_same_or_more_determined_or_undetermined(by),
             TypeAssertion::CompatibleWith(with) => selected_type.is_compat_with(with),
@@ -100,9 +112,6 @@ impl<'a> TypeAssertion<'a> {
             TypeAssertion::CompatibleWithOneOf(with_one_of) => {
                 with_one_of.iter().any(|with| selected_type.is_compat_with(with))
             },
-        };
-        if !assertion_passed {
-            panic!("types got an unexpected type: expected {:?}, got {:?}.\nExpr: {:?}", self, selected_type, types_value);
         }
     }
 }
@@ -776,6 +785,27 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         (selected_type, types_value)
     }
 
+    /// subgraph def_types_type
+    fn handle_types_type(&mut self) -> SubgraphType {
+        self.expect_state("types_type");
+
+        let tp = match self.next_state().as_str() {
+            "types_type_bigint" => SubgraphType::BigInt,
+            "types_type_integer" => SubgraphType::Integer,
+            "types_type_numeric" => SubgraphType::Numeric,
+            "types_type_3vl" => SubgraphType::Val3,
+            "types_type_text" => SubgraphType::Text,
+            "types_type_date" => SubgraphType::Date,
+            "types_type_interval" => SubgraphType::Interval,
+            "types_type_timestamp" => SubgraphType::Timestamp,
+            any => self.panic_unexpected(any),
+        };
+
+        self.expect_state("EXIT_types_type");
+
+        tp
+    }
+
     /// subgraph def_types_value
     fn handle_types_value(&mut self, type_assertion: TypeAssertion) -> (SubgraphType, Expr) {
         self.expect_state("types_value");
@@ -1082,9 +1112,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 }
             },
             "IsDistinctFrom" => {
+                self.expect_state("call0_types_type");
+                let tp = self.handle_types_type();
                 self.expect_state("call56_types");
-                let (types_selected_type, types_value_1) = self.handle_types(TypeAssertion::None);
-                self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
+                self.state_generator.set_compatible_list(tp.get_compat_types());
+                let types_value_1 = self.handle_types(TypeAssertion::CompatibleWith(tp.clone())).1;
                 let is_distinct_not_flag = match self.next_state().as_str() {
                     "IsDistinctNOT" => {
                         self.expect_state("DISTINCT");
@@ -1094,7 +1126,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     any => self.panic_unexpected(any)
                 };
                 self.expect_state("call21_types");
-                let types_value_2 = self.handle_types(TypeAssertion::CompatibleWith(types_selected_type)).1;
+                let types_value_2 = self.handle_types(TypeAssertion::CompatibleWith(tp)).1;
                 if is_distinct_not_flag {
                     Expr::IsNotDistinctFrom(Box::new(types_value_1), Box::new(types_value_2))
                 } else {
