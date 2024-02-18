@@ -466,35 +466,35 @@ digraph G {
         call0_types_value [TYPES="[known]", MODS="[...]", label="Types value\nTYPES: [known]\nMODS: [...]", shape=rectangle, style=filled, color=orange]
         call0_types_value -> EXIT_types
 
-        types_select_type_bigint[TYPE_NAME="bigint", label="bigint?", set_value="types_type"]
+        types_select_type_bigint[TYPE_NAME="bigint", label="bigint?"]
         types -> types_select_type_bigint
         types_select_type_bigint -> call0_types_value
 
-        types_select_type_integer[TYPE_NAME="integer", label="integer?", set_value="types_type"]
+        types_select_type_integer[TYPE_NAME="integer", label="integer?"]
         types -> types_select_type_integer
         types_select_type_integer -> call0_types_value
 
-        types_select_type_numeric[TYPE_NAME="numeric", label="numeric?", set_value="types_type"]
+        types_select_type_numeric[TYPE_NAME="numeric", label="numeric?"]
         types -> types_select_type_numeric
         types_select_type_numeric -> call0_types_value
 
-        types_select_type_3vl[TYPE_NAME="3VL Value", label="3VL Value?", set_value="types_type"]
+        types_select_type_3vl[TYPE_NAME="3VL Value", label="3VL Value?"]
         types -> types_select_type_3vl
         types_select_type_3vl -> call0_types_value
 
-        types_select_type_text[TYPE_NAME="text", label="text?", set_value="types_type"]
+        types_select_type_text[TYPE_NAME="text", label="text?"]
         types -> types_select_type_text
         types_select_type_text -> call0_types_value
 
-        types_select_type_date[TYPE_NAME="date", label="date?", set_value="types_type"]
+        types_select_type_date[TYPE_NAME="date", label="date?"]
         types -> types_select_type_date
         types_select_type_date -> call0_types_value
 
-        types_select_type_timestamp[TYPE_NAME="timestamp", label="timestamp?", set_value="types_type"]
+        types_select_type_timestamp[TYPE_NAME="timestamp", label="timestamp?"]
         types -> types_select_type_timestamp
         types_select_type_timestamp -> call0_types_value
 
-        types_select_type_interval[TYPE_NAME="interval", label="interval?", set_value="types_type"]
+        types_select_type_interval[TYPE_NAME="interval", label="interval?"]
         types -> types_select_type_interval
         types_select_type_interval -> call0_types_value
     }

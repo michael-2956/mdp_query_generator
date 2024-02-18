@@ -777,6 +777,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     fn handle_types_value(&mut self, type_assertion: TypeAssertion) -> (SubgraphType, Expr) {
         self.expect_state("types_value");
         let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
+        self.state_generator.set_known_list(selected_types.clone());
         let (selected_type, types_value) = match self.next_state().as_str() {
             "types_value_nested" => {
                 self.expect_state("call87_types");
