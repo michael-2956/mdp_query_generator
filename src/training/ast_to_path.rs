@@ -104,16 +104,16 @@ trait GetIndentated {
 
 impl GetIndentated for ConvertionError {
     fn get_indentated_string(self) -> String {
-        let mut s = format!("  {self}");
-        s = s.replace("\n", "\n  ");
+        let mut s = format!(".  {self}");
+        s = s.replace("\n", "\n.  ");
         s
     }
 }
 
 impl GetIndentated for String {
     fn get_indentated_string(self) -> String {
-        let mut s = format!("  {self}");
-        s = s.replace("\n", "\n  ");
+        let mut s = format!(".  {self}");
+        s = s.replace("\n", "\n.  ");
         s
     }
 }
@@ -1069,25 +1069,10 @@ impl PathGenerator {
 
     fn handle_types_continue_after(&mut self, expr: &Expr, type_assertion: TypeAssertion, continue_after: TypesContinueAfter) -> Result<SubgraphType, ConvertionError> {
         self.try_push_state("types")?;
-
         let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
-
-        let selected_type = match expr {
-            Expr::Value(Value::Null) => {
-                // todo: if this is on, we can now actually maybe continue_after and try different types?
-                self.try_push_state("types_value_null")?;
-                SubgraphType::Undetermined
-            },
-            Expr::Nested(expr) => {
-                self.try_push_states(&["types_value_nested", "call87_types"])?;
-                self.handle_types_continue_after(expr, TypeAssertion::None, continue_after)?
-            },
-            expr => self.handle_types_expr(selected_types, expr, continue_after)?,
-        };
+        let selected_type = self.handle_types_expr(selected_types, expr, continue_after)?;
         self.try_push_state("EXIT_types")?;
-
         type_assertion.check(&selected_type, expr);
-
         return Ok(selected_type)
     }
 
@@ -1143,7 +1128,7 @@ impl PathGenerator {
             self.try_push_state("call0_types_value")?;
             match self.handle_types_value(expr) {
                 Ok(tp) => {
-                    if *subgraph_type == tp { break tp } else {
+                    if tp.is_same_or_more_determined_or_undetermined(subgraph_type) { break tp } else {
                         panic!("types_value did not return the requested type. Requested: {subgraph_type} Got: {tp}")
                     }
                 },
@@ -1168,6 +1153,14 @@ impl PathGenerator {
         let checkpoint = self.get_checkpoint();
 
         let (tp_res, subgraph_key) = match expr {
+            Expr::Value(Value::Null) => {
+                self.try_push_state("types_value_null")?;
+                (Ok(SubgraphType::Undetermined), "null")
+            },
+            Expr::Nested(expr) => {
+                self.try_push_states(&["types_value_nested", "call1_types_value"])?;
+                (self.handle_types_value(expr), "nested")
+            },
             Expr::Cast { expr, data_type } if **expr == Expr::Value(Value::Null) => {
                 let null_type = SubgraphType::from_data_type(data_type);
                 (if selected_types.contains(&null_type) {
@@ -1230,7 +1223,7 @@ impl PathGenerator {
     }
 
     fn handle_types_value_column_expr(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
-        self.try_push_state("call0_column_spec")?;
+        self.try_push_states(&["column_type_available", "call0_column_spec"])?;
         self.handle_column_spec(expr)
     }
 
