@@ -780,8 +780,8 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         self.state_generator.set_known_list(selected_types.clone());
         let (selected_type, types_value) = match self.next_state().as_str() {
             "types_value_nested" => {
-                self.expect_state("call87_types");
-                let (tp, expr) = self.handle_types(TypeAssertion::None);
+                self.expect_state("call1_types_value");
+                let (tp, expr) = self.handle_types_value(TypeAssertion::None);
                 (tp, Expr::Nested(Box::new(expr)))
             },
             "types_value_null" => {
