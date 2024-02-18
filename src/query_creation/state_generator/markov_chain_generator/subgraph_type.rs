@@ -128,6 +128,19 @@ impl SubgraphType {
         type_vec
     }
 
+    /// filters the selected_types by selected_type
+    pub fn filter_by_selected(selected_types: &Vec<SubgraphType>, selected_type: SubgraphType) -> Vec<SubgraphType> {
+        match selected_type {
+            with_inner @ SubgraphType::ListExpr(..) => {
+                selected_types.iter()
+                    .map(|x| x.to_owned())
+                    .filter(|x| std::mem::discriminant(x) == std::mem::discriminant(&with_inner))
+                    .collect::<Vec<_>>()
+            }
+            any => vec![any]
+        }
+    }
+
     /// get a list of compatible types\
     /// if the returned vector includes the needed type, this type is compatible
     pub fn get_compat_types(&self) -> Vec<SubgraphType> {

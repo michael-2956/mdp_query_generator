@@ -14,7 +14,6 @@ pub trait NamedValue: Debug {
 
 #[derive(Debug, Clone)]
 pub enum ValueSetterValue {
-    TypesType(TypesTypeValue),
     CanSkipLimit(CanSkipLimitValue),
     IsGroupingSets(IsGroupingSetsValue),
     GroupingEnabled(GroupingEnabledValue),
@@ -22,6 +21,7 @@ pub enum ValueSetterValue {
     DistinctAggregation(DistinctAggregationValue),
     SelectIsNotDistinct(SelectIsNotDistinctValue),
     HasAccessibleColumns(HasAccessibleColumnsValue),
+    IsColumnTypeAvailable(IsColumnTypeAvailableValue),
     SelectAccessibleColumns(SelectAccessibleColumnsValue),
     HasUniqueColumnNamesForType(HasUniqueColumnNamesForSelectedTypesValue),
 }
@@ -32,65 +32,6 @@ pub trait ValueSetter: Debug {
 
     /// get the value in given context
     fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue;
-}
-
-#[derive(Debug, Clone)]
-pub struct TypesTypeValue {
-    pub selected_types: Vec<SubgraphType>,
-    pub type_is_available_in_clause: bool,
-}
-
-impl NamedValue for TypesTypeValue {
-    fn name() -> SmolStr {
-        SmolStr::new("types_type")
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct TypesTypeValueSetter { }
-
-impl ValueSetter for TypesTypeValueSetter {
-    fn get_value_name(&self) -> SmolStr {
-        TypesTypeValue::name()
-    }
-
-    fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
-        let selected_type = match function_context.current_node.node_common.name.as_str() {
-            "types_select_type_bigint" => SubgraphType::BigInt,
-            "types_select_type_integer" => SubgraphType::Integer,
-            "types_select_type_numeric" => SubgraphType::Numeric,
-            "types_select_type_3vl" => SubgraphType::Val3,
-            "types_select_type_text" => SubgraphType::Text,
-            "types_select_type_date" => SubgraphType::Date,
-            "types_select_type_interval" => SubgraphType::Interval,
-            "types_select_type_timestamp" => SubgraphType::Timestamp,
-            any => panic!("{any} unexpectedly triggered the types_type value setter"),
-        };
-        let allowed_type_list = match selected_type {
-            with_inner @ SubgraphType::ListExpr(..) => {
-                let argument_selected_types = unwrap_variant!(function_context.call_params.selected_types.clone(), CallTypes::TypeList);
-                argument_selected_types
-                    .iter()
-                    .map(|x| x.to_owned())
-                    .filter(|x| std::mem::discriminant(x) == std::mem::discriminant(&with_inner))
-                    .collect::<Vec<_>>()
-            }
-            any => vec![any]
-        };
-
-        let check_group_by = function_context.call_params.modifiers.contains(&SmolStr::new("group by columns"));
-
-        ValueSetterValue::TypesType(TypesTypeValue {
-            type_is_available_in_clause: allowed_type_list.iter().any(|x|
-                if check_group_by {
-                    clause_context.group_by().is_type_available(x)
-                } else {
-                    clause_context.from().is_type_available(x, None)
-                }
-            ),
-            selected_types: allowed_type_list,
-        })
-    }
 }
 
 /// Call modifier that relies on external (static in function scope) values
@@ -118,6 +59,41 @@ pub trait StatefulCallModifier: Debug {
 }
 
 #[derive(Debug, Clone)]
+pub struct IsColumnTypeAvailableValue {
+    /// is available
+    pub is_available: bool,
+}
+
+impl NamedValue for IsColumnTypeAvailableValue {
+    fn name() -> SmolStr {
+        SmolStr::new("is_column_type_available_val")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IsColumnTypeAvailableValueSetter { }
+
+impl ValueSetter for IsColumnTypeAvailableValueSetter {
+    fn get_value_name(&self) -> SmolStr {
+        IsColumnTypeAvailableValue::name()
+    }
+
+    fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
+        let check_group_by = function_context.call_params.modifiers.contains(&SmolStr::new("group by columns"));
+        let argument_types = unwrap_variant!(function_context.call_params.selected_types.clone(), CallTypes::TypeList);
+        ValueSetterValue::IsColumnTypeAvailable(IsColumnTypeAvailableValue {
+            is_available: argument_types.iter().any(|x|
+                if check_group_by {
+                    clause_context.group_by().is_type_available(x)
+                } else {
+                    clause_context.from().is_type_available(x, None)
+                }
+            ),
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct IsColumnTypeAvailableModifier {}
 
 impl StatelessCallModifier for IsColumnTypeAvailableModifier {
@@ -126,11 +102,11 @@ impl StatelessCallModifier for IsColumnTypeAvailableModifier {
     }
 
     fn get_associated_value_name(&self) -> Option<SmolStr> {
-        Some(TypesTypeValue::name())
+        Some(IsColumnTypeAvailableValue::name())
     }
 
     fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
-        unwrap_variant!(associated_value.unwrap(), ValueSetterValue::TypesType).type_is_available_in_clause
+        unwrap_variant!(associated_value.unwrap(), ValueSetterValue::IsColumnTypeAvailable).is_available
     }
 }
 

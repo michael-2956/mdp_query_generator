@@ -22,7 +22,7 @@ use super::{
 };
 use self::{
     aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution},
-    call_modifiers::{SelectAccessibleColumnsValue, TypesTypeValue, ValueSetterValue, WildcardRelationsValue},
+    call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue},
     expr_precedence::ExpressionPriority, query_info::{ClauseContext, DatabaseSchema, QueryProps}, value_choosers::QueryValueChooser
 };
 
@@ -750,36 +750,27 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     /// subgraph def_types
     fn handle_types(&mut self, type_assertion: TypeAssertion) -> (SubgraphType, Expr) {
         self.expect_state("types");
-        match self.next_state().as_str() {
-            "types_select_type_bigint" |
-            "types_select_type_integer" |
-            "types_select_type_numeric" |
-            "types_select_type_3vl" |
-            "types_select_type_text" |
-            "types_select_type_date" |
-            "types_select_type_timestamp" |
-            "types_select_type_interval" => {},
-            "types_value_null" => {
-                self.expect_state("EXIT_types");
-                return (SubgraphType::Undetermined, Expr::Value(Value::Null));
-            },
-            "types_value_nested" => {
-                self.expect_state("call87_types");
-                let (tp, expr) = self.handle_types(type_assertion);
-                self.expect_state("EXIT_types");
-                return (tp, Expr::Nested(Box::new(expr)))
-            }
+
+        let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
+        let selected_type = match self.next_state().as_str() {
+            "types_select_type_bigint" => SubgraphType::BigInt,
+            "types_select_type_integer" => SubgraphType::Integer,
+            "types_select_type_numeric" => SubgraphType::Numeric,
+            "types_select_type_3vl" => SubgraphType::Val3,
+            "types_select_type_text" => SubgraphType::Text,
+            "types_select_type_date" => SubgraphType::Date,
+            "types_select_type_interval" => SubgraphType::Interval,
+            "types_select_type_timestamp" => SubgraphType::Timestamp,
             any => self.panic_unexpected(any),
         };
+        let allowed_type_list = SubgraphType::filter_by_selected(&selected_types, selected_type);
 
-        self.state_generator.set_known_list(unwrap_variant!(
-            self.state_generator.get_named_value::<TypesTypeValue>().unwrap(),
-            ValueSetterValue::TypesType
-        ).selected_types.clone());
+        self.state_generator.set_known_list(allowed_type_list);
         self.expect_state("call0_types_value");
         let (selected_type, types_value) = self.handle_types_value(type_assertion);
+
         self.expect_state("EXIT_types");
-        (selected_type, types_value.nest_children_if_needed())
+        (selected_type, types_value)
     }
 
     /// subgraph def_types_value
@@ -812,8 +803,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             "call0_case" => self.handle_case(),
             "call0_formulas" => self.handle_formulas(),
             "call0_literals" => self.handle_literals(),
-            "call0_column_spec" => self.handle_column_spec(),
             "call0_aggregate_function" => self.handle_aggregate_function(),
+            "column_type_available" => {
+                self.expect_state("call0_column_spec");
+                self.handle_column_spec()
+            },
             "call1_Query" => {
                 let (subquery, column_types) = self.handle_query();
                 let selected_type = match column_types.len() {
@@ -826,7 +820,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         };
         type_assertion.check(&selected_type, &types_value);
         self.expect_state("EXIT_types_value");
-        (selected_type, types_value)
+        (selected_type, types_value.nest_children_if_needed())
     }
 
     /// subgraph def_formulas
