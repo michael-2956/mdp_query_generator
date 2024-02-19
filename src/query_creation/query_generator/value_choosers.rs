@@ -266,7 +266,7 @@ impl QueryValueChooser for DeterministicValueChooser {
 
     fn choose_aggregate_function_name<'a>(&mut self, mut func_names_iter: impl Iterator::<Item = &'a String>, _dist: WeightedIndex<f64>) -> ObjectName {
         let aggr_func = self.chosen_aggregate_functions.next();
-        assert!(func_names_iter.any(|func_name| *func_name == aggr_func.0[0].value), "Selected aggregate funcction is not available: {}", aggr_func);
+        assert!(func_names_iter.any(|func_name| *func_name == aggr_func.0[0].value.to_uppercase()), "Selected aggregate function is not available: {}", aggr_func);
         aggr_func
     }
     

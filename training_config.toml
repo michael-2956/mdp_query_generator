@@ -66,7 +66,7 @@ aggregate_functions_distribution_map_file="aggregate_functions_distribution_map.
 [state_generator]
 # Path to graph source for a markov chain
 # graph_file_path="graph.dot"
-graph_file_path="performance_untrained_graph.dot"
+graph_file_path="graph.dot"
 
 [dynmod_anticall]
 # TODO: anticall substitute model settings

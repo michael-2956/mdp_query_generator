@@ -680,11 +680,13 @@ digraph G {
 
         case_first_result [label="First result"]
         case -> case_first_result
-        call82_types [TYPES="[...]", label="TYPES: [...types] -> TP1\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
-        case_first_result -> call82_types
+        call7_types_type [TYPES="[...]", label="Types type: [...types] -> TP1", shape=rectangle, color=yellowgreen, style=filled]
+        case_first_result -> call7_types_type
+        call82_types [TYPES="[compatible]", label="TYPES: compatible(TP1)\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call7_types_type -> call82_types
         
         case_else [label="ELSE"]
-        call81_types [TYPES="[compatible]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call81_types [TYPES="[compatible]", label="TYPES: compatible(TP1)\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         case_else -> call81_types
         call81_types -> EXIT_case
         case_else -> EXIT_case
@@ -694,18 +696,20 @@ digraph G {
 
         simple_case_operand [label="Operand"]
         simple_case -> simple_case_operand
-        call78_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY -> TP2\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        simple_case_operand -> call78_types
+        call8_types_type [TYPES="[any]", label="Types type: ANY -> TP2", shape=rectangle, color=yellowgreen, style=filled]
+        simple_case_operand -> call8_types_type
+        call78_types [TYPES="[compatible]", MODS="[...]", label="TYPES: compatible(TP2)\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call8_types_type -> call78_types
 
         simple_case_condition [label="Condition"]
         call78_types -> simple_case_condition
-        call79_types [TYPES="[compatible]", label="TYPES: [compatible(TP2)]\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call79_types [TYPES="[compatible]", label="TYPES: compatible(TP2)\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         simple_case_condition -> call79_types
         call79_types -> case_else
 
         simple_case_result [label="Add result"]
         call79_types -> simple_case_result
-        call80_types [TYPES="[compatible]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call80_types [TYPES="[compatible]", label="TYPES: compatible(TP1)\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         simple_case_result -> call80_types
         call80_types -> simple_case_condition
 
@@ -720,7 +724,7 @@ digraph G {
 
         searched_case_result [label="Add result"]
         call76_types -> searched_case_result
-        call77_types [TYPES="[compatible]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call77_types [TYPES="[compatible]", label="TYPES: compatible(TP1)\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         searched_case_result -> call77_types
         call77_types -> searched_case_condition
     }
@@ -755,13 +759,15 @@ digraph G {
         list_expr [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[]", label="list expr\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\n[mods]", shape=rectangle, style=filled, color=blue]
         EXIT_list_expr[label="EXIT list expr"]
 
-        call16_types [TYPES="[...]", MODS="[...]", label="TYPES: [...types]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        list_expr -> call16_types
+        call6_types_type [TYPES="[...]", label="Types type: [...types] -> TP1", shape=rectangle, color=yellowgreen, style=filled]
+        list_expr -> call6_types_type
+        call16_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call6_types_type -> call16_types
 
         list_expr_multiple_values [label="Multiple values"]
         call16_types -> list_expr_multiple_values
 
-        call49_types [TYPES="[compatible]", label="TYPES: [compatible]\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call49_types [TYPES="[compatible]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
         list_expr_multiple_values -> call49_types
         list_expr_multiple_values -> EXIT_list_expr
         call49_types -> call49_types
@@ -810,25 +816,29 @@ digraph G {
         InListNot [label="NOT"]
         InListIn [label="IN"]
         VAL_3 -> InList
-        call57_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
-        InList -> call57_types
+        call3_types_type [TYPES="[any]", label="Types type: ANY -> TP1", shape=rectangle, color=yellowgreen, style=filled]
+        InList -> call3_types_type
+        call57_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
+        call3_types_type -> call57_types
         call57_types -> InListNot
         InListNot -> InListIn
         call57_types -> InListIn
-        call1_list_expr [TYPES="[compatible]", MODS="[...]", label="list expr\nTYPES: [compatible]\nmodif.: [...mods]", shape=rectangle, style=filled, color=blue]
+        call1_list_expr [TYPES="[compatible]", MODS="[...]", label="list expr\nTYPES: [compatible(TP1)]\nmodif.: [...mods]", shape=rectangle, style=filled, color=blue]
         InListIn -> call1_list_expr
         call1_list_expr -> EXIT_VAL_3
 
         InSubquery[label="IN [subquery]"]
-        InSubqueryNot [label="NOT"]
-        InSubqueryIn [label="IN"]
-        call58_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
         VAL_3 -> InSubquery
-        InSubquery -> call58_types
+        call4_types_type [TYPES="[any]", label="Types type: ANY -> TP1", shape=rectangle, color=yellowgreen, style=filled]
+        InSubquery -> call4_types_type
+        call58_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
+        call4_types_type -> call58_types
+        InSubqueryNot [label="NOT"]
         call58_types -> InSubqueryNot
+        InSubqueryIn [label="IN"]
         InSubqueryNot -> InSubqueryIn
         call58_types -> InSubqueryIn
-        call3_Query [TYPES="[compatible]", MODS="[single column]", label="Query\nTYPE: [compatible]\nMODS: [single column]", shape=rectangle, style=filled, color=green]
+        call3_Query [TYPES="[compatible]", MODS="[single column]", label="Query\nTYPE: [compatible(TP1)]\nMODS: [single column]", shape=rectangle, style=filled, color=green]
         InSubqueryIn -> call3_Query
         call3_Query -> EXIT_VAL_3
 
@@ -836,13 +846,15 @@ digraph G {
         BetweenBetween [label="BETWEEN"]
         BetweenBetweenAnd [label="AND"]
         VAL_3 -> Between
-        call59_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
-        Between -> call59_types
+        call5_types_type [TYPES="[any]", label="Types type: ANY -> TP1", shape=rectangle, color=yellowgreen, style=filled]
+        call59_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
+        Between -> call5_types_type
+        call5_types_type -> call59_types
         call59_types -> BetweenBetween
-        call22_types [MODS="[...]", TYPES="[compatible]", label="TYPES: [compatible]\nmodif.: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call22_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         BetweenBetween -> call22_types
         call22_types -> BetweenBetweenAnd
-        call23_types [MODS="[...]", TYPES="[compatible]", label="TYPES: [compatible]\nmodif.: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call23_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         BetweenBetweenAnd -> call23_types
         call23_types -> EXIT_VAL_3
 
@@ -852,9 +864,11 @@ digraph G {
         BinaryCompLessEqual [label="<="]
         BinaryCompUnEqual [label="<>"]
         VAL_3 -> BinaryComp
-        call60_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
-        BinaryComp -> call60_types
-        call24_types [MODS="[...]", TYPES="[compatible]", label="TYPES: [compatible]\nmodif.: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call1_types_type [TYPES="[any]", label="Types type: ANY -> TP1", shape=rectangle, color=yellowgreen, style=filled]
+        BinaryComp -> call1_types_type
+        call60_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call1_types_type -> call60_types
+        call24_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         call60_types -> BinaryCompLess
         BinaryCompLess -> call24_types
         call60_types -> BinaryCompEqual
@@ -876,8 +890,10 @@ digraph G {
         AnyAllAnyAllAny[label="ANY"]
         AnyAllAnyAllAll[label="ALL"]
         VAL_3 -> AnyAll
-        call61_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
-        AnyAll -> call61_types
+        call2_types_type [TYPES="[any]", label="Types type: ANY -> TP1", shape=rectangle, color=yellowgreen, style=filled]
+        AnyAll -> call2_types_type
+        call61_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
+        call2_types_type -> call61_types
         call61_types -> AnyAllSelectOp
         AnyAllSelectOp -> AnyAllLess
         AnyAllLess -> AnyAllSelectIter
@@ -887,7 +903,7 @@ digraph G {
         AnyAllLessEqual -> AnyAllSelectIter
         AnyAllSelectOp -> AnyAllUnEqual
         AnyAllUnEqual -> AnyAllSelectIter
-        call4_Query [TYPES="[compatible]", MODS="[single column]", label="Query\nTYPE: [compatible]\nMODS: [single column]", shape=rectangle, style=filled, color=green]
+        call4_Query [TYPES="[compatible]", MODS="[single column]", label="Query\nTYPE: [compatible(TP1)]\nMODS: [single column]", shape=rectangle, style=filled, color=green]
         AnyAllSelectIter -> call4_Query
         call4_Query -> AnyAllAnyAll
         AnyAllAnyAll -> AnyAllAnyAllAny

@@ -994,11 +994,13 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     /// subgraph def_list_expr
     fn handle_list_expr(&mut self) -> (SubgraphType, Vec<Expr>) {
         self.expect_state("list_expr");
+        self.expect_state("call6_types_type");
+        let inner_type = self.handle_types_type();
+        self.state_generator.set_compatible_list(inner_type.get_compat_types());
         self.expect_state("call16_types");
-        let (inner_type, types_value) = self.handle_types(TypeAssertion::None);
+        let types_value = self.handle_types(TypeAssertion::CompatibleWith(inner_type.clone())).1;
         match self.next_state().as_str() {
             "list_expr_multiple_values" => {
-                self.state_generator.set_compatible_list(inner_type.get_compat_types());
                 let mut list_expr: Vec<Expr> = vec![types_value];
                 loop {
                     match self.next_state().as_str() {
@@ -1019,21 +1021,24 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     fn handle_case(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("case");
 
-        self.expect_state("case_first_result");
+        self.expect_states(&["case_first_result", "call7_types_type"]);
+        let out_type = self.handle_types_type();
         self.expect_state("call82_types");
-        let (out_type, first_result) = self.handle_types(TypeAssertion::None);
+        self.state_generator.set_compatible_list(out_type.get_compat_types());
+        let first_result = self.handle_types(TypeAssertion::CompatibleWith(out_type.clone())).1;
         let mut results = vec![first_result];
         let mut conditions = vec![];
 
         let operand = match self.next_state().as_str() {
             "simple_case" => {
-                self.expect_state("simple_case_operand");
+                self.expect_states(&["simple_case_operand", "call8_types_type"]);
+                let operand_type = self.handle_types_type();
                 self.expect_state("call78_types");
-                let (operand_type, operand_expr) = self.handle_types(TypeAssertion::None);
+                self.state_generator.set_compatible_list(operand_type.get_compat_types());
+                let operand_expr = self.handle_types(TypeAssertion::CompatibleWith(operand_type.clone())).1;
 
                 loop {
-                    self.expect_state("simple_case_condition");
-                    self.expect_state("call79_types");
+                    self.expect_states(&["simple_case_condition", "call79_types"]);
                     self.state_generator.set_compatible_list(operand_type.get_compat_types());
                     let condition_expr = self.handle_types(TypeAssertion::CompatibleWith(operand_type.clone())).1;
                     conditions.push(condition_expr);
@@ -1148,9 +1153,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 }
             },
             "InList" => {
+                self.expect_state("call3_types_type");
+                let tp = self.handle_types_type();
+                self.state_generator.set_compatible_list(tp.get_compat_types());
                 self.expect_state("call57_types");
-                let (types_selected_type, types_value) = self.handle_types(TypeAssertion::None);
-                self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
+                let types_value = self.handle_types(TypeAssertion::CompatibleWith(tp)).1;
                 let in_list_not_flag = match self.next_state().as_str() {
                     "InListNot" => {
                         self.expect_state("InListIn");
@@ -1167,9 +1174,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 }
             },
             "InSubquery" => {
+                self.expect_state("call4_types_type");
+                let tp = self.handle_types_type();
+                self.state_generator.set_compatible_list(tp.get_compat_types());
                 self.expect_state("call58_types");
-                let (types_selected_type, types_value) = self.handle_types(TypeAssertion::None);
-                self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
+                let types_value = self.handle_types(TypeAssertion::CompatibleWith(tp)).1;
                 let in_subquery_not_flag = match self.next_state().as_str() {
                     "InSubqueryNot" => {
                         self.expect_state("InSubqueryIn");
@@ -1187,9 +1196,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 }
             },
             "Between" => {
+                self.expect_state("call5_types_type");
+                let tp = self.handle_types_type();
+                self.state_generator.set_compatible_list(tp.get_compat_types());
                 self.expect_state("call59_types");
-                let (types_selected_type, types_value_1) = self.handle_types(TypeAssertion::None);
-                self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
+                let types_value_1 = self.handle_types(TypeAssertion::CompatibleWith(tp.clone())).1;
                 let between_not_flag = match self.next_state().as_str() {
                     "BetweenBetweenNot" => {
                         self.expect_state("BetweenBetween");
@@ -1199,10 +1210,10 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     any => self.panic_unexpected(any)
                 };
                 self.expect_state("call22_types");
-                let types_value_2 = self.handle_types(TypeAssertion::CompatibleWith(types_selected_type.clone())).1;
+                let types_value_2 = self.handle_types(TypeAssertion::CompatibleWith(tp.clone())).1;
                 self.expect_state("BetweenBetweenAnd");
                 self.expect_state("call23_types");
-                let types_value_3 = self.handle_types(TypeAssertion::CompatibleWith(types_selected_type)).1;
+                let types_value_3 = self.handle_types(TypeAssertion::CompatibleWith(tp)).1;
                 Expr::Between {
                     expr: Box::new(types_value_1),
                     negated: between_not_flag,
@@ -1211,9 +1222,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 }
             },
             "BinaryComp" => {
+                self.expect_state("call1_types_type");
+                let tp = self.handle_types_type();
+                self.state_generator.set_compatible_list(tp.get_compat_types());
                 self.expect_state("call60_types");
-                let (types_selected_type, types_value_1) = self.handle_types(TypeAssertion::None);
-                self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
+                let types_value_1 = self.handle_types(TypeAssertion::CompatibleWith(tp.clone())).1;
                 let binary_comp_op = match self.next_state().as_str() {
                     "BinaryCompEqual" => BinaryOperator::Eq,
                     "BinaryCompLess" => BinaryOperator::Lt,
@@ -1222,7 +1235,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     any => self.panic_unexpected(any)
                 };
                 self.expect_state("call24_types");
-                let types_value_2 = self.handle_types(TypeAssertion::CompatibleWith(types_selected_type)).1;
+                let types_value_2 = self.handle_types(TypeAssertion::CompatibleWith(tp)).1;
                 Expr::BinaryOp {
                     left: Box::new(types_value_1),
                     op: binary_comp_op,
@@ -1230,9 +1243,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 }
             },
             "AnyAll" => {
+                self.expect_state("call2_types_type");
+                let tp = self.handle_types_type();
+                self.state_generator.set_compatible_list(tp.get_compat_types());
                 self.expect_state("call61_types");
-                let (types_selected_type, types_value) = self.handle_types(TypeAssertion::None);
-                self.state_generator.set_compatible_list(types_selected_type.get_compat_types());
+                let types_value = self.handle_types(TypeAssertion::CompatibleWith(tp)).1;
                 self.expect_state("AnyAllSelectOp");
                 let any_all_op = match self.next_state().as_str() {
                     "AnyAllEqual" => BinaryOperator::Eq,

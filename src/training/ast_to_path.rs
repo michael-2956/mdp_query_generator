@@ -634,9 +634,11 @@ impl PathGenerator {
                 self.handle_query(subquery)?;
             },
             Expr::InList { expr, list, negated } => {
-                self.try_push_states(&["InList", "call57_types"])?;
-                self.handle_types_and_try(expr, TypeAssertion::None, |_self, returned_type| {
+                self.try_push_states(&["InList", "call3_types_type"])?;
+                self.handle_types_type_and_try(TypeAssertion::None, |_self, returned_type| {
                     _self.state_generator.set_compatible_list(returned_type.get_compat_types());
+                    _self.try_push_state("call57_types")?;
+                    _self.handle_types(expr, TypeAssertion::CompatibleWith(returned_type.clone()))?;
                     if *negated { _self.try_push_state("InListNot")?; }
                     _self.try_push_states(&["InListIn", "call1_list_expr"])?;
                     _self.handle_list_expr(list)?;
@@ -644,9 +646,11 @@ impl PathGenerator {
                 })?;
             },
             Expr::InSubquery { expr, subquery, negated } => {
-                self.try_push_states(&["InSubquery", "call58_types"])?;
-                self.handle_types_and_try(expr, TypeAssertion::None, |_self, returned_type| {
+                self.try_push_states(&["InSubquery", "call4_types_type"])?;
+                self.handle_types_type_and_try(TypeAssertion::None, |_self, returned_type| {
                     _self.state_generator.set_compatible_list(returned_type.get_compat_types());
+                    _self.try_push_state("call58_types")?;
+                    _self.handle_types(expr, TypeAssertion::CompatibleWith(returned_type.clone()))?;
                     if *negated { _self.try_push_state("InSubqueryNot")?; }
                     _self.try_push_states(&["InSubqueryIn", "call3_Query"])?;
                     _self.handle_query(subquery)?;
@@ -654,9 +658,11 @@ impl PathGenerator {
                 })?;
             },
             Expr::Between { expr, negated, low, high } => {
-                self.try_push_states(&["Between", "call59_types"])?;
-                self.handle_types_and_try(expr, TypeAssertion::None, |_self, returned_type| {
+                self.try_push_states(&["Between", "call5_types_type"])?;
+                self.handle_types_type_and_try(TypeAssertion::None, |_self, returned_type| {
                     _self.state_generator.set_compatible_list(returned_type.get_compat_types());
+                    _self.try_push_state("call59_types")?;
+                    _self.handle_types(expr, TypeAssertion::CompatibleWith(returned_type.clone()))?;
                     if *negated { _self.try_push_state("BetweenBetweenNot")?; }
                     _self.try_push_states(&["BetweenBetween", "call22_types"])?;
                     _self.handle_types(low, TypeAssertion::CompatibleWith(returned_type.clone()))?;
@@ -687,9 +693,11 @@ impl PathGenerator {
                     BinaryOperator::NotEq => {
                         match &**right {
                             Expr::AnyOp(right_inner) | Expr::AllOp(right_inner) => {
-                                self.try_push_states(&["AnyAll", "call61_types"])?;
-                                self.handle_types_and_try(left, TypeAssertion::None, |_self, returned_type| {
+                                self.try_push_states(&["AnyAll", "call2_types_type"])?;
+                                self.handle_types_type_and_try(TypeAssertion::None, |_self, returned_type| {
                                     _self.state_generator.set_compatible_list(returned_type.get_compat_types());
+                                    _self.try_push_state("call61_types")?;
+                                    _self.handle_types(left, TypeAssertion::CompatibleWith(returned_type))?;
                                     _self.try_push_state("AnyAllSelectOp")?;
                                     _self.try_push_state(match op {
                                         BinaryOperator::Eq => "AnyAllEqual",
@@ -716,9 +724,11 @@ impl PathGenerator {
                                 })?;
                             },
                             _ => {
-                                self.try_push_states(&["BinaryComp", "call60_types"])?;
-                                self.handle_types_and_try(left, TypeAssertion::None, |_self, returned_type| {
+                                self.try_push_states(&["BinaryComp", "call1_types_type"])?;
+                                self.handle_types_type_and_try(TypeAssertion::None, |_self, returned_type| {
                                     _self.state_generator.set_compatible_list(returned_type.get_compat_types());
+                                    _self.try_push_state("call60_types")?;
+                                    _self.handle_types(left, TypeAssertion::CompatibleWith(returned_type.clone()))?;
                                     _self.try_push_state(match op {
                                         BinaryOperator::Eq => "BinaryCompEqual",
                                         BinaryOperator::Lt => "BinaryCompLess",
@@ -730,7 +740,6 @@ impl PathGenerator {
                                     _self.handle_types(right, TypeAssertion::CompatibleWith(returned_type))?;
                                     Ok(())
                                 })?;
-                                
                             }
                         }
                     },
@@ -1044,7 +1053,7 @@ impl PathGenerator {
         self.handle_types_continue_after(expr, type_assertion, TypesContinueAfter::None)
     }
 
-    fn handle_types_and_try<F: Fn(&mut PathGenerator, SubgraphType) -> Result<(), ConvertionError>>(&mut self, expr: &Expr, type_assertion: TypeAssertion, and_try: F) -> Result<SubgraphType, ConvertionError> {
+    fn _handle_types_and_try<F: Fn(&mut PathGenerator, SubgraphType) -> Result<(), ConvertionError>>(&mut self, expr: &Expr, type_assertion: TypeAssertion, and_try: F) -> Result<SubgraphType, ConvertionError> {
         // Use like:
         // let returned_type = self.handle_types_and_try(expr, TypeAssertion::None, |_self, returned_type| {
         //     _self.something(...);
@@ -1099,7 +1108,7 @@ impl PathGenerator {
                 None => return Err(ConvertionError::new(
                     format!(
                         "Types didn't find a suitable type for expression, among:\n{:#?}\n\
-                        Expression:\n{:#?}\nPrinted: {expr}\nErrors:\n{}\n",
+                        Expression:\n{:?}\nPrinted: {expr}\nErrors:\n{}\n",
                         selected_types, expr, err_str.get_indentated_string()
                     )
                 )),
@@ -1146,8 +1155,8 @@ impl PathGenerator {
 
     /// subgraph def_types_type
     fn handle_types_type_and_try<F: Fn(&mut PathGenerator, SubgraphType) -> Result<(), ConvertionError>>(
-            &mut self, type_assertion: TypeAssertion, and_try: F
-        ) -> Result<SubgraphType, ConvertionError> {
+        &mut self, type_assertion: TypeAssertion, and_try: F
+    ) -> Result<SubgraphType, ConvertionError> {
         // Use like:
         // let returned_type = self.handle_types_type_and_try(TypeAssertion::None, |_self, returned_type| {
         //     _self.something(...);
@@ -1535,8 +1544,10 @@ impl PathGenerator {
 
     /// subgraph def_list_expr
     fn handle_list_expr(&mut self, list: &Vec<Expr>) -> Result<SubgraphType, ConvertionError> {
-        self.try_push_states(&["list_expr", "call16_types"])?;
-        let inner_type = self.handle_types_and_try(&list[0], TypeAssertion::None, |_self, inner_type| {
+        self.try_push_states(&["list_expr", "call6_types_type"])?;
+        let inner_type = self.handle_types_type_and_try(TypeAssertion::None, |_self, inner_type| {
+            _self.try_push_state("call16_types")?;
+            _self.handle_types(&list[0], TypeAssertion::CompatibleWith(inner_type.clone()))?;
             _self.try_push_state("list_expr_multiple_values")?;
             _self.state_generator.set_compatible_list(inner_type.get_compat_types());
             for expr in list.iter().skip(1) {
@@ -1569,11 +1580,16 @@ impl PathGenerator {
             (operand, conditions, results, else_result)
         } else { panic!("handle_case reveived {expr}") };
 
-        self.try_push_states(&["case_first_result", "call82_types"])?;
-        let out_type = self.handle_types_and_try(&results[0], TypeAssertion::None, |_self, out_type| {
+        self.try_push_states(&["case_first_result", "call7_types_type"])?;
+        let out_type = self.handle_types_type_and_try(TypeAssertion::None, |_self, out_type| {
+            _self.try_push_state("call82_types")?;
+            _self.handle_types(&results[0], TypeAssertion::CompatibleWith(out_type.clone()))?;
             if let Some(operand_expr) = operand {
-                _self.try_push_states(&["simple_case", "simple_case_operand", "call78_types"])?;
-                _self.handle_types_and_try(operand_expr, TypeAssertion::None, |_self, operand_type| {
+                _self.try_push_states(&["simple_case", "simple_case_operand", "call8_types_type"])?;
+                _self.handle_types_type_and_try(TypeAssertion::None, |_self, operand_type| {
+                    _self.state_generator.set_compatible_list(operand_type.get_compat_types());
+                    _self.try_push_state("call78_types")?;
+                    _self.handle_types(operand_expr, TypeAssertion::CompatibleWith(operand_type.clone()))?;
                     for i in 0..conditions.len() {
                         _self.try_push_states(&["simple_case_condition", "call79_types"])?;
                         _self.state_generator.set_compatible_list(operand_type.get_compat_types());
