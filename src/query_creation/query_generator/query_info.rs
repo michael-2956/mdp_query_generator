@@ -353,12 +353,12 @@ impl ClauseContext {
         )
     }
 
-    pub fn get_column_levels_by_types(
+    pub fn get_non_empty_column_levels_by_types(
         &self, column_types: Vec<SubgraphType>, only_group_by_columns: bool, only_unique_column_names: bool,
     ) -> Vec<Vec<(&SubgraphType, [&IdentName; 2])>> {
         self.get_accessible_column_levels_by_types_iter(
             column_types, only_group_by_columns, only_unique_column_names
-        ).collect::<Vec<_>>()
+        ).filter(|col_vec| !col_vec.is_empty()).collect::<Vec<_>>()
     }
 
     pub fn is_type_available(&self, any_of: Vec<SubgraphType>, only_group_by_columns: bool) -> bool {
@@ -567,7 +567,10 @@ impl QueryProps {
 
     fn set_subquery_call_mods(&mut self, subquery_call_mods: &CallModifiers) {
         if *subquery_call_mods == CallModifiers::None {
-            self.current_subquery_call_options = None;
+            self.current_subquery_call_options = Some(SubqueryCallOptions {
+                only_group_by_columns: false,
+                _no_aggregate: false,
+            });
         } else {
             let mods = unwrap_variant!(subquery_call_mods, CallModifiers::StaticList);
             self.current_subquery_call_options = Some(SubqueryCallOptions {
@@ -774,7 +777,8 @@ impl GroupByContents {
     }
 }
 
-/// a custom ident that only compares and hashes the string
+/// An Ident wrapper that only compares/hashes
+/// the uppercase string.
 #[derive(Clone, Debug, Eq)]
 pub struct IdentName {
     ident: Ident

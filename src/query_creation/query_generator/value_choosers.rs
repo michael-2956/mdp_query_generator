@@ -56,7 +56,7 @@ impl QueryValueChooser for RandomValueChooser {
     }
 
     fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, only_group_by_columns: bool, only_unique_column_names: bool) -> (SubgraphType, [IdentName; 2]) {
-        let column_levels = clause_context.get_column_levels_by_types(column_types, only_group_by_columns, only_unique_column_names);
+        let column_levels = clause_context.get_non_empty_column_levels_by_types(column_types, only_group_by_columns, only_unique_column_names);
         let columns = *column_levels.choose(&mut self.rng).as_ref().unwrap();
         let (col_tp, [rel_name, col_name]) = *columns.choose(&mut self.rng).as_ref().unwrap();
         ((*col_tp).clone(), [(*rel_name).clone(), (*col_name).clone()])
