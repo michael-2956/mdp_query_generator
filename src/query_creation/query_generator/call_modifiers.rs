@@ -4,7 +4,7 @@ use sqlparser::ast::Ident;
 use core::fmt::Debug;
 use std::collections::BTreeMap;
 
-use crate::{query_creation::state_generator::{markov_chain_generator::{markov_chain::CallModifiers, subgraph_type::SubgraphType, FunctionContext}, CallTypes}, unwrap_variant};
+use crate::{query_creation::state_generator::{markov_chain_generator::{subgraph_type::SubgraphType, FunctionContext}, CallTypes}, unwrap_variant};
 
 use super::query_info::{ClauseContext, IdentName};
 
@@ -81,9 +81,7 @@ impl ValueSetter for IsColumnTypeAvailableValueSetter {
     }
 
     fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
-        let check_group_by = function_context.call_params.modifiers.contains(&SmolStr::new("group by columns"));
         let mut argument_types = unwrap_variant!(function_context.call_params.selected_types.clone(), CallTypes::TypeList);
-        let modifiers = unwrap_variant!(&function_context.call_params.modifiers, CallModifiers::StaticList);
 
         let selected_type_opt = match function_context.current_node.node_common.name.as_str() {
             "column_type_available" => None,
@@ -102,22 +100,17 @@ impl ValueSetter for IsColumnTypeAvailableValueSetter {
             argument_types = SubgraphType::filter_by_selected(&argument_types, selected_type);
         }
 
-        let is_available = argument_types.iter().any(|x|
-            if check_group_by {
-                clause_context.group_by().is_type_available(x)
-            } else {
-                clause_context.from().is_type_available(x, None)
-            }
+        let only_group_by_columns = function_context.call_params.modifiers.contains(&SmolStr::new("group by columns"));
+        let type_is_available = clause_context.is_type_available(argument_types, only_group_by_columns);
+        let types_value_has_other_options = [
+            "no typed nulls", "no subquery", "no literals",
+            "no case", "no formulas",
+        ].into_iter().any(
+            |m| !function_context.call_params.modifiers.contains(&SmolStr::new(m))
         );
-
         return ValueSetterValue::IsColumnTypeAvailable(IsColumnTypeAvailableValue {
-            is_available,
-            let_through: is_available || [
-                "no typed nulls", "no subquery", "no literals",
-                "no case", "no formulas",
-            ].into_iter().any(
-                |m| !modifiers.contains(&SmolStr::new(m))
-            )
+            is_available: type_is_available,
+            let_through: type_is_available || types_value_has_other_options
         })
     }
 }
@@ -167,14 +160,12 @@ impl ValueSetter for HasUniqueColumnNamesForTypeValueSetter {
         let column_types = unwrap_variant!(
             &function_context.call_params.selected_types, CallTypes::TypeList
         );
-        let allowed_col_names = if function_context.call_params.modifiers.contains(
+        let only_group_by_columns = function_context.call_params.modifiers.contains(
             &SmolStr::new("group by columns")
-        ) {
-            Some(clause_context.group_by().get_column_name_set())
-        } else { None };
+        );
         // in any clause context the column ambiguity is determined by FROM
         ValueSetterValue::HasUniqueColumnNamesForType(HasUniqueColumnNamesForSelectedTypesValue {
-            value: clause_context.from().has_unique_columns_for_types(column_types, allowed_col_names)
+            value: clause_context.has_unique_columns_for_types(column_types.clone(), only_group_by_columns)
         })
     }
 }
@@ -199,7 +190,7 @@ impl StatelessCallModifier for HasUniqueColumnNamesForSelectedTypesModifier {
 #[derive(Debug, Clone)]
 pub struct WildcardRelationsValue {
     /// relations eligible to be selected by qualified wildcard
-    pub wildcard_selectable_relations: Vec<Ident>,
+    pub relations_selectable_by_qualified_wildcard: Vec<Ident>,
     /// total number of relations
     pub total_relations_num: usize,
 }
@@ -227,19 +218,23 @@ impl ValueSetter for WildcardRelationsValueSetter {
         // 1. All types selected by wildcard from table should be in the allowed types
         // 2. if single_column modifier is present, only a single column should be present in every relation
         ValueSetterValue::WildcardRelations(WildcardRelationsValue {
-            wildcard_selectable_relations: clause_context.from().relations_iter().filter_map(|(alias, relation)| {
-                let column_types = relation.get_column_types();
-                if single_column && column_types.len() != 1 {
-                    None
-                } else {
-                    if column_types.iter().all(|col_type| allowed_types.contains(col_type)) {
-                        Some(alias.clone())
-                    } else {
-                        None
-                    }
+            relations_selectable_by_qualified_wildcard: clause_context.from().relations_iter().filter_map(|(alias, relation)| {
+                // get all column types (if there is the same type twice it will still be here)
+                let all_column_types: Vec<_> = relation.get_all_columns_iter().map(|(_, col_type)| col_type.clone()).collect();
+                let all_types_are_allowed = all_column_types.iter().all(|col_type| allowed_types.contains(col_type));
+
+                let mut relation_opt: Option<Ident> = if all_types_are_allowed {
+                    Some(alias.clone().into())
+                } else { None };
+
+                // the relation is not eligible if the number of columns is > 1 and single_column is on
+                if single_column && all_column_types.len() != 1 {
+                    relation_opt = None;
                 }
+
+                relation_opt
             }).collect(),
-            total_relations_num: clause_context.from().relations_num(),
+            total_relations_num: clause_context.from().num_relations(),
         })
     }
 }
@@ -264,14 +259,13 @@ impl StatelessCallModifier for IsWildcardAvailableModifier {
         match function_context.current_node.node_common.name.as_str() {
             "SELECT_wildcard" => {
                 if single_column {
-                    // there is a single relation and it is eligible to be selected by wildcard
-                    wildcard_relations.total_relations_num == 1 && wildcard_relations.wildcard_selectable_relations.len() == 1
+                    wildcard_relations.total_relations_num == 1 && wildcard_relations.relations_selectable_by_qualified_wildcard.len() == 1
                 } else {
                     wildcard_relations.total_relations_num > 0
                 }
             },
             "SELECT_qualified_wildcard" => {
-                wildcard_relations.wildcard_selectable_relations.len() > 0
+                wildcard_relations.relations_selectable_by_qualified_wildcard.len() > 0
             },
             any => panic!("is_wildcard_available cannot be called at {any}")
         }
@@ -424,7 +418,7 @@ impl ValueSetter for HasAccessibleColumnsValueSetter {
 
     fn get_value(&self, clause_context: &ClauseContext, _function_context: &FunctionContext) -> ValueSetterValue {
         ValueSetterValue::HasAccessibleColumns(HasAccessibleColumnsValue {
-            available: clause_context.from().has_unique_columns_for_types(&vec![SubgraphType::Undetermined], None),
+            available: clause_context.has_unique_columns(false),
         })
     }
 }

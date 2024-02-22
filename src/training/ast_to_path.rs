@@ -5,7 +5,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{self, BinaryOperator, DataType, DateTimeField, Expr, FunctionArg, FunctionArgExpr, Ident, ObjectName, OrderByExpr, Query, Select, SelectItem, SetExpr, TableWithJoins, TimezoneInfo, TrimWhereField, UnaryOperator, Value};
 
-use crate::{config::{Config, MainConfig, TomlReadable}, query_creation::{query_generator::{aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue}, query_info::{ClauseContext, ClauseContextCheckpoint, DatabaseSchema, QueryProps}, value_choosers::{DeterministicValueChooser, RandomValueChooser}, QueryGenerator, TypeAssertion}, state_generator::{markov_chain_generator::{error::SyntaxError, markov_chain::{CallModifiers, MarkovChain}, ChainStateCheckpoint, DynClone, StateGeneratorConfig}, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, subgraph_type::SubgraphType, substitute_models::{AntiCallModel, DeterministicModel, PathModel, SubstituteModel}, CallTypes, MarkovChainGenerator}}, unwrap_pat, unwrap_variant, unwrap_variant_or_else};
+use crate::{config::{Config, MainConfig, TomlReadable}, query_creation::{query_generator::{aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue}, query_info::{ClauseContext, ClauseContextCheckpoint, DatabaseSchema, IdentName, QueryProps}, value_choosers::{DeterministicValueChooser, RandomValueChooser}, QueryGenerator, TypeAssertion}, state_generator::{markov_chain_generator::{error::SyntaxError, markov_chain::{CallModifiers, MarkovChain}, ChainStateCheckpoint, DynClone, StateGeneratorConfig}, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, subgraph_type::SubgraphType, substitute_models::{AntiCallModel, DeterministicModel, PathModel, SubstituteModel}, CallTypes, MarkovChainGenerator}}, unwrap_pat, unwrap_variant, unwrap_variant_or_else};
 
 pub struct AST2PathTestingConfig {
     pub schema: PathBuf,
@@ -123,9 +123,8 @@ pub enum PathNode {
     State(SmolStr),
     NewSubgraph(SmolStr),
     SelectedTableName(ObjectName),
-    SelectedColumnNameFROM(Vec<Ident>),
-    SelectedColumnNameGROUPBY(Vec<Ident>),
-    SelectedColumnNameORDERBY(Ident),
+    SelectedColumnName([IdentName; 2]),
+    ORDERBYSelectReference(Ident),
     SelectedAggregateFunctions(ObjectName),
     NumericValue(String),
     IntegerValue(String),
@@ -285,8 +284,8 @@ impl PathGenerator {
     }
 
     /// subgraph def_Query
-    fn handle_query(&mut self, query: &Box<Query>) -> Result<Vec<(Option<Ident>, SubgraphType)>, ConvertionError> {
-        self.clause_context.on_query_begin();
+    fn handle_query(&mut self, query: &Box<Query>) -> Result<Vec<(Option<IdentName>, SubgraphType)>, ConvertionError> {
+        self.clause_context.on_query_begin(self.state_generator.get_fn_modifiers_opt());
         self.try_push_state("Query")?;
 
         let select_body = unwrap_variant!(&*query.body, SetExpr::Select);
@@ -413,7 +412,7 @@ impl PathGenerator {
             ValueSetterValue::SelectAccessibleColumns
         ).accessible_columns.iter().collect::<Vec<_>>();
         if aliases.contains(&&ident.clone().into()) {
-            self.push_node(PathNode::SelectedColumnNameORDERBY(ident.clone()));
+            self.push_node(PathNode::ORDERBYSelectReference(ident.clone()));
             Ok(())
         } else {
             Err(ConvertionError::new(format!(
@@ -426,7 +425,7 @@ impl PathGenerator {
     fn handle_from(&mut self, from: &Vec<TableWithJoins>) -> Result<(), ConvertionError> {
         self.try_push_state("FROM")?;
         for table_with_joins in from.iter() {
-            self.clause_context.from_mut().create_empty_subfrom();
+            self.clause_context.from_mut().add_subfrom();
             match &table_with_joins.relation {
                 sqlparser::ast::TableFactor::Table { name, .. } => {
                     self.try_push_state("FROM_table")?;
@@ -539,31 +538,29 @@ impl PathGenerator {
                     let expr = self.handle_types(expr, TypeAssertion::None)?;
                     self.try_push_state("select_expr_done")?;
                     self.push_node(PathNode::SelectAlias(alias.clone()));  // the order is important
-                    column_idents_and_graph_types.push((Some(alias.clone()), expr));
+                    column_idents_and_graph_types.push((Some(alias.clone().into()), expr));
                 },
                 SelectItem::QualifiedWildcard(alias, ..) => {
                     self.try_push_states(&["SELECT_tables_eligible_for_wildcard", "SELECT_qualified_wildcard"])?;
                     let relation = match alias.0.as_slice() {
                         [ident] => {
                             let wildcard_relations = unwrap_variant!(self.state_generator.get_named_value::<WildcardRelationsValue>().unwrap(), ValueSetterValue::WildcardRelations);
-                            if !wildcard_relations.wildcard_selectable_relations.contains(ident) {
+                            if !wildcard_relations.relations_selectable_by_qualified_wildcard.contains(ident) {
                                 return Err(ConvertionError::new(format!(
                                     "{ident}.* is not available: wildcard_selectable_relations = {:?}",
-                                    wildcard_relations.wildcard_selectable_relations
+                                    wildcard_relations.relations_selectable_by_qualified_wildcard
                                 )))
                             }
                             self.clause_context.from().get_relation_by_name(ident)
                         },
                         any => panic!("schema.table alias is not supported: {}", ObjectName(any.to_vec())),
                     };
-                    column_idents_and_graph_types.extend(relation.get_columns_with_types().into_iter());
+                    column_idents_and_graph_types.extend(relation.get_all_columns_iter_cloned());
                     self.push_node(PathNode::QualifiedWildcardSelectedRelation(alias.0.last().unwrap().clone()));
                 },
                 SelectItem::Wildcard(..) => {
                     self.try_push_states(&["SELECT_tables_eligible_for_wildcard", "SELECT_wildcard"])?;
-                    column_idents_and_graph_types.extend(self.clause_context
-                        .from().get_wildcard_columns().into_iter()
-                    );
+                    column_idents_and_graph_types.extend(self.clause_context.from().get_wildcard_columns_iter());
                 },
             }
         }
@@ -1497,7 +1494,7 @@ impl PathGenerator {
             self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList, || self.state_generator.print_stack()
         );
         self.try_push_state("column_spec_choose_source")?;
-        let check_group_by = if self.state_generator.get_fn_modifiers().contains(&SmolStr::new("group by columns")) {
+        let only_group_by_columns = if self.state_generator.get_fn_modifiers().contains(&SmolStr::new("group by columns")) {
             self.try_push_state("get_column_spec_from_group_by")?;
             true
         } else {
@@ -1505,7 +1502,7 @@ impl PathGenerator {
             false
         };
         self.try_push_state("column_spec_choose_qualified")?;
-        let mut ident_components = match expr {
+        let ident_components = match expr {
             Expr::Identifier(ident) => {
                 self.try_push_state("unqualified_column_name")?;
                 vec![ident.clone()]
@@ -1516,14 +1513,9 @@ impl PathGenerator {
             },
             any => unexpected_expr!(any),
         };
-        if check_group_by {
-            ident_components = self.clause_context.from().qualify_column(ident_components);
-        }
-        let selected_type = match if check_group_by {
-            self.clause_context.group_by().get_column_type_by_ident_components(&ident_components)
-        } else {
-            self.clause_context.from().get_column_type_by_ident_components(&ident_components)
-        } {
+        let (selected_type, qualified_column_name) = match self.clause_context.retrieve_column_by_ident_components(
+            &ident_components, only_group_by_columns
+        ) {
             Ok(selected_type) => selected_type,
             Err(err) => return Err(ConvertionError::new(format!("{err}"))),
         };
@@ -1533,11 +1525,7 @@ impl PathGenerator {
                 ObjectName(ident_components), selected_type, column_types
             )))
         }
-        if check_group_by {
-            self.push_node(PathNode::SelectedColumnNameGROUPBY(ident_components));
-        } else {
-            self.push_node(PathNode::SelectedColumnNameFROM(ident_components));
-        }
+        self.push_node(PathNode::SelectedColumnName(qualified_column_name));
         self.try_push_state("EXIT_column_spec")?;
         Ok(selected_type)
     }
@@ -1546,6 +1534,7 @@ impl PathGenerator {
     fn handle_list_expr(&mut self, list: &Vec<Expr>) -> Result<SubgraphType, ConvertionError> {
         self.try_push_states(&["list_expr", "call6_types_type"])?;
         let inner_type = self.handle_types_type_and_try(TypeAssertion::None, |_self, inner_type| {
+            _self.state_generator.set_compatible_list(inner_type.get_compat_types());
             _self.try_push_state("call16_types")?;
             _self.handle_types(&list[0], TypeAssertion::CompatibleWith(inner_type.clone()))?;
             _self.try_push_state("list_expr_multiple_values")?;
@@ -1583,6 +1572,7 @@ impl PathGenerator {
         self.try_push_states(&["case_first_result", "call7_types_type"])?;
         let out_type = self.handle_types_type_and_try(TypeAssertion::None, |_self, out_type| {
             _self.try_push_state("call82_types")?;
+            _self.state_generator.set_compatible_list(out_type.get_compat_types());
             _self.handle_types(&results[0], TypeAssertion::CompatibleWith(out_type.clone()))?;
             if let Some(operand_expr) = operand {
                 _self.try_push_states(&["simple_case", "simple_case_operand", "call8_types_type"])?;
@@ -1775,7 +1765,9 @@ impl PathGenerator {
                                 }
                                 self.try_push_state("call69_types")?;
                                 let column_type = self.handle_types(column_expr, TypeAssertion::None)?;
-                                let column_name = self.clause_context.from().get_qualified_ident_components(column_expr);
+                                let column_name = self.clause_context.retrieve_column_by_column_expr(
+                                    &column_expr, false
+                                ).unwrap().1;
                                 self.clause_context.group_by_mut().append_column(column_name, column_type);
                             }
                         }
@@ -1791,7 +1783,9 @@ impl PathGenerator {
                 ) => {
                     self.try_push_state("call70_types")?;
                     let column_type = self.handle_types(column_expr, TypeAssertion::None)?;
-                    let column_name = self.clause_context.from().get_qualified_ident_components(column_expr);
+                    let column_name = self.clause_context.retrieve_column_by_column_expr(
+                        &column_expr, false
+                    ).unwrap().1;
                     self.clause_context.group_by_mut().append_column(column_name, column_type);
                 },
                 any => unexpected_expr!(any)

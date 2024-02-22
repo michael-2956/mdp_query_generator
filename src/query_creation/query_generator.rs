@@ -11,7 +11,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
-    self, BinaryOperator, DataType, DateTimeField, Expr, FunctionArg, FunctionArgExpr, Ident, Join, ObjectName, OrderByExpr, Query, Select, SelectItem, SetExpr, TableFactor, TableWithJoins, TimezoneInfo, TrimWhereField, UnaryOperator, Value, WildcardAdditionalOptions
+    self, BinaryOperator, DataType, DateTimeField, Expr, FunctionArg, FunctionArgExpr, Join, ObjectName, OrderByExpr, Query, Select, SelectItem, SetExpr, TableFactor, TableWithJoins, TimezoneInfo, TrimWhereField, UnaryOperator, Value, WildcardAdditionalOptions
 };
 
 use crate::{config::TomlReadable, training::models::PathwayGraphModel};
@@ -23,7 +23,7 @@ use super::{
 use self::{
     aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution},
     call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue},
-    expr_precedence::ExpressionPriority, query_info::{ClauseContext, DatabaseSchema, QueryProps}, value_choosers::QueryValueChooser
+    expr_precedence::ExpressionPriority, query_info::{ClauseContext, DatabaseSchema, IdentName, QueryProps}, value_choosers::QueryValueChooser
 };
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
@@ -185,9 +185,9 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     }
 
     /// subgraph def_Query
-    fn handle_query(&mut self) -> (Query, Vec<(Option<Ident>, SubgraphType)>) {
+    fn handle_query(&mut self) -> (Query, Vec<(Option<IdentName>, SubgraphType)>) {
         self.substitute_model.notify_subquery_creation_begin();
-        self.clause_context.on_query_begin();
+        self.clause_context.on_query_begin(self.state_generator.get_fn_modifiers_opt());
         self.expect_state("Query");
 
         let mut select_body = Select {
@@ -357,7 +357,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         let mut from: Vec<TableWithJoins> = vec![];
 
         loop {
-            self.clause_context.from_mut().create_empty_subfrom();
+            self.clause_context.from_mut().add_subfrom();
             from.push(TableWithJoins { relation: match self.next_state().as_str() {
                 "FROM_table" => self.handle_from_table(),
                 "call0_Query" => self.handle_from_query(),
@@ -456,7 +456,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             any => self.panic_unexpected(any)
         }
 
-        let mut column_idents_and_graph_types: Vec<(Option<Ident>, SubgraphType)> = vec![];
+        let mut column_idents_and_graph_types: Vec<(Option<IdentName>, SubgraphType)> = vec![];
         let mut projection = vec![];
 
         loop {
@@ -465,7 +465,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     match self.next_state().as_str() {
                         "SELECT_wildcard" => {
                             column_idents_and_graph_types.extend(
-                                self.clause_context.from().get_wildcard_columns().into_iter()
+                                self.clause_context.from().get_wildcard_columns_iter()
                             );
                             projection.push(SelectItem::Wildcard(WildcardAdditionalOptions {
                                 opt_exclude: None, opt_except: None, opt_rename: None,
@@ -478,7 +478,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                             let (alias, relation) = self.value_chooser.choose_qualified_wildcard_relation(
                                 from_contents, wildcard_relations
                             );
-                            column_idents_and_graph_types.extend(relation.get_columns_with_types().into_iter());
+                            column_idents_and_graph_types.extend(relation.get_all_columns_iter_cloned());
                             projection.push(SelectItem::QualifiedWildcard(
                                 ObjectName(vec![alias]),
                                 WildcardAdditionalOptions {
@@ -505,7 +505,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                         },
                         "SELECT_expr_with_alias" => {
                             let select_alias = self.value_chooser.choose_select_alias();
-                            (Some(select_alias.clone()), SelectItem::ExprWithAlias {
+                            (Some(select_alias.clone().into()), SelectItem::ExprWithAlias {
                                 expr, alias: select_alias,
                             })
                         },
@@ -549,7 +549,9 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             match self.next_state().as_str() {
                 "call70_types" => {
                     let (column_type, column_expr) = self.handle_types(TypeAssertion::None);
-                    let column_name = self.clause_context.from().get_qualified_ident_components(&column_expr);
+                    let column_name = self.clause_context.retrieve_column_by_column_expr(
+                        &column_expr, false
+                    ).unwrap().1;
                     result.push(column_expr);
                     self.clause_context.group_by_mut().append_column(column_name, column_type);
 
@@ -573,7 +575,9 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                             match self.next_state().as_str() {
                                 "call69_types" => {
                                     let (column_type, column_expr) = self.handle_types(TypeAssertion::None);
-                                    let column_name = self.clause_context.from().get_qualified_ident_components(&column_expr);
+                                    let column_name = self.clause_context.retrieve_column_by_column_expr(
+                                        &column_expr, false
+                                    ).unwrap().1;
                                     current_set.push(column_expr);
                                     self.clause_context.group_by_mut().append_column(column_name, column_type);
                                 },
@@ -962,7 +966,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList, || self.state_generator.print_stack()
         );
         self.expect_state("column_spec_choose_source");
-        let group_by_column = match self.next_state().as_str() {
+        let only_group_by_columns = match self.next_state().as_str() {
             "get_column_spec_from_group_by" => true,
             "get_column_spec_from_from" => false,
             any => self.panic_unexpected(any),
@@ -973,19 +977,13 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             "unqualified_column_name" => false,
             any => self.panic_unexpected(any)
         };
-        let (selected_type, qualified_column_name) = if group_by_column {
-            self.value_chooser.choose_column_group_by(
-                self.clause_context.from(),
-                self.clause_context.group_by(),
-                &column_types, qualified
-            )
-        } else {
-            self.value_chooser.choose_column_from(self.clause_context.from(), &column_types, qualified)
-        };
+        let (selected_type, qualified_column_name) = self.value_chooser.choose_column(
+            &self.clause_context, column_types, only_group_by_columns, !qualified
+        );
         let ident = if qualified {
-            Expr::CompoundIdentifier(qualified_column_name)
+            Expr::CompoundIdentifier(qualified_column_name.into_iter().map(IdentName::into).collect())
         } else {
-            Expr::Identifier(qualified_column_name.last().unwrap().clone())
+            Expr::Identifier(qualified_column_name.last().unwrap().clone().into())
         };
         self.expect_state("EXIT_column_spec");
         (selected_type, ident)

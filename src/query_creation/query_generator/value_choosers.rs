@@ -4,17 +4,15 @@ use sqlparser::ast::{DateTimeField, Ident, ObjectName};
 
 use crate::{training::ast_to_path::PathNode, query_creation::state_generator::subgraph_type::SubgraphType};
 
-use super::{call_modifiers::WildcardRelationsValue, query_info::{CreateTableSt, DatabaseSchema, FromContents, GroupByContents, IdentName, Relation}};
+use super::{call_modifiers::WildcardRelationsValue, query_info::{ClauseContext, CreateTableSt, DatabaseSchema, FromContents, IdentName, Relation}};
 
 pub trait QueryValueChooser {
     fn new() -> Self;
 
     fn choose_table<'a>(&mut self, database_schema: &'a DatabaseSchema) -> &'a CreateTableSt;
 
-    fn choose_column_from(&mut self, from_contents: &FromContents, column_types: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>);
+    fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, only_group_by_columns: bool, only_unique_column_names: bool) -> (SubgraphType, [IdentName; 2]);
 
-    fn choose_column_group_by(&mut self, from_contents: &FromContents, group_by_contents: &GroupByContents, column_types: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>);
-    
     fn choose_select_alias_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident;
 
     fn choose_aggregate_function_name<'a>(&mut self, func_names_iter: impl Iterator::<Item = &'a String>, dist: WeightedIndex<f64>) -> ObjectName;
@@ -57,18 +55,11 @@ impl QueryValueChooser for RandomValueChooser {
         database_schema.get_random_table_def(&mut self.rng)
     }
 
-    fn choose_column_from(&mut self, from_contents: &FromContents, column_types: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>) {
-        from_contents.get_random_column_with_type_of(&mut self.rng, column_types, qualified, None)
-    }
-
-    fn choose_column_group_by(&mut self, from_contents: &FromContents, group_by_contents: &GroupByContents, column_types: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>) {
-        if !qualified {
-            from_contents.get_random_column_with_type_of(&mut self.rng, column_types, qualified,
-                Some(group_by_contents.get_column_name_set())
-            )
-        } else {
-            group_by_contents.get_random_column_with_type_of(&mut self.rng, column_types)
-        }
+    fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, only_group_by_columns: bool, only_unique_column_names: bool) -> (SubgraphType, [IdentName; 2]) {
+        let column_levels = clause_context.get_column_levels_by_types(column_types, only_group_by_columns, only_unique_column_names);
+        let columns = *column_levels.choose(&mut self.rng).as_ref().unwrap();
+        let (col_tp, [rel_name, col_name]) = *columns.choose(&mut self.rng).as_ref().unwrap();
+        ((*col_tp).clone(), [(*rel_name).clone(), (*col_name).clone()])
     }
 
     fn choose_select_alias_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident {
@@ -114,7 +105,7 @@ impl QueryValueChooser for RandomValueChooser {
     }
 
     fn choose_qualified_wildcard_relation<'a>(&mut self, from_contents: &'a FromContents, wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation) {
-        let alias = wildcard_relations.wildcard_selectable_relations.choose(&mut self.rng).unwrap();
+        let alias = wildcard_relations.relations_selectable_by_qualified_wildcard.choose(&mut self.rng).unwrap();
         let relation = from_contents.get_relation_by_name(alias);
         (alias.clone(), relation)
     }
@@ -182,9 +173,8 @@ pub struct DeterministicValueChooser {
     chosen_intervals: VecWithIndex<(String, Option<DateTimeField>)>,
     chosen_tables: VecWithIndex<ObjectName>,
     chosen_select_aliases: VecWithIndex<Ident>,
-    chosen_columns_from: VecWithIndex<Vec<Ident>>,
-    chosen_columns_group_by: VecWithIndex<Vec<Ident>>,
-    chosen_columns_order_by: VecWithIndex<Ident>,
+    chosen_columns: VecWithIndex<[IdentName; 2]>,
+    chosen_order_by_select_refs: VecWithIndex<Ident>,
     chosen_aggregate_functions: VecWithIndex<ObjectName>,
     chosen_qualified_wildcard_tables: VecWithIndex<Ident>,
 }
@@ -201,9 +191,8 @@ impl DeterministicValueChooser {
             chosen_intervals: init_from_nodes!(path, (String, Option<DateTimeField>), IntervalValue),
             chosen_tables: init_from_nodes!(path, ObjectName, SelectedTableName),
             chosen_select_aliases: init_from_nodes!(path, Ident, SelectAlias),
-            chosen_columns_from: init_from_nodes!(path, Vec<Ident>, SelectedColumnNameFROM),
-            chosen_columns_group_by: init_from_nodes!(path, Vec<Ident>, SelectedColumnNameGROUPBY),
-            chosen_columns_order_by: init_from_nodes!(path, Ident, SelectedColumnNameORDERBY),
+            chosen_columns: init_from_nodes!(path, [IdentName; 2], SelectedColumnName),
+            chosen_order_by_select_refs: init_from_nodes!(path, Ident, ORDERBYSelectReference),
             chosen_aggregate_functions: init_from_nodes!(path, ObjectName, SelectedAggregateFunctions),
             chosen_qualified_wildcard_tables: init_from_nodes!(path, Ident, QualifiedWildcardSelectedRelation),
         }
@@ -222,9 +211,8 @@ impl QueryValueChooser for DeterministicValueChooser {
             chosen_intervals: VecWithIndex::new(),
             chosen_tables: VecWithIndex::new(),
             chosen_select_aliases: VecWithIndex::new(),
-            chosen_columns_from: VecWithIndex::new(),
-            chosen_columns_group_by: VecWithIndex::new(),
-            chosen_columns_order_by: VecWithIndex::new(),
+            chosen_columns: VecWithIndex::new(),
+            chosen_order_by_select_refs: VecWithIndex::new(),
             chosen_aggregate_functions: VecWithIndex::new(),
             chosen_qualified_wildcard_tables: VecWithIndex::new(),
         }
@@ -235,29 +223,23 @@ impl QueryValueChooser for DeterministicValueChooser {
         database_schema.get_table_def_by_name(new_table_name)
     }
 
-    fn choose_column_from(&mut self, from_contents: &FromContents, column_types: &Vec<SubgraphType>, qualified: bool) -> (SubgraphType, Vec<Ident>) {
-        let ident_components = self.chosen_columns_from.next_ref();
-        let col_type = from_contents.get_column_type_by_ident_components(ident_components).unwrap();
-        if !column_types.contains(&col_type) {
-            panic!("column_types = {:?} does not contain col_type = {:?}", column_types, col_type)
-        }
-        if ident_components.len() != (if qualified { 2 } else { 1 }) {
-            panic!("qualified is {qualified} but ident_components has {} elements: {:?}", ident_components.len(), ident_components)
-        }
-        (col_type, ident_components.clone())
-    }
-
-    fn choose_column_group_by(&mut self, _from_contents: &FromContents, group_by_contents: &GroupByContents, column_types: &Vec<SubgraphType>, _qualified: bool) -> (SubgraphType, Vec<Ident>) {
-        let ident_components = self.chosen_columns_group_by.next();
-        let col_type = group_by_contents.get_column_type_by_ident_components(&ident_components).unwrap();
-        if !column_types.contains(&col_type) {
-            panic!("column_types = {:?} does not contain col_type = {:?}", column_types, col_type)
-        }
-        (col_type, ident_components)
+    fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, only_group_by_columns: bool, only_unique_column_names: bool) -> (SubgraphType, [IdentName; 2]) {
+        let qualified_column_name = self.chosen_columns.next();
+        let ident_components: Vec<Ident> = if only_unique_column_names {
+            vec![qualified_column_name.iter().last().cloned().unwrap().into()]
+        } else {
+            qualified_column_name.iter().cloned().map(IdentName::into).collect()
+        };
+        let (col_tp, retrieved_column_name) = clause_context.retrieve_column_by_ident_components(
+            &ident_components, only_group_by_columns
+        ).unwrap();
+        assert!(column_types.iter().any(|tp| col_tp.is_same_or_more_determined_or_undetermined(&tp)));
+        assert!(qualified_column_name == retrieved_column_name);
+        (col_tp, retrieved_column_name)
     }
     
     fn choose_select_alias_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident {
-        let ident = self.chosen_columns_order_by.next();
+        let ident = self.chosen_order_by_select_refs.next();
         if !aliases.contains(&&ident.clone().into()) {
             panic!("Cannot choose {ident} in ORDER BY: it is not present among SELECT aliases: {:?}", aliases);
         }
@@ -292,7 +274,7 @@ impl QueryValueChooser for DeterministicValueChooser {
 
     fn choose_qualified_wildcard_relation<'a>(&mut self, from_contents: &'a FromContents, wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation) {
         let alias = self.chosen_qualified_wildcard_tables.next_ref();
-        if !wildcard_relations.wildcard_selectable_relations.contains(alias) {
+        if !wildcard_relations.relations_selectable_by_qualified_wildcard.contains(alias) {
             panic!("Relation cannot be selected by wildcard in this context: wildcard_relations = {:?}, rel. alias: {alias}", wildcard_relations)
         }
         let relation = from_contents.get_relation_by_name(alias);
@@ -310,9 +292,8 @@ impl QueryValueChooser for DeterministicValueChooser {
         self.chosen_intervals.reset();
         self.chosen_tables.reset();
         self.chosen_select_aliases.reset();
-        self.chosen_columns_from.reset();
-        self.chosen_columns_group_by.reset();
-        self.chosen_columns_order_by.reset();
+        self.chosen_columns.reset();
+        self.chosen_order_by_select_refs.reset();
         self.chosen_qualified_wildcard_tables.reset();
     }
 }

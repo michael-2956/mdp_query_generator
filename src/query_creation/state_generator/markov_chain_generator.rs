@@ -870,6 +870,14 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
        &self.call_stack.last().unwrap().function_context.call_params.modifiers
     }
 
+    /// get crrent function modifiers list, if any function is running now
+    /// (would be None right before and after the main function was called for the first time)
+    pub fn get_fn_modifiers_opt(&self) -> Option<&CallModifiers> {
+        self.call_stack.last().map(
+            |sf| &sf.function_context.call_params.modifiers     
+        )
+     }
+
     pub fn get_pending_call_accepted_types(&self) -> FunctionTypes {
         self.markov_chain.functions.get(&self.pending_call.as_ref().unwrap().func_name).unwrap().accepted_types.clone()
     }
