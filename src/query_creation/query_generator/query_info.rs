@@ -286,11 +286,12 @@ impl ClauseContext {
         eprintln!("Clause hierarchy: {:#?}", self.get_clause_hierarchy_iter().collect::<Vec<_>>());
     }
 
-    fn get_clause_hierarchy_iter(&self) -> impl Iterator<Item=(&FromContents, &GroupByContents, &QueryProps)> {
+    /// returns None if the level's from is empty
+    fn get_clause_hierarchy_iter(&self) -> impl Iterator<Item=Option<(&FromContents, &GroupByContents, &QueryProps)>> {
         self.all_accessible_froms.get_from_contents_hierarchy_iter()
             .zip(self.group_by_contents_stack.iter().rev())
             .zip(self.query_props_stack.iter().rev())
-            .map(|((a, b), c)| (a, b, c))
+            .map(|((a, b), c)| a.map(|a| (a, b, c)))
     }
 
     fn get_accessible_column_levels_iter_retrieve_by<'a, F>(
@@ -300,10 +301,11 @@ impl ClauseContext {
     where
         F: for<'b> Fn(&'b FromContents, Option<HashSet<[IdentName; 2]>>, bool) -> Box<dyn TypeAndQualifiedColumnIter<'b> + 'b>,
     {
-        let only_unique_column_names = check_accessibility == CheckAccessibility::ColumnName;
         let mut shaded_col_names: HashSet<IdentName> = HashSet::new();
         let mut shaded_rel_names: HashSet<IdentName> = HashSet::new();
-        self.get_clause_hierarchy_iter().enumerate().map(move |(
+        self.get_clause_hierarchy_iter().enumerate().filter_map(
+            |(i, v_opt)| v_opt.map(|v| (i, v))
+        ).map(move |(
             i, (from_contents, group_by_contents, query_props)
         )| {
             let only_group_by_columns = if i == 0 { only_group_by_columns } else {
@@ -312,19 +314,26 @@ impl ClauseContext {
             let allowed_rel_col_names_opt = if only_group_by_columns {
                 Some(group_by_contents.get_column_name_set())
             } else { None };
-            let accessible_columns = retrieve_by(
-                    from_contents, allowed_rel_col_names_opt, only_unique_column_names
-                )
-                .filter(|(.., [rel_name, col_name])| {
-                    let by_qualified_column = !shaded_rel_names.contains(rel_name);
-                    let by_column = !shaded_col_names.contains(col_name);
-                    match &check_accessibility {
-                        CheckAccessibility::QualifiedColumnName => by_qualified_column,
-                        CheckAccessibility::ColumnName => by_column,
-                        CheckAccessibility::Either => by_qualified_column || by_column,
-                    }
-                })
-                .collect::<Vec<_>>();
+            let accessible_columns = [
+                match &check_accessibility {
+                    CheckAccessibility::QualifiedColumnName => vec![],
+                    CheckAccessibility::ColumnName |
+                    CheckAccessibility::Either => {
+                        retrieve_by(from_contents, allowed_rel_col_names_opt.clone(), true).filter(
+                            |(.., [.., col_name])| !shaded_col_names.contains(col_name)
+                        ).collect::<Vec<_>>()
+                    },
+                },
+                match &check_accessibility {
+                    CheckAccessibility::ColumnName => vec![],
+                    CheckAccessibility::QualifiedColumnName |
+                    CheckAccessibility::Either => {
+                        retrieve_by(from_contents, allowed_rel_col_names_opt, false).filter(
+                            |(.., [rel_name, ..])| !shaded_rel_names.contains(rel_name)
+                        ).collect::<Vec<_>>()
+                    },
+                }
+            ].concat();
             for rel_name in from_contents.get_all_rel_names_iter() {
                 shaded_rel_names.insert((*rel_name).clone());
             }
@@ -546,11 +555,11 @@ impl AllAccessibleFroms {
 
     /// returns an iterator of FromContents that first contains current subfrom, then
     /// the top from, then all the other froms from bottom query level to top query level
-    fn get_from_contents_hierarchy_iter(&self) -> impl Iterator<Item = &FromContents> {
+    fn get_from_contents_hierarchy_iter(&self) -> impl Iterator<Item = Option<&FromContents>> {
         self.from_contents_stack.iter().rev()
             .zip(self.from_is_active_stack.iter().rev())
             .zip(self.subfrom_opt_stack.iter().rev())
-            .filter_map(|((from_contents, from_is_active), subfrom_opt)|
+            .map(|((from_contents, from_is_active), subfrom_opt)|
                 subfrom_opt.as_ref().or(
                     if *from_is_active { Some(from_contents) } else { None }
                 )

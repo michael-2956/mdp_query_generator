@@ -736,14 +736,14 @@ digraph G {
         column_spec_choose_source [label="Choose column source"]
         column_spec -> column_spec_choose_source
 
-        column_spec_choose_qualified [label="Choose if qualified\n[set value]", set_value="name_accessibility_of_selected_types_value"]
-
         get_column_spec_from_group_by [label="GROUP BY\nmod. 'group by columns' -> ON", modifier="group by columns", modifier_mode="on"]
         column_spec_choose_source -> get_column_spec_from_group_by
-        get_column_spec_from_group_by -> column_spec_choose_qualified
 
         get_column_spec_from_from [label="FROM\nmod. 'group by columns' -> OFF", modifier="group by columns", modifier_mode="off"]
         column_spec_choose_source -> get_column_spec_from_from
+
+        column_spec_choose_qualified [label="Choose if qualified\n[set value]", set_value="name_accessibility_of_selected_types_value"]
+        get_column_spec_from_group_by -> column_spec_choose_qualified
         get_column_spec_from_from -> column_spec_choose_qualified
 
         qualified_column_name [label="Qualified (R.COL)\n[call mod]", call_modifier="selected_types_accessible_by_naming_method"]

@@ -164,13 +164,20 @@ impl ValueSetter for NameAccessibilityOfSelectedTypesValueSetter {
         let only_group_by_columns = function_context.call_params.modifiers.contains(
             &SmolStr::new("group by columns")
         );
+        let accessible_by_column_name = clause_context.has_columns_for_types(
+            column_types.clone(), only_group_by_columns, CheckAccessibility::ColumnName,
+        );
+        let accessible_by_qualified_column_name = clause_context.has_columns_for_types(
+            column_types.clone(), only_group_by_columns, CheckAccessibility::QualifiedColumnName,
+        );
+        // eprintln!("accessible by either = {}", clause_context.has_columns_for_types(
+        //     column_types.clone(), only_group_by_columns, CheckAccessibility::Either,
+        // ));
+        // eprintln!("accessible_by_column_name = {}", accessible_by_column_name);
+        // eprintln!("accessible_by_qualified_column_name = {}\n", accessible_by_qualified_column_name);
         ValueSetterValue::NameAccessibilityOfSelectedTypes(NameAccessibilityOfSelectedTypesValue {
-            accessible_by_column_name: clause_context.has_columns_for_types(
-                column_types.clone(), only_group_by_columns, CheckAccessibility::ColumnName,
-            ),
-            accessible_by_qualified_column_name: clause_context.has_columns_for_types(
-                column_types.clone(), only_group_by_columns, CheckAccessibility::QualifiedColumnName,
-            ),
+            accessible_by_column_name,
+            accessible_by_qualified_column_name,
         })
     }
 }

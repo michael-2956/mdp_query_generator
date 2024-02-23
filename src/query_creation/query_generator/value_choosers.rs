@@ -59,7 +59,7 @@ impl QueryValueChooser for RandomValueChooser {
         let column_levels = clause_context.get_non_empty_column_levels_by_types(column_types.clone(), only_group_by_columns, check_accessibility.clone());
         let columns = *column_levels.choose(&mut self.rng).as_ref().unwrap();
         let (col_tp, [rel_name, col_name]) = *columns.choose(&mut self.rng).as_ref().unwrap();
-        // if **rel_name == Ident::new("T1").into() && **col_name == Ident::new("C_CUSTKEY").into() {
+        // if **rel_name == Ident::new("T3").into() && **col_name == Ident::new("C4").into() {
         //     eprintln!("selected {} by {:#?} with {:?} from {:#?}", ObjectName([(*rel_name).clone().into(), (*col_name).clone().into()].to_vec()), check_accessibility, column_types, column_levels);
         //     clause_context.eprint_clause_hierarchy();
         // }
