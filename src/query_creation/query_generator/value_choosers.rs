@@ -4,14 +4,14 @@ use sqlparser::ast::{DateTimeField, Ident, ObjectName};
 
 use crate::{training::ast_to_path::PathNode, query_creation::state_generator::subgraph_type::SubgraphType};
 
-use super::{call_modifiers::WildcardRelationsValue, query_info::{ClauseContext, CreateTableSt, DatabaseSchema, FromContents, IdentName, Relation}};
+use super::{call_modifiers::WildcardRelationsValue, query_info::{CheckAccessibility, ClauseContext, CreateTableSt, DatabaseSchema, FromContents, IdentName, Relation}};
 
 pub trait QueryValueChooser {
     fn new() -> Self;
 
     fn choose_table<'a>(&mut self, database_schema: &'a DatabaseSchema) -> &'a CreateTableSt;
 
-    fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, only_group_by_columns: bool, only_unique_column_names: bool) -> (SubgraphType, [IdentName; 2]);
+    fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, only_group_by_columns: bool, check_accessibility: CheckAccessibility) -> (SubgraphType, [IdentName; 2]);
 
     fn choose_select_alias_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident;
 
@@ -55,10 +55,14 @@ impl QueryValueChooser for RandomValueChooser {
         database_schema.get_random_table_def(&mut self.rng)
     }
 
-    fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, only_group_by_columns: bool, only_unique_column_names: bool) -> (SubgraphType, [IdentName; 2]) {
-        let column_levels = clause_context.get_non_empty_column_levels_by_types(column_types, only_group_by_columns, only_unique_column_names);
+    fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, only_group_by_columns: bool, check_accessibility: CheckAccessibility) -> (SubgraphType, [IdentName; 2]) {
+        let column_levels = clause_context.get_non_empty_column_levels_by_types(column_types.clone(), only_group_by_columns, check_accessibility.clone());
         let columns = *column_levels.choose(&mut self.rng).as_ref().unwrap();
         let (col_tp, [rel_name, col_name]) = *columns.choose(&mut self.rng).as_ref().unwrap();
+        // if **rel_name == Ident::new("T1").into() && **col_name == Ident::new("C_CUSTKEY").into() {
+        //     eprintln!("selected {} by {:#?} with {:?} from {:#?}", ObjectName([(*rel_name).clone().into(), (*col_name).clone().into()].to_vec()), check_accessibility, column_types, column_levels);
+        //     clause_context.eprint_clause_hierarchy();
+        // }
         ((*col_tp).clone(), [(*rel_name).clone(), (*col_name).clone()])
     }
 
@@ -223,9 +227,9 @@ impl QueryValueChooser for DeterministicValueChooser {
         database_schema.get_table_def_by_name(new_table_name)
     }
 
-    fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, only_group_by_columns: bool, only_unique_column_names: bool) -> (SubgraphType, [IdentName; 2]) {
+    fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, only_group_by_columns: bool, check_accessibility: CheckAccessibility) -> (SubgraphType, [IdentName; 2]) {
         let qualified_column_name = self.chosen_columns.next();
-        let ident_components: Vec<Ident> = if only_unique_column_names {
+        let ident_components: Vec<Ident> = if check_accessibility == CheckAccessibility::ColumnName {
             vec![qualified_column_name.iter().last().cloned().unwrap().into()]
         } else {
             qualified_column_name.iter().cloned().map(IdentName::into).collect()
@@ -237,7 +241,7 @@ impl QueryValueChooser for DeterministicValueChooser {
         assert!(qualified_column_name == retrieved_column_name);
         (col_tp, retrieved_column_name)
     }
-    
+
     fn choose_select_alias_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident {
         let ident = self.chosen_order_by_select_refs.next();
         if !aliases.contains(&&ident.clone().into()) {

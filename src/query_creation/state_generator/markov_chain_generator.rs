@@ -13,7 +13,7 @@ use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use take_until::TakeUntilExt;
 
-use crate::{config::TomlReadable, query_creation::{query_generator::{call_modifiers::{CanSkipLimitModifier, CanSkipLimitValueSetter, DistinctAggregationModifier, DistinctAggregationValueSetter, GroupingEnabledValueSetter, GroupingModeSwitchModifier, HasAccessibleColumnsModifier, HasAccessibleColumnsValueSetter, HasUniqueColumnNamesForSelectedTypesModifier, HasUniqueColumnNamesForTypeValueSetter, IsColumnTypeAvailableModifier, IsColumnTypeAvailableValueSetter, IsEmptySetAllowedModifier, IsGroupingSetsValueSetter, IsWildcardAvailableModifier, NamedValue, SelectAccessibleColumnsValueSetter, SelectHasAccessibleColumnsModifier, SelectIsNotDistinctModifier, SelectIsNotDistinctValueSetter, StatefulCallModifier, StatelessCallModifier, ValueSetter, ValueSetterValue, WildcardRelationsValueSetter}, query_info::ClauseContext}, state_generator::markov_chain_generator::markov_chain::FunctionTypes}, training::models::{ModelPredictionResult, PathwayGraphModel}, unwrap_variant};
+use crate::{config::TomlReadable, query_creation::{query_generator::{call_modifiers::{CanSkipLimitModifier, CanSkipLimitValueSetter, DistinctAggregationModifier, DistinctAggregationValueSetter, GroupingEnabledValueSetter, GroupingModeSwitchModifier, HasAccessibleColumnsModifier, HasAccessibleColumnsValueSetter, SelectedTypesAccessibleByNamingMethodModifier, NameAccessibilityOfSelectedTypesValueSetter, IsColumnTypeAvailableModifier, IsColumnTypeAvailableValueSetter, IsEmptySetAllowedModifier, IsGroupingSetsValueSetter, IsWildcardAvailableModifier, NamedValue, SelectAccessibleColumnsValueSetter, SelectHasAccessibleColumnsModifier, SelectIsNotDistinctModifier, SelectIsNotDistinctValueSetter, StatefulCallModifier, StatelessCallModifier, ValueSetter, ValueSetterValue, WildcardRelationsValueSetter}, query_info::ClauseContext}, state_generator::markov_chain_generator::markov_chain::FunctionTypes}, training::models::{ModelPredictionResult, PathwayGraphModel}, unwrap_variant};
 
 use self::{
     markov_chain::{
@@ -563,8 +563,8 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         _self.register_stateless_call_modifier(HasAccessibleColumnsModifier {});
         _self.register_value_setter(SelectAccessibleColumnsValueSetter {});
         _self.register_stateless_call_modifier(SelectHasAccessibleColumnsModifier {});
-        _self.register_value_setter(HasUniqueColumnNamesForTypeValueSetter {});
-        _self.register_stateless_call_modifier(HasUniqueColumnNamesForSelectedTypesModifier {});
+        _self.register_value_setter(NameAccessibilityOfSelectedTypesValueSetter {});
+        _self.register_stateless_call_modifier(SelectedTypesAccessibleByNamingMethodModifier {});
         _self.fill_function_modifier_info();
         _self.reset();
         Ok(_self)

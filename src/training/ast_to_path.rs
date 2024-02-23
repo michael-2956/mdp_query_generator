@@ -460,12 +460,15 @@ impl PathGenerator {
                     },
                     any => unexpected_expr!(any)
                 }
+                self.clause_context.from_mut().activate_subfrom();
                 self.try_push_states(&["FROM_join_on", "call83_types"])?;
                 self.handle_types(join_on, TypeAssertion::GeneratedBy(SubgraphType::Val3))?;
+                self.clause_context.from_mut().deactivate_subfrom();
             }
             self.try_push_state("FROM_cartesian_product")?;
             self.clause_context.from_mut().delete_subfrom();
         }
+        self.clause_context.from_mut().activate_from();
         self.try_push_state("EXIT_FROM")?;
         Ok(())
     }
@@ -1519,7 +1522,9 @@ impl PathGenerator {
             Ok(selected_type) => selected_type,
             Err(err) => return Err(ConvertionError::new(format!("{err}"))),
         };
-        if !column_types.contains(&selected_type) {
+        if !column_types.iter().any(
+            |searched_type| selected_type.is_same_or_more_determined_or_undetermined(searched_type)
+        ) {
             return Err(ConvertionError::new(format!(
                 "get_column_type_by_ident_components() selected a column ({}) with type {:?}, but expected one of {:?}",
                 ObjectName(ident_components), selected_type, column_types

@@ -736,7 +736,7 @@ digraph G {
         column_spec_choose_source [label="Choose column source"]
         column_spec -> column_spec_choose_source
 
-        column_spec_choose_qualified [label="Choose if qualified\n[set value]", set_value="do_unique_column_names_exist_for_selected_types"]
+        column_spec_choose_qualified [label="Choose if qualified\n[set value]", set_value="name_accessibility_of_selected_types_value"]
 
         get_column_spec_from_group_by [label="GROUP BY\nmod. 'group by columns' -> ON", modifier="group by columns", modifier_mode="on"]
         column_spec_choose_source -> get_column_spec_from_group_by
@@ -746,11 +746,11 @@ digraph G {
         column_spec_choose_source -> get_column_spec_from_from
         get_column_spec_from_from -> column_spec_choose_qualified
 
-        qualified_column_name [label="Qualified (R.COL)"]
+        qualified_column_name [label="Qualified (R.COL)\n[call mod]", call_modifier="selected_types_accessible_by_naming_method"]
         column_spec_choose_qualified -> qualified_column_name
         qualified_column_name -> EXIT_column_spec
 
-        unqualified_column_name [label="Unqualified (COL)\n[call mod]", call_modifier="has_unique_column_names_for_selected_types"]
+        unqualified_column_name [label="Unqualified (COL)\n[call mod]", call_modifier="selected_types_accessible_by_naming_method"]
         column_spec_choose_qualified -> unqualified_column_name
         unqualified_column_name -> EXIT_column_spec
     }

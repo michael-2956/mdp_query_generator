@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use crate::{query_creation::state_generator::{markov_chain_generator::{subgraph_type::SubgraphType, FunctionContext}, CallTypes}, unwrap_variant};
 
-use super::query_info::{ClauseContext, IdentName};
+use super::query_info::{CheckAccessibility, ClauseContext, IdentName};
 
 pub trait NamedValue: Debug {
     fn name() -> SmolStr where Self : Sized;
@@ -23,7 +23,7 @@ pub enum ValueSetterValue {
     HasAccessibleColumns(HasAccessibleColumnsValue),
     IsColumnTypeAvailable(IsColumnTypeAvailableValue),
     SelectAccessibleColumns(SelectAccessibleColumnsValue),
-    HasUniqueColumnNamesForType(HasUniqueColumnNamesForSelectedTypesValue),
+    NameAccessibilityOfSelectedTypes(NameAccessibilityOfSelectedTypesValue),
 }
 
 pub trait ValueSetter: Debug {
@@ -138,22 +138,23 @@ impl StatelessCallModifier for IsColumnTypeAvailableModifier {
 }
 
 #[derive(Debug, Clone)]
-pub struct HasUniqueColumnNamesForSelectedTypesValue {
-    value: bool,
+pub struct NameAccessibilityOfSelectedTypesValue {
+    accessible_by_column_name: bool,
+    accessible_by_qualified_column_name: bool,
 }
 
-impl NamedValue for HasUniqueColumnNamesForSelectedTypesValue {
+impl NamedValue for NameAccessibilityOfSelectedTypesValue {
     fn name() -> SmolStr {
-        SmolStr::new("do_unique_column_names_exist_for_selected_types")
+        SmolStr::new("name_accessibility_of_selected_types_value")
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct HasUniqueColumnNamesForTypeValueSetter { }
+pub struct NameAccessibilityOfSelectedTypesValueSetter { }
 
-impl ValueSetter for HasUniqueColumnNamesForTypeValueSetter {
+impl ValueSetter for NameAccessibilityOfSelectedTypesValueSetter {
     fn get_value_name(&self) -> SmolStr {
-        HasUniqueColumnNamesForSelectedTypesValue::name()
+        NameAccessibilityOfSelectedTypesValue::name()
     }
 
     fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
@@ -163,27 +164,36 @@ impl ValueSetter for HasUniqueColumnNamesForTypeValueSetter {
         let only_group_by_columns = function_context.call_params.modifiers.contains(
             &SmolStr::new("group by columns")
         );
-        // in any clause context the column ambiguity is determined by FROM
-        ValueSetterValue::HasUniqueColumnNamesForType(HasUniqueColumnNamesForSelectedTypesValue {
-            value: clause_context.has_unique_columns_for_types(column_types.clone(), only_group_by_columns)
+        ValueSetterValue::NameAccessibilityOfSelectedTypes(NameAccessibilityOfSelectedTypesValue {
+            accessible_by_column_name: clause_context.has_columns_for_types(
+                column_types.clone(), only_group_by_columns, CheckAccessibility::ColumnName,
+            ),
+            accessible_by_qualified_column_name: clause_context.has_columns_for_types(
+                column_types.clone(), only_group_by_columns, CheckAccessibility::QualifiedColumnName,
+            ),
         })
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct HasUniqueColumnNamesForSelectedTypesModifier {}
+pub struct SelectedTypesAccessibleByNamingMethodModifier {}
 
-impl StatelessCallModifier for HasUniqueColumnNamesForSelectedTypesModifier {
+impl StatelessCallModifier for SelectedTypesAccessibleByNamingMethodModifier {
     fn get_name(&self) -> SmolStr {
-        SmolStr::new("has_unique_column_names_for_selected_types")
+        SmolStr::new("selected_types_accessible_by_naming_method")
     }
 
     fn get_associated_value_name(&self) -> Option<SmolStr> {
-        Some(HasUniqueColumnNamesForSelectedTypesValue::name())
+        Some(NameAccessibilityOfSelectedTypesValue::name())
     }
 
-    fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
-        unwrap_variant!(associated_value.unwrap(), ValueSetterValue::HasUniqueColumnNamesForType).value
+    fn run(&self, function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
+        let associated_value = unwrap_variant!(associated_value.unwrap(), ValueSetterValue::NameAccessibilityOfSelectedTypes);
+        match function_context.current_node.node_common.name.as_str() {
+            "unqualified_column_name" => associated_value.accessible_by_column_name,
+            "qualified_column_name" => associated_value.accessible_by_qualified_column_name,
+            any => panic!("selected_types_accessible_by_naming_method cannot be called at {any}")
+        }
     }
 }
 
@@ -418,7 +428,7 @@ impl ValueSetter for HasAccessibleColumnsValueSetter {
 
     fn get_value(&self, clause_context: &ClauseContext, _function_context: &FunctionContext) -> ValueSetterValue {
         ValueSetterValue::HasAccessibleColumns(HasAccessibleColumnsValue {
-            available: clause_context.has_unique_columns(false),
+            available: clause_context.has_columns(false, CheckAccessibility::Either),
         })
     }
 }

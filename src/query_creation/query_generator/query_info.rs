@@ -174,6 +174,13 @@ pub enum ClauseContextCheckpoint {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CheckAccessibility {
+    QualifiedColumnName,
+    ColumnName,
+    Either
+}
+
 trait TypeAndQualifiedColumnIter<'a>: Iterator<Item = (&'a SubgraphType, [&'a IdentName; 2])> {}
 impl<'a, T: Iterator<Item = (&'a SubgraphType, [&'a IdentName; 2])> + 'a> TypeAndQualifiedColumnIter<'a> for T {}
 
@@ -275,6 +282,10 @@ impl ClauseContext {
         self.group_by_contents_stack.last_mut().unwrap()
     }
 
+    pub fn eprint_clause_hierarchy(&self) {
+        eprintln!("Clause hierarchy: {:#?}", self.get_clause_hierarchy_iter().collect::<Vec<_>>());
+    }
+
     fn get_clause_hierarchy_iter(&self) -> impl Iterator<Item=(&FromContents, &GroupByContents, &QueryProps)> {
         self.all_accessible_froms.get_from_contents_hierarchy_iter()
             .zip(self.group_by_contents_stack.iter().rev())
@@ -283,13 +294,15 @@ impl ClauseContext {
     }
 
     fn get_accessible_column_levels_iter_retrieve_by<'a, F>(
-        &'a self, retrieve_by: F, only_group_by_columns: bool, only_unique_column_names: bool, 
+        &'a self, retrieve_by: F, only_group_by_columns: bool,
+        check_accessibility: CheckAccessibility,
     ) -> impl Iterator<Item = Vec<(&'a SubgraphType, [&'a IdentName; 2])>>
     where
         F: for<'b> Fn(&'b FromContents, Option<HashSet<[IdentName; 2]>>, bool) -> Box<dyn TypeAndQualifiedColumnIter<'b> + 'b>,
     {
-        let mut used_col_names: HashSet<IdentName> = HashSet::new();
-        let mut used_rel_col_names: HashSet<[IdentName; 2]> = HashSet::new();
+        let only_unique_column_names = check_accessibility == CheckAccessibility::ColumnName;
+        let mut shaded_col_names: HashSet<IdentName> = HashSet::new();
+        let mut shaded_rel_names: HashSet<IdentName> = HashSet::new();
         self.get_clause_hierarchy_iter().enumerate().map(move |(
             i, (from_contents, group_by_contents, query_props)
         )| {
@@ -299,19 +312,24 @@ impl ClauseContext {
             let allowed_rel_col_names_opt = if only_group_by_columns {
                 Some(group_by_contents.get_column_name_set())
             } else { None };
-            let accessible_columns = retrieve_by(from_contents, allowed_rel_col_names_opt, only_unique_column_names)
-                // check is the R.C or C (if unique column names are required)
-                // are unique across the subquery levels (which is required for them)
-                // to be accessible
+            let accessible_columns = retrieve_by(
+                    from_contents, allowed_rel_col_names_opt, only_unique_column_names
+                )
                 .filter(|(.., [rel_name, col_name])| {
-                    !used_rel_col_names.contains(&[(*rel_name).clone(), (*col_name).clone()]) &&
-                    if only_unique_column_names { !used_col_names.contains(col_name) } else { true }
+                    let by_qualified_column = !shaded_rel_names.contains(rel_name);
+                    let by_column = !shaded_col_names.contains(col_name);
+                    match &check_accessibility {
+                        CheckAccessibility::QualifiedColumnName => by_qualified_column,
+                        CheckAccessibility::ColumnName => by_column,
+                        CheckAccessibility::Either => by_qualified_column || by_column,
+                    }
                 })
                 .collect::<Vec<_>>();
-            for (.., [rel_name, col_name]) in accessible_columns.iter() {
-                // add the R.C and C to their respective
-                used_rel_col_names.insert([(*rel_name).clone(), (*col_name).clone()]);
-                if only_unique_column_names { used_col_names.insert((*col_name).clone()); }
+            for rel_name in from_contents.get_all_rel_names_iter() {
+                shaded_rel_names.insert((*rel_name).clone());
+            }
+            for col_name in from_contents.get_all_col_names_iter() {
+                shaded_col_names.insert((*col_name).clone());
             }
             accessible_columns
         })
@@ -321,7 +339,7 @@ impl ClauseContext {
     /// a the type that falls into the column_types vec. The columns should
     /// be accessible from the respeccove relations
     ///
-    /// The 'only_unique_column_names' argument, if true, signals that only\
+    /// The 'check_accessibility' argument, if true, signals that only\
     /// unique column names should be considered (needed for unqualified columns)
     ///
     /// If 'only_group_by_columns' is true, the current query requires\
@@ -330,61 +348,56 @@ impl ClauseContext {
     /// For the parent queries, the column source is determined by the\
     /// modifiers present at the time of the subquery call.
     fn get_accessible_column_levels_by_types_iter(
-        &self, column_types: Vec<SubgraphType>, only_group_by_columns: bool, only_unique_column_names: bool,
+        &self, column_types: Vec<SubgraphType>, only_group_by_columns: bool,
+        check_accessibility: CheckAccessibility
     ) -> impl Iterator<Item = Vec<(&SubgraphType, [&IdentName; 2])>> {
         self.get_accessible_column_levels_iter_retrieve_by(
-            move |fc, allowed_rel_col_names_opt, only_unique_column_names| {
+            move |fc, allowed_rel_col_names_opt, only_unique| {
                 Box::new(fc.get_accessible_columns_by_types(
-                    &column_types, allowed_rel_col_names_opt, only_unique_column_names
+                    &column_types, allowed_rel_col_names_opt, only_unique
                 ).into_iter())
-            }, only_group_by_columns, only_unique_column_names
+            }, only_group_by_columns, check_accessibility
         )
     }
 
     fn get_accessible_column_levels_iter(
-        &self, only_group_by_columns: bool, only_unique_column_names: bool,
+        &self, only_group_by_columns: bool, check_accessibility: CheckAccessibility
     ) -> impl Iterator<Item = Vec<(&SubgraphType, [&IdentName; 2])>> {
         self.get_accessible_column_levels_iter_retrieve_by(
-            |fc, allowed_rel_col_names_opt, only_unique_column_names| {
+            |fc, allowed_rel_col_names_opt, only_unique| {
                 Box::new(fc.get_accessible_columns_iter(
-                    allowed_rel_col_names_opt, only_unique_column_names
+                    allowed_rel_col_names_opt, only_unique
                 ))
-            }, only_group_by_columns, only_unique_column_names
+            }, only_group_by_columns, check_accessibility
         )
     }
 
     pub fn get_non_empty_column_levels_by_types(
-        &self, column_types: Vec<SubgraphType>, only_group_by_columns: bool, only_unique_column_names: bool,
+        &self, column_types: Vec<SubgraphType>, only_group_by_columns: bool,
+        check_accessibility: CheckAccessibility
     ) -> Vec<Vec<(&SubgraphType, [&IdentName; 2])>> {
         self.get_accessible_column_levels_by_types_iter(
-            column_types, only_group_by_columns, only_unique_column_names
+            column_types, only_group_by_columns, check_accessibility
         ).filter(|col_vec| !col_vec.is_empty()).collect::<Vec<_>>()
     }
 
     pub fn is_type_available(&self, any_of: Vec<SubgraphType>, only_group_by_columns: bool) -> bool {
         self.get_accessible_column_levels_by_types_iter(
-            any_of, only_group_by_columns, false
+            any_of, only_group_by_columns, CheckAccessibility::Either
         ).find(|col_vec| !col_vec.is_empty()).is_some()
     }
 
-    /// checks if there are columns:
-    /// 1) with types that fall into any_of,
-    /// 2) with names that are unique for their respective FROMs,
-    /// 3) at any subquery nesting level.
-    pub fn has_unique_columns_for_types(
-        &self, any_of: Vec<SubgraphType>, only_group_by_columns: bool
+    pub fn has_columns_for_types(
+        &self, column_types: Vec<SubgraphType>, only_group_by_columns: bool, check_accessibility: CheckAccessibility
     ) -> bool {
         self.get_accessible_column_levels_by_types_iter(
-            any_of, only_group_by_columns, true
+            column_types, only_group_by_columns, check_accessibility
         ).find(|col_vec| !col_vec.is_empty()).is_some()
     }
 
-    /// checks if there are columns:
-    /// 1) with names that are unique for their respective FROMs,
-    /// 2) at any subquery nesting level.
-    pub fn has_unique_columns(&self, only_group_by_columns: bool) -> bool {
+    pub fn has_columns(&self, only_group_by_columns: bool, check_accessibility: CheckAccessibility) -> bool {
         self.get_accessible_column_levels_iter(
-            only_group_by_columns, true
+            only_group_by_columns, check_accessibility
         ).find(|col_vec| !col_vec.is_empty()).is_some()
     }
 
@@ -392,20 +405,20 @@ impl ClauseContext {
         &self, ident_components: &Vec<Ident>, only_group_by_columns: bool
     ) -> Result<(SubgraphType, [IdentName; 2]), ColumnRetrievalError> {
         let (
-            only_unique_column_names, searched_rel, searched_col
-        ): (bool, std::option::Option<IdentName>, IdentName) = match ident_components.as_slice() {
+            check_accessibility, searched_rel, searched_col
+        ): (_, std::option::Option<IdentName>, IdentName) = match ident_components.as_slice() {
             [col_ident] => {
-                (true, None, col_ident.clone().into())
+                (CheckAccessibility::ColumnName, None, col_ident.clone().into())
             },
             [rel_ident, col_ident] => {
-                (false, Some(rel_ident.clone().into()), col_ident.clone().into())
+                (CheckAccessibility::QualifiedColumnName, Some(rel_ident.clone().into()), col_ident.clone().into())
             }
             any => return Err(ColumnRetrievalError::new(format!(
                 "Can't access column. Name requires 1 or 2 elements, got: {:?}", any
             ))),
         };
         let rel_col_tp_opt = self.get_accessible_column_levels_iter(
-            only_group_by_columns, only_unique_column_names
+            only_group_by_columns, check_accessibility.clone()
         ).find_map(
             |cols_and_types| cols_and_types.into_iter()
                 .find_map(|(tp, [rel_name, col_name])|
@@ -419,10 +432,10 @@ impl ClauseContext {
         match rel_col_tp_opt {
             Some(val) => Ok(val),
             None => Err(ColumnRetrievalError::new(format!(
-                "Couldn't find column named {}.\nAccessible columns:{:#?}",
+                "Couldn't find column named {}.\nAccessible columns: {:#?}",
                     ObjectName(ident_components.clone()), self.get_accessible_column_levels_iter(
-                        only_group_by_columns, only_unique_column_names
-                    ).collect::<Vec<_>>()
+                        only_group_by_columns, check_accessibility
+                    ).collect::<Vec<_>>(),
             ))),
         }
     }
@@ -441,22 +454,28 @@ impl ClauseContext {
 
 #[derive(Debug, Clone)]
 pub struct AllAccessibleFroms {
+    from_is_active_stack: Vec<bool>,
     from_contents_stack: Vec<FromContents>,
     subfrom_opt_stack: Vec<Option<FromContents>>,
+    unactive_subfrom_opt_stack: Vec<Option<FromContents>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct AllAccessibleFromsCutoffCheckpoint {
     stack_length: usize,
+    from_is_active_last: bool,
     from_contents_last: FromContents,
     subfrom_opt_last: Option<FromContents>,
+    unactive_subfrom_opt_last: Option<FromContents>,
 }
 
 impl AllAccessibleFroms {
     fn new() -> Self {
         Self {
+            from_is_active_stack: vec![],
             from_contents_stack: vec![],
             subfrom_opt_stack: vec![],
+            unactive_subfrom_opt_stack: vec![],
         }
     }
 
@@ -474,11 +493,24 @@ impl AllAccessibleFroms {
         } else { top_from_alias }
     }
 
+    pub fn activate_from(&mut self) {
+        *self.from_is_active_stack.last_mut().unwrap() = true;
+    }
+
     pub fn add_subfrom(&mut self) {
         *self.current_subfrom_opt_mut() = Some(FromContents::new());
     }
 
+    pub fn activate_subfrom(&mut self) {
+        *self.subfrom_opt_stack.last_mut().unwrap() = self.unactive_subfrom_opt_stack.last_mut().unwrap().take();
+    }
+
+    pub fn deactivate_subfrom(&mut self) {
+        *self.unactive_subfrom_opt_stack.last_mut().unwrap() = self.subfrom_opt_stack.last_mut().unwrap().take();
+    }
+
     pub fn delete_subfrom(&mut self) {
+        // subfrom should be deactivated here
         self.current_subfrom_opt_mut().take().unwrap();
     }
 
@@ -486,32 +518,43 @@ impl AllAccessibleFroms {
         AllAccessibleFromsCutoffCheckpoint {
             stack_length: self.from_contents_stack.len(),
             from_contents_last: self.from_contents_stack.last().unwrap().clone(),
+            from_is_active_last: *self.from_is_active_stack.last().unwrap(),
             subfrom_opt_last: self.subfrom_opt_stack.last().unwrap().clone(),
+            unactive_subfrom_opt_last: self.unactive_subfrom_opt_stack.last().unwrap().clone(),
         }
     }
 
     fn restore_from_cutoff_checkpoint(&mut self, checkpoint: AllAccessibleFromsCutoffCheckpoint) {
+        *self.from_is_active_stack.last_mut().unwrap() = checkpoint.from_is_active_last;
         self.from_contents_stack.truncate(checkpoint.stack_length);
         *self.from_contents_stack.last_mut().unwrap() = checkpoint.from_contents_last;
         self.subfrom_opt_stack.truncate(checkpoint.stack_length);
         *self.subfrom_opt_stack.last_mut().unwrap() = checkpoint.subfrom_opt_last;
+        self.unactive_subfrom_opt_stack.truncate(checkpoint.stack_length);
+        *self.unactive_subfrom_opt_stack.last_mut().unwrap() = checkpoint.unactive_subfrom_opt_last;
     }
 
     fn current_subfrom_opt_mut(&mut self) -> &mut Option<FromContents> {
-        self.subfrom_opt_stack.last_mut().unwrap()
+        assert!(self.subfrom_opt_stack.last().unwrap().is_none());
+        self.unactive_subfrom_opt_stack.last_mut().unwrap()
     }
 
     fn current_subfrom_opt(&self) -> &Option<FromContents> {
+        assert!(self.unactive_subfrom_opt_stack.last().unwrap().is_none());
         self.subfrom_opt_stack.last().unwrap()
     }
 
     /// returns an iterator of FromContents that first contains current subfrom, then
     /// the top from, then all the other froms from bottom query level to top query level
     fn get_from_contents_hierarchy_iter(&self) -> impl Iterator<Item = &FromContents> {
-        self.from_contents_stack.iter().rev().zip(self.subfrom_opt_stack.iter().rev()).map(
-            |(from_contents, subfrom_opt)|
-                subfrom_opt.as_ref().unwrap_or(from_contents)
-        )
+        self.from_contents_stack.iter().rev()
+            .zip(self.from_is_active_stack.iter().rev())
+            .zip(self.subfrom_opt_stack.iter().rev())
+            .filter_map(|((from_contents, from_is_active), subfrom_opt)|
+                subfrom_opt.as_ref().or(
+                    if *from_is_active { Some(from_contents) } else { None }
+                )
+            )
     }
 
     fn active_from(&self) -> &FromContents {
@@ -528,11 +571,15 @@ impl AllAccessibleFroms {
 
     fn on_query_begin(&mut self) {
         self.subfrom_opt_stack.push(None);
+        self.unactive_subfrom_opt_stack.push(None);
+        self.from_is_active_stack.push(false);
         self.from_contents_stack.push(FromContents::new());
     }
 
     fn on_query_end(&mut self) {
         self.subfrom_opt_stack.pop();
+        self.unactive_subfrom_opt_stack.pop();
+        self.from_is_active_stack.pop();
         self.from_contents_stack.pop();
     }
 }
@@ -909,6 +956,14 @@ impl FromContents {
             .filter(move |(.., [rel_name, col_name])| if let Some(allowed_rel_col_names) = &allowed_rel_col_names_opt {
                 allowed_rel_col_names.contains(&[(*rel_name).clone(), (*col_name).clone()])
             } else { true })
+    }
+
+    fn get_all_rel_names_iter(&self) -> impl Iterator<Item = &IdentName> {
+        self.relations.iter().map(|(rel_name, ..)| rel_name)
+    }
+
+    fn get_all_col_names_iter(&self) -> impl Iterator<Item = &IdentName> {
+        self.relations.iter().flat_map(|(.., relation)| relation.get_all_column_names_iter())
     }
 
     /// returns accessible columns which types are in the column_types vec\

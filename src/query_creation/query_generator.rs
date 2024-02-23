@@ -23,7 +23,7 @@ use super::{
 use self::{
     aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution},
     call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue},
-    expr_precedence::ExpressionPriority, query_info::{ClauseContext, DatabaseSchema, IdentName, QueryProps}, value_choosers::QueryValueChooser
+    expr_precedence::ExpressionPriority, query_info::{CheckAccessibility, ClauseContext, DatabaseSchema, IdentName, QueryProps}, value_choosers::QueryValueChooser
 };
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
@@ -383,10 +383,13 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                             "call5_Query" => self.handle_from_query(),
                             any => self.panic_unexpected(any)
                         };
+                        // only activate sub-from for JOIN ON
+                        self.clause_context.from_mut().activate_subfrom();
                         self.expect_states(&["FROM_join_on", "call83_types"]);
                         let join_on = ast::JoinConstraint::On(
                             self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Val3)).1
                         );
+                        self.clause_context.from_mut().deactivate_subfrom();
                         joins.push(Join {
                             relation,
                             join_operator: match join_type.as_str() {
@@ -409,7 +412,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
 
             self.clause_context.from_mut().delete_subfrom();
         }
-
+        self.clause_context.from_mut().activate_from();
         from
     }
 
@@ -972,15 +975,15 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             any => self.panic_unexpected(any),
         };
         self.expect_state("column_spec_choose_qualified");
-        let qualified = match self.next_state().as_str() {
-            "qualified_column_name" => true,
-            "unqualified_column_name" => false,
+        let check_accessibility = match self.next_state().as_str() {
+            "qualified_column_name" => CheckAccessibility::QualifiedColumnName,
+            "unqualified_column_name" => CheckAccessibility::ColumnName,
             any => self.panic_unexpected(any)
         };
         let (selected_type, qualified_column_name) = self.value_chooser.choose_column(
-            &self.clause_context, column_types, only_group_by_columns, !qualified
+            &self.clause_context, column_types, only_group_by_columns, check_accessibility.clone()
         );
-        let ident = if qualified {
+        let ident = if check_accessibility == CheckAccessibility::QualifiedColumnName {
             Expr::CompoundIdentifier(qualified_column_name.into_iter().map(IdentName::into).collect())
         } else {
             Expr::Identifier(qualified_column_name.last().unwrap().clone().into())
