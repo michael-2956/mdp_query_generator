@@ -1,11 +1,33 @@
-use std::{error::Error, fmt, io::Write, path::PathBuf, str::FromStr};
+use std::{error::Error, fmt, path::PathBuf, str::FromStr};
+
+pub mod tester;
+mod continue_after;
+
 
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{self, BinaryOperator, DataType, DateTimeField, Expr, FunctionArg, FunctionArgExpr, Ident, ObjectName, OrderByExpr, Query, Select, SelectItem, SetExpr, TableWithJoins, TimezoneInfo, TrimWhereField, UnaryOperator, Value};
 
-use crate::{config::{Config, MainConfig, TomlReadable}, query_creation::{query_generator::{aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue}, query_info::{ClauseContext, ClauseContextCheckpoint, DatabaseSchema, IdentName, QueryProps}, value_choosers::{DeterministicValueChooser, RandomValueChooser}, QueryGenerator, TypeAssertion}, state_generator::{markov_chain_generator::{error::SyntaxError, markov_chain::{CallModifiers, MarkovChain}, ChainStateCheckpoint, DynClone, StateGeneratorConfig}, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, subgraph_type::SubgraphType, substitute_models::{AntiCallModel, DeterministicModel, PathModel, SubstituteModel}, CallTypes, MarkovChainGenerator}}, unwrap_pat, unwrap_variant, unwrap_variant_or_else};
+use crate::{
+    config::TomlReadable, query_creation::{
+        query_generator::{
+            aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution},
+            call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue},
+            query_info::{ClauseContext, ClauseContextCheckpoint, DatabaseSchema, IdentName, QueryProps}, TypeAssertion
+        },
+        state_generator::{
+            markov_chain_generator::{
+                error::SyntaxError, markov_chain::{CallModifiers, MarkovChain}, ChainStateCheckpoint, DynClone, StateGeneratorConfig
+            },
+            state_choosers::MaxProbStateChooser,
+            subgraph_type::SubgraphType, substitute_models::{DeterministicModel, SubstituteModel}, CallTypes, MarkovChainGenerator
+        }
+    },
+    unwrap_pat, unwrap_variant, unwrap_variant_or_else
+};
+
+use self::continue_after::{SelectContinueAfter, TypesContinueAfter};
 
 pub struct AST2PathTestingConfig {
     pub schema: PathBuf,
@@ -19,61 +41,6 @@ impl TomlReadable for AST2PathTestingConfig {
             schema: PathBuf::from_str(section["testing_schema"].as_str().unwrap()).unwrap(),
             n_tests: section["n_tests"].as_integer().unwrap() as usize,
         }
-    }
-}
-
-/// currently uses training DB to test (subject to change)
-pub struct TestAST2Path {
-    config: AST2PathTestingConfig,
-    main_config: MainConfig,
-    path_generator: PathGenerator,
-    random_query_generator: QueryGenerator<AntiCallModel, ProbabilisticStateChooser, RandomValueChooser>,
-    path_query_generator: QueryGenerator<PathModel, MaxProbStateChooser, DeterministicValueChooser>,
-}
-
-impl TestAST2Path {
-    pub fn with_config(config: Config) -> Result<Self, SyntaxError> {
-        Ok(Self {
-            path_generator: PathGenerator::new(
-                DatabaseSchema::parse_schema(&config.ast2path_testing_config.schema),
-                &config.chain_config,
-                config.generator_config.aggregate_functions_distribution.clone(),
-            )?,
-            config: config.ast2path_testing_config,
-            main_config: config.main_config,
-            random_query_generator: QueryGenerator::from_state_generator_and_schema(
-                MarkovChainGenerator::with_config(&config.chain_config).unwrap(),
-                config.generator_config.clone(),
-            ),
-            path_query_generator: QueryGenerator::from_state_generator_and_schema(
-                MarkovChainGenerator::with_config(&config.chain_config).unwrap(),
-                config.generator_config,
-            ),
-        })
-    }
-
-    pub fn test(&mut self) -> Result<(), ConvertionError> {
-        for i in 0..self.config.n_tests {
-            let query = Box::new(self.random_query_generator.generate());
-            if i % 10 == 0 {
-                if self.main_config.print_progress {
-                    print!("{}/{}      \r", i, self.config.n_tests);
-                }
-                std::io::stdout().flush().unwrap();
-            }
-            // if i < 220 { continue; }
-            // println!("Tested query: {query}");
-            let path = self.path_generator.get_query_path(&query)?;
-            let generated_query = self.path_query_generator.generate_with_substitute_model_and_value_chooser(
-                Box::new(PathModel::from_path_nodes(&path)),
-                Box::new(DeterministicValueChooser::from_path_nodes(&path))
-            );
-            if *query != generated_query {
-                println!("\nAST -> path -> AST mismatch!\nOriginal  query: {}\nGenerated query: {}", query, generated_query);
-                println!("Path: {:?}", path);
-            }
-        }
-        Ok(())
     }
 }
 
@@ -165,7 +132,7 @@ impl PathGenerator {
     }
 
     fn process_query(&mut self, query: &Box<Query>) -> Result<(), ConvertionError> {
-        self.handle_query(query)?;
+        self.handle_query(query, None)?;
         // reset the generator
         if let Some(state) = self.next_state_opt().unwrap() {
             panic!("Couldn't reset state generator: Received {state}");
@@ -208,10 +175,33 @@ struct Checkpoint {
     path_cutoff_length: usize,
 }
 
-#[derive(Debug, PartialEq)]
-enum TypesContinueAfter {
-    None,
-    ExprType(SubgraphType),
+struct TypesValue {
+    tp: SubgraphType,
+    /// indicates that other types for the
+    /// expression are possible to be assigned
+    worth_exploring: bool,
+}
+
+impl TypesValue {
+    fn not_explorable(tp: SubgraphType) -> Self {
+        Self {
+            tp,
+            worth_exploring: false,
+        }
+    }
+
+    fn explorable(tp: SubgraphType) -> Self {
+        Self {
+            tp,
+            worth_exploring: true,
+        }
+    }
+}
+
+impl Into<SubgraphType> for TypesValue {
+    fn into(self) -> SubgraphType {
+        self.tp
+    }
 }
 
 impl PathGenerator {
@@ -284,13 +274,21 @@ impl PathGenerator {
     }
 
     /// subgraph def_Query
-    fn handle_query(&mut self, query: &Box<Query>) -> Result<Vec<(Option<IdentName>, SubgraphType)>, ConvertionError> {
+    fn handle_query(
+        &mut self, query: &Box<Query>, select_continue_after: Option<SelectContinueAfter>
+    ) -> Result<(Vec<(Option<IdentName>, SubgraphType)>, SelectContinueAfter), ConvertionError> {
         self.clause_context.on_query_begin(self.state_generator.get_fn_modifiers_opt());
         self.try_push_state("Query")?;
 
         let select_body = unwrap_variant!(&*query.body, SetExpr::Select);
         
         self.try_push_state("call0_FROM")?;
+        /// TODO: or maybe we should iterate among FROM types?
+        /// handle_from_and_try ( {query after FROM} )
+        /// and from would in turn iterate through subquery types
+        /// so also handle_select will be able to continue after a type
+        /// and continue with the types in the select clause that will
+        /// try other types
         self.handle_from(&select_body.from)?;
 
         if let Some(ref selection) = select_body.selection {
@@ -298,15 +296,21 @@ impl PathGenerator {
             self.handle_where(selection)?;
         }
 
+        let mut select_continue_after = select_continue_after.unwrap_or(
+            SelectContinueAfter::new(select_body.projection.len())
+        );
+
         if select_body.group_by.len() != 0 {
-            self.handle_query_after_group_by(select_body, true)?;
+            self.handle_query_after_group_by(select_body, true, &mut select_continue_after)?;
         } else {
             let implicit_group_by_checkpoint = self.get_checkpoint();
-            match self.handle_query_after_group_by(select_body, false) {
+            let select_continue_after_checkpoint = select_continue_after.clone();
+            match self.handle_query_after_group_by(select_body, false, &mut select_continue_after) {
                 Ok(..) => { },
                 Err(err_no_grouping) => {
+                    select_continue_after = select_continue_after_checkpoint;
                     self.restore_checkpoint(&implicit_group_by_checkpoint);
-                    match self.handle_query_after_group_by(select_body, true) {
+                    match self.handle_query_after_group_by(select_body, true, &mut select_continue_after) {
                         Ok(..) => { },
                         Err(err_grouping) => {
                             self.restore_checkpoint_consume(implicit_group_by_checkpoint);
@@ -334,10 +338,10 @@ impl PathGenerator {
         // }
         self.clause_context.on_query_end();
 
-        return Ok(output_type)
+        return Ok((output_type, select_continue_after))
     }
 
-    fn handle_query_after_group_by(&mut self, select_body: &Box<Select>, with_group_by: bool) -> Result<(), ConvertionError> {
+    fn handle_query_after_group_by(&mut self, select_body: &Box<Select>, with_group_by: bool, select_continue_after: &mut SelectContinueAfter) -> Result<(), ConvertionError> {
         if with_group_by {
             self.try_push_state("call0_GROUP_BY")?;
             self.handle_group_by(&select_body.group_by)?;
@@ -355,7 +359,7 @@ impl PathGenerator {
         }
 
         self.try_push_state("call0_SELECT")?;
-        self.handle_select(select_body.distinct, &select_body.projection)?;
+        self.handle_select(select_body.distinct, &select_body.projection, select_continue_after)?;
 
         Ok(())
     }
@@ -433,7 +437,7 @@ impl PathGenerator {
                 },
                 sqlparser::ast::TableFactor::Derived { subquery, .. } => {
                     self.try_push_state("call0_Query")?;
-                    self.handle_from_query(subquery)?;
+                    self.handle_from_query(subquery, None)?;
                 },
                 any => unexpected_expr!(any)
             }
@@ -456,7 +460,7 @@ impl PathGenerator {
                     },
                     sqlparser::ast::TableFactor::Derived { subquery, .. } => {
                         self.try_push_state("call5_Query")?;
-                        self.handle_from_query(subquery)?;
+                        self.handle_from_query(subquery, None)?;
                     },
                     any => unexpected_expr!(any)
                 }
@@ -480,10 +484,14 @@ impl PathGenerator {
         Ok(())
     }
 
-    fn handle_from_query(&mut self, subquery: &Box<Query>) -> Result<(), ConvertionError> {
-        let column_idents_and_graph_types = self.handle_query(subquery)?;
+    fn handle_from_query(
+        &mut self, subquery: &Box<Query>, select_continue_after: Option<SelectContinueAfter>
+    ) -> Result<SelectContinueAfter, ConvertionError> {
+        let (
+            column_idents_and_graph_types, select_continue_after
+        ) = self.handle_query(subquery, select_continue_after)?;
         self.clause_context.from_mut().append_query(column_idents_and_graph_types);
-        Ok(())
+        Ok(select_continue_after)
     }
 
     /// subgraph def_WHERE
@@ -496,52 +504,83 @@ impl PathGenerator {
     }
 
     /// subgraph def_SELECT
-    fn handle_select(&mut self, distinct: bool, projection: &Vec<SelectItem>) -> Result<(), ConvertionError> {
+    fn handle_select(&mut self, distinct: bool, projection: &Vec<SelectItem>, select_continue_after: &mut SelectContinueAfter) -> Result<(), ConvertionError> {
         self.try_push_state("SELECT")?;
         if distinct {
             self.try_push_state("SELECT_DISTINCT")?;
             self.clause_context.query_mut().set_distinct();
         }
 
-        let mut column_idents_and_graph_types = vec![];
-
+        
         let single_column_mod = match self.state_generator.get_fn_modifiers() {
             CallModifiers::StaticList(list) if list.contains(&SmolStr::new("single column")) => true,
             _ => false,
         };
-
+        
+        if single_column_mod && projection.len() != 1 {
+            return Err(ConvertionError::new(format!(
+                "single column modifier is ON but the projection contains multiple columns: {:#?}",
+                projection
+            )))
+        }
+        
         let select_item_state = if self.clause_context.group_by().is_grouping_active() {
             "call73_types"
         } else {
             "call54_types"
         };
 
+        let mut err_str = "".to_string();
+        let checkpoint = self.get_checkpoint();
+        select_continue_after.prepare();
+
+        let column_idents_and_graph_types = loop {
+            err_str += match self.handle_select_projection(
+                projection, select_item_state, select_continue_after
+            ) {
+                Ok(ret) => break ret,
+                Err(err) => format!("For series {select_continue_after}, got: {err}\n"),
+            }.as_str();
+
+            self.restore_checkpoint(&checkpoint);
+            if let Err(err) = select_continue_after.update_current_series() {
+                return Err(ConvertionError::new(format!(
+                    "{err}:\n{}", err_str.get_indentated_string()
+                )))
+            }
+        };
+
+        self.try_push_state("EXIT_SELECT")?;
+
+        self.clause_context.query_mut().set_select_type(column_idents_and_graph_types);
+
+        Ok(())
+    }
+
+    fn handle_select_projection(
+        &mut self, projection: &Vec<SelectItem>, select_item_state: &str, select_continue_after: &mut SelectContinueAfter
+    ) -> Result<Vec<(Option<IdentName>, SubgraphType)>, ConvertionError> {
+        let mut column_idents_and_graph_types: Vec<(Option<IdentName>, SubgraphType)> = vec![];
+
         for (i, select_item) in projection.iter().enumerate() {
             if i > 0 {
-                if single_column_mod {
-                    return Err(ConvertionError::new(format!(
-                        "single column modifier is ON but the projection contains multiple columns: {:#?}",
-                        projection
-                    )))
-                } else {
-                    self.try_push_state("SELECT_list_multiple_values")?;
-                }
+                self.try_push_state("SELECT_list_multiple_values")?;
             }
             self.try_push_state("SELECT_list")?;
             match select_item {
                 SelectItem::UnnamedExpr(expr) => {
                     self.try_push_states(&["SELECT_unnamed_expr", "select_expr", select_item_state])?;
                     let alias = QueryProps::extract_alias(&expr);
-                    let expr = self.handle_types(expr, TypeAssertion::None)?;
+                    let tp = select_continue_after.run_types(self, i, expr, TypeAssertion::None)?;
                     self.try_push_state("select_expr_done")?;
-                    column_idents_and_graph_types.push((alias, expr));
+                    column_idents_and_graph_types.push((alias, tp));
                 },
                 SelectItem::ExprWithAlias { expr, alias } => {
                     self.try_push_states(&["SELECT_expr_with_alias", "select_expr", select_item_state])?;
-                    let expr = self.handle_types(expr, TypeAssertion::None)?;
+                    let tp = select_continue_after.run_types(self, i, expr, TypeAssertion::None)?;
                     self.try_push_state("select_expr_done")?;
                     self.push_node(PathNode::SelectAlias(alias.clone()));  // the order is important
-                    column_idents_and_graph_types.push((Some(alias.clone().into()), expr));
+                    column_idents_and_graph_types.push((Some(alias.clone().into()), tp));
                 },
                 SelectItem::QualifiedWildcard(alias, ..) => {
                     self.try_push_states(&["SELECT_tables_eligible_for_wildcard", "SELECT_qualified_wildcard"])?;
@@ -558,20 +597,19 @@ impl PathGenerator {
                         },
                         any => panic!("schema.table alias is not supported: {}", ObjectName(any.to_vec())),
                     };
+                    select_continue_after.mark_no_types_call_for_index(i);
                     column_idents_and_graph_types.extend(relation.get_all_columns_iter_cloned());
                     self.push_node(PathNode::QualifiedWildcardSelectedRelation(alias.0.last().unwrap().clone()));
                 },
                 SelectItem::Wildcard(..) => {
                     self.try_push_states(&["SELECT_tables_eligible_for_wildcard", "SELECT_wildcard"])?;
+                    select_continue_after.mark_no_types_call_for_index(i);
                     column_idents_and_graph_types.extend(self.clause_context.from().get_wildcard_columns_iter());
                 },
             }
         }
-        self.try_push_state("EXIT_SELECT")?;
 
-        self.clause_context.query_mut().set_select_type(column_idents_and_graph_types);
-
-        Ok(())
+        Ok(column_idents_and_graph_types)
     }
 
     /// subgraph def_LIMIT
@@ -631,7 +669,7 @@ impl PathGenerator {
                 self.try_push_state("Exists")?;
                 if *negated { self.try_push_state("Exists_not")?; }
                 self.try_push_state("call2_Query")?;
-                self.handle_query(subquery)?;
+                self.handle_query(subquery, None)?;
             },
             Expr::InList { expr, list, negated } => {
                 self.try_push_states(&["InList", "call3_types_type"])?;
@@ -653,7 +691,7 @@ impl PathGenerator {
                     _self.handle_types(expr, TypeAssertion::CompatibleWith(returned_type.clone()))?;
                     if *negated { _self.try_push_state("InSubqueryNot")?; }
                     _self.try_push_states(&["InSubqueryIn", "call3_Query"])?;
-                    _self.handle_query(subquery)?;
+                    _self.handle_query(subquery, None)?;
                     Ok(())
                 })?;
             },
@@ -710,7 +748,7 @@ impl PathGenerator {
                                     match &**right_inner {
                                         Expr::Subquery(query) => {
                                             _self.try_push_state("call4_Query")?;
-                                            _self.handle_query(query)?;
+                                            _self.handle_query(query, None)?;
                                         },
                                         any => unexpected_expr!(any),
                                     }
@@ -1050,7 +1088,7 @@ impl PathGenerator {
 
     /// subgraph def_types
     fn handle_types(&mut self, expr: &Expr, type_assertion: TypeAssertion) -> Result<SubgraphType, ConvertionError> {
-        self.handle_types_continue_after(expr, type_assertion, TypesContinueAfter::None)
+        self.handle_types_continue_after(expr, type_assertion, TypesContinueAfter::None).map(TypesValue::into)
     }
 
     fn _handle_types_and_try<F: Fn(&mut PathGenerator, SubgraphType) -> Result<(), ConvertionError>>(&mut self, expr: &Expr, type_assertion: TypeAssertion, and_try: F) -> Result<SubgraphType, ConvertionError> {
@@ -1063,7 +1101,7 @@ impl PathGenerator {
         let mut err_msg = "".to_string();
         let checkpoint = self.get_checkpoint();
         loop {
-            let tp = match self.handle_types_continue_after(expr, type_assertion.clone(), continue_after) {
+            let TypesValue { tp, worth_exploring } = match self.handle_types_continue_after(expr, type_assertion.clone(), continue_after) {
                 Ok(tp) => tp,
                 Err(err) => break Err(ConvertionError::new(err_msg + format!("Finally: {err}\n").as_str())),
             };
@@ -1072,22 +1110,29 @@ impl PathGenerator {
                 Err(err) => {
                     err_msg += format!("Tried with {tp} returned by types, but got: {err}\n").as_str();
                     self.restore_checkpoint(&checkpoint);
-                    continue_after = TypesContinueAfter::ExprType(tp);
+                    if worth_exploring {
+                        continue_after = TypesContinueAfter::ExprType(tp);
+                    } else {
+                        break Err(ConvertionError::new(err_msg + format!(
+                            "Finally, the types indicated that\
+                            it's not worth exploring further\n"
+                        ).as_str()))
+                    }
                 },
             };
         }
     }
 
-    fn handle_types_continue_after(&mut self, expr: &Expr, type_assertion: TypeAssertion, continue_after: TypesContinueAfter) -> Result<SubgraphType, ConvertionError> {
+    fn handle_types_continue_after(&mut self, expr: &Expr, type_assertion: TypeAssertion, continue_after: TypesContinueAfter) -> Result<TypesValue, ConvertionError> {
         self.try_push_state("types")?;
         let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
-        let selected_type = self.handle_types_expr(selected_types, expr, continue_after)?;
+        let types_value = self.handle_types_expr(selected_types, expr, continue_after)?;
         self.try_push_state("EXIT_types")?;
-        type_assertion.check(&selected_type, expr);
-        return Ok(selected_type)
+        type_assertion.check(&types_value.tp, expr);
+        return Ok(types_value)
     }
 
-    fn handle_types_expr(&mut self, selected_types: Vec<SubgraphType>, expr: &Expr, continue_after: TypesContinueAfter) -> Result<SubgraphType, ConvertionError> {
+    fn handle_types_expr(&mut self, selected_types: Vec<SubgraphType>, expr: &Expr, continue_after: TypesContinueAfter) -> Result<TypesValue, ConvertionError> {
         let mut err_str = "".to_string();
         let types_before_state_selection = self.get_checkpoint();
         let selected_types = SubgraphType::sort_by_compatibility(selected_types);
@@ -1102,7 +1147,7 @@ impl PathGenerator {
         }
 
         // try out different allowed types to find the actual one (or not)
-        let subgraph_type = loop {
+        let types_value = loop {
             let subgraph_type = match selected_types_iter.next() {
                 Some(subgraph_type) => subgraph_type,
                 None => return Err(ConvertionError::new(
@@ -1138,9 +1183,11 @@ impl PathGenerator {
 
             self.try_push_state("call0_types_value")?;
             match self.handle_types_value(expr) {
-                Ok(tp) => {
-                    if tp.is_same_or_more_determined_or_undetermined(subgraph_type) { break tp } else {
-                        panic!("types_value did not return the requested type. Requested: {subgraph_type} Got: {tp}")
+                Ok(types_value) => {
+                    if types_value.tp.is_same_or_more_determined_or_undetermined(subgraph_type) {
+                        break types_value
+                    } else {
+                        panic!("types_value did not return the requested type. Requested: {subgraph_type} Got: {}", types_value.tp)
                     }
                 },
                 Err(err) => {
@@ -1150,7 +1197,7 @@ impl PathGenerator {
             };
         };
 
-        Ok(subgraph_type)
+        Ok(types_value)
     }
 
     /// subgraph def_types_type
@@ -1222,7 +1269,9 @@ impl PathGenerator {
     }
 
     /// subgraph def_types_value
-    fn handle_types_value(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+    /// the boolean value indicates whether the expression may be multi-type
+    /// and pther types are worth exploring
+    fn handle_types_value(&mut self, expr: &Expr) -> Result<TypesValue, ConvertionError> {
         self.try_push_state("types_value")?;
         let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
         self.state_generator.set_known_list(selected_types.clone());
@@ -1234,7 +1283,7 @@ impl PathGenerator {
         let (tp_res, subgraph_key) = match expr {
             Expr::Value(Value::Null) => {
                 self.try_push_state("types_value_null")?;
-                (Ok(SubgraphType::Undetermined), "null")
+                (Ok(TypesValue::not_explorable(SubgraphType::Undetermined)), "null")
             },
             Expr::Nested(expr) => {
                 self.try_push_states(&["types_value_nested", "call1_types_value"])?;
@@ -1244,7 +1293,7 @@ impl PathGenerator {
                 let null_type = SubgraphType::from_data_type(data_type);
                 (if selected_types.contains(&null_type) {
                     self.try_push_state("types_value_typed_null")?;
-                    Ok(null_type)
+                    Ok(TypesValue::not_explorable(null_type))
                 } else {
                     Err(ConvertionError::new(format!("Wrong null types: {:?} for expr: {expr}::{data_type}", selected_types)))
                 }, "typed null")
@@ -1253,7 +1302,7 @@ impl PathGenerator {
             Expr::Function(function) => (self.handle_types_value_expr_aggr_function(function), "Aggregate function"),
             Expr::Subquery(subquery) => (self.handle_types_value_subquery(subquery), "Subquery"),
             expr => {
-                let handlers: Vec<(Box<dyn FnMut(&mut PathGenerator) -> Result<SubgraphType, ConvertionError>>, &str)> = vec![
+                let handlers: Vec<(Box<dyn FnMut(&mut PathGenerator) -> Result<TypesValue, ConvertionError>>, &str)> = vec![
                     (Box::new(|_self| _self.handle_types_value_column_expr(expr)), "column identifier"),
                     (Box::new(|_self| _self.handle_types_value_literals(expr)), "literals"),
                 ];
@@ -1281,39 +1330,39 @@ impl PathGenerator {
         }
     }
 
-    fn handle_types_value_expr_case(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+    fn handle_types_value_expr_case(&mut self, expr: &Expr) -> Result<TypesValue, ConvertionError> {
         self.try_push_state("call0_case")?;
-        self.handle_case(expr)
-    }
-    
-    fn handle_types_value_expr_aggr_function(&mut self, function: &ast::Function) -> Result<SubgraphType, ConvertionError> {
-        self.try_push_state("call0_aggregate_function")?;
-        self.handle_aggregate_function(function)
+        self.handle_case(expr).map(|tp| TypesValue::explorable(tp))
     }
 
-    fn handle_types_value_subquery(&mut self, subquery: &Box<Query>) -> Result<SubgraphType, ConvertionError> {
+    fn handle_types_value_expr_aggr_function(&mut self, function: &ast::Function) -> Result<TypesValue, ConvertionError> {
+        self.try_push_state("call0_aggregate_function")?;
+        self.handle_aggregate_function(function).map(|tp: SubgraphType| TypesValue::not_explorable(tp))
+    }
+
+    fn handle_types_value_subquery(&mut self, subquery: &Box<Query>) -> Result<TypesValue, ConvertionError> {
         self.try_push_state("call1_Query")?;
-        let col_type_list = self.handle_query(subquery)?;
+        let col_type_list = self.handle_query(subquery, None)?.0;
         if let [(.., query_subgraph_type)] = col_type_list.as_slice() {
-            Ok(query_subgraph_type.clone())
+            Ok(TypesValue::explorable(query_subgraph_type.clone()))
         } else {
             panic!("Query did not return a single type. Got: {:?}\nQuery: {subquery}", col_type_list);
         }
     }
 
-    fn handle_types_value_column_expr(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+    fn handle_types_value_column_expr(&mut self, expr: &Expr) -> Result<TypesValue, ConvertionError> {
         self.try_push_states(&["column_type_available", "call0_column_spec"])?;
-        self.handle_column_spec(expr)
+        self.handle_column_spec(expr).map(|tp: SubgraphType| TypesValue::not_explorable(tp))
     }
 
-    fn handle_types_value_literals(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+    fn handle_types_value_literals(&mut self, expr: &Expr) -> Result<TypesValue, ConvertionError> {
         self.try_push_state("call0_literals")?;
-        self.handle_literals(expr)
+        self.handle_literals(expr).map(|tp: SubgraphType| TypesValue::explorable(tp))
     }
 
-    fn handle_types_value_expr_formula(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
+    fn handle_types_value_expr_formula(&mut self, expr: &Expr) -> Result<TypesValue, ConvertionError> {
         self.try_push_state("call0_formulas")?;
-        self.handle_formulas(expr)
+        self.handle_formulas(expr).map(|tp: SubgraphType| TypesValue::not_explorable(tp))
     }
 
     /// subgraph def_formulas

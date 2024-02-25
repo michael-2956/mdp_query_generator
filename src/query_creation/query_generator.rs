@@ -682,10 +682,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 match self.next_state().as_str() {
                     arm if arm == states[0] => {
                         self.expect_state(states[1]);
+                        /// TODO: arguments should be compatible with function signature, not exactly matching it
                         let arg_expr = self.handle_types(TypeAssertion::GeneratedBy(return_type.clone())).1;
                         args_type_v.push(return_type.clone());
                         args_expr_v.push(FunctionArg::Unnamed(FunctionArgExpr::Expr(arg_expr)));
-                    }
+                    },
                     arm if arm == states[2] => { },
                     any => self.panic_unexpected(any),
                 };
