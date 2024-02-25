@@ -283,12 +283,6 @@ impl PathGenerator {
         let select_body = unwrap_variant!(&*query.body, SetExpr::Select);
         
         self.try_push_state("call0_FROM")?;
-        /// TODO: or maybe we should iterate among FROM types?
-        /// handle_from_and_try ( {query after FROM} )
-        /// and from would in turn iterate through subquery types
-        /// so also handle_select will be able to continue after a type
-        /// and continue with the types in the select clause that will
-        /// try other types
         self.handle_from(&select_body.from)?;
 
         if let Some(ref selection) = select_body.selection {
@@ -437,6 +431,11 @@ impl PathGenerator {
                 },
                 sqlparser::ast::TableFactor::Derived { subquery, .. } => {
                     self.try_push_state("call0_Query")?;
+                    // If we would want to test different suitable types for the inner
+                    // query here at some later stage, we can do this, but not for now.
+                    // This can be useful because of current implementation of CASE or literal expressions,
+                    // where they can generate an integer output where bigint was selected
+                    // ... but for now this is not an issue
                     self.handle_from_query(subquery, None)?;
                 },
                 any => unexpected_expr!(any)
@@ -1734,7 +1733,8 @@ impl PathGenerator {
                     SubgraphType::BigInt => &["aggregate_select_type_bigint", "arg_bigint", "call75_types"],
                     _ => panic!("Something wrong with match arm"),
                 })?;
-                self.handle_types(arg_expr, TypeAssertion::GeneratedBy(return_type.clone()))?;
+                self.state_generator.set_compatible_list(return_type.get_compat_types());
+                self.handle_types(arg_expr, TypeAssertion::CompatibleWith(return_type.clone()))?;
             },
 
             // ANY SINGLE ARGUMENT: BIGINT
@@ -1764,9 +1764,10 @@ impl PathGenerator {
                     _ => panic!("Something wrong with match arm"),
                 };
                 self.try_push_states(&states[..3])?;
-                self.handle_types(arg_expr_1, TypeAssertion::GeneratedBy(return_type.clone()))?;
+                self.state_generator.set_compatible_list(return_type.get_compat_types());
+                self.handle_types(arg_expr_1, TypeAssertion::CompatibleWith(return_type.clone()))?;
                 self.try_push_state(states[3])?;
-                self.handle_types(arg_expr_2, TypeAssertion::GeneratedBy(return_type.clone()))?;
+                self.handle_types(arg_expr_2, TypeAssertion::CompatibleWith(return_type.clone()))?;
             },
 
             _ => {

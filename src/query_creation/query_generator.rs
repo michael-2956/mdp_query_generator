@@ -663,8 +663,9 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     },
                     "arg_bigint" => {
                         self.expect_state("call75_types");
+                        self.state_generator.set_compatible_list(SubgraphType::BigInt.get_compat_types());
                         (AggregateFunctionAgruments::TypeList(vec![SubgraphType::BigInt]), vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(
-                            self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::BigInt)).1
+                            self.handle_types(TypeAssertion::CompatibleWith(SubgraphType::BigInt)).1
                         ))])
                     },
                     any => self.panic_unexpected(any),
@@ -679,11 +680,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 };
                 let mut args_type_v = vec![];
                 let mut args_expr_v = vec![];
+                self.state_generator.set_compatible_list(return_type.get_compat_types());
                 match self.next_state().as_str() {
                     arm if arm == states[0] => {
                         self.expect_state(states[1]);
-                        /// TODO: arguments should be compatible with function signature, not exactly matching it
-                        let arg_expr = self.handle_types(TypeAssertion::GeneratedBy(return_type.clone())).1;
+                        let arg_expr = self.handle_types(TypeAssertion::CompatibleWith(return_type.clone())).1;
                         args_type_v.push(return_type.clone());
                         args_expr_v.push(FunctionArg::Unnamed(FunctionArgExpr::Expr(arg_expr)));
                     },
@@ -691,7 +692,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     any => self.panic_unexpected(any),
                 };
                 self.expect_state(states[3]);
-                let arg_expr = self.handle_types(TypeAssertion::GeneratedBy(return_type.clone())).1;
+                let arg_expr = self.handle_types(TypeAssertion::CompatibleWith(return_type.clone())).1;
                 args_type_v.push(return_type.clone());
                 args_expr_v.push(FunctionArg::Unnamed(FunctionArgExpr::Expr(arg_expr)));
                 let args_type = AggregateFunctionAgruments::TypeList(args_type_v);
@@ -708,8 +709,9 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 };
                 let args_type = AggregateFunctionAgruments::TypeList(vec![return_type.clone()]);
                 self.expect_states(states);
+                self.state_generator.set_compatible_list(return_type.get_compat_types());
                 let args_expr = vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(
-                    self.handle_types(TypeAssertion::GeneratedBy(return_type.clone())).1,
+                    self.handle_types(TypeAssertion::CompatibleWith(return_type.clone())).1,
                 ))];
                 (args_type, args_expr, return_type)
             },
