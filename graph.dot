@@ -953,9 +953,9 @@ digraph G {
         EXIT_number [label="EXIT number"]
 
         BinaryNumberOp[label="binary op."]
-        call47_types [TYPES="[...]", MODS="[...]", label="TYPES: [...types]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call47_types [TYPES="[compatible]", MODS="[...]", label="TYPES: compatible(...)\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         number -> BinaryNumberOp
-        call48_types [TYPES="[...]", MODS="[...]", label="TYPES: [...types]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call48_types [TYPES="[compatible]", MODS="[...]", label="TYPES: compatible(...)\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         BinaryNumberOp -> call48_types
         binary_number_plus [label="+"]
         call48_types -> binary_number_plus
@@ -984,7 +984,7 @@ digraph G {
         call47_types -> EXIT_number
 
         UnaryNumberOp [label="unary op."]
-        call1_types [TYPES="[...]", MODS="[...]", label="TYPES: [...types]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call1_types [TYPES="[compatible]", MODS="[...]", label="TYPES: compatible(...)\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         number -> UnaryNumberOp
         unary_number_plus[label="+"]
         UnaryNumberOp -> unary_number_plus
@@ -1003,8 +1003,8 @@ digraph G {
         unary_number_cub_root -> call1_types
         call1_types -> EXIT_number
         // postgres treats -3 like a literal, but parser treats it like - and 1
-        // so we take "-" to actual literals generation. But expression '-' is here
-        call89_types [TYPES="[...]", MODS="[..., no literals]", label="TYPES: [...types]\nMODS: [..., no literals]", shape=rectangle, style=filled, color=lightblue]
+        // so we take "-" to actual literals generation. But the expression '-' (like in "-(4 + 1)") is here
+        call89_types [TYPES="[compatible]", MODS="[..., no literals]", label="TYPES: compatible(...)\nMODS: [..., no literals]", shape=rectangle, style=filled, color=lightblue]
         unary_number_minus[label="-"]
         UnaryNumberOp -> unary_number_minus
         unary_number_minus -> call89_types

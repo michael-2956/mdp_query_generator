@@ -177,9 +177,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         }
     }
 
-    fn assert_single_type_argument(&self) {
+    fn assert_single_type_argument(&self) -> SubgraphType {
         let arg_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
-        if arg_types.len() > 1 {
+        if let [tp] = arg_types.as_slice() {
+            tp.clone()
+        } else {
             panic!("This subgraph does not accept multiple types as argument. Got: {:?}", arg_types);
         }
     }
@@ -1330,11 +1332,12 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     /// subgraph def_numeric
     fn handle_number(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("number");
-        self.assert_single_type_argument();
+        let number_type = self.assert_single_type_argument();
         let (number_type, number) = match self.next_state().as_str() {
             "BinaryNumberOp" => {
                 self.expect_state("call48_types");
-                let (number_type, types_value_1) = self.handle_types(TypeAssertion::None);
+                self.state_generator.set_compatible_list(number_type.get_compat_types());
+                let types_value_1 = self.handle_types(TypeAssertion::CompatibleWith(number_type.clone())).1;
                 let numeric_binary_op = match self.next_state().as_str() {
                     "binary_number_bin_and" => BinaryOperator::BitwiseAnd,
                     "binary_number_bin_or" => BinaryOperator::BitwiseOr,
@@ -1347,7 +1350,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     any => self.panic_unexpected(any),
                 };
                 self.expect_state("call47_types");
-                let types_value_2 = self.handle_types(TypeAssertion::None).1;
+                let types_value_2 = self.handle_types(TypeAssertion::CompatibleWith(number_type.clone())).1;
                 (number_type, Expr::BinaryOp {
                     left: Box::new(types_value_1),
                     op: numeric_binary_op,
@@ -1369,7 +1372,8 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 } else {
                     self.expect_state("call1_types");
                 }
-                let (number_type, number) = self.handle_types(TypeAssertion::None);
+                self.state_generator.set_compatible_list(number_type.get_compat_types());
+                let number = self.handle_types(TypeAssertion::CompatibleWith(number_type.clone())).1;
                 (number_type, Expr::UnaryOp {
                     op: numeric_unary_op,
                     expr: Box::new(number)

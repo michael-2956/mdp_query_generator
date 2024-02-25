@@ -276,12 +276,44 @@ digraph G {
         aggregate_distinct -> aggregate_select_return_type
 
 
+        aggregate_select_type_text[TYPE_NAME="text", label="text?"]
+        aggregate_select_return_type -> aggregate_select_type_text
+
+        arg_single_text [label="[text]"]
+        aggregate_select_type_text -> arg_single_text
+        call63_types [TYPES="[compatible]", label="TYPES: compatible(text)\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        arg_single_text -> call63_types
+        call63_types -> EXIT_aggregate_function
+
+        arg_double_text [label="[text, text]"]
+        call74_types [TYPES="[compatible]", label="TYPES: compatible(text)\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        aggregate_select_type_text -> arg_double_text
+        arg_double_text -> call74_types
+        call74_types -> call63_types
+
+
+        aggregate_select_type_numeric[TYPE_NAME="numeric", label="numeric?"]
+        aggregate_select_return_type -> aggregate_select_type_numeric
+
+        arg_single_numeric [label="[numeric]"]
+        aggregate_select_type_numeric -> arg_single_numeric
+        call66_types [TYPES="[compatible]", label="TYPES: compatible(numeric)\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        arg_single_numeric -> call66_types
+        call66_types -> EXIT_aggregate_function
+        
+        arg_double_numeric [label="[numeric, numeric]"]
+        aggregate_select_type_numeric -> arg_double_numeric   
+        call68_types[TYPES="[compatible]", label="TYPES: compatible(numeric)\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        arg_double_numeric -> call68_types
+        call68_types -> call66_types
+
+
         aggregate_select_type_bigint[TYPE_NAME="bigint", label="bigint?"]
         aggregate_select_return_type -> aggregate_select_type_bigint
 
         arg_bigint [label="[bigint]"]
         aggregate_select_type_bigint -> arg_bigint
-        call75_types [TYPES="[bigint]", label="TYPES: bigint\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        call75_types [TYPES="[compatible]", label="TYPES: compatible(bigint)\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
         arg_bigint -> call75_types
         call75_types -> EXIT_aggregate_function
 
@@ -301,40 +333,9 @@ digraph G {
 
         arg_integer [label="[integer]"]
         aggregate_select_type_integer -> arg_integer
-        call71_types [TYPES="[integer]", label="TYPES: integer\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        call71_types [TYPES="[compatible]", label="TYPES: compatible(integer)\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
         arg_integer -> call71_types
         call71_types -> EXIT_aggregate_function
-
-
-        aggregate_select_type_numeric[TYPE_NAME="numeric", label="numeric?"]
-        aggregate_select_return_type -> aggregate_select_type_numeric
-
-        arg_single_numeric [label="[numeric]"]
-        aggregate_select_type_numeric -> arg_single_numeric
-        call66_types [TYPES="[numeric]", label="TYPES: numeric\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
-        arg_single_numeric -> call66_types
-        call66_types -> EXIT_aggregate_function
-        
-        arg_double_numeric [label="[numeric, numeric]"]
-        aggregate_select_type_numeric -> arg_double_numeric   
-        call68_types[TYPES="[numeric]", label="TYPES: numeric\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
-        arg_double_numeric -> call68_types
-        call68_types -> call66_types
-
-
-        aggregate_select_type_text[TYPE_NAME="text", label="text?"]
-        aggregate_select_return_type -> aggregate_select_type_text
-
-        arg_single_text [label="[text]"]
-        aggregate_select_type_text -> arg_single_text
-        call63_types [TYPES="[text]", label="TYPES: text\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
-        arg_single_text -> call63_types
-        call63_types -> EXIT_aggregate_function
-        arg_double_text [label="[text, text]"]
-        call74_types [TYPES="[text]", label="TYPES: text\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
-        aggregate_select_type_text -> arg_double_text
-        arg_double_text -> call74_types
-        call74_types -> call63_types
 
 
         aggregate_select_type_bool[TYPE_NAME="3VL Value", label="3VL Value?"]
@@ -342,7 +343,7 @@ digraph G {
 
         arg_single_3vl [label="[3vl]"]
         aggregate_select_type_bool -> arg_single_3vl
-        call64_types [TYPES="[3VL Value]", label="TYPES: 3VL Value\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        call64_types [TYPES="[compatible]", label="TYPES: compatible(3VL Value)\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
         arg_single_3vl -> call64_types
         call64_types -> EXIT_aggregate_function
 
@@ -352,7 +353,7 @@ digraph G {
 
         arg_date [label="[date]"]
         aggregate_select_type_date -> arg_date
-        call72_types [TYPES="[date]", label="TYPES: date\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        call72_types [TYPES="[compatible]", label="TYPES: compatible(date)\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
         arg_date -> call72_types
         call72_types -> EXIT_aggregate_function
 
@@ -362,7 +363,7 @@ digraph G {
 
         arg_timestamp [label="[timestamp]"]
         aggregate_select_type_timestamp -> arg_timestamp
-        call96_types [TYPES="[timestamp]", label="TYPES: timestamp\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        call96_types [TYPES="[compatible]", label="TYPES: compatible(timestamp)\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
         arg_timestamp -> call96_types
         call96_types -> EXIT_aggregate_function
 
@@ -372,7 +373,7 @@ digraph G {
 
         arg_interval [label="[interval]"]
         aggregate_select_type_interval -> arg_interval
-        call90_types [TYPES="[interval]", label="TYPES: interval\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        call90_types [TYPES="[compatible]", label="TYPES: compatible(interval)\nMODS: [no aggregate]", MODS="[no aggregate]", shape=rectangle, style=filled, color=lightblue]
         arg_interval -> call90_types
         call90_types -> EXIT_aggregate_function
     }
@@ -952,9 +953,9 @@ digraph G {
         EXIT_number [label="EXIT number"]
 
         BinaryNumberOp[label="binary op."]
-        call47_types [TYPES="[...]", MODS="[...]", label="TYPES: [...types]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call47_types [TYPES="[compatible]", MODS="[...]", label="TYPES: compatible(...)\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         number -> BinaryNumberOp
-        call48_types [TYPES="[...]", MODS="[...]", label="TYPES: [...types]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call48_types [TYPES="[compatible]", MODS="[...]", label="TYPES: compatible(...)\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         BinaryNumberOp -> call48_types
         binary_number_plus [label="+"]
         call48_types -> binary_number_plus
@@ -983,7 +984,7 @@ digraph G {
         call47_types -> EXIT_number
 
         UnaryNumberOp [label="unary op."]
-        call1_types [TYPES="[...]", MODS="[...]", label="TYPES: [...types]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call1_types [TYPES="[compatible]", MODS="[...]", label="TYPES: compatible(...)\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         number -> UnaryNumberOp
         unary_number_plus[label="+"]
         UnaryNumberOp -> unary_number_plus
@@ -1002,8 +1003,8 @@ digraph G {
         unary_number_cub_root -> call1_types
         call1_types -> EXIT_number
         // postgres treats -3 like a literal, but parser treats it like - and 1
-        // so we take "-" to actual literals generation. But expression '-' is here
-        call89_types [TYPES="[...]", MODS="[..., no literals]", label="TYPES: [...types]\nMODS: [..., no literals]", shape=rectangle, style=filled, color=lightblue]
+        // so we take "-" to actual literals generation. But the expression '-' (like in "-(4 + 1)") is here
+        call89_types [TYPES="[compatible]", MODS="[..., no literals]", label="TYPES: compatible(...)\nMODS: [..., no literals]", shape=rectangle, style=filled, color=lightblue]
         unary_number_minus[label="-"]
         UnaryNumberOp -> unary_number_minus
         unary_number_minus -> call89_types

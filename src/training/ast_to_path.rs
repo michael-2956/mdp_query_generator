@@ -190,7 +190,10 @@ impl TypesValue {
         }
     }
 
-    fn explorable(tp: SubgraphType) -> Self {
+    /// Currently, we mark everything as unexplorable because this
+    /// feature is disabled. If enabled in future, should be turned
+    /// on for literals and CASE
+    fn _explorable(tp: SubgraphType) -> Self {
         Self {
             tp,
             worth_exploring: true,
@@ -242,9 +245,11 @@ impl PathGenerator {
         Ok(())
     }
 
-    fn assert_single_type_argument(&self) {
+    fn assert_single_type_argument(&self) -> SubgraphType {
         let arg_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
-        if arg_types.len() > 1 {
+        if let [tp] = arg_types.as_slice() {
+            tp.clone()
+        } else {
             panic!("This subgraph does not accept multiple types as argument. Got: {:?}", arg_types);
         }
     }
@@ -807,11 +812,12 @@ impl PathGenerator {
     /// subgraph def_numeric
     fn handle_number(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
         self.try_push_state("number")?;
-        self.assert_single_type_argument();
+        let number_type = self.assert_single_type_argument();
         let number_type = match expr {
             Expr::BinaryOp { left, op, right } => {
                 self.try_push_states(&["BinaryNumberOp", "call48_types"])?;
-                let number_type = self.handle_types(left, TypeAssertion::None)?;
+                self.state_generator.set_compatible_list(number_type.get_compat_types());
+                self.handle_types(left, TypeAssertion::CompatibleWith(number_type.clone()))?;
                 self.try_push_state(match op {
                     BinaryOperator::BitwiseAnd => "binary_number_bin_and",
                     BinaryOperator::BitwiseOr => "binary_number_bin_or",
@@ -824,7 +830,7 @@ impl PathGenerator {
                     any => unexpected_expr!(any),
                 })?;
                 self.try_push_state("call47_types")?;
-                self.handle_types(right, TypeAssertion::None)?;
+                self.handle_types(right, TypeAssertion::CompatibleWith(number_type.clone()))?;
                 number_type
             },
             Expr::UnaryOp { op, expr } => {
@@ -843,7 +849,9 @@ impl PathGenerator {
                 } else {
                     self.try_push_state("call1_types")?;
                 }
-                self.handle_types(expr, TypeAssertion::None)?
+                self.state_generator.set_compatible_list(number_type.get_compat_types());
+                self.handle_types(expr, TypeAssertion::CompatibleWith(number_type.clone()))?;
+                number_type
             },
             Expr::Position { expr, r#in } => {
                 self.try_push_states(&["number_string_position", "call2_types"])?;
@@ -1331,7 +1339,8 @@ impl PathGenerator {
 
     fn handle_types_value_expr_case(&mut self, expr: &Expr) -> Result<TypesValue, ConvertionError> {
         self.try_push_state("call0_case")?;
-        self.handle_case(expr).map(|tp| TypesValue::explorable(tp))
+        // change to explorable if we use this feature
+        self.handle_case(expr).map(|tp| TypesValue::not_explorable(tp))
     }
 
     fn handle_types_value_expr_aggr_function(&mut self, function: &ast::Function) -> Result<TypesValue, ConvertionError> {
@@ -1343,7 +1352,8 @@ impl PathGenerator {
         self.try_push_state("call1_Query")?;
         let col_type_list = self.handle_query(subquery, None)?.0;
         if let [(.., query_subgraph_type)] = col_type_list.as_slice() {
-            Ok(TypesValue::explorable(query_subgraph_type.clone()))
+            // change to explorable if we use this feature
+            Ok(TypesValue::not_explorable(query_subgraph_type.clone()))
         } else {
             panic!("Query did not return a single type. Got: {:?}\nQuery: {subquery}", col_type_list);
         }
@@ -1356,7 +1366,8 @@ impl PathGenerator {
 
     fn handle_types_value_literals(&mut self, expr: &Expr) -> Result<TypesValue, ConvertionError> {
         self.try_push_state("call0_literals")?;
-        self.handle_literals(expr).map(|tp: SubgraphType| TypesValue::explorable(tp))
+        // change to explorable if we use this feature
+        self.handle_literals(expr).map(|tp: SubgraphType| TypesValue::not_explorable(tp))
     }
 
     fn handle_types_value_expr_formula(&mut self, expr: &Expr) -> Result<TypesValue, ConvertionError> {
