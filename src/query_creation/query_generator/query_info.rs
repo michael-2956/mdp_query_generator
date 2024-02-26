@@ -964,15 +964,17 @@ impl FromContents {
     }
 
     /// get all the columns represented in only a single relation in FROM
-    fn get_unique_columns(&self) -> HashSet<IdentName> {
+    fn get_unique_columns(&self) -> HashSet<[IdentName; 2]> {
         self.relations.iter()
-            .flat_map(|(_, rel)| rel.get_all_column_names_iter().cloned())
-            .fold(HashMap::new(), |mut acc, x| {
-                *acc.entry(x).or_insert(0usize) += 1usize;
+            .flat_map(|(_, rel)| rel.get_all_column_names_iter().cloned().map(
+                |col_name| [rel.alias.clone(), col_name]
+            ))
+            .fold(HashMap::new(), |mut acc, [rel_name, col_name]| {
+                acc.entry(col_name).or_insert(vec![]).push(rel_name);
                 acc
             }).into_iter()
-            .filter(|(_, num)| *num == 1)
-            .map(|(col_name, _)| col_name)
+            .filter(|(_, rels)| rels.len() == 1)
+            .map(|(col_name, rels)| [rels.into_iter().next().unwrap(), col_name])
             .collect()
     }
 
@@ -987,13 +989,11 @@ impl FromContents {
         ) = if only_unique {
             let mut allowed_columns = self.get_unique_columns();
             if let Some(allowed_rel_col_names) = allowed_rel_col_names_opt {
-                allowed_columns = allowed_columns.intersection(
-                    &allowed_rel_col_names.into_iter().map(
-                        |x| x.into_iter().last().unwrap()
-                    ).collect()
-                ).cloned().collect()
+                allowed_columns = allowed_columns.intersection(&allowed_rel_col_names).cloned().collect()
             }
-            (Some(allowed_columns), None)
+            (Some(allowed_columns.into_iter().map(
+                |x| x.into_iter().last().unwrap()
+            ).collect::<HashSet<_>>()), None)
         } else {
             (None, allowed_rel_col_names_opt)
         };
