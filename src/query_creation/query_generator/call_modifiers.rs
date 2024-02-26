@@ -100,8 +100,9 @@ impl ValueSetter for IsColumnTypeAvailableValueSetter {
             argument_types = SubgraphType::filter_by_selected(&argument_types, selected_type);
         }
 
+        let shade_by_select_aliases = function_context.call_params.modifiers.contains(&SmolStr::new("shade by select aliases"));
         let only_group_by_columns = function_context.call_params.modifiers.contains(&SmolStr::new("group by columns"));
-        let type_is_available = clause_context.is_type_available(argument_types, only_group_by_columns);
+        let type_is_available = clause_context.is_type_available(argument_types, only_group_by_columns, shade_by_select_aliases);
         let types_value_has_other_options = [
             "no typed nulls", "no subquery", "no literals",
             "no case", "no formulas",
@@ -164,17 +165,15 @@ impl ValueSetter for NameAccessibilityOfSelectedTypesValueSetter {
         let only_group_by_columns = function_context.call_params.modifiers.contains(
             &SmolStr::new("group by columns")
         );
+        let shade_by_select_aliases = function_context.call_params.modifiers.contains(
+            &SmolStr::new("shade by select aliases")
+        );
         let accessible_by_column_name = clause_context.has_columns_for_types(
-            column_types.clone(), only_group_by_columns, CheckAccessibility::ColumnName,
+            column_types.clone(), only_group_by_columns, CheckAccessibility::ColumnName, shade_by_select_aliases
         );
         let accessible_by_qualified_column_name = clause_context.has_columns_for_types(
-            column_types.clone(), only_group_by_columns, CheckAccessibility::QualifiedColumnName,
+            column_types.clone(), only_group_by_columns, CheckAccessibility::QualifiedColumnName, shade_by_select_aliases
         );
-        // eprintln!("accessible by either = {}", clause_context.has_columns_for_types(
-        //     column_types.clone(), only_group_by_columns, CheckAccessibility::Either,
-        // ));
-        // eprintln!("accessible_by_column_name = {}", accessible_by_column_name);
-        // eprintln!("accessible_by_qualified_column_name = {}\n", accessible_by_qualified_column_name);
         ValueSetterValue::NameAccessibilityOfSelectedTypes(NameAccessibilityOfSelectedTypesValue {
             accessible_by_column_name,
             accessible_by_qualified_column_name,
@@ -435,7 +434,7 @@ impl ValueSetter for HasAccessibleColumnsValueSetter {
 
     fn get_value(&self, clause_context: &ClauseContext, _function_context: &FunctionContext) -> ValueSetterValue {
         ValueSetterValue::HasAccessibleColumns(HasAccessibleColumnsValue {
-            available: clause_context.has_columns(false, CheckAccessibility::Either),
+            available: clause_context.has_columns(false, CheckAccessibility::Either, false),
         })
     }
 }
@@ -582,14 +581,12 @@ impl ValueSetter for SelectAccessibleColumnsValueSetter {
         ValueSetterValue::SelectAccessibleColumns(SelectAccessibleColumnsValue {
             accessible_columns: match function_context.current_node.node_common.name.as_str() {
                 "order_by_select_reference" => {
-                    clause_context.query().select_type().iter().filter_map(
-                        // get all aliases
-                        |(alias, ..)| alias.as_ref()
-                    ).fold(BTreeMap::new(),|mut acc, ident| {
-                        // count them
-                        *acc.entry(IdentName::from(ident.clone())).or_insert(0) += 1; acc
-                        // retrieve ones mentioned once
-                    }).into_iter().filter(|(_, count)| *count == 1).map(|x| x.0).collect()
+                    clause_context.query().get_all_select_aliases_iter()
+                        .fold(BTreeMap::new(),|mut acc, ident| {
+                            // count them
+                            *acc.entry(ident.clone()).or_insert(0usize) += 1; acc
+                            // retrieve ones mentioned once
+                        }).into_iter().filter(|(_, count)| *count == 1).map(|x| x.0).collect()
                 },
                 any => panic!("{any} unexpectedly triggered the select_has_accessible_columns value setter"),
             },

@@ -296,12 +296,14 @@ impl ClauseContext {
 
     fn get_accessible_column_levels_iter_retrieve_by<'a, F>(
         &'a self, retrieve_by: F, only_group_by_columns: bool,
-        check_accessibility: CheckAccessibility,
+        check_accessibility: CheckAccessibility, shade_by_select_aliases: bool
     ) -> impl Iterator<Item = Vec<(&'a SubgraphType, [&'a IdentName; 2])>>
     where
         F: for<'b> Fn(&'b FromContents, Option<HashSet<[IdentName; 2]>>, bool) -> Box<dyn TypeAndQualifiedColumnIter<'b> + 'b>,
     {
-        let mut shaded_col_names: HashSet<IdentName> = HashSet::new();
+        let mut shaded_col_names: HashSet<IdentName> = if shade_by_select_aliases {
+            HashSet::from_iter(self.query().get_all_select_aliases_iter().cloned())
+        } else { HashSet::new() };
         let mut shaded_rel_names: HashSet<IdentName> = HashSet::new();
         self.get_clause_hierarchy_iter().enumerate().filter_map(
             |(i, v_opt)| v_opt.map(|v| (i, v))
@@ -358,60 +360,60 @@ impl ClauseContext {
     /// modifiers present at the time of the subquery call.
     fn get_accessible_column_levels_by_types_iter(
         &self, column_types: Vec<SubgraphType>, only_group_by_columns: bool,
-        check_accessibility: CheckAccessibility
+        check_accessibility: CheckAccessibility, shade_by_select_aliases: bool
     ) -> impl Iterator<Item = Vec<(&SubgraphType, [&IdentName; 2])>> {
         self.get_accessible_column_levels_iter_retrieve_by(
             move |fc, allowed_rel_col_names_opt, only_unique| {
                 Box::new(fc.get_accessible_columns_by_types(
                     &column_types, allowed_rel_col_names_opt, only_unique
                 ).into_iter())
-            }, only_group_by_columns, check_accessibility
+            }, only_group_by_columns, check_accessibility, shade_by_select_aliases
         )
     }
 
     fn get_accessible_column_levels_iter(
-        &self, only_group_by_columns: bool, check_accessibility: CheckAccessibility
+        &self, only_group_by_columns: bool, check_accessibility: CheckAccessibility, shade_by_select_aliases: bool
     ) -> impl Iterator<Item = Vec<(&SubgraphType, [&IdentName; 2])>> {
         self.get_accessible_column_levels_iter_retrieve_by(
             |fc, allowed_rel_col_names_opt, only_unique| {
                 Box::new(fc.get_accessible_columns_iter(
                     allowed_rel_col_names_opt, only_unique
                 ))
-            }, only_group_by_columns, check_accessibility
+            }, only_group_by_columns, check_accessibility, shade_by_select_aliases
         )
     }
 
     pub fn get_non_empty_column_levels_by_types(
         &self, column_types: Vec<SubgraphType>, only_group_by_columns: bool,
-        check_accessibility: CheckAccessibility
+        check_accessibility: CheckAccessibility, shade_by_select_aliases: bool
     ) -> Vec<Vec<(&SubgraphType, [&IdentName; 2])>> {
         self.get_accessible_column_levels_by_types_iter(
-            column_types, only_group_by_columns, check_accessibility
+            column_types, only_group_by_columns, check_accessibility, shade_by_select_aliases
         ).filter(|col_vec| !col_vec.is_empty()).collect::<Vec<_>>()
     }
 
-    pub fn is_type_available(&self, any_of: Vec<SubgraphType>, only_group_by_columns: bool) -> bool {
+    pub fn is_type_available(&self, any_of: Vec<SubgraphType>, only_group_by_columns: bool, shade_by_select_aliases: bool) -> bool {
         self.get_accessible_column_levels_by_types_iter(
-            any_of, only_group_by_columns, CheckAccessibility::Either
+            any_of, only_group_by_columns, CheckAccessibility::Either, shade_by_select_aliases
         ).find(|col_vec| !col_vec.is_empty()).is_some()
     }
 
     pub fn has_columns_for_types(
-        &self, column_types: Vec<SubgraphType>, only_group_by_columns: bool, check_accessibility: CheckAccessibility
+        &self, column_types: Vec<SubgraphType>, only_group_by_columns: bool, check_accessibility: CheckAccessibility, shade_by_select_aliases: bool
     ) -> bool {
         self.get_accessible_column_levels_by_types_iter(
-            column_types, only_group_by_columns, check_accessibility
+            column_types, only_group_by_columns, check_accessibility, shade_by_select_aliases
         ).find(|col_vec| !col_vec.is_empty()).is_some()
     }
 
-    pub fn has_columns(&self, only_group_by_columns: bool, check_accessibility: CheckAccessibility) -> bool {
+    pub fn has_columns(&self, only_group_by_columns: bool, check_accessibility: CheckAccessibility, shade_by_select_aliases: bool) -> bool {
         self.get_accessible_column_levels_iter(
-            only_group_by_columns, check_accessibility
+            only_group_by_columns, check_accessibility, shade_by_select_aliases
         ).find(|col_vec| !col_vec.is_empty()).is_some()
     }
 
     pub fn retrieve_column_by_ident_components(
-        &self, ident_components: &Vec<Ident>, only_group_by_columns: bool
+        &self, ident_components: &Vec<Ident>, only_group_by_columns: bool, shade_by_select_aliases: bool
     ) -> Result<(SubgraphType, [IdentName; 2]), ColumnRetrievalError> {
         let (
             check_accessibility, searched_rel, searched_col
@@ -427,7 +429,7 @@ impl ClauseContext {
             ))),
         };
         let rel_col_tp_opt = self.get_accessible_column_levels_iter(
-            only_group_by_columns, check_accessibility.clone()
+            only_group_by_columns, check_accessibility.clone(), shade_by_select_aliases
         ).find_map(
             |cols_and_types| cols_and_types.into_iter()
                 .find_map(|(tp, [rel_name, col_name])|
@@ -443,21 +445,21 @@ impl ClauseContext {
             None => Err(ColumnRetrievalError::new(format!(
                 "Couldn't find column named {}.\nAccessible columns: {:#?}",
                     ObjectName(ident_components.clone()), self.get_accessible_column_levels_iter(
-                        only_group_by_columns, check_accessibility
+                        only_group_by_columns, check_accessibility, shade_by_select_aliases
                     ).collect::<Vec<_>>(),
             ))),
         }
     }
 
     pub fn retrieve_column_by_column_expr(
-        &self, column_expr: &Expr, only_group_by_columns: bool
+        &self, column_expr: &Expr, only_group_by_columns: bool, shade_by_select_aliases: bool
     ) -> Result<(SubgraphType, [IdentName; 2]), ColumnRetrievalError> {
         let ident_components = match column_expr {
             Expr::Identifier(ident) => vec![ident.clone()],
             Expr::CompoundIdentifier(ident_components) => ident_components.clone(),
             any => panic!("Unexpected expression for GROUP BY column: {:#?}", any),
         };
-        self.retrieve_column_by_ident_components(&ident_components, only_group_by_columns)
+        self.retrieve_column_by_ident_components(&ident_components, only_group_by_columns, shade_by_select_aliases)
     }
 }
 
@@ -654,6 +656,10 @@ impl QueryProps {
 
     pub fn select_type(&self) -> &Vec<(Option<IdentName>, SubgraphType)> {
         &self.column_idents_and_graph_types.as_ref().unwrap()
+    }
+
+    pub fn get_all_select_aliases_iter(&self) -> impl Iterator<Item = &IdentName> {
+        self.select_type().iter().filter_map(|(alias, ..)| alias.as_ref())
     }
 
     pub fn pop_output_type(&mut self) -> Vec<(Option<IdentName>, SubgraphType)> {

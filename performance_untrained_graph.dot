@@ -199,17 +199,14 @@ digraph G {
         select_expr -> call54_types
         call54_types -> select_expr_done
 
-        // we can make a call trigger, moving this to a separate subgraph,
-        // that would check whether there is a single column for a wildcard,
-        // but let's keep it simple for now
         // SELECT_tables_eligible_for_wildcard [label="Set Relations for wildcards\nset_value='wildcard_relations'", set_value="wildcard_relations"]
         // SELECT_list -> SELECT_tables_eligible_for_wildcard
         // SELECT_wildcard [label="wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
-        // SELECT_qualified_wildcard [label="qualified wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
         // SELECT_tables_eligible_for_wildcard -> SELECT_wildcard
-        // SELECT_tables_eligible_for_wildcard -> SELECT_qualified_wildcard
         // SELECT_wildcard -> SELECT_list_multiple_values
         // SELECT_wildcard -> EXIT_SELECT
+        // SELECT_qualified_wildcard [label="qualified wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
+        // SELECT_tables_eligible_for_wildcard -> SELECT_qualified_wildcard
         // SELECT_qualified_wildcard -> SELECT_list_multiple_values
         // SELECT_qualified_wildcard -> EXIT_SELECT
     }
@@ -411,10 +408,10 @@ digraph G {
         order_by_expr [label="Expression\n[call mod]\n[set value]", call_modifier="select_is_not_distinct_mod", set_value="grouping_enabled"]
         order_by_list -> order_by_expr
 
-        call84_types [label="TYPES: any\nMODS: [group by columns, no literals]\ncall mod.: 'grouping mode switch'", TYPES="[any]", MODS="[group by columns, no literals]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
+        call84_types [label="TYPES: any\nMODS: [group by columns, no literals, shade by select aliases]\ncall mod.: 'grouping mode switch'", TYPES="[any]", MODS="[group by columns, no literals, shade by select aliases]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
         order_by_expr -> call84_types
         call84_types -> order_by_expr_done
-        call85_types [label="TYPES: any\nMODS: [no aggregate, no literals]\ncall mod.: 'grouping mode switch'", TYPES="[any]", MODS="[no aggregate, no literals]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
+        call85_types [label="TYPES: any\nMODS: [no aggregate, no literals, shade by select aliases]\ncall mod.: 'grouping mode switch'", TYPES="[any]", MODS="[no aggregate, no literals, shade by select aliases]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
         order_by_expr -> call85_types
         call85_types -> order_by_expr_done
 
@@ -461,7 +458,7 @@ digraph G {
     }
 
     subgraph def_types {
-        types [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[no nesting, no literals, no case, no formulas, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no aggregate]", label="TYPES:\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[no nesting, no literals, no case, no formulas, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=octagon, style=filled, color=lightblue]
+        types [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[shade by select aliases, no nesting, no literals, no case, no formulas, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no aggregate]", label="TYPES:\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[shade by select aliases, no nesting, no literals, no case, no formulas, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=octagon, style=filled, color=lightblue]
         EXIT_types [label="EXIT GENERIC TYPE(S)", shape=rectangle]
 
         call0_types_value [TYPES="[known]", MODS="[...]", label="Types value\nTYPES: [known]\nMODS: [...]\n[call mod]", call_modifier="is_column_type_available_gate", shape=rectangle, style=filled, color=orange]
@@ -538,7 +535,7 @@ digraph G {
     }
 
     subgraph def_types_value {
-        types_value [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[no nesting, no literals, no case, no formulas, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no aggregate]", label="Types value\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[no nesting, no literals, no case, no formulas, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=rectangle, style=filled, color=orange]
+        types_value [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[shade by select aliases, no nesting, no literals, no case, no formulas, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no aggregate]", label="Types value\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[shade by select aliases, no nesting, no literals, no case, no formulas, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=rectangle, style=filled, color=orange]
         EXIT_types_value [shape=rectangle]
 
         types_value_nested [label="(nested)\nmod.: 'no nesting' -> OFF", modifier="no nesting", modifier_mode="off"]
@@ -557,7 +554,7 @@ digraph G {
 
         column_type_available [label="column type available\n[set value]", set_value="is_column_type_available_val"]
         types_value -> column_type_available
-        call0_column_spec [TYPES="[known]", MODS="[?group by columns]", modifier="no column spec", modifier_mode="off", call_modifier="is_column_type_available_gate", label="column specifier\nTYPE: known\nMODS: [?group by columns]\nmod.: 'no column spec' -> OFF\n[call mod]", shape=rectangle, style=filled, color=gold]
+        call0_column_spec [TYPES="[known]", MODS="[?group by columns, ?shade by select aliases]", modifier="no column spec", modifier_mode="off", call_modifier="is_column_type_available_gate", label="column specifier\nTYPE: known\nMODS: [?group by columns, ?shade by select aliases]\nmod.: 'no column spec' -> OFF\n[call mod]", shape=rectangle, style=filled, color=gold]
         column_type_available -> call0_column_spec
         call0_column_spec -> EXIT_types_value
 
@@ -731,21 +728,31 @@ digraph G {
     }
 
     subgraph def_column_spec {
-        column_spec [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[group by columns]", label="column specifier\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[group by columns]", shape=rectangle, style=filled, color=gold]
+        column_spec [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[group by columns, shade by select aliases]", label="column specifier\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[group by columns, shade by select aliases]", shape=rectangle, style=filled, color=gold]
         EXIT_column_spec [label="EXIT column specifier", shape=rectangle]
 
-        column_spec_choose_source [label="Choose column source"]
-        column_spec -> column_spec_choose_source
+        column_spec_mentioned_in_group_by [label="Columns should be\nmentioned in group by?"]
+        column_spec -> column_spec_mentioned_in_group_by
 
-        get_column_spec_from_group_by [label="GROUP BY\nmod. 'group by columns' -> ON", modifier="group by columns", modifier_mode="on"]
-        column_spec_choose_source -> get_column_spec_from_group_by
+        column_spec_mentioned_in_group_by_yes [label="Yes\nmod. 'group by columns' -> ON", modifier="group by columns", modifier_mode="on"]
+        column_spec_mentioned_in_group_by -> column_spec_mentioned_in_group_by_yes
 
-        get_column_spec_from_from [label="FROM\nmod. 'group by columns' -> OFF", modifier="group by columns", modifier_mode="off"]
-        column_spec_choose_source -> get_column_spec_from_from
+        column_spec_mentioned_in_group_by_no [label="No\nmod. 'group by columns' -> OFF", modifier="group by columns", modifier_mode="off"]
+        column_spec_mentioned_in_group_by -> column_spec_mentioned_in_group_by_no
+
+        column_spec_shaded_by_select [label="Column names shaded by select aliases?"]
+        column_spec_mentioned_in_group_by_yes -> column_spec_shaded_by_select
+        column_spec_mentioned_in_group_by_no -> column_spec_shaded_by_select
+
+        column_spec_shaded_by_select_yes [label="Yes\nmod. 'shade by select aliases' -> ON", modifier="shade by select aliases", modifier_mode="on"]
+        column_spec_shaded_by_select -> column_spec_shaded_by_select_yes
+
+        column_spec_shaded_by_select_no [label="No\nmod. 'shade by select aliases' -> OFF", modifier="shade by select aliases", modifier_mode="off"]
+        column_spec_shaded_by_select -> column_spec_shaded_by_select_no
 
         column_spec_choose_qualified [label="Choose if qualified\n[set value]", set_value="name_accessibility_of_selected_types_value"]
-        get_column_spec_from_group_by -> column_spec_choose_qualified
-        get_column_spec_from_from -> column_spec_choose_qualified
+        column_spec_shaded_by_select_yes -> column_spec_choose_qualified
+        column_spec_shaded_by_select_no -> column_spec_choose_qualified
 
         qualified_column_name [label="Qualified (R.COL)\n[call mod]", call_modifier="selected_types_accessible_by_naming_method"]
         column_spec_choose_qualified -> qualified_column_name
@@ -860,32 +867,34 @@ digraph G {
         call23_types -> EXIT_VAL_3
 
         BinaryComp[label="CMP"]
-        BinaryCompLess [label="<"]
-        BinaryCompEqual [label="="]
-        BinaryCompLessEqual [label="<="]
-        BinaryCompUnEqual [label="<>"]
         VAL_3 -> BinaryComp
         call1_types_type [TYPES="[any]", label="Types type: ANY -> TP1", shape=rectangle, color=yellowgreen, style=filled]
         BinaryComp -> call1_types_type
         call60_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         call1_types_type -> call60_types
         call24_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        call60_types -> BinaryCompLess
-        BinaryCompLess -> call24_types
+        BinaryCompEqual [label="="]
         call60_types -> BinaryCompEqual
         BinaryCompEqual -> call24_types
-        call60_types -> BinaryCompLessEqual
-        BinaryCompLessEqual -> call24_types
+        BinaryCompUnEqual [label="<>"]
         call60_types -> BinaryCompUnEqual
         BinaryCompUnEqual -> call24_types
+        BinaryCompLess [label="<"]
+        call60_types -> BinaryCompLess
+        BinaryCompLess -> call24_types
+        BinaryCompLessEqual [label="<="]
+        call60_types -> BinaryCompLessEqual
+        BinaryCompLessEqual -> call24_types
+        BinaryCompGreater [label=">"]
+        call60_types -> BinaryCompGreater
+        BinaryCompGreater -> call24_types
+        BinaryCompGreaterEqual [label=">="]
+        call60_types -> BinaryCompGreaterEqual
+        BinaryCompGreaterEqual -> call24_types
         call24_types -> EXIT_VAL_3
 
         AnyAll[label="ANY / ALL"]
         AnyAllSelectOp[label="select op."]
-        AnyAllLess [label="<"]
-        AnyAllEqual [label="="]
-        AnyAllLessEqual [label="<="]
-        AnyAllUnEqual [label="<>"]
         AnyAllSelectIter[label="select iterable"]
         AnyAllAnyAll[label="select ANY/ALL"]
         AnyAllAnyAllAny[label="ANY"]
@@ -896,14 +905,24 @@ digraph G {
         call61_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
         call2_types_type -> call61_types
         call61_types -> AnyAllSelectOp
-        AnyAllSelectOp -> AnyAllLess
-        AnyAllLess -> AnyAllSelectIter
+        AnyAllEqual [label="="]
         AnyAllSelectOp -> AnyAllEqual
         AnyAllEqual -> AnyAllSelectIter
-        AnyAllSelectOp -> AnyAllLessEqual
-        AnyAllLessEqual -> AnyAllSelectIter
+        AnyAllUnEqual [label="<>"]
         AnyAllSelectOp -> AnyAllUnEqual
         AnyAllUnEqual -> AnyAllSelectIter
+        AnyAllLess [label="<"]
+        AnyAllSelectOp -> AnyAllLess
+        AnyAllLess -> AnyAllSelectIter
+        AnyAllLessEqual [label="<="]
+        AnyAllSelectOp -> AnyAllLessEqual
+        AnyAllLessEqual -> AnyAllSelectIter
+        AnyAllGreater [label=">"]
+        AnyAllSelectOp -> AnyAllGreater
+        AnyAllGreater -> AnyAllSelectIter
+        AnyAllGreaterEqual [label=">="]
+        AnyAllSelectOp -> AnyAllGreaterEqual
+        AnyAllGreaterEqual -> AnyAllSelectIter
         call4_Query [TYPES="[compatible]", MODS="[single column]", label="Query\nTYPE: [compatible(TP1)]\nMODS: [single column]", shape=rectangle, style=filled, color=green]
         AnyAllSelectIter -> call4_Query
         call4_Query -> AnyAllAnyAll

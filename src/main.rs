@@ -1,15 +1,14 @@
 use std::{io::Write, time::Instant};
 
-use equivalence_testing::{query_creation::{
-    query_generator::{QueryGenerator, value_choosers::RandomValueChooser},
-    state_generator::{
-        MarkovChainGenerator,
-        state_choosers::{ProbabilisticStateChooser, StateChooser},
-        substitute_models::{SubstituteModel, MarkovModel, AntiCallModel},
-    },
-}, equivalence_testing_function::{
+use equivalence_testing::{config::{Config, ProgramArgs}, equivalence_testing_function::{
     check_query, string_to_query
-}, config::{Config, ProgramArgs}, training::{ast_to_path::tester::TestAST2Path, trainer::SQLTrainer}};
+}, query_creation::{
+    query_generator::{value_choosers::RandomValueChooser, QueryGenerator},
+    state_generator::{
+        state_choosers::{ProbabilisticStateChooser, StateChooser},
+        substitute_models::{AntiCallModel, MarkovModel, SubstituteModel}, MarkovChainGenerator
+    },
+}, training::{ast_to_path::tester::TestAST2Path, trainer::SQLTrainer}};
 
 use structopt::StructOpt;
 

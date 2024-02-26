@@ -159,13 +159,13 @@ impl PathGenerator {
 
 macro_rules! unexpected_expr {
     ($el: expr) => {{
-        return Err(ConvertionError::new(format!("Unexpected expression: {:#?}", $el)))
+        return Err(ConvertionError::new(format!("Unexpected expression: {:?}", $el)))
     }};
 }
 
 macro_rules! unexpected_subgraph_type {
     ($el: expr) => {{
-        return Err(ConvertionError::new(format!("Unexpected subgraph type: {:#?}", $el)))
+        return Err(ConvertionError::new(format!("Unexpected subgraph type: {:?}", $el)))
     }};
 }
 
@@ -730,9 +730,11 @@ impl PathGenerator {
                         self.handle_types(right, TypeAssertion::GeneratedBy(SubgraphType::Val3))?;
                     },
                     BinaryOperator::Eq |
+                    BinaryOperator::NotEq |
                     BinaryOperator::Lt |
                     BinaryOperator::LtEq |
-                    BinaryOperator::NotEq => {
+                    BinaryOperator::Gt |
+                    BinaryOperator::GtEq => {
                         match &**right {
                             Expr::AnyOp(right_inner) | Expr::AllOp(right_inner) => {
                                 self.try_push_states(&["AnyAll", "call2_types_type"])?;
@@ -743,9 +745,11 @@ impl PathGenerator {
                                     _self.try_push_state("AnyAllSelectOp")?;
                                     _self.try_push_state(match op {
                                         BinaryOperator::Eq => "AnyAllEqual",
+                                        BinaryOperator::NotEq => "AnyAllUnEqual",
                                         BinaryOperator::Lt => "AnyAllLess",
                                         BinaryOperator::LtEq => "AnyAllLessEqual",
-                                        BinaryOperator::NotEq => "AnyAllUnEqual",
+                                        BinaryOperator::Gt => "AnyAllGreater",
+                                        BinaryOperator::GtEq => "AnyAllGreaterEqual",
                                         any => unexpected_expr!(any),
                                     })?;
                                     _self.try_push_state("AnyAllSelectIter")?;
@@ -773,9 +777,11 @@ impl PathGenerator {
                                     _self.handle_types(left, TypeAssertion::CompatibleWith(returned_type.clone()))?;
                                     _self.try_push_state(match op {
                                         BinaryOperator::Eq => "BinaryCompEqual",
+                                        BinaryOperator::NotEq => "BinaryCompUnEqual",
                                         BinaryOperator::Lt => "BinaryCompLess",
                                         BinaryOperator::LtEq => "BinaryCompLessEqual",
-                                        BinaryOperator::NotEq => "BinaryCompUnEqual",
+                                        BinaryOperator::Gt => "BinaryCompGreater",
+                                        BinaryOperator::GtEq => "BinaryCompGreaterEqual",
                                         any => unexpected_expr!(any),
                                     })?;
                                     _self.try_push_state("call24_types")?;
@@ -812,12 +818,12 @@ impl PathGenerator {
     /// subgraph def_numeric
     fn handle_number(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
         self.try_push_state("number")?;
-        let number_type = self.assert_single_type_argument();
+        let requested_number_type = self.assert_single_type_argument();
         let number_type = match expr {
             Expr::BinaryOp { left, op, right } => {
                 self.try_push_states(&["BinaryNumberOp", "call48_types"])?;
-                self.state_generator.set_compatible_list(number_type.get_compat_types());
-                self.handle_types(left, TypeAssertion::CompatibleWith(number_type.clone()))?;
+                self.state_generator.set_compatible_list(requested_number_type.get_compat_types());
+                self.handle_types(left, TypeAssertion::CompatibleWith(requested_number_type.clone()))?;
                 self.try_push_state(match op {
                     BinaryOperator::BitwiseAnd => "binary_number_bin_and",
                     BinaryOperator::BitwiseOr => "binary_number_bin_or",
@@ -830,8 +836,8 @@ impl PathGenerator {
                     any => unexpected_expr!(any),
                 })?;
                 self.try_push_state("call47_types")?;
-                self.handle_types(right, TypeAssertion::CompatibleWith(number_type.clone()))?;
-                number_type
+                self.handle_types(right, TypeAssertion::CompatibleWith(requested_number_type.clone()))?;
+                requested_number_type
             },
             Expr::UnaryOp { op, expr } => {
                 self.try_push_state("UnaryNumberOp")?;
@@ -849,9 +855,9 @@ impl PathGenerator {
                 } else {
                     self.try_push_state("call1_types")?;
                 }
-                self.state_generator.set_compatible_list(number_type.get_compat_types());
-                self.handle_types(expr, TypeAssertion::CompatibleWith(number_type.clone()))?;
-                number_type
+                self.state_generator.set_compatible_list(requested_number_type.get_compat_types());
+                self.handle_types(expr, TypeAssertion::CompatibleWith(requested_number_type.clone()))?;
+                requested_number_type
             },
             Expr::Position { expr, r#in } => {
                 self.try_push_states(&["number_string_position", "call2_types"])?;
@@ -1555,12 +1561,20 @@ impl PathGenerator {
         let column_types = unwrap_variant_or_else!(
             self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList, || self.state_generator.print_stack()
         );
-        self.try_push_state("column_spec_choose_source")?;
+        self.try_push_state("column_spec_mentioned_in_group_by")?;
         let only_group_by_columns = if self.state_generator.get_fn_modifiers().contains(&SmolStr::new("group by columns")) {
-            self.try_push_state("get_column_spec_from_group_by")?;
+            self.try_push_state("column_spec_mentioned_in_group_by_yes")?;
             true
         } else {
-            self.try_push_state("get_column_spec_from_from")?;
+            self.try_push_state("column_spec_mentioned_in_group_by_no")?;
+            false
+        };
+        self.try_push_state("column_spec_shaded_by_select")?;
+        let shade_by_select_aliases = if self.state_generator.get_fn_modifiers().contains(&SmolStr::new("shade by select aliases")) {
+            self.try_push_state("column_spec_shaded_by_select_yes")?;
+            true
+        } else {
+            self.try_push_state("column_spec_shaded_by_select_no")?;
             false
         };
         self.try_push_state("column_spec_choose_qualified")?;
@@ -1576,7 +1590,7 @@ impl PathGenerator {
             any => unexpected_expr!(any),
         };
         let (selected_type, qualified_column_name) = match self.clause_context.retrieve_column_by_ident_components(
-            &ident_components, only_group_by_columns
+            &ident_components, only_group_by_columns, shade_by_select_aliases
         ) {
             Ok(selected_type) => selected_type,
             Err(err) => return Err(ConvertionError::new(format!("{err}"))),
@@ -1832,7 +1846,7 @@ impl PathGenerator {
                                 self.try_push_state("call69_types")?;
                                 let column_type = self.handle_types(column_expr, TypeAssertion::None)?;
                                 let column_name = self.clause_context.retrieve_column_by_column_expr(
-                                    &column_expr, false
+                                    &column_expr, false, false
                                 ).unwrap().1;
                                 self.clause_context.group_by_mut().append_column(column_name, column_type);
                             }
@@ -1850,7 +1864,7 @@ impl PathGenerator {
                     self.try_push_state("call70_types")?;
                     let column_type = self.handle_types(column_expr, TypeAssertion::None)?;
                     let column_name = self.clause_context.retrieve_column_by_column_expr(
-                        &column_expr, false
+                        &column_expr, false, false
                     ).unwrap().1;
                     self.clause_context.group_by_mut().append_column(column_name, column_type);
                 },

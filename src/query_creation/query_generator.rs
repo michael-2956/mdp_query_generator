@@ -475,7 +475,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                             projection.push(SelectItem::Wildcard(WildcardAdditionalOptions {
                                 opt_exclude: None, opt_except: None, opt_rename: None,
                             }));
-                            continue;
                         },
                         "SELECT_qualified_wildcard" => {
                             let from_contents = self.clause_context.from();
@@ -555,7 +554,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 "call70_types" => {
                     let (column_type, column_expr) = self.handle_types(TypeAssertion::None);
                     let column_name = self.clause_context.retrieve_column_by_column_expr(
-                        &column_expr, false
+                        &column_expr, false, false
                     ).unwrap().1;
                     result.push(column_expr);
                     self.clause_context.group_by_mut().append_column(column_name, column_type);
@@ -581,7 +580,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                                 "call69_types" => {
                                     let (column_type, column_expr) = self.handle_types(TypeAssertion::None);
                                     let column_name = self.clause_context.retrieve_column_by_column_expr(
-                                        &column_expr, false
+                                        &column_expr, false, false
                                     ).unwrap().1;
                                     current_set.push(column_expr);
                                     self.clause_context.group_by_mut().append_column(column_name, column_type);
@@ -973,10 +972,16 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         let column_types = unwrap_variant_or_else!(
             self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList, || self.state_generator.print_stack()
         );
-        self.expect_state("column_spec_choose_source");
+        self.expect_state("column_spec_mentioned_in_group_by");
         let only_group_by_columns = match self.next_state().as_str() {
-            "get_column_spec_from_group_by" => true,
-            "get_column_spec_from_from" => false,
+            "column_spec_mentioned_in_group_by_yes" => true,
+            "column_spec_mentioned_in_group_by_no" => false,
+            any => self.panic_unexpected(any),
+        };
+        self.expect_state("column_spec_shaded_by_select");
+        let shade_by_select_aliases = match self.next_state().as_str() {
+            "column_spec_shaded_by_select_yes" => true,
+            "column_spec_shaded_by_select_no" => false,
             any => self.panic_unexpected(any),
         };
         self.expect_state("column_spec_choose_qualified");
@@ -986,7 +991,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             any => self.panic_unexpected(any)
         };
         let (selected_type, qualified_column_name) = self.value_chooser.choose_column(
-            &self.clause_context, column_types, only_group_by_columns, check_accessibility.clone()
+            &self.clause_context, column_types, only_group_by_columns, check_accessibility.clone(), shade_by_select_aliases
         );
         let ident = if check_accessibility == CheckAccessibility::QualifiedColumnName {
             Expr::CompoundIdentifier(qualified_column_name.into_iter().map(IdentName::into).collect())
@@ -1235,9 +1240,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 let types_value_1 = self.handle_types(TypeAssertion::CompatibleWith(tp.clone())).1;
                 let binary_comp_op = match self.next_state().as_str() {
                     "BinaryCompEqual" => BinaryOperator::Eq,
+                    "BinaryCompUnEqual" => BinaryOperator::NotEq,
                     "BinaryCompLess" => BinaryOperator::Lt,
                     "BinaryCompLessEqual" => BinaryOperator::LtEq,
-                    "BinaryCompUnEqual" => BinaryOperator::NotEq,
+                    "BinaryCompGreater" => BinaryOperator::Gt,
+                    "BinaryCompGreaterEqual" => BinaryOperator::GtEq,
                     any => self.panic_unexpected(any)
                 };
                 self.expect_state("call24_types");
@@ -1257,9 +1264,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 self.expect_state("AnyAllSelectOp");
                 let any_all_op = match self.next_state().as_str() {
                     "AnyAllEqual" => BinaryOperator::Eq,
+                    "AnyAllUnEqual" => BinaryOperator::NotEq,
                     "AnyAllLess" => BinaryOperator::Lt,
                     "AnyAllLessEqual" => BinaryOperator::LtEq,
-                    "AnyAllUnEqual" => BinaryOperator::NotEq,
+                    "AnyAllGreater" => BinaryOperator::Gt,
+                    "AnyAllGreaterEqual" => BinaryOperator::GtEq,
                     any => self.panic_unexpected(any)
                 };
                 self.expect_state("AnyAllSelectIter");
@@ -1332,12 +1341,12 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     /// subgraph def_numeric
     fn handle_number(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("number");
-        let number_type = self.assert_single_type_argument();
+        let requested_number_type = self.assert_single_type_argument();
         let (number_type, number) = match self.next_state().as_str() {
             "BinaryNumberOp" => {
                 self.expect_state("call48_types");
-                self.state_generator.set_compatible_list(number_type.get_compat_types());
-                let types_value_1 = self.handle_types(TypeAssertion::CompatibleWith(number_type.clone())).1;
+                self.state_generator.set_compatible_list(requested_number_type.get_compat_types());
+                let types_value_1 = self.handle_types(TypeAssertion::CompatibleWith(requested_number_type.clone())).1;
                 let numeric_binary_op = match self.next_state().as_str() {
                     "binary_number_bin_and" => BinaryOperator::BitwiseAnd,
                     "binary_number_bin_or" => BinaryOperator::BitwiseOr,
@@ -1350,8 +1359,8 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     any => self.panic_unexpected(any),
                 };
                 self.expect_state("call47_types");
-                let types_value_2 = self.handle_types(TypeAssertion::CompatibleWith(number_type.clone())).1;
-                (number_type, Expr::BinaryOp {
+                let types_value_2 = self.handle_types(TypeAssertion::CompatibleWith(requested_number_type.clone())).1;
+                (requested_number_type, Expr::BinaryOp {
                     left: Box::new(types_value_1),
                     op: numeric_binary_op,
                     right: Box::new(types_value_2)
@@ -1372,9 +1381,9 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 } else {
                     self.expect_state("call1_types");
                 }
-                self.state_generator.set_compatible_list(number_type.get_compat_types());
-                let number = self.handle_types(TypeAssertion::CompatibleWith(number_type.clone())).1;
-                (number_type, Expr::UnaryOp {
+                self.state_generator.set_compatible_list(requested_number_type.get_compat_types());
+                let number = self.handle_types(TypeAssertion::CompatibleWith(requested_number_type.clone())).1;
+                (requested_number_type, Expr::UnaryOp {
                     op: numeric_unary_op,
                     expr: Box::new(number)
                 })
