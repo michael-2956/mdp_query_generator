@@ -23,7 +23,7 @@ use super::{
 use self::{
     aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution},
     call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue},
-    expr_precedence::ExpressionPriority, query_info::{CheckAccessibility, ClauseContext, DatabaseSchema, IdentName, QueryProps}, value_choosers::QueryValueChooser
+    expr_precedence::ExpressionPriority, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, DatabaseSchema, IdentName, QueryProps}, value_choosers::QueryValueChooser
 };
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
@@ -554,7 +554,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 "call70_types" => {
                     let (column_type, column_expr) = self.handle_types(TypeAssertion::None);
                     let column_name = self.clause_context.retrieve_column_by_column_expr(
-                        &column_expr, false, false
+                        &column_expr, ColumnRetrievalOptions::new(false, false, false)
                     ).unwrap().1;
                     result.push(column_expr);
                     self.clause_context.group_by_mut().append_column(column_name, column_type);
@@ -580,7 +580,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                                 "call69_types" => {
                                     let (column_type, column_expr) = self.handle_types(TypeAssertion::None);
                                     let column_name = self.clause_context.retrieve_column_by_column_expr(
-                                        &column_expr, false, false
+                                        &column_expr, ColumnRetrievalOptions::new(false, false, false)
                                     ).unwrap().1;
                                     current_set.push(column_expr);
                                     self.clause_context.group_by_mut().append_column(column_name, column_type);
@@ -984,14 +984,23 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             "column_spec_shaded_by_select_no" => false,
             any => self.panic_unexpected(any),
         };
+        self.expect_state("column_spec_aggregatable_columns");
+        let only_columns_that_can_be_aggregated = match self.next_state().as_str() {
+            "column_spec_aggregatable_columns_yes" => true,
+            "column_spec_aggregatable_columns_no" => false,
+            any => self.panic_unexpected(any),
+        };
         self.expect_state("column_spec_choose_qualified");
         let check_accessibility = match self.next_state().as_str() {
             "qualified_column_name" => CheckAccessibility::QualifiedColumnName,
             "unqualified_column_name" => CheckAccessibility::ColumnName,
             any => self.panic_unexpected(any)
         };
+        let column_retrieval_options = ColumnRetrievalOptions::new(
+            only_group_by_columns, shade_by_select_aliases, only_columns_that_can_be_aggregated
+        );
         let (selected_type, qualified_column_name) = self.value_chooser.choose_column(
-            &self.clause_context, column_types, only_group_by_columns, check_accessibility.clone(), shade_by_select_aliases
+            &self.clause_context, column_types, check_accessibility.clone(), column_retrieval_options
         );
         let ident = if check_accessibility == CheckAccessibility::QualifiedColumnName {
             Expr::CompoundIdentifier(qualified_column_name.into_iter().map(IdentName::into).collect())

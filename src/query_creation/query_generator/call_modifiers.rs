@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use crate::{query_creation::state_generator::{markov_chain_generator::{subgraph_type::SubgraphType, FunctionContext}, CallTypes}, unwrap_variant};
 
-use super::query_info::{CheckAccessibility, ClauseContext, IdentName};
+use super::query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, IdentName};
 
 pub trait NamedValue: Debug {
     fn name() -> SmolStr where Self : Sized;
@@ -100,9 +100,9 @@ impl ValueSetter for IsColumnTypeAvailableValueSetter {
             argument_types = SubgraphType::filter_by_selected(&argument_types, selected_type);
         }
 
-        let shade_by_select_aliases = function_context.call_params.modifiers.contains(&SmolStr::new("shade by select aliases"));
-        let only_group_by_columns = function_context.call_params.modifiers.contains(&SmolStr::new("group by columns"));
-        let type_is_available = clause_context.is_type_available(argument_types, only_group_by_columns, shade_by_select_aliases);
+        let type_is_available = clause_context.is_type_available(
+            argument_types, ColumnRetrievalOptions::from_call_mods(&function_context.call_params.modifiers)
+        );
         let types_value_has_other_options = [
             "no typed nulls", "no subquery", "no literals",
             "no case", "no formulas",
@@ -162,17 +162,12 @@ impl ValueSetter for NameAccessibilityOfSelectedTypesValueSetter {
         let column_types = unwrap_variant!(
             &function_context.call_params.selected_types, CallTypes::TypeList
         );
-        let only_group_by_columns = function_context.call_params.modifiers.contains(
-            &SmolStr::new("group by columns")
-        );
-        let shade_by_select_aliases = function_context.call_params.modifiers.contains(
-            &SmolStr::new("shade by select aliases")
-        );
+        let column_retrieval_options = ColumnRetrievalOptions::from_call_mods(&function_context.call_params.modifiers);
         let accessible_by_column_name = clause_context.has_columns_for_types(
-            column_types.clone(), only_group_by_columns, CheckAccessibility::ColumnName, shade_by_select_aliases
+            column_types.clone(), CheckAccessibility::ColumnName, column_retrieval_options.clone()
         );
         let accessible_by_qualified_column_name = clause_context.has_columns_for_types(
-            column_types.clone(), only_group_by_columns, CheckAccessibility::QualifiedColumnName, shade_by_select_aliases
+            column_types.clone(), CheckAccessibility::QualifiedColumnName, column_retrieval_options
         );
         ValueSetterValue::NameAccessibilityOfSelectedTypes(NameAccessibilityOfSelectedTypesValue {
             accessible_by_column_name,
@@ -434,7 +429,9 @@ impl ValueSetter for HasAccessibleColumnsValueSetter {
 
     fn get_value(&self, clause_context: &ClauseContext, _function_context: &FunctionContext) -> ValueSetterValue {
         ValueSetterValue::HasAccessibleColumns(HasAccessibleColumnsValue {
-            available: clause_context.has_columns(false, CheckAccessibility::Either, false),
+            available: clause_context.has_columns(CheckAccessibility::Either, ColumnRetrievalOptions::new(
+                false, false, false
+            )),
         })
     }
 }

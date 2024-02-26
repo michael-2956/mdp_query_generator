@@ -14,7 +14,7 @@ use crate::{
         query_generator::{
             aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution},
             call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue},
-            query_info::{ClauseContext, ClauseContextCheckpoint, DatabaseSchema, IdentName, QueryProps}, TypeAssertion
+            query_info::{ClauseContext, ClauseContextCheckpoint, ColumnRetrievalOptions, DatabaseSchema, IdentName, QueryProps}, TypeAssertion
         },
         state_generator::{
             markov_chain_generator::{
@@ -1561,22 +1561,23 @@ impl PathGenerator {
         let column_types = unwrap_variant_or_else!(
             self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList, || self.state_generator.print_stack()
         );
+        let column_retrieval_options = ColumnRetrievalOptions::from_call_mods(self.state_generator.get_fn_modifiers());
+
         self.try_push_state("column_spec_mentioned_in_group_by")?;
-        let only_group_by_columns = if self.state_generator.get_fn_modifiers().contains(&SmolStr::new("group by columns")) {
-            self.try_push_state("column_spec_mentioned_in_group_by_yes")?;
-            true
-        } else {
-            self.try_push_state("column_spec_mentioned_in_group_by_no")?;
-            false
-        };
+        self.try_push_state(if column_retrieval_options.only_group_by_columns {
+            "column_spec_mentioned_in_group_by_yes"
+        } else { "column_spec_mentioned_in_group_by_no" })?;
+
         self.try_push_state("column_spec_shaded_by_select")?;
-        let shade_by_select_aliases = if self.state_generator.get_fn_modifiers().contains(&SmolStr::new("shade by select aliases")) {
-            self.try_push_state("column_spec_shaded_by_select_yes")?;
-            true
-        } else {
-            self.try_push_state("column_spec_shaded_by_select_no")?;
-            false
-        };
+        self.try_push_state(if column_retrieval_options.shade_by_select_aliases {
+            "column_spec_shaded_by_select_yes"
+        } else { "column_spec_shaded_by_select_no" })?;
+
+        self.try_push_state("column_spec_aggregatable_columns")?;
+        self.try_push_state(if column_retrieval_options.only_columns_that_can_be_aggregated {
+            "column_spec_aggregatable_columns_yes"
+        } else { "column_spec_aggregatable_columns_no" })?;
+
         self.try_push_state("column_spec_choose_qualified")?;
         let ident_components = match expr {
             Expr::Identifier(ident) => {
@@ -1589,12 +1590,14 @@ impl PathGenerator {
             },
             any => unexpected_expr!(any),
         };
+
         let (selected_type, qualified_column_name) = match self.clause_context.retrieve_column_by_ident_components(
-            &ident_components, only_group_by_columns, shade_by_select_aliases
+            &ident_components, column_retrieval_options
         ) {
             Ok(selected_type) => selected_type,
             Err(err) => return Err(ConvertionError::new(format!("{err}"))),
         };
+
         if !column_types.iter().any(
             |searched_type| selected_type.is_same_or_more_determined_or_undetermined(searched_type)
         ) {
@@ -1603,6 +1606,7 @@ impl PathGenerator {
                 ObjectName(ident_components), selected_type, column_types
             )))
         }
+
         self.push_node(PathNode::SelectedColumnName(qualified_column_name));
         self.try_push_state("EXIT_column_spec")?;
         Ok(selected_type)
@@ -1846,7 +1850,7 @@ impl PathGenerator {
                                 self.try_push_state("call69_types")?;
                                 let column_type = self.handle_types(column_expr, TypeAssertion::None)?;
                                 let column_name = self.clause_context.retrieve_column_by_column_expr(
-                                    &column_expr, false, false
+                                    &column_expr, ColumnRetrievalOptions::new(false, false, false)
                                 ).unwrap().1;
                                 self.clause_context.group_by_mut().append_column(column_name, column_type);
                             }
@@ -1864,7 +1868,7 @@ impl PathGenerator {
                     self.try_push_state("call70_types")?;
                     let column_type = self.handle_types(column_expr, TypeAssertion::None)?;
                     let column_name = self.clause_context.retrieve_column_by_column_expr(
-                        &column_expr, false, false
+                        &column_expr, ColumnRetrievalOptions::new(false, false, false)
                     ).unwrap().1;
                     self.clause_context.group_by_mut().append_column(column_name, column_type);
                 },

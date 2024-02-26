@@ -181,6 +181,37 @@ pub enum CheckAccessibility {
     Either
 }
 
+#[derive(Debug, Clone)]
+pub struct ColumnRetrievalOptions {
+    /// the caller query requires a column to be groupped (mentioned in GROUP BY)
+    pub only_group_by_columns: bool,
+    /// the select aliases are shading the columns that can possibly be selected\
+    /// In other words, if a column is a select alias by name, it can't be selected
+    /// TODO: rename to "not_a_select_alias"
+    pub shade_by_select_aliases: bool,
+    /// If this is true, the caller wants the column to be able to be aggregated
+    /// (put into an aggregate function)
+    pub only_columns_that_can_be_aggregated: bool,
+}
+
+impl ColumnRetrievalOptions {
+    pub fn new(only_group_by_columns: bool, shade_by_select_aliases: bool, only_columns_that_can_be_aggregated: bool) -> Self {
+        Self {
+            only_group_by_columns,
+            shade_by_select_aliases,
+            only_columns_that_can_be_aggregated,
+        }
+    }
+
+    pub fn from_call_mods(mods: &CallModifiers) -> Self {
+        Self {
+            only_group_by_columns: mods.contains(&SmolStr::new("group by columns")),
+            shade_by_select_aliases: mods.contains(&SmolStr::new("shade by select aliases")),
+            only_columns_that_can_be_aggregated: mods.contains(&SmolStr::new("aggregate-able columns")),
+        }
+    }
+}
+
 trait TypeAndQualifiedColumnIter<'a>: Iterator<Item = (&'a SubgraphType, [&'a IdentName; 2])> {}
 impl<'a, T: Iterator<Item = (&'a SubgraphType, [&'a IdentName; 2])> + 'a> TypeAndQualifiedColumnIter<'a> for T {}
 
@@ -295,22 +326,27 @@ impl ClauseContext {
     }
 
     fn get_accessible_column_levels_iter_retrieve_by<'a, F>(
-        &'a self, retrieve_by: F, only_group_by_columns: bool,
-        check_accessibility: CheckAccessibility, shade_by_select_aliases: bool
+        &'a self, retrieve_by: F, check_accessibility: CheckAccessibility, column_retrieval_options: ColumnRetrievalOptions
     ) -> impl Iterator<Item = Vec<(&'a SubgraphType, [&'a IdentName; 2])>>
     where
         F: for<'b> Fn(&'b FromContents, Option<HashSet<[IdentName; 2]>>, bool) -> Box<dyn TypeAndQualifiedColumnIter<'b> + 'b>,
     {
-        let mut shaded_col_names: HashSet<IdentName> = if shade_by_select_aliases {
+        let mut shaded_col_names: HashSet<IdentName> = if column_retrieval_options.shade_by_select_aliases {
             HashSet::from_iter(self.query().get_all_select_aliases_iter().cloned())
         } else { HashSet::new() };
         let mut shaded_rel_names: HashSet<IdentName> = HashSet::new();
         self.get_clause_hierarchy_iter().enumerate().filter_map(
             |(i, v_opt)| v_opt.map(|v| (i, v))
+        ).filter(move |(i, (.., query_props))|
+            if column_retrieval_options.only_columns_that_can_be_aggregated {
+                // either we are in a caller query, where all aggregate-able columns,
+                // or we are in a parent query that did not forbid aggregation
+                *i == 0 || !query_props.get_current_subquery_call_options().no_aggregate
+            } else { true }
         ).map(move |(
             i, (from_contents, group_by_contents, query_props)
         )| {
-            let only_group_by_columns = if i == 0 { only_group_by_columns } else {
+            let only_group_by_columns = if i == 0 { column_retrieval_options.only_group_by_columns } else {
                 query_props.get_current_subquery_call_options().only_group_by_columns
             };
             let allowed_rel_col_names_opt = if only_group_by_columns {
@@ -359,61 +395,61 @@ impl ClauseContext {
     /// For the parent queries, the column source is determined by the\
     /// modifiers present at the time of the subquery call.
     fn get_accessible_column_levels_by_types_iter(
-        &self, column_types: Vec<SubgraphType>, only_group_by_columns: bool,
-        check_accessibility: CheckAccessibility, shade_by_select_aliases: bool
+        &self, column_types: Vec<SubgraphType>, check_accessibility: CheckAccessibility,
+        column_retrieval_options: ColumnRetrievalOptions
     ) -> impl Iterator<Item = Vec<(&SubgraphType, [&IdentName; 2])>> {
         self.get_accessible_column_levels_iter_retrieve_by(
             move |fc, allowed_rel_col_names_opt, only_unique| {
                 Box::new(fc.get_accessible_columns_by_types(
                     &column_types, allowed_rel_col_names_opt, only_unique
                 ).into_iter())
-            }, only_group_by_columns, check_accessibility, shade_by_select_aliases
+            }, check_accessibility, column_retrieval_options
         )
     }
 
     fn get_accessible_column_levels_iter(
-        &self, only_group_by_columns: bool, check_accessibility: CheckAccessibility, shade_by_select_aliases: bool
+        &self, check_accessibility: CheckAccessibility, column_retrieval_options: ColumnRetrievalOptions
     ) -> impl Iterator<Item = Vec<(&SubgraphType, [&IdentName; 2])>> {
         self.get_accessible_column_levels_iter_retrieve_by(
             |fc, allowed_rel_col_names_opt, only_unique| {
                 Box::new(fc.get_accessible_columns_iter(
                     allowed_rel_col_names_opt, only_unique
                 ))
-            }, only_group_by_columns, check_accessibility, shade_by_select_aliases
+            }, check_accessibility, column_retrieval_options
         )
     }
 
     pub fn get_non_empty_column_levels_by_types(
-        &self, column_types: Vec<SubgraphType>, only_group_by_columns: bool,
-        check_accessibility: CheckAccessibility, shade_by_select_aliases: bool
+        &self, column_types: Vec<SubgraphType>, check_accessibility: CheckAccessibility,
+        column_retrieval_options: ColumnRetrievalOptions
     ) -> Vec<Vec<(&SubgraphType, [&IdentName; 2])>> {
         self.get_accessible_column_levels_by_types_iter(
-            column_types, only_group_by_columns, check_accessibility, shade_by_select_aliases
+            column_types, check_accessibility, column_retrieval_options
         ).filter(|col_vec| !col_vec.is_empty()).collect::<Vec<_>>()
     }
 
-    pub fn is_type_available(&self, any_of: Vec<SubgraphType>, only_group_by_columns: bool, shade_by_select_aliases: bool) -> bool {
+    pub fn is_type_available(&self, any_of: Vec<SubgraphType>, column_retrieval_options: ColumnRetrievalOptions) -> bool {
         self.get_accessible_column_levels_by_types_iter(
-            any_of, only_group_by_columns, CheckAccessibility::Either, shade_by_select_aliases
+            any_of, CheckAccessibility::Either, column_retrieval_options
         ).find(|col_vec| !col_vec.is_empty()).is_some()
     }
 
     pub fn has_columns_for_types(
-        &self, column_types: Vec<SubgraphType>, only_group_by_columns: bool, check_accessibility: CheckAccessibility, shade_by_select_aliases: bool
+        &self, column_types: Vec<SubgraphType>, check_accessibility: CheckAccessibility, column_retrieval_options: ColumnRetrievalOptions
     ) -> bool {
         self.get_accessible_column_levels_by_types_iter(
-            column_types, only_group_by_columns, check_accessibility, shade_by_select_aliases
+            column_types, check_accessibility, column_retrieval_options
         ).find(|col_vec| !col_vec.is_empty()).is_some()
     }
 
-    pub fn has_columns(&self, only_group_by_columns: bool, check_accessibility: CheckAccessibility, shade_by_select_aliases: bool) -> bool {
+    pub fn has_columns(&self, check_accessibility: CheckAccessibility, column_retrieval_options: ColumnRetrievalOptions) -> bool {
         self.get_accessible_column_levels_iter(
-            only_group_by_columns, check_accessibility, shade_by_select_aliases
+            check_accessibility, column_retrieval_options
         ).find(|col_vec| !col_vec.is_empty()).is_some()
     }
 
     pub fn retrieve_column_by_ident_components(
-        &self, ident_components: &Vec<Ident>, only_group_by_columns: bool, shade_by_select_aliases: bool
+        &self, ident_components: &Vec<Ident>, column_retrieval_options: ColumnRetrievalOptions
     ) -> Result<(SubgraphType, [IdentName; 2]), ColumnRetrievalError> {
         let (
             check_accessibility, searched_rel, searched_col
@@ -429,7 +465,7 @@ impl ClauseContext {
             ))),
         };
         let rel_col_tp_opt = self.get_accessible_column_levels_iter(
-            only_group_by_columns, check_accessibility.clone(), shade_by_select_aliases
+            check_accessibility.clone(), column_retrieval_options.clone()
         ).find_map(
             |cols_and_types| cols_and_types.into_iter()
                 .find_map(|(tp, [rel_name, col_name])|
@@ -445,21 +481,21 @@ impl ClauseContext {
             None => Err(ColumnRetrievalError::new(format!(
                 "Couldn't find column named {}.\nAccessible columns: {:#?}",
                     ObjectName(ident_components.clone()), self.get_accessible_column_levels_iter(
-                        only_group_by_columns, check_accessibility, shade_by_select_aliases
+                        check_accessibility, column_retrieval_options
                     ).collect::<Vec<_>>(),
             ))),
         }
     }
 
     pub fn retrieve_column_by_column_expr(
-        &self, column_expr: &Expr, only_group_by_columns: bool, shade_by_select_aliases: bool
+        &self, column_expr: &Expr, column_retrieval_options: ColumnRetrievalOptions
     ) -> Result<(SubgraphType, [IdentName; 2]), ColumnRetrievalError> {
         let ident_components = match column_expr {
             Expr::Identifier(ident) => vec![ident.clone()],
             Expr::CompoundIdentifier(ident_components) => ident_components.clone(),
             any => panic!("Unexpected expression for GROUP BY column: {:#?}", any),
         };
-        self.retrieve_column_by_ident_components(&ident_components, only_group_by_columns, shade_by_select_aliases)
+        self.retrieve_column_by_ident_components(&ident_components, column_retrieval_options)
     }
 }
 
@@ -598,7 +634,7 @@ impl AllAccessibleFroms {
 #[derive(Debug, Clone)]
 struct SubqueryCallOptions {
     only_group_by_columns: bool,
-    _no_aggregate: bool,
+    no_aggregate: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -627,13 +663,13 @@ impl QueryProps {
         if *subquery_call_mods == CallModifiers::None {
             self.current_subquery_call_options = Some(SubqueryCallOptions {
                 only_group_by_columns: false,
-                _no_aggregate: false,
+                no_aggregate: false,
             });
         } else {
             let mods = unwrap_variant!(subquery_call_mods, CallModifiers::StaticList);
             self.current_subquery_call_options = Some(SubqueryCallOptions {
                 only_group_by_columns: mods.contains(&SmolStr::new("group by columns")),
-                _no_aggregate: mods.contains(&SmolStr::new("no aggregate")),
+                no_aggregate: mods.contains(&SmolStr::new("no aggregate")),
             })
         }
     }
