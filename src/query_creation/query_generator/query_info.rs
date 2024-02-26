@@ -684,7 +684,9 @@ impl QueryProps {
                     .and_then(|else_expr| if matches!(
                         else_expr.unnested(), Expr::Value(sqlparser::ast::Value::Boolean(_))
                     ) || matches!(
-                        else_expr.unnested(), Expr::TypedString { data_type, value: _ } if *data_type == DataType::Date
+                        else_expr.unnested(), Expr::TypedString { data_type, value: _ } if [
+                            DataType::Date, DataType::Interval
+                        ].contains(data_type)
                     ) { None } else {
                         Self::extract_alias(else_expr).map(IdentName::into)
                     })
@@ -710,8 +712,9 @@ impl QueryProps {
             },
             Expr::TypedString {
                 data_type, value: _,
-            } if *data_type == DataType::Date => {
-                Some(Ident { value: "date".to_string(), quote_style: Some('"') })
+            } if [DataType::Date, DataType::Interval].contains(data_type) => {
+                let s = if *data_type == DataType::Date { "date" } else { "interval" };
+                Some(Ident { value: s.to_string(), quote_style: Some('"') })
             },
             Expr::Subquery(query) => {
                 let select_body = unwrap_variant!(&*query.body, SetExpr::Select);
