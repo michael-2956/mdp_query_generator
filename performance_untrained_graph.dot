@@ -205,10 +205,10 @@ digraph G {
         SELECT_tables_eligible_for_wildcard -> SELECT_wildcard
         // SELECT_wildcard -> SELECT_list_multiple_values
         SELECT_wildcard -> EXIT_SELECT
-        // SELECT_qualified_wildcard [label="qualified wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
-        // SELECT_tables_eligible_for_wildcard -> SELECT_qualified_wildcard
+        SELECT_qualified_wildcard [label="qualified wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
+        SELECT_tables_eligible_for_wildcard -> SELECT_qualified_wildcard
         // SELECT_qualified_wildcard -> SELECT_list_multiple_values
-        // SELECT_qualified_wildcard -> EXIT_SELECT
+        SELECT_qualified_wildcard -> EXIT_SELECT
     }
 
     subgraph def_GROUP_BY {

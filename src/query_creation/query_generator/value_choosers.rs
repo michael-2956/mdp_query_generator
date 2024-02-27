@@ -110,6 +110,7 @@ impl QueryValueChooser for RandomValueChooser {
 
     fn choose_qualified_wildcard_relation<'a>(&mut self, clause_context: &'a ClauseContext, wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation) {
         let alias = wildcard_relations.relation_levels_selectable_by_qualified_wildcard
+            .iter().filter(|x| !x.is_empty()).collect::<Vec<_>>()
             .choose(&mut self.rng).unwrap()
             .choose(&mut self.rng).unwrap();
         let relation = clause_context.get_relation_by_name(alias);

@@ -318,6 +318,7 @@ impl ClauseContext {
     }
 
     pub fn get_relation_levels_selectable_by_qualified_wildcard(&self, allowed_types: Vec<SubgraphType>, single_column: bool) -> Vec<Vec<IdentName>> {
+        // first level is always present because we're in SELECT
         self.get_filtered_from_clause_hierarchy_with_allowed_columns(ColumnRetrievalOptions {
             only_group_by_columns: self.top_group_by().is_grouping_active(),
             shade_by_select_aliases: false, // we are in SELECT
@@ -1095,7 +1096,6 @@ impl FromContents {
         ).map(|(.., r)| r)
     }
 
-    /// Returns columns in the following format: alias.column_name
     pub fn get_wildcard_columns_iter(&self) -> impl Iterator<Item = (Option<IdentName>, SubgraphType)> + '_ {
         self.relations.values().flat_map(
             |relation| relation.get_all_columns_iter_cloned()
