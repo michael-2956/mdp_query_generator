@@ -199,12 +199,12 @@ digraph G {
         select_expr -> call54_types
         call54_types -> select_expr_done
 
-        // SELECT_tables_eligible_for_wildcard [label="Set Relations for wildcards\nset_value='wildcard_relations'", set_value="wildcard_relations"]
-        // SELECT_list -> SELECT_tables_eligible_for_wildcard
-        // SELECT_wildcard [label="wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
-        // SELECT_tables_eligible_for_wildcard -> SELECT_wildcard
-        // SELECT_wildcard -> SELECT_list_multiple_values
-        // SELECT_wildcard -> EXIT_SELECT
+        SELECT_tables_eligible_for_wildcard [label="Set Relations for wildcards\nset_value='wildcard_relations'", set_value="wildcard_relations"]
+        SELECT_list -> SELECT_tables_eligible_for_wildcard
+        SELECT_wildcard [label="wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
+        SELECT_tables_eligible_for_wildcard -> SELECT_wildcard
+        SELECT_wildcard -> SELECT_list_multiple_values
+        SELECT_wildcard -> EXIT_SELECT
         // SELECT_qualified_wildcard [label="qualified wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
         // SELECT_tables_eligible_for_wildcard -> SELECT_qualified_wildcard
         // SELECT_qualified_wildcard -> SELECT_list_multiple_values

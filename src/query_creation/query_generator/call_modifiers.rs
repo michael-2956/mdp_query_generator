@@ -1,5 +1,4 @@
 use smol_str::SmolStr;
-use sqlparser::ast::Ident;
 
 use core::fmt::Debug;
 use std::collections::BTreeMap;
@@ -200,10 +199,11 @@ impl StatelessCallModifier for SelectedTypesAccessibleByNamingMethodModifier {
 
 #[derive(Debug, Clone)]
 pub struct WildcardRelationsValue {
-    /// relations eligible to be selected by qualified wildcard
-    pub relations_selectable_by_qualified_wildcard: Vec<Ident>,
+    /// relations eligible to be selected by qualified wildcard, from the
+    /// current FROM to the upmost parent FROM
+    pub relation_levels_selectable_by_qualified_wildcard: Vec<Vec<IdentName>>,
     /// total number of relations
-    pub total_relations_num: usize,
+    pub num_relations_in_top_from: usize,
 }
 
 impl NamedValue for WildcardRelationsValue {
@@ -226,26 +226,11 @@ impl ValueSetter for WildcardRelationsValueSetter {
         }
         let single_column = function_context.call_params.modifiers.contains(&SmolStr::new("single column"));
         let allowed_types = unwrap_variant!(function_context.call_params.selected_types.clone(), CallTypes::TypeList);
-        // 1. All types selected by wildcard from table should be in the allowed types
-        // 2. if single_column modifier is present, only a single column should be present in every relation
         ValueSetterValue::WildcardRelations(WildcardRelationsValue {
-            relations_selectable_by_qualified_wildcard: clause_context.from().relations_iter().filter_map(|(alias, relation)| {
-                // get all column types (if there is the same type twice it will still be here)
-                let all_column_types: Vec<_> = relation.get_all_columns_iter().map(|(_, col_type)| col_type.clone()).collect();
-                let all_types_are_allowed = all_column_types.iter().all(|col_type| allowed_types.contains(col_type));
-
-                let mut relation_opt: Option<Ident> = if all_types_are_allowed {
-                    Some(alias.clone().into())
-                } else { None };
-
-                // the relation is not eligible if the number of columns is > 1 and single_column is on
-                if single_column && all_column_types.len() != 1 {
-                    relation_opt = None;
-                }
-
-                relation_opt
-            }).collect(),
-            total_relations_num: clause_context.from().num_relations(),
+            relation_levels_selectable_by_qualified_wildcard: clause_context.get_relation_levels_selectable_by_qualified_wildcard(
+                allowed_types, single_column
+            ),
+            num_relations_in_top_from: clause_context.top_active_from().num_relations(),
         })
     }
 }
@@ -269,14 +254,16 @@ impl StatelessCallModifier for IsWildcardAvailableModifier {
         // 4. if multiple relations are present but single_column is ON, the SELECT_wildcard is OFF
         match function_context.current_node.node_common.name.as_str() {
             "SELECT_wildcard" => {
+                let all_relations_allowed = wildcard_relations.relation_levels_selectable_by_qualified_wildcard[0].len() ==
+                                                  wildcard_relations.num_relations_in_top_from;
                 if single_column {
-                    wildcard_relations.total_relations_num == 1 && wildcard_relations.relations_selectable_by_qualified_wildcard.len() == 1
-                } else {
-                    wildcard_relations.total_relations_num > 0
-                }
+                    all_relations_allowed && wildcard_relations.num_relations_in_top_from == 1
+                } else { all_relations_allowed }
             },
             "SELECT_qualified_wildcard" => {
-                wildcard_relations.relations_selectable_by_qualified_wildcard.len() > 0
+                wildcard_relations.relation_levels_selectable_by_qualified_wildcard.iter().any(
+                    |level| level.len() > 0
+                )
             },
             any => panic!("is_wildcard_available cannot be called at {any}")
         }
@@ -326,7 +313,7 @@ impl ValueSetter for GroupingEnabledValueSetter {
 
     fn get_value(&self, clause_context: &ClauseContext, _function_context: &FunctionContext) -> ValueSetterValue {
         ValueSetterValue::GroupingEnabled(GroupingEnabledValue {
-            enabled: clause_context.group_by().is_grouping_active(),
+            enabled: clause_context.top_group_by().is_grouping_active(),
         })
     }
 }
@@ -527,8 +514,8 @@ impl ValueSetter for CanSkipLimitValueSetter {
                 "query_can_skip_limit_set_val" => {
                     !function_context.call_params.modifiers.contains(&SmolStr::new("single row")) ||
                     (
-                        clause_context.group_by().is_single_group() &&
-                        clause_context.group_by().is_single_row()
+                        clause_context.top_group_by().is_single_group() &&
+                        clause_context.top_group_by().is_single_row()
                     )
                 },
                 any => panic!("{any} unexpectedly triggered the can_skip_limit value setter"),

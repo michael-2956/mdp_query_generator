@@ -3,7 +3,7 @@ use std::{collections::{BTreeMap, BTreeSet, HashMap, HashSet}, error::Error, fmt
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
-use crate::{query_creation::state_generator::{markov_chain_generator::markov_chain::CallModifiers, subgraph_type::SubgraphType}, unwrap_variant};
+use crate::{query_creation::state_generator::{markov_chain_generator::markov_chain::CallModifiers, subgraph_type::{ContainsSubgraphType, SubgraphType}}, unwrap_variant};
 
 use sqlparser::{ast::{ColumnDef, DataType, Expr, FileFormat, HiveDistributionStyle, HiveFormat, Ident, ObjectName, OnCommit, Query, SelectItem, SetExpr, SqlOption, Statement, TableAlias, TableConstraint}, dialect::PostgreSqlDialect, parser::Parser};
 
@@ -297,24 +297,56 @@ impl ClauseContext {
         self.query_props_stack.last_mut().unwrap()
     }
 
-    pub fn from(&self) -> &FromContents {
-        self.all_accessible_froms.active_from()
+    pub fn top_active_from(&self) -> &FromContents {
+        self.all_accessible_froms.top_active_from()
     }
 
-    pub fn from_mut(&mut self) -> &mut AllAccessibleFroms {
+    pub fn top_from_mut(&mut self) -> &mut AllAccessibleFroms {
         &mut self.all_accessible_froms
     }
 
-    pub fn group_by(&self) -> &GroupByContents {
+    pub fn top_group_by(&self) -> &GroupByContents {
         self.group_by_contents_stack.last().unwrap()
     }
 
-    pub fn group_by_mut(&mut self) -> &mut GroupByContents {
+    pub fn top_group_by_mut(&mut self) -> &mut GroupByContents {
         self.group_by_contents_stack.last_mut().unwrap()
     }
 
     pub fn eprint_clause_hierarchy(&self) {
         eprintln!("Clause hierarchy: {:#?}", self.get_clause_hierarchy_iter().collect::<Vec<_>>());
+    }
+
+    pub fn get_relation_levels_selectable_by_qualified_wildcard(&self, allowed_types: Vec<SubgraphType>, single_column: bool) -> Vec<Vec<IdentName>> {
+        self.get_filtered_from_clause_hierarchy_with_allowed_columns(ColumnRetrievalOptions {
+            only_group_by_columns: self.top_group_by().is_grouping_active(),
+            shade_by_select_aliases: false, // we are in SELECT
+            only_columns_that_can_be_aggregated: false,  // we are definitely non in aggregation
+        }).map(|(from_contents, shaded_rel_names, _, allowed_rel_col_names_opt)| {
+            from_contents.relations_iter().filter(|(rel_name, relation)| {
+                !shaded_rel_names.contains(rel_name) && {
+                    let all_columns: Vec<_> = relation.get_all_columns_iter().collect();
+                    if single_column && all_columns.len() != 1 {
+                        // the relation is not eligible if the number of columns is > 1 and single_column is on
+                        false
+                    } else {
+                        all_columns.iter().all(|(col_name, col_type)| {
+                            allowed_types.contains_generator_of(*col_type) && if let Some(
+                                allowed_rel_col_names
+                            ) = &allowed_rel_col_names_opt {
+                                if let Some(col_name) = col_name {
+                                    allowed_rel_col_names.contains(&[(**rel_name).clone(), (**col_name).clone()])
+                                } else { false }
+                            } else { true }
+                        })
+                    }
+                }
+            }).map(|(rel_name, ..)| rel_name.clone()).collect()
+        }).collect()
+    }
+
+    pub fn get_relation_by_name(&self, name: &IdentName) -> &Relation {
+        self.all_accessible_froms.get_relation_by_name(name)
     }
 
     /// returns None if the level's from is empty
@@ -325,16 +357,21 @@ impl ClauseContext {
             .map(|((a, b), c)| a.map(|a| (a, b, c)))
     }
 
-    fn get_accessible_column_levels_iter_retrieve_by<'a, F>(
-        &'a self, retrieve_by: F, check_accessibility: CheckAccessibility, column_retrieval_options: ColumnRetrievalOptions
-    ) -> impl Iterator<Item = Vec<(&'a SubgraphType, [&'a IdentName; 2])>>
-    where
-        F: for<'b> Fn(&'b FromContents, Option<HashSet<[IdentName; 2]>>, bool) -> Box<dyn TypeAndQualifiedColumnIter<'b> + 'b>,
-    {
+    /// Get FROM clauses hierarchy that adhere to column_retrieval_options.\
+    /// Iterator produces:\
+    /// - FROM clause
+    /// - a list of shaded relation names
+    /// - a list of shaded column names
+    /// - optionally, a set of allowed R.C names
+    fn get_filtered_from_clause_hierarchy_with_allowed_columns(
+        &self, column_retrieval_options: ColumnRetrievalOptions
+    ) -> impl Iterator<Item = (
+        &FromContents, HashSet<IdentName>, HashSet<IdentName>, Option<HashSet<[IdentName; 2]>>
+    )> {
+        let mut shaded_rel_names: HashSet<IdentName> = HashSet::new();
         let mut shaded_col_names: HashSet<IdentName> = if column_retrieval_options.shade_by_select_aliases {
             HashSet::from_iter(self.query().get_all_select_aliases_iter().cloned())
         } else { HashSet::new() };
-        let mut shaded_rel_names: HashSet<IdentName> = HashSet::new();
         self.get_clause_hierarchy_iter().enumerate().filter_map(
             |(i, v_opt)| v_opt.map(|v| (i, v))
         ).filter(move |(i, (.., query_props))|
@@ -352,6 +389,29 @@ impl ClauseContext {
             let allowed_rel_col_names_opt = if only_group_by_columns {
                 Some(group_by_contents.get_column_name_set())
             } else { None };
+            let ret_srn = shaded_rel_names.clone();
+            for rel_name in from_contents.get_all_rel_names_iter() {
+                shaded_rel_names.insert((*rel_name).clone());
+            }
+            let ret_scn = shaded_col_names.clone();
+            for col_name in from_contents.get_all_col_names_iter() {
+                shaded_col_names.insert((*col_name).clone());
+            }
+            (from_contents, ret_srn, ret_scn, allowed_rel_col_names_opt)
+        })
+    }
+
+    fn get_accessible_column_levels_iter_retrieve_by<'a, F>(
+        &'a self, retrieve_by: F, check_accessibility: CheckAccessibility, column_retrieval_options: ColumnRetrievalOptions
+    ) -> impl Iterator<Item = Vec<(&'a SubgraphType, [&'a IdentName; 2])>>
+    where
+        F: for<'b> Fn(&'b FromContents, Option<HashSet<[IdentName; 2]>>, bool) -> Box<dyn TypeAndQualifiedColumnIter<'b> + 'b>,
+    {
+        self.get_filtered_from_clause_hierarchy_with_allowed_columns(
+            column_retrieval_options
+        ).map(move |(
+            from_contents, shaded_rel_names, shaded_col_names, allowed_rel_col_names_opt
+        )| {
             let accessible_columns = [
                 match &check_accessibility {
                     CheckAccessibility::QualifiedColumnName => vec![],
@@ -372,12 +432,6 @@ impl ClauseContext {
                     },
                 }
             ].concat();
-            for rel_name in from_contents.get_all_rel_names_iter() {
-                shaded_rel_names.insert((*rel_name).clone());
-            }
-            for col_name in from_contents.get_all_col_names_iter() {
-                shaded_col_names.insert((*col_name).clone());
-            }
             accessible_columns
         })
     }
@@ -561,6 +615,11 @@ impl AllAccessibleFroms {
         self.current_subfrom_opt_mut().take().unwrap();
     }
 
+    fn get_relation_by_name(&self, name: &IdentName) -> &Relation {
+        self.get_from_contents_hierarchy_iter().filter_map(|fc| fc)
+            .find_map(|fc| fc.get_relation_by_name(name)).unwrap()
+    }
+
     fn get_cutoff_checkpoint(&self) -> AllAccessibleFromsCutoffCheckpoint {
         AllAccessibleFromsCutoffCheckpoint {
             stack_length: self.from_contents_stack.len(),
@@ -604,7 +663,7 @@ impl AllAccessibleFroms {
             )
     }
 
-    fn active_from(&self) -> &FromContents {
+    fn top_active_from(&self) -> &FromContents {
         self.current_subfrom_opt().as_ref().unwrap_or(self.top_from())
     }
 
@@ -1027,13 +1086,13 @@ impl FromContents {
         &self, column_types: &Vec<SubgraphType>, allowed_rel_col_names_opt: Option<HashSet<[IdentName; 2]>>, only_unique: bool
     ) -> Vec<(&SubgraphType, [&IdentName; 2])> {
         self.get_accessible_columns_iter(allowed_rel_col_names_opt, only_unique)
-            .filter(|(col_tp, ..)| column_types.iter().any(
-                |searched_type| (*col_tp).is_same_or_more_determined_or_undetermined(searched_type)
-            )).collect()
+            .filter(|(col_tp, ..)| column_types.contains_generator_of(*col_tp)).collect()
     }
 
-    pub fn get_relation_by_name(&self, name: &Ident) -> &Relation {
-        self.relations.iter().find(|(rl_name, _)| **rl_name == name.clone().into()).unwrap().1
+    fn get_relation_by_name(&self, name: &IdentName) -> Option<&Relation> {
+        self.relations.iter().find(
+            |(rl_name, _)| *rl_name == name
+        ).map(|(.., r)| r)
     }
 
     /// Returns columns in the following format: alias.column_name

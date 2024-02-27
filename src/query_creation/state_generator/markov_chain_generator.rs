@@ -16,9 +16,9 @@ use take_until::TakeUntilExt;
 use crate::{config::TomlReadable, query_creation::{query_generator::{call_modifiers::{CanSkipLimitModifier, CanSkipLimitValueSetter, DistinctAggregationModifier, DistinctAggregationValueSetter, GroupingEnabledValueSetter, GroupingModeSwitchModifier, HasAccessibleColumnsModifier, HasAccessibleColumnsValueSetter, SelectedTypesAccessibleByNamingMethodModifier, NameAccessibilityOfSelectedTypesValueSetter, IsColumnTypeAvailableModifier, IsColumnTypeAvailableValueSetter, IsEmptySetAllowedModifier, IsGroupingSetsValueSetter, IsWildcardAvailableModifier, NamedValue, SelectAccessibleColumnsValueSetter, SelectHasAccessibleColumnsModifier, SelectIsNotDistinctModifier, SelectIsNotDistinctValueSetter, StatefulCallModifier, StatelessCallModifier, ValueSetter, ValueSetterValue, WildcardRelationsValueSetter}, query_info::ClauseContext}, state_generator::markov_chain_generator::markov_chain::FunctionTypes}, training::models::{ModelPredictionResult, PathwayGraphModel}, unwrap_variant};
 
 use self::{
-    markov_chain::{
-        MarkovChain, NodeParams, CallParams, CallModifiers, Function, ModifierWithFields
-    }, error::SyntaxError, dot_parser::{NodeCommon, TypeWithFields}, subgraph_type::SubgraphType
+    dot_parser::{NodeCommon, TypeWithFields}, error::SyntaxError, markov_chain::{
+        CallModifiers, CallParams, Function, MarkovChain, ModifierWithFields, NodeParams
+    }, subgraph_type::{ContainsSubgraphType, SubgraphType}
 };
 
 use state_choosers::StateChooser;
@@ -1072,9 +1072,7 @@ fn check_node_off(
         off = match call_params.selected_types {
             CallTypes::None => true,
             CallTypes::TypeList(ref t_name_list) => !t_name_list.iter()
-                .any(|x| type_names.iter().any(
-                    |type_name|  x.is_same_or_more_determined_or_undetermined(type_name)
-                )),
+                .any(|x| type_names.contains_generator_of(x)),
             _ => panic!("Expected None or TypeNameList for function selected types")
         };
     }

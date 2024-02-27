@@ -18,7 +18,7 @@ use crate::{config::TomlReadable, training::models::PathwayGraphModel};
 
 use super::{
     super::{unwrap_variant, unwrap_variant_or_else},
-    state_generator::{CallTypes, markov_chain_generator::subgraph_type::SubgraphType}
+    state_generator::{markov_chain_generator::subgraph_type::SubgraphType, subgraph_type::ContainsSubgraphType, CallTypes}
 };
 use self::{
     aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution},
@@ -107,7 +107,7 @@ impl<'a> TypeAssertion<'a> {
             TypeAssertion::GeneratedBy(by) => selected_type.is_same_or_more_determined_or_undetermined(by),
             TypeAssertion::CompatibleWith(with) => selected_type.is_compat_with(with),
             TypeAssertion::GeneratedByOneOf(by_one_of) => {
-                by_one_of.iter().any(|by| selected_type.is_same_or_more_determined_or_undetermined(by))
+                by_one_of.contains_generator_of(selected_type)
             },
             TypeAssertion::CompatibleWithOneOf(with_one_of) => {
                 with_one_of.iter().any(|with| selected_type.is_compat_with(with))
@@ -249,7 +249,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         select_body.projection = self.handle_select();
         select_body.distinct = self.clause_context.query().is_distinct();
 
-        if self.clause_context.group_by().is_grouping_active() && !self.clause_context.query().is_aggregation_indicated() {
+        if self.clause_context.top_group_by().is_grouping_active() && !self.clause_context.query().is_aggregation_indicated() {
             if select_body.group_by.is_empty() {
                 // Grouping is active but wasn't indicated in any way. Add GROUP BY true
                 // instead of GROUP BY (), because unsupported by parser
@@ -359,12 +359,12 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         let mut from: Vec<TableWithJoins> = vec![];
 
         loop {
-            self.clause_context.from_mut().add_subfrom();
+            self.clause_context.top_from_mut().add_subfrom();
             from.push(TableWithJoins { relation: match self.next_state().as_str() {
                 "FROM_table" => self.handle_from_table(),
                 "call0_Query" => self.handle_from_query(),
                 "EXIT_FROM" => {
-                    self.clause_context.from_mut().delete_subfrom();
+                    self.clause_context.top_from_mut().delete_subfrom();
                     break
                 },
                 any => self.panic_unexpected(any)
@@ -386,12 +386,12 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                             any => self.panic_unexpected(any)
                         };
                         // only activate sub-from for JOIN ON
-                        self.clause_context.from_mut().activate_subfrom();
+                        self.clause_context.top_from_mut().activate_subfrom();
                         self.expect_states(&["FROM_join_on", "call83_types"]);
                         let join_on = ast::JoinConstraint::On(
                             self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Val3)).1
                         );
-                        self.clause_context.from_mut().deactivate_subfrom();
+                        self.clause_context.top_from_mut().deactivate_subfrom();
                         joins.push(Join {
                             relation,
                             join_operator: match join_type.as_str() {
@@ -412,15 +412,15 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 any => self.panic_unexpected(any)
             }
 
-            self.clause_context.from_mut().delete_subfrom();
+            self.clause_context.top_from_mut().delete_subfrom();
         }
-        self.clause_context.from_mut().activate_from();
+        self.clause_context.top_from_mut().activate_from();
         from
     }
 
     fn handle_from_table(&mut self) -> TableFactor {
         let create_table_st = self.value_chooser.choose_table(&self.database_schema);
-        let alias = self.clause_context.from_mut().append_table(create_table_st);
+        let alias = self.clause_context.top_from_mut().append_table(create_table_st);
         TableFactor::Table {
             name: create_table_st.name.clone(),
             alias: Some(alias),
@@ -432,7 +432,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
 
     fn handle_from_query(&mut self) -> TableFactor {
         let (query, column_idents_and_graph_types) = self.handle_query();
-        let alias = self.clause_context.from_mut().append_query(column_idents_and_graph_types);
+        let alias = self.clause_context.top_from_mut().append_query(column_idents_and_graph_types);
         TableFactor::Derived {
             lateral: false,
             subquery: Box::new(query),
@@ -470,17 +470,16 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     match self.next_state().as_str() {
                         "SELECT_wildcard" => {
                             column_idents_and_graph_types.extend(
-                                self.clause_context.from().get_wildcard_columns_iter()
+                                self.clause_context.top_active_from().get_wildcard_columns_iter()
                             );
                             projection.push(SelectItem::Wildcard(WildcardAdditionalOptions {
                                 opt_exclude: None, opt_except: None, opt_rename: None,
                             }));
                         },
                         "SELECT_qualified_wildcard" => {
-                            let from_contents = self.clause_context.from();
                             let wildcard_relations = unwrap_variant!(self.state_generator.get_named_value::<WildcardRelationsValue>().unwrap(), ValueSetterValue::WildcardRelations);
                             let (alias, relation) = self.value_chooser.choose_qualified_wildcard_relation(
-                                from_contents, wildcard_relations
+                                &self.clause_context, wildcard_relations
                             );
                             column_idents_and_graph_types.extend(relation.get_all_columns_iter_cloned());
                             projection.push(SelectItem::QualifiedWildcard(
@@ -537,8 +536,8 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         self.expect_state("GROUP_BY");
         match self.next_state().as_str() {
             "group_by_single_group" => {
-                self.clause_context.group_by_mut().set_single_group_grouping();
-                self.clause_context.group_by_mut().set_single_row_grouping();
+                self.clause_context.top_group_by_mut().set_single_group_grouping();
+                self.clause_context.top_group_by_mut().set_single_row_grouping();
                 self.expect_state("EXIT_GROUP_BY");
                 return vec![]
             },
@@ -557,7 +556,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                         &column_expr, ColumnRetrievalOptions::new(false, false, false)
                     ).unwrap().1;
                     result.push(column_expr);
-                    self.clause_context.group_by_mut().append_column(column_name, column_type);
+                    self.clause_context.top_group_by_mut().append_column(column_name, column_type);
 
                     match self.next_state().as_str() {
                         "grouping_column_list" => { },
@@ -583,7 +582,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                                         &column_expr, ColumnRetrievalOptions::new(false, false, false)
                                     ).unwrap().1;
                                     current_set.push(column_expr);
-                                    self.clause_context.group_by_mut().append_column(column_name, column_type);
+                                    self.clause_context.top_group_by_mut().append_column(column_name, column_type);
                                 },
                                 "set_multiple" => { },
                                 "set_list_empty_allowed" => { },  // will break in next iteration
@@ -620,12 +619,12 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         }
 
         // For cases such as: GROUPING SETS ( (), (), () )
-        if !self.clause_context.group_by().contains_columns() {
-            self.clause_context.group_by_mut().set_single_group_grouping();
+        if !self.clause_context.top_group_by().contains_columns() {
+            self.clause_context.top_group_by_mut().set_single_group_grouping();
             // Check is GROUPING SETS ( () )
             if let &[Expr::GroupingSets(ref set_list)] = result.as_slice() {
                 if set_list.len() == 1 {
-                    self.clause_context.group_by_mut().set_single_row_grouping();
+                    self.clause_context.top_group_by_mut().set_single_row_grouping();
                 }
             }
         }

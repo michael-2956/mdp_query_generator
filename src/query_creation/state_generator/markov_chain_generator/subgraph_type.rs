@@ -111,6 +111,26 @@ impl Display for SubgraphType {
     }
 }
 
+pub trait ContainsSubgraphType {
+    fn contains_generator_of(&self, tp: &SubgraphType) -> bool;
+}
+
+impl ContainsSubgraphType for Vec<SubgraphType> {
+    fn contains_generator_of(&self, tp: &SubgraphType) -> bool {
+        self.iter().any(|searched_type|
+            (*tp).is_same_or_more_determined_or_undetermined(searched_type)
+        )
+    }
+}
+
+impl ContainsSubgraphType for [SubgraphType] {
+    fn contains_generator_of(&self, tp: &SubgraphType) -> bool {
+        self.iter().any(|searched_type|
+            (*tp).is_same_or_more_determined_or_undetermined(searched_type)
+        )
+    }
+}
+
 impl SubgraphType {
     /// Sorted in a way that latter are convertible
     /// to former, if any compatibility exists

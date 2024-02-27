@@ -2,9 +2,9 @@ use rand::{distributions::{Distribution, WeightedIndex}, seq::SliceRandom, Rng, 
 use rand_chacha::ChaCha8Rng;
 use sqlparser::ast::{DateTimeField, Ident, ObjectName};
 
-use crate::{training::ast_to_path::PathNode, query_creation::state_generator::subgraph_type::SubgraphType};
+use crate::{query_creation::state_generator::subgraph_type::{ContainsSubgraphType, SubgraphType}, training::ast_to_path::PathNode};
 
-use super::{call_modifiers::WildcardRelationsValue, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, CreateTableSt, DatabaseSchema, FromContents, IdentName, Relation}};
+use super::{call_modifiers::WildcardRelationsValue, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, CreateTableSt, DatabaseSchema, IdentName, Relation}};
 
 pub trait QueryValueChooser {
     fn new() -> Self;
@@ -31,7 +31,7 @@ pub trait QueryValueChooser {
 
     fn choose_interval(&mut self, with_field: bool) -> (String, Option<DateTimeField>);
 
-    fn choose_qualified_wildcard_relation<'a>(&mut self, from_contents: &'a FromContents, wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation);
+    fn choose_qualified_wildcard_relation<'a>(&mut self, clause_context: &'a ClauseContext, wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation);
 
     fn choose_select_alias(&mut self) -> Ident;
 
@@ -108,10 +108,12 @@ impl QueryValueChooser for RandomValueChooser {
         } else { ("1 day".to_string(), None) }
     }
 
-    fn choose_qualified_wildcard_relation<'a>(&mut self, from_contents: &'a FromContents, wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation) {
-        let alias = wildcard_relations.relations_selectable_by_qualified_wildcard.choose(&mut self.rng).unwrap();
-        let relation = from_contents.get_relation_by_name(alias);
-        (alias.clone(), relation)
+    fn choose_qualified_wildcard_relation<'a>(&mut self, clause_context: &'a ClauseContext, wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation) {
+        let alias = wildcard_relations.relation_levels_selectable_by_qualified_wildcard
+            .choose(&mut self.rng).unwrap()
+            .choose(&mut self.rng).unwrap();
+        let relation = clause_context.get_relation_by_name(alias);
+        (alias.clone().into(), relation)
     }
 
     fn choose_select_alias(&mut self) -> Ident {
@@ -237,7 +239,7 @@ impl QueryValueChooser for DeterministicValueChooser {
         let (col_tp, retrieved_column_name) = clause_context.retrieve_column_by_ident_components(
             &ident_components, column_retrieval_options
         ).unwrap();
-        assert!(column_types.iter().any(|tp| col_tp.is_same_or_more_determined_or_undetermined(&tp)));
+        assert!(column_types.contains_generator_of(&col_tp));
         assert!(qualified_column_name == retrieved_column_name);
         (col_tp, retrieved_column_name)
     }
@@ -276,13 +278,13 @@ impl QueryValueChooser for DeterministicValueChooser {
         (value, field)
     }
 
-    fn choose_qualified_wildcard_relation<'a>(&mut self, from_contents: &'a FromContents, wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation) {
-        let alias = self.chosen_qualified_wildcard_tables.next_ref();
-        if !wildcard_relations.relations_selectable_by_qualified_wildcard.contains(alias) {
-            panic!("Relation cannot be selected by wildcard in this context: wildcard_relations = {:?}, rel. alias: {alias}", wildcard_relations)
+    fn choose_qualified_wildcard_relation<'a>(&mut self, clause_context: &'a ClauseContext, wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation) {
+        let alias: IdentName = self.chosen_qualified_wildcard_tables.next_ref().clone().into();
+        if !wildcard_relations.relation_levels_selectable_by_qualified_wildcard.iter().any(|level| level.contains(&alias)) {
+            panic!("Relation cannot be selected by wildcard in this context: wildcard_relations = {:?}, rel. alias: {}", wildcard_relations, <IdentName as Into<Ident>>::into(alias))
         }
-        let relation = from_contents.get_relation_by_name(alias);
-        (alias.clone(), relation)
+        let relation = clause_context.get_relation_by_name(&alias);
+        (alias.into(), relation)
     }
 
     fn choose_select_alias(&mut self) -> Ident { self.chosen_select_aliases.next() }

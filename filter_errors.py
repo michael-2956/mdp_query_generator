@@ -9,6 +9,7 @@ ignore_errs = [
     "value out of range: underflow",
     "value out of range: overflow",
     "division by zero",
+    "too many grouping sets present",
 ]
 
 total_errs = 0

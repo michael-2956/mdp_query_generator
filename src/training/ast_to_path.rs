@@ -21,7 +21,7 @@ use crate::{
                 error::SyntaxError, markov_chain::{CallModifiers, MarkovChain}, ChainStateCheckpoint, DynClone, StateGeneratorConfig
             },
             state_choosers::MaxProbStateChooser,
-            subgraph_type::SubgraphType, substitute_models::{DeterministicModel, SubstituteModel}, CallTypes, MarkovChainGenerator
+            subgraph_type::{ContainsSubgraphType, SubgraphType}, substitute_models::{DeterministicModel, SubstituteModel}, CallTypes, MarkovChainGenerator
         }
     },
     unwrap_pat, unwrap_variant, unwrap_variant_or_else
@@ -347,7 +347,7 @@ impl PathGenerator {
         }
 
         if let Some(ref having) = select_body.having {
-            if self.clause_context.group_by().is_grouping_active() {
+            if self.clause_context.top_group_by().is_grouping_active() {
                 self.try_push_state("call0_HAVING")?;
                 self.handle_having(having)?;
             } else {
@@ -367,7 +367,7 @@ impl PathGenerator {
     fn handle_order_by(&mut self, order_by: &Vec<OrderByExpr>) -> Result<(), ConvertionError> {
         self.try_push_state("ORDER_BY")?;
 
-        let expr_state = if self.clause_context.group_by().is_grouping_active() {
+        let expr_state = if self.clause_context.top_group_by().is_grouping_active() {
             "call84_types"
         } else { "call85_types" };
 
@@ -428,7 +428,7 @@ impl PathGenerator {
     fn handle_from(&mut self, from: &Vec<TableWithJoins>) -> Result<(), ConvertionError> {
         self.try_push_state("FROM")?;
         for table_with_joins in from.iter() {
-            self.clause_context.from_mut().add_subfrom();
+            self.clause_context.top_from_mut().add_subfrom();
             match &table_with_joins.relation {
                 sqlparser::ast::TableFactor::Table { name, .. } => {
                     self.try_push_state("FROM_table")?;
@@ -468,15 +468,15 @@ impl PathGenerator {
                     },
                     any => unexpected_expr!(any)
                 }
-                self.clause_context.from_mut().activate_subfrom();
+                self.clause_context.top_from_mut().activate_subfrom();
                 self.try_push_states(&["FROM_join_on", "call83_types"])?;
                 self.handle_types(join_on, TypeAssertion::GeneratedBy(SubgraphType::Val3))?;
-                self.clause_context.from_mut().deactivate_subfrom();
+                self.clause_context.top_from_mut().deactivate_subfrom();
             }
             self.try_push_state("FROM_cartesian_product")?;
-            self.clause_context.from_mut().delete_subfrom();
+            self.clause_context.top_from_mut().delete_subfrom();
         }
-        self.clause_context.from_mut().activate_from();
+        self.clause_context.top_from_mut().activate_from();
         self.try_push_state("EXIT_FROM")?;
         Ok(())
     }
@@ -484,7 +484,7 @@ impl PathGenerator {
     fn handle_from_table(&mut self, name: &ObjectName) -> Result<(), ConvertionError> {
         self.push_node(PathNode::SelectedTableName(name.clone()));
         let create_table_st = self.database_schema.get_table_def_by_name(name);
-        self.clause_context.from_mut().append_table(create_table_st);
+        self.clause_context.top_from_mut().append_table(create_table_st);
         Ok(())
     }
 
@@ -494,7 +494,7 @@ impl PathGenerator {
         let (
             column_idents_and_graph_types, select_continue_after
         ) = self.handle_query(subquery, select_continue_after)?;
-        self.clause_context.from_mut().append_query(column_idents_and_graph_types);
+        self.clause_context.top_from_mut().append_query(column_idents_and_graph_types);
         Ok(select_continue_after)
     }
 
@@ -528,7 +528,7 @@ impl PathGenerator {
             )))
         }
         
-        let select_item_state = if self.clause_context.group_by().is_grouping_active() {
+        let select_item_state = if self.clause_context.top_group_by().is_grouping_active() {
             "call73_types"
         } else {
             "call54_types"
@@ -590,14 +590,17 @@ impl PathGenerator {
                     self.try_push_states(&["SELECT_tables_eligible_for_wildcard", "SELECT_qualified_wildcard"])?;
                     let relation = match alias.0.as_slice() {
                         [ident] => {
+                            let identname: IdentName = ident.clone().into();
                             let wildcard_relations = unwrap_variant!(self.state_generator.get_named_value::<WildcardRelationsValue>().unwrap(), ValueSetterValue::WildcardRelations);
-                            if !wildcard_relations.relations_selectable_by_qualified_wildcard.contains(ident) {
+                            if !wildcard_relations.relation_levels_selectable_by_qualified_wildcard.iter().any(
+                                |level| level.contains(&identname)
+                            ) {
                                 return Err(ConvertionError::new(format!(
                                     "{ident}.* is not available: wildcard_selectable_relations = {:?}",
-                                    wildcard_relations.relations_selectable_by_qualified_wildcard
+                                    wildcard_relations.relation_levels_selectable_by_qualified_wildcard
                                 )))
                             }
-                            self.clause_context.from().get_relation_by_name(ident)
+                            self.clause_context.get_relation_by_name(&identname)
                         },
                         any => panic!("schema.table alias is not supported: {}", ObjectName(any.to_vec())),
                     };
@@ -608,7 +611,7 @@ impl PathGenerator {
                 SelectItem::Wildcard(..) => {
                     self.try_push_states(&["SELECT_tables_eligible_for_wildcard", "SELECT_wildcard"])?;
                     select_continue_after.mark_no_types_call_for_index(i);
-                    column_idents_and_graph_types.extend(self.clause_context.from().get_wildcard_columns_iter());
+                    column_idents_and_graph_types.extend(self.clause_context.top_active_from().get_wildcard_columns_iter());
                 },
             }
         }
@@ -1598,9 +1601,7 @@ impl PathGenerator {
             Err(err) => return Err(ConvertionError::new(format!("{err}"))),
         };
 
-        if !column_types.iter().any(
-            |searched_type| selected_type.is_same_or_more_determined_or_undetermined(searched_type)
-        ) {
+        if !column_types.contains_generator_of(&selected_type) {
             return Err(ConvertionError::new(format!(
                 "get_column_type_by_ident_components() selected a column ({}) with type {:?}, but expected one of {:?}",
                 ObjectName(ident_components), selected_type, column_types
@@ -1815,8 +1816,8 @@ impl PathGenerator {
     fn handle_group_by(&mut self, grouping_exprs: &Vec<Expr>) -> Result<(), ConvertionError> {
         self.try_push_state("GROUP_BY")?;
         if grouping_exprs.len() == 0 || grouping_exprs == &[Expr::Value(Value::Boolean(true))] {
-            self.clause_context.group_by_mut().set_single_group_grouping();
-            self.clause_context.group_by_mut().set_single_row_grouping();
+            self.clause_context.top_group_by_mut().set_single_group_grouping();
+            self.clause_context.top_group_by_mut().set_single_row_grouping();
             self.try_push_states(&["group_by_single_group", "EXIT_GROUP_BY"])?;
             return Ok(())
         } else {
@@ -1852,7 +1853,7 @@ impl PathGenerator {
                                 let column_name = self.clause_context.retrieve_column_by_column_expr(
                                     &column_expr, ColumnRetrievalOptions::new(false, false, false)
                                 ).unwrap().1;
-                                self.clause_context.group_by_mut().append_column(column_name, column_type);
+                                self.clause_context.top_group_by_mut().append_column(column_name, column_type);
                             }
                         }
                     }
@@ -1870,19 +1871,19 @@ impl PathGenerator {
                     let column_name = self.clause_context.retrieve_column_by_column_expr(
                         &column_expr, ColumnRetrievalOptions::new(false, false, false)
                     ).unwrap().1;
-                    self.clause_context.group_by_mut().append_column(column_name, column_type);
+                    self.clause_context.top_group_by_mut().append_column(column_name, column_type);
                 },
                 any => unexpected_expr!(any)
             }
         }
 
         // For cases such as: GROUPING SETS ( (), (), () )
-        if !self.clause_context.group_by().contains_columns() {
-            self.clause_context.group_by_mut().set_single_group_grouping();
+        if !self.clause_context.top_group_by().contains_columns() {
+            self.clause_context.top_group_by_mut().set_single_group_grouping();
             // Check is GROUPING SETS ( () )
             if let &[Expr::GroupingSets(ref set_list)] = grouping_exprs.as_slice() {
                 if set_list.len() == 1 {
-                    self.clause_context.group_by_mut().set_single_row_grouping();
+                    self.clause_context.top_group_by_mut().set_single_row_grouping();
                 }
             }
         }
