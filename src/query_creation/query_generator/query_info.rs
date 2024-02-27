@@ -402,6 +402,10 @@ impl ClauseContext {
         })
     }
 
+    /// This checks the current and parent queries for columns:
+    /// - are accessible by check_accessibility method, and
+    /// - are able to be retrieved with column_retrieval_options\
+    /// and retrieves them using the retrieve_by function.
     fn get_accessible_column_levels_iter_retrieve_by<'a, F>(
         &'a self, retrieve_by: F, check_accessibility: CheckAccessibility, column_retrieval_options: ColumnRetrievalOptions
     ) -> impl Iterator<Item = Vec<(&'a SubgraphType, [&'a IdentName; 2])>>
@@ -437,18 +441,10 @@ impl ClauseContext {
         })
     }
 
-    /// This checks the current and parent queries for columns with\
-    /// a the type that falls into the column_types vec. The columns should
-    /// be accessible from the respeccove relations
-    ///
-    /// The 'check_accessibility' argument, if true, signals that only\
-    /// unique column names should be considered (needed for unqualified columns)
-    ///
-    /// If 'only_group_by_columns' is true, the current query requires\
-    /// a column to be groupped (mentioned in GROUP BY)
-    ///
-    /// For the parent queries, the column source is determined by the\
-    /// modifiers present at the time of the subquery call.
+    /// This checks the current and parent queries for columns:
+    /// - with a the type that falls into the column_types vec,
+    /// - are accessible by check_accessibility method, and
+    /// - are able to be retrieved with column_retrieval_options
     fn get_accessible_column_levels_by_types_iter(
         &self, column_types: Vec<SubgraphType>, check_accessibility: CheckAccessibility,
         column_retrieval_options: ColumnRetrievalOptions
@@ -462,14 +458,15 @@ impl ClauseContext {
         )
     }
 
+    /// This checks the current and parent queries for columns that:
+    /// - are accessible by check_accessibility method, and
+    /// - are able to be retrieved with column_retrieval_options
     fn get_accessible_column_levels_iter(
         &self, check_accessibility: CheckAccessibility, column_retrieval_options: ColumnRetrievalOptions
     ) -> impl Iterator<Item = Vec<(&SubgraphType, [&IdentName; 2])>> {
         self.get_accessible_column_levels_iter_retrieve_by(
             |fc, allowed_rel_col_names_opt, only_unique| {
-                Box::new(fc.get_accessible_columns_iter(
-                    allowed_rel_col_names_opt, only_unique
-                ))
+                Box::new(fc.get_accessible_columns_iter(allowed_rel_col_names_opt, only_unique))
             }, check_accessibility, column_retrieval_options
         )
     }
@@ -1106,7 +1103,7 @@ impl FromContents {
         self.relations.len()
     }
 
-    pub fn relations_iter(&self) -> impl Iterator<Item = (&IdentName, &Relation)> {
+    fn relations_iter(&self) -> impl Iterator<Item = (&IdentName, &Relation)> {
         self.relations.iter()
     }
 }
@@ -1183,7 +1180,7 @@ impl Relation {
     }
 
     /// get all columns with their types, including the unnamed ones and ambiguous ones
-    pub fn get_all_columns_iter(&self) -> impl Iterator<Item = (Option<&IdentName>, &SubgraphType)> {
+    fn get_all_columns_iter(&self) -> impl Iterator<Item = (Option<&IdentName>, &SubgraphType)> {
         self.get_accessible_columns_iter()
             .map(|(col_ident, col_tp)| (Some(col_ident), col_tp))
             .chain(self.unnamed_columns.iter().map(|x| (None, x)))
