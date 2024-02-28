@@ -112,14 +112,11 @@ digraph G {
 
         // FROM -> EXIT_FROM
 
-        FROM_table [label="Table"]
-        FROM -> FROM_table
-        call0_Query [label="Query", shape=rectangle, TYPES="[any]", MODS="[]", style=filled, color=green]
-        FROM -> call0_Query
+        call0_FROM_item [label="FROM item", shape=rectangle, style=filled, color=lightgreen]
+        FROM -> call0_FROM_item
 
         FROM_join_by [label="join by"]
-        call0_Query -> FROM_join_by
-        FROM_table -> FROM_join_by
+        call0_FROM_item -> FROM_join_by
 
         FROM_join_to [label="join to"]
 
@@ -139,12 +136,9 @@ digraph G {
         // FROM_full_join -> FROM_join_to
 
         FROM_join_on [label="ON"]
-        FROM_join_table [label="Table"]
-        FROM_join_to -> FROM_join_table
-        FROM_join_table -> FROM_join_on
-        call5_Query [label="Query", shape=rectangle, TYPES="[any]", MODS="[]", style=filled, color=green]
-        FROM_join_to -> call5_Query
-        call5_Query -> FROM_join_on
+        call1_FROM_item [label="FROM item", shape=rectangle, style=filled, color=lightgreen]
+        FROM_join_to -> call1_FROM_item
+        call1_FROM_item -> FROM_join_on
 
         call83_types [TYPES="[3VL Value]", MODS="[no aggregate]", label="TYPES: 3VL Value\nMODS: [no aggregate]", shape=rectangle, style=filled, color=lightblue]
         FROM_join_on -> call83_types
@@ -152,11 +146,29 @@ digraph G {
 
         FROM_cartesian_product [label="Cartesian product"]
         FROM_cartesian_product -> EXIT_FROM
-        FROM_table -> FROM_cartesian_product
-        // FROM_cartesian_product -> FROM_table
-        call0_Query -> FROM_cartesian_product
-        // FROM_cartesian_product -> call0_Query
+        call0_FROM_item -> FROM_cartesian_product
+        // FROM_cartesian_product -> call0_FROM_item
         call83_types -> FROM_cartesian_product
+    }
+
+    subgraph def_FROM_item {
+        FROM_item [label="FROM item", shape=rectangle, style=filled, color=lightgreen]
+        EXIT_FROM_item [label="EXIT FROM item"]
+
+        FROM_item_alias [label="with alias"]
+        FROM_item -> FROM_item_alias
+
+        FROM_item_no_alias [label="without alias"]
+        FROM_item -> FROM_item_no_alias
+
+        FROM_table [label="Table"]
+        FROM_item_no_alias -> FROM_table
+        FROM_item_alias -> FROM_table
+        FROM_table -> EXIT_FROM_item
+
+        call0_Query [label="Query", shape=rectangle, TYPES="[any]", MODS="[]", style=filled, color=green]
+        FROM_item_alias -> call0_Query
+        call0_Query -> EXIT_FROM_item
     }
 
     subgraph def_WHERE {
@@ -1241,9 +1253,10 @@ digraph G {
     subgraph ignore {
         { rank = same; "call0_Query"; "FROM_table"; }
 
-        EXIT_FROM -> WHERE [color=none, weight=10]
+        EXIT_FROM -> FROM_item [color=none, weight=10]
+        EXIT_FROM_item -> WHERE [color=none, weight=10]
         EXIT_WHERE -> SELECT [color=none, weight=10]
-        EXIT_SELECT -> GROUP_BY [color=none, weight=10]
+        EXIT_SELECT -> GROUP_BY [color=none]
         EXIT_GROUP_BY -> aggregate_function [color=none]
         EXIT_aggregate_function -> HAVING [color=none]
         EXIT_HAVING -> ORDER_BY [color=none]

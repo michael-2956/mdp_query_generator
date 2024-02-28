@@ -1,6 +1,7 @@
+import sys
+
 to_comment = """
-FROM_cartesian_product -> FROM_table
-FROM_cartesian_product -> call0_Query
+FROM_cartesian_product -> call0_FROM_item
 
 limit_num [label="limit [num]\\nmod: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
 LIMIT -> limit_num
@@ -26,7 +27,8 @@ for line in to_comment.split('\n'):
     if line != '':
         new_line = "// " + line
         if graph.find(line) == -1:
-            print(f"Failed to find:\n{line}")
+            print(f"Failed to find:\n{line}", file=sys.stderr)
+            exit(1)
         graph = graph.replace(line, new_line)
 
 open("performance_untrained_graph.dot", 'w').write(graph)

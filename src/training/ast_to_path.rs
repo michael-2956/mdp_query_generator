@@ -429,6 +429,7 @@ impl PathGenerator {
                     self.push_node(PathNode::FromAlias(alias.name.clone()));
                 } else { self.try_push_state("FROM_item_no_alias")?; }
                 self.try_push_state("FROM_table")?;
+                self.push_node(PathNode::SelectedTableName(name.clone()));
                 let create_table_st = self.database_schema.get_table_def_by_name(name);
                 self.clause_context.top_from_mut().append_table(create_table_st, alias.clone());
             },

@@ -1,6 +1,10 @@
 #!/bin/zsh
 
-rm parser_bugs.sql
+set -e
+
+if test -f parser_bugs.sql; then
+  rm parser_bugs.sql
+fi
 
 python3 create_perf_version.py 
 
