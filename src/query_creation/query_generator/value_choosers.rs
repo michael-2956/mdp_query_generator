@@ -4,12 +4,12 @@ use sqlparser::ast::{DateTimeField, Ident, ObjectName};
 
 use crate::{query_creation::state_generator::subgraph_type::{ContainsSubgraphType, SubgraphType}, training::ast_to_path::PathNode};
 
-use super::{call_modifiers::WildcardRelationsValue, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, CreateTableSt, DatabaseSchema, IdentName, Relation}};
+use super::{call_modifiers::WildcardRelationsValue, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, IdentName, Relation}};
 
 pub trait QueryValueChooser {
     fn new() -> Self;
 
-    fn choose_table<'a>(&mut self, database_schema: &'a DatabaseSchema) -> &'a CreateTableSt;
+    fn choose_table_name(&mut self, available_table_names: &Vec<ObjectName>) -> ObjectName;
 
     fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, check_accessibility: CheckAccessibility, column_retrieval_options: ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]);
 
@@ -55,8 +55,8 @@ impl QueryValueChooser for RandomValueChooser {
         }
     }
 
-    fn choose_table<'a>(&mut self, database_schema: &'a DatabaseSchema) -> &'a CreateTableSt {
-        database_schema.get_random_table_def(&mut self.rng)
+    fn choose_table_name(&mut self, available_table_names: &Vec<ObjectName>) -> ObjectName {
+        available_table_names[self.rng.gen_range(0..available_table_names.len())].clone()
     }
 
     fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, check_accessibility: CheckAccessibility, column_retrieval_options: ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]) {
@@ -237,9 +237,12 @@ impl QueryValueChooser for DeterministicValueChooser {
         }
     }
 
-    fn choose_table<'a>(&mut self, database_schema: &'a DatabaseSchema) -> &'a CreateTableSt {
-        let new_table_name = self.chosen_tables.next_ref();
-        database_schema.get_table_def_by_name(new_table_name)
+    fn choose_table_name(&mut self, available_table_names: &Vec<ObjectName>) -> ObjectName {
+        let name = self.chosen_tables.next();
+        if !available_table_names.contains(&&name) {
+            panic!("Selected table name {name} is not present: {:?}", available_table_names)
+        }
+        name
     }
 
     fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, check_accessibility: CheckAccessibility, column_retrieval_options: ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]) {

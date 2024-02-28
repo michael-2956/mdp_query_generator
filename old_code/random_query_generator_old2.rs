@@ -188,7 +188,7 @@ impl QueryGenerator {
         push_var!(info, Query, query);
     }
 
-    fn handle_from_table(&mut self, info: &mut QueryInfo) {
+    fn handle_FROM_item_table(&mut self, info: &mut QueryInfo) {
         let last_relation = TableFactor::Table {
             name: info.relation_generator.new_relation().gen_object_name(),
             alias: None,
@@ -1042,7 +1042,7 @@ impl QueryGenerator {
                 // ===== subgraph Query
                 "Query" => self.handle_query(info),
                 "EXIT_Query" => self.handle_query_exit(info),
-                "FROM_table" => self.handle_from_table(info),
+                "FROM_item_table" => self.handle_FROM_item_table(info),
                 "call0_Query" => {},
                 "Rcall0_Query" => self.handle_from_subquery_r(info),
                 "FROM_cartesian_product" => self.handle_multiple_relations(info),

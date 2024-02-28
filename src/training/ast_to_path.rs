@@ -107,7 +107,6 @@ pub enum PathNode {
 
 pub struct PathGenerator {
     current_path: Vec<PathNode>,
-    database_schema: DatabaseSchema,
     state_generator: MarkovChainGenerator<MaxProbStateChooser>,
     state_selector: DeterministicModel,
     clause_context: ClauseContext,
@@ -123,10 +122,9 @@ impl PathGenerator {
     ) -> Result<Self, SyntaxError> {
         Ok(Self {
             current_path: vec![],
-            database_schema,
             state_generator: MarkovChainGenerator::<MaxProbStateChooser>::with_config(chain_config)?,
             state_selector: DeterministicModel::new(),
-            clause_context: ClauseContext::new(),
+            clause_context: ClauseContext::new(database_schema),
             aggregate_functions_distribution,
             rng: ChaCha8Rng::seed_from_u64(1),
         })
@@ -428,10 +426,9 @@ impl PathGenerator {
                     self.try_push_state("FROM_item_alias")?;
                     self.push_node(PathNode::FromAlias(alias.name.clone()));
                 } else { self.try_push_state("FROM_item_no_alias")?; }
-                self.try_push_state("FROM_table")?;
+                self.try_push_state("FROM_item_table")?;
                 self.push_node(PathNode::SelectedTableName(name.clone()));
-                let create_table_st = self.database_schema.get_table_def_by_name(name);
-                self.clause_context.top_from_mut().append_table(create_table_st, alias.clone());
+                self.clause_context.add_from_table_by_name(name, alias.clone());
             },
             TableFactor::Derived { subquery, alias, .. } => {
                 let alias = alias.as_ref().unwrap();

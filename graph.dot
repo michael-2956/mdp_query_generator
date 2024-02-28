@@ -155,16 +155,16 @@ digraph G {
         FROM_item [label="FROM item", shape=rectangle, style=filled, color=lightgreen]
         EXIT_FROM_item [label="EXIT FROM item"]
 
-        FROM_item_alias [label="with alias"]
+        FROM_item_alias [label="with alias\n[set value]", set_value="available_table_names"]
         FROM_item -> FROM_item_alias
 
-        FROM_item_no_alias [label="without alias"]
+        FROM_item_no_alias [label="without alias\n[set value]", set_value="available_table_names"]
         FROM_item -> FROM_item_no_alias
 
-        FROM_table [label="Table"]
-        FROM_item_no_alias -> FROM_table
-        FROM_item_alias -> FROM_table
-        FROM_table -> EXIT_FROM_item
+        FROM_item_table [label="Table\n[call mod]", call_modifier="from_table_names_available"]
+        FROM_item_no_alias -> FROM_item_table
+        FROM_item_alias -> FROM_item_table
+        FROM_item_table -> EXIT_FROM_item
 
         call0_Query [label="Query", shape=rectangle, TYPES="[any]", MODS="[]", style=filled, color=green]
         FROM_item_alias -> call0_Query
@@ -1251,7 +1251,7 @@ digraph G {
 
     # cosmetic
     subgraph ignore {
-        { rank = same; "call0_Query"; "FROM_table"; }
+        { rank = same; "call0_Query"; "FROM_item_table"; }
 
         EXIT_FROM -> FROM_item [color=none, weight=10]
         EXIT_FROM_item -> WHERE [color=none, weight=10]

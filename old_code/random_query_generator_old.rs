@@ -94,7 +94,7 @@ struct QueryInfo {
     /// allowed
     current_nest_level: u32,
     /// tables used in from
-    from_tables: Vec<String>,
+    FROM_item_tables: Vec<String>,
     /// list of aliased table names used in FROM
     from_aliased_table_names: Vec<String>,
     /// used for table alias name generation in FROM
@@ -112,7 +112,7 @@ impl QueryInfo {
         QueryInfo {
             table_mentions_num: 0,
             current_nest_level: 1,
-            from_tables: Vec::<_>::new(),
+            FROM_item_tables: Vec::<_>::new(),
             from_aliased_table_names: Vec::<_>::new(),
             from_free_alias_index: 0,
             select_attrs_num: 0,
@@ -164,17 +164,17 @@ impl QueryGenerator {
     }
 
     fn generate_from(&mut self, query_info: &mut QueryInfo) -> Vec<TableWithJoins> {
-        let mut from_tables = Vec::<_>::new();
+        let mut FROM_item_tables = Vec::<_>::new();
 
-        from_tables.push(self.generate_relation_with_joins(query_info));
+        FROM_item_tables.push(self.generate_relation_with_joins(query_info));
 
         while query_info.table_mentions_num < self.params.max_total_tables
             && self.rng.gen_bool(self.params.from_next_table_prob)
         {
-            from_tables.push(self.generate_relation_with_joins(query_info));
+            FROM_item_tables.push(self.generate_relation_with_joins(query_info));
         }
 
-        from_tables
+        FROM_item_tables
     }
 
     fn generate_relation_with_joins(&mut self, query_info: &mut QueryInfo) -> TableWithJoins {
@@ -216,14 +216,14 @@ impl QueryGenerator {
         &mut self,
         query_info: &mut QueryInfo,
     ) -> (ObjectName, Option<TableAlias>) {
-        let tables_num = query_info.from_tables.len();
+        let tables_num = query_info.FROM_item_tables.len();
         let (name, alias) =
             if tables_num != 0 && self.rng.gen_bool(self.params.from_same_table_prob) {
-                let table_name = query_info.from_tables[self.rng.gen_range(0..tables_num)].clone();
+                let table_name = query_info.FROM_item_tables[self.rng.gen_range(0..tables_num)].clone();
                 (table_name, Some(self.generate_table_alias(query_info)))
             } else {
                 let new_name = format!("R{tables_num}");
-                query_info.from_tables.push(new_name);
+                query_info.FROM_item_tables.push(new_name);
                 (format!("R{tables_num}"), None)
             };
 

@@ -1,4 +1,5 @@
 use smol_str::SmolStr;
+use sqlparser::ast::ObjectName;
 
 use core::fmt::Debug;
 use std::collections::BTreeMap;
@@ -17,6 +18,7 @@ pub enum ValueSetterValue {
     IsGroupingSets(IsGroupingSetsValue),
     GroupingEnabled(GroupingEnabledValue),
     WildcardRelations(WildcardRelationsValue),
+    AvailableTableNames(AvailableTableNamesValue),
     DistinctAggregation(DistinctAggregationValue),
     SelectIsNotDistinct(SelectIsNotDistinctValue),
     HasAccessibleColumns(HasAccessibleColumnsValue),
@@ -642,5 +644,56 @@ impl StatelessCallModifier for SelectIsNotDistinctModifier {
 
     fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
         unwrap_variant!(associated_value.unwrap(), ValueSetterValue::SelectIsNotDistinct).is_not_distinct
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AvailableTableNamesValue {
+    pub table_names: Vec<ObjectName>,
+}
+
+impl NamedValue for AvailableTableNamesValue {
+    fn name() -> SmolStr {
+        SmolStr::new("available_table_names")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AvailableTableNamesValueSetter { }
+
+impl ValueSetter for AvailableTableNamesValueSetter {
+    fn get_value_name(&self) -> SmolStr {
+        AvailableTableNamesValue::name()
+    }
+
+    fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
+        ValueSetterValue::AvailableTableNames(AvailableTableNamesValue {
+            table_names: match function_context.current_node.node_common.name.as_str() {
+                "FROM_item_alias" => {
+                    clause_context.schema_ref().get_all_table_names().into_iter().cloned().collect()
+                },
+                "FROM_item_no_alias" => {
+                    clause_context.get_unused_table_names()
+                },
+                any => panic!("{any} unexpectedly triggered the available_table_names value setter"),
+            },
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FromTableNamesAvailableModifier {}
+
+impl StatelessCallModifier for FromTableNamesAvailableModifier {
+    fn get_name(&self) -> SmolStr {
+        SmolStr::new("from_table_names_available")
+    }
+
+    fn get_associated_value_name(&self) -> Option<SmolStr> {
+        Some(AvailableTableNamesValue::name())
+    }
+
+    fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
+        !unwrap_variant!(associated_value.unwrap(), ValueSetterValue::AvailableTableNames).table_names.is_empty()
     }
 }

@@ -22,7 +22,7 @@ use super::{
 };
 use self::{
     aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution},
-    call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue},
+    call_modifiers::{AvailableTableNamesValue, SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue},
     expr_precedence::ExpressionPriority, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, DatabaseSchema, IdentName, QueryProps}, value_choosers::QueryValueChooser
 };
 
@@ -60,7 +60,6 @@ pub struct QueryGenerator<DynMod: SubstituteModel, StC: StateChooser, QVC: Query
     substitute_model: Box<DynMod>,
     predictor_model: Option<Box<dyn PathwayGraphModel>>,
     value_chooser: Box<QVC>,
-    database_schema: DatabaseSchema,
     clause_context: ClauseContext,
     train_model: Option<Box<dyn PathwayGraphModel>>,
     rng: ChaCha8Rng,
@@ -122,16 +121,15 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             state_generator,
             predictor_model: None,
             substitute_model: Box::new(SubMod::new()),
-            database_schema: DatabaseSchema::parse_schema(&config.table_schema_path),
             value_chooser: Box::new(QVC::new()),
+            clause_context: ClauseContext::new(DatabaseSchema::parse_schema(&config.table_schema_path)),
             config,
-            clause_context: ClauseContext::new(),
             train_model: None,
             rng: ChaCha8Rng::seed_from_u64(1),
         };
 
         if _self.config.print_schema {
-            println!("Relations:\n{}", _self.database_schema);
+            println!("Relations:\n{}", _self.clause_context.schema_ref());
         }
 
         _self
@@ -427,11 +425,15 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         };
 
         let expr = match self.next_state().as_str() {
-            "FROM_table" => {
-                let create_table_st = self.value_chooser.choose_table(&self.database_schema);
-                self.clause_context.top_from_mut().append_table(create_table_st, table_alias.clone());
+            "FROM_item_table" => {
+                let available_table_names = &unwrap_variant!(
+                    self.state_generator.get_named_value::<AvailableTableNamesValue>().unwrap(),
+                    ValueSetterValue::AvailableTableNames
+                ).table_names;
+                let name = self.value_chooser.choose_table_name(available_table_names);
+                self.clause_context.add_from_table_by_name(&name, table_alias.clone());
                 TableFactor::Table {
-                    name: create_table_st.name.clone(),
+                    name,
                     alias: table_alias,
                     args: None,
                     with_hints: vec![],

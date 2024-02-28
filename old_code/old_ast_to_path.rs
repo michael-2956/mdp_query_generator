@@ -53,7 +53,7 @@ impl DeterministicStateChooser {
 
         for (i, table_with_joins) in select_body.from.iter().enumerate() {
             match table_with_joins.relation {
-                TableFactor::Table { .. } => self.push_state("FROM_table"),
+                TableFactor::Table { .. } => self.push_state("FROM_item_table"),
                 TableFactor::Derived { subquery, .. } => {
                     self.push_state("call0_Query");
                     self.process_query(*subquery);

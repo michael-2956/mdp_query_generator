@@ -1,7 +1,5 @@
 use std::{collections::{BTreeMap, BTreeSet, HashMap, HashSet}, error::Error, fmt, hash::Hash, path::Path};
 
-use rand::Rng;
-use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use crate::{query_creation::state_generator::{markov_chain_generator::markov_chain::CallModifiers, subgraph_type::{ContainsSubgraphType, SubgraphType}}, unwrap_variant};
 
@@ -106,6 +104,7 @@ impl ColumnRetrievalError {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct DatabaseSchema {
     pub table_defs: Vec<CreateTableSt>
 }
@@ -134,8 +133,8 @@ impl DatabaseSchema {
         }
     }
 
-    pub fn get_random_table_def(&self, rng: &mut ChaCha8Rng) -> &CreateTableSt {
-        &self.table_defs[rng.gen_range(0..self.table_defs.len())]
+    pub fn get_all_table_names(&self) -> Vec<&ObjectName> {
+        self.table_defs.iter().map(|td| &td.name).collect()
     }
 
     pub fn get_table_def_by_name(&self, name: &ObjectName) -> &CreateTableSt {
@@ -153,6 +152,7 @@ impl DatabaseSchema {
 /// call modifiers to disable nodes.
 #[derive(Debug, Clone)]
 pub struct ClauseContext {
+    database_schema: DatabaseSchema,
     query_props_stack: Vec<QueryProps>,
     all_accessible_froms: AllAccessibleFroms,
     group_by_contents_stack: Vec<GroupByContents>,
@@ -216,12 +216,17 @@ trait TypeAndQualifiedColumnIter<'a>: Iterator<Item = (&'a SubgraphType, [&'a Id
 impl<'a, T: Iterator<Item = (&'a SubgraphType, [&'a IdentName; 2])> + 'a> TypeAndQualifiedColumnIter<'a> for T {}
 
 impl ClauseContext {
-    pub fn new() -> Self {
+    pub fn new(database_schema: DatabaseSchema) -> Self {
         Self {
+            database_schema,
             query_props_stack: vec![],
             all_accessible_froms: AllAccessibleFroms::new(),
             group_by_contents_stack: vec![],
         }
+    }
+
+    pub fn schema_ref(&self) -> &DatabaseSchema {
+        &self.database_schema
     }
 
     pub fn get_checkpoint(&self, cutoff: bool) -> ClauseContextCheckpoint {
@@ -549,6 +554,20 @@ impl ClauseContext {
         };
         self.retrieve_column_by_ident_components(&ident_components, column_retrieval_options)
     }
+
+    pub fn add_from_table_by_name(&mut self, name: &ObjectName, alias: Option<TableAlias>) {
+        self.all_accessible_froms.append_table(
+            self.schema_ref().get_table_def_by_name(name).clone(),
+            alias
+        );
+    }
+
+    pub fn get_unused_table_names(&self) -> Vec<ObjectName> {
+        let used_rel_names = self.all_accessible_froms.top_from().get_all_rel_names_iter().collect::<HashSet<_>>();
+        self.schema_ref().get_all_table_names().into_iter()
+            .filter(|table_name| !used_rel_names.contains::<IdentName>(&(**table_name).0[0].clone().into()))
+            .cloned().collect()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -578,9 +597,9 @@ impl AllAccessibleFroms {
         }
     }
 
-    pub fn append_table(&mut self, create_table_st: &CreateTableSt, alias: Option<TableAlias>) {
+    fn append_table(&mut self, create_table_st: CreateTableSt, alias: Option<TableAlias>) {
         let alias = alias.map(|x| x.name.value).unwrap_or(create_table_st.name.0[0].value.clone());
-        self.top_from_mut().append_table(create_table_st, alias.clone());
+        self.top_from_mut().append_table(create_table_st.clone(), alias.clone());
         if let Some(subfrom) = self.current_subfrom_opt_mut() {
             subfrom.append_table(create_table_st, alias);
         }
@@ -999,7 +1018,7 @@ impl FromContents {
         Self { relations: BTreeMap::new() }
     }
 
-    fn append_table(&mut self, create_table_st: &CreateTableSt, alias: String) {
+    fn append_table(&mut self, create_table_st: CreateTableSt, alias: String) {
         let relation = Relation::from_table(alias, create_table_st);
         self.relations.insert(relation.alias.clone(), relation);
     }
@@ -1121,11 +1140,11 @@ impl Relation {
         }
     }
 
-    fn from_table(alias: String, create_table: &CreateTableSt) -> Self {
+    fn from_table(alias: String, create_table: CreateTableSt) -> Self {
         let mut _self = Relation::with_alias(alias);
-        for column in &create_table.columns {
+        for column in create_table.columns {
             let graph_type = SubgraphType::from_data_type(&column.data_type);
-            _self.accessible_columns.append_column(column.name.clone().into(), graph_type);
+            _self.accessible_columns.append_column(column.name.into(), graph_type);
         }
         _self
     }
