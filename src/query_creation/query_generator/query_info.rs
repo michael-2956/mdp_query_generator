@@ -578,18 +578,20 @@ impl AllAccessibleFroms {
         }
     }
 
-    pub fn append_table(&mut self, create_table_st: &CreateTableSt) -> TableAlias {
-        let top_from_alias = self.top_from_mut().append_table(create_table_st, None);
+    pub fn append_table(&mut self, create_table_st: &CreateTableSt, alias: Option<TableAlias>) {
+        let alias = alias.map(|x| x.name.value).unwrap_or(create_table_st.name.0[0].value.clone());
+        self.top_from_mut().append_table(create_table_st, alias.clone());
         if let Some(subfrom) = self.current_subfrom_opt_mut() {
-            subfrom.append_table(create_table_st, Some(top_from_alias))
-        } else { top_from_alias }
+            subfrom.append_table(create_table_st, alias);
+        }
     }
 
-    pub fn append_query(&mut self, column_idents_and_graph_types: Vec<(Option<IdentName>, SubgraphType)>) -> TableAlias {
-        let top_from_alias = self.top_from_mut().append_query(column_idents_and_graph_types.clone(), None);
+    pub fn append_query(&mut self, column_idents_and_graph_types: Vec<(Option<IdentName>, SubgraphType)>, alias: TableAlias) {
+        let alias = alias.name.value;
+        self.top_from_mut().append_query(column_idents_and_graph_types.clone(), alias.clone());
         if let Some(subfrom) = self.current_subfrom_opt_mut() {
-            subfrom.append_query(column_idents_and_graph_types, Some(top_from_alias))
-        } else { top_from_alias }
+            subfrom.append_query(column_idents_and_graph_types, alias);
+        }
     }
 
     pub fn activate_from(&mut self) {
@@ -990,34 +992,21 @@ pub struct FromContents {
     /// This is ordered because we need consistent
     /// same-seed runs
     relations: BTreeMap<IdentName, Relation>,
-    free_relation_name_index: usize,
 }
 
 impl FromContents {
     pub fn new() -> Self {
-        Self { relations: BTreeMap::new(), free_relation_name_index: 0 }
+        Self { relations: BTreeMap::new() }
     }
 
-    fn create_relation_alias(&mut self, with_alias: Option<TableAlias>) -> TableAlias {
-        with_alias.unwrap_or({
-            let alias = format!("T{}", self.free_relation_name_index);
-            self.free_relation_name_index += 1;
-            TableAlias { name: Ident { value: alias, quote_style: None }, columns: vec![] }
-        })
-    }
-
-    fn append_table(&mut self, create_table_st: &CreateTableSt, with_alias: Option<TableAlias>) -> TableAlias {
-        let alias = self.create_relation_alias(with_alias);
-        let relation = Relation::from_table(SmolStr::new(alias.name.value.clone()), create_table_st);
+    fn append_table(&mut self, create_table_st: &CreateTableSt, alias: String) {
+        let relation = Relation::from_table(alias, create_table_st);
         self.relations.insert(relation.alias.clone(), relation);
-        alias
     }
 
-    fn append_query(&mut self, column_idents_and_graph_types: Vec<(Option<IdentName>, SubgraphType)>, with_alias: Option<TableAlias>) -> TableAlias {
-        let alias = self.create_relation_alias(with_alias);
-        let relation = Relation::from_query(SmolStr::new(alias.name.value.clone()), column_idents_and_graph_types);
+    fn append_query(&mut self, column_idents_and_graph_types: Vec<(Option<IdentName>, SubgraphType)>, alias: String) {
+        let relation = Relation::from_query(alias, column_idents_and_graph_types);
         self.relations.insert(relation.alias.clone(), relation);
-        alias
     }
 
     /// get all the columns represented in only a single relation in FROM
@@ -1123,7 +1112,7 @@ pub struct Relation {
 }
 
 impl Relation {
-    fn with_alias(alias: SmolStr) -> Self {
+    fn with_alias(alias: String) -> Self {
         Self {
             alias: Ident::new(alias).into(),
             accessible_columns: ColumnContainer::new(),
@@ -1132,7 +1121,7 @@ impl Relation {
         }
     }
 
-    fn from_table(alias: SmolStr, create_table: &CreateTableSt) -> Self {
+    fn from_table(alias: String, create_table: &CreateTableSt) -> Self {
         let mut _self = Relation::with_alias(alias);
         for column in &create_table.columns {
             let graph_type = SubgraphType::from_data_type(&column.data_type);
@@ -1141,8 +1130,8 @@ impl Relation {
         _self
     }
 
-    fn from_query(alias: SmolStr, column_idents_and_graph_types: Vec<(Option<IdentName>, SubgraphType)>) -> Self {
-        let mut _self = Relation::with_alias(alias.clone());
+    fn from_query(alias: String, column_idents_and_graph_types: Vec<(Option<IdentName>, SubgraphType)>) -> Self {
+        let mut _self = Relation::with_alias(alias);
         let mut named_columns = vec![];
         for (column_name, graph_type) in column_idents_and_graph_types {
             if let Some(column_name) = column_name {
