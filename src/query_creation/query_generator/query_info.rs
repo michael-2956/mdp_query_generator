@@ -133,11 +133,15 @@ impl DatabaseSchema {
         }
     }
 
+    pub fn num_columns_in_table(&self, name: &ObjectName) -> usize {
+        self.get_table_def_by_name(name).columns.len()
+    }
+
     pub fn get_all_table_names(&self) -> Vec<&ObjectName> {
         self.table_defs.iter().map(|td| &td.name).collect()
     }
 
-    pub fn get_table_def_by_name(&self, name: &ObjectName) -> &CreateTableSt {
+    fn get_table_def_by_name(&self, name: &ObjectName) -> &CreateTableSt {
         match self.table_defs.iter().find(
             |x| x.name.to_string().to_uppercase() == name.to_string().to_uppercase()
         ) {
@@ -598,18 +602,22 @@ impl AllAccessibleFroms {
     }
 
     fn append_table(&mut self, create_table_st: CreateTableSt, alias: Option<TableAlias>) {
-        let alias = alias.map(|x| x.name.value).unwrap_or(create_table_st.name.0[0].value.clone());
-        self.top_from_mut().append_table(create_table_st.clone(), alias.clone());
+        let (
+            alias, column_renames
+        ) = alias.map(|x| (
+            (x.name.value, x.columns)
+        )).unwrap_or((create_table_st.name.0[0].value.clone(), vec![]));
+        self.top_from_mut().append_table(create_table_st.clone(), alias.clone(), column_renames.clone());
         if let Some(subfrom) = self.current_subfrom_opt_mut() {
-            subfrom.append_table(create_table_st, alias);
+            subfrom.append_table(create_table_st, alias, column_renames);
         }
     }
 
     pub fn append_query(&mut self, column_idents_and_graph_types: Vec<(Option<IdentName>, SubgraphType)>, alias: TableAlias) {
-        let alias = alias.name.value;
-        self.top_from_mut().append_query(column_idents_and_graph_types.clone(), alias.clone());
+        let (alias, column_renames) = (alias.name.value, alias.columns);
+        self.top_from_mut().append_query(column_idents_and_graph_types.clone(), alias.clone(), column_renames.clone());
         if let Some(subfrom) = self.current_subfrom_opt_mut() {
-            subfrom.append_query(column_idents_and_graph_types, alias);
+            subfrom.append_query(column_idents_and_graph_types, alias, column_renames.clone());
         }
     }
 
@@ -1011,20 +1019,24 @@ pub struct FromContents {
     /// This is ordered because we need consistent
     /// same-seed runs
     relations: BTreeMap<IdentName, Relation>,
+    /// order of relation names for get_wildcard_columns_iter()
+    wildcard_relation_names: Vec<IdentName>,
 }
 
 impl FromContents {
     pub fn new() -> Self {
-        Self { relations: BTreeMap::new() }
+        Self { relations: BTreeMap::new(), wildcard_relation_names: vec![] }
     }
 
-    fn append_table(&mut self, create_table_st: CreateTableSt, alias: String) {
-        let relation = Relation::from_table(alias, create_table_st);
+    fn append_table(&mut self, create_table_st: CreateTableSt, alias: String, column_renames: Vec<Ident>) {
+        let relation = Relation::from_table(alias, create_table_st, column_renames);
+        self.wildcard_relation_names.push(relation.alias.clone());
         self.relations.insert(relation.alias.clone(), relation);
     }
 
-    fn append_query(&mut self, column_idents_and_graph_types: Vec<(Option<IdentName>, SubgraphType)>, alias: String) {
-        let relation = Relation::from_query(alias, column_idents_and_graph_types);
+    fn append_query(&mut self, column_idents_and_graph_types: Vec<(Option<IdentName>, SubgraphType)>, alias: String, column_renames: Vec<Ident>) {
+        let relation = Relation::from_query(alias, column_idents_and_graph_types, column_renames);
+        self.wildcard_relation_names.push(relation.alias.clone());
         self.relations.insert(relation.alias.clone(), relation);
     }
 
@@ -1102,8 +1114,8 @@ impl FromContents {
     }
 
     pub fn get_wildcard_columns_iter(&self) -> impl Iterator<Item = (Option<IdentName>, SubgraphType)> + '_ {
-        self.relations.values().flat_map(
-            |relation| relation.get_all_columns_iter_cloned()
+        self.wildcard_relation_names.iter().flat_map(
+            |rel_name| self.relations.get(rel_name).unwrap().get_wildcard_columns()
         )
     }
 
@@ -1128,6 +1140,8 @@ pub struct Relation {
     /// A list of ambiguous column names and types,
     /// as they can be referenced with wildcards
     ambiguous_columns: Vec<(IdentName, SubgraphType)>,
+    /// this is what is returned by get_wildcard_columns
+    wildcard_columns: Vec<(Option<IdentName>, SubgraphType)>
 }
 
 impl Relation {
@@ -1137,25 +1151,34 @@ impl Relation {
             accessible_columns: ColumnContainer::new(),
             unnamed_columns: vec![],
             ambiguous_columns: vec![],
+            wildcard_columns: vec![],
         }
     }
 
-    fn from_table(alias: String, create_table: CreateTableSt) -> Self {
+    fn from_table(alias: String, create_table: CreateTableSt, column_renames: Vec<Ident>) -> Self {
         let mut _self = Relation::with_alias(alias);
+        let mut column_renames = column_renames.into_iter();
         for column in create_table.columns {
             let graph_type = SubgraphType::from_data_type(&column.data_type);
-            _self.accessible_columns.append_column(column.name.into(), graph_type);
+            let column_rename = column_renames.next();
+            let column_name: IdentName = column_rename.unwrap_or(column.name).into();
+            _self.wildcard_columns.push((Some(column_name.clone()), graph_type.clone()));
+            _self.accessible_columns.append_column(column_name, graph_type);
         }
         _self
     }
 
-    fn from_query(alias: String, column_idents_and_graph_types: Vec<(Option<IdentName>, SubgraphType)>) -> Self {
+    fn from_query(alias: String, column_idents_and_graph_types: Vec<(Option<IdentName>, SubgraphType)>, column_renames: Vec<Ident>) -> Self {
         let mut _self = Relation::with_alias(alias);
         let mut named_columns = vec![];
+        let mut column_renames = column_renames.into_iter();
         for (column_name, graph_type) in column_idents_and_graph_types {
-            if let Some(column_name) = column_name {
+            let column_rename = column_renames.next().map(Ident::into);
+            if let Some(column_name) = column_rename.or(column_name) {
+                _self.wildcard_columns.push((Some(column_name.clone()), graph_type.clone()));
                 named_columns.push((column_name, graph_type));
             } else {
+                _self.wildcard_columns.push((None, graph_type.clone()));
                 _self.unnamed_columns.push(graph_type);
             }
         }
@@ -1198,7 +1221,7 @@ impl Relation {
     }
 
     /// get all columns with their types, including the unnamed ones and ambiguous ones
-    pub fn get_all_columns_iter_cloned(&self) -> impl Iterator<Item = (Option<IdentName>, SubgraphType)> + '_ {
-        self.get_all_columns_iter().map(|(x, y)| (x.cloned(), y.clone()))
+    pub fn get_wildcard_columns(&self) -> impl Iterator<Item = (Option<IdentName>, SubgraphType)> + '_ {
+        self.wildcard_columns.iter().cloned()
     }
 }

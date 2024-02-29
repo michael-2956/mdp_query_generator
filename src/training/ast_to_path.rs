@@ -103,6 +103,7 @@ pub enum PathNode {
     QualifiedWildcardSelectedRelation(Ident),
     SelectAlias(Ident),
     FromAlias(Ident),
+    FromColumnRenames(Vec<Ident>),
 }
 
 pub struct PathGenerator {
@@ -422,12 +423,14 @@ impl PathGenerator {
 
         match relation {
             TableFactor::Table { name, alias, .. } => {
-                if let Some(alias) = alias.as_ref() {
+                let renames = if let Some(alias) = alias.as_ref() {
                     self.try_push_state("FROM_item_alias")?;
                     self.push_node(PathNode::FromAlias(alias.name.clone()));
-                } else { self.try_push_state("FROM_item_no_alias")?; }
+                    Some(alias.columns.clone())
+                } else { self.try_push_state("FROM_item_no_alias")?; None };
                 self.try_push_state("FROM_item_table")?;
                 self.push_node(PathNode::SelectedTableName(name.clone()));
+                if let Some(renames) = renames { self.push_node(PathNode::FromColumnRenames(renames)); }
                 self.clause_context.add_from_table_by_name(name, alias.clone());
             },
             TableFactor::Derived { subquery, alias, .. } => {
@@ -436,6 +439,7 @@ impl PathGenerator {
                 self.push_node(PathNode::FromAlias(alias.name.clone()));
                 self.try_push_state("call0_Query")?;
                 let column_idents_and_graph_types = self.handle_query(subquery)?;
+                self.push_node(PathNode::FromColumnRenames(alias.columns.clone()));
                 self.clause_context.top_from_mut().append_query(column_idents_and_graph_types, alias.clone());
             },
             any => unexpected_expr!(any)
@@ -536,7 +540,7 @@ impl PathGenerator {
                         },
                         any => panic!("schema.table alias is not supported: {}", ObjectName(any.to_vec())),
                     };
-                    column_idents_and_graph_types.extend(relation.get_all_columns_iter_cloned());
+                    column_idents_and_graph_types.extend(relation.get_wildcard_columns());
                     self.push_node(PathNode::QualifiedWildcardSelectedRelation(alias.0.last().unwrap().clone()));
                 },
                 SelectItem::Wildcard(..) => {

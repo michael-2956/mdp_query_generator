@@ -415,7 +415,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     fn handle_from_item(&mut self) -> TableFactor {
         self.expect_state("FROM_item");
 
-        let table_alias = match self.next_state().as_str() {
+        let mut table_alias = match self.next_state().as_str() {
             "FROM_item_alias" => Some(TableAlias {
                 name: self.value_chooser.choose_from_alias(),
                 columns: vec![]
@@ -431,6 +431,10 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     ValueSetterValue::AvailableTableNames
                 ).table_names;
                 let name = self.value_chooser.choose_table_name(available_table_names);
+                if let Some(ref mut table_alias) = table_alias {
+                    let n_columns = self.clause_context.schema_ref().num_columns_in_table(&name);
+                    table_alias.columns = self.value_chooser.choose_from_column_renames(n_columns);
+                }
                 self.clause_context.add_from_table_by_name(&name, table_alias.clone());
                 TableFactor::Table {
                     name,
@@ -442,6 +446,10 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             },
             "call0_Query" => {
                 let (query, column_idents_and_graph_types) = self.handle_query();
+                if let Some(ref mut table_alias) = table_alias {
+                    let n_columns = column_idents_and_graph_types.len();
+                    table_alias.columns = self.value_chooser.choose_from_column_renames(n_columns);
+                }
                 self.clause_context.top_from_mut().append_query(column_idents_and_graph_types, table_alias.clone().unwrap());
                 TableFactor::Derived {
                     lateral: false,
@@ -498,7 +506,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                             let (alias, relation) = self.value_chooser.choose_qualified_wildcard_relation(
                                 &self.clause_context, wildcard_relations
                             );
-                            column_idents_and_graph_types.extend(relation.get_all_columns_iter_cloned());
+                            column_idents_and_graph_types.extend(relation.get_wildcard_columns());
                             projection.push(SelectItem::QualifiedWildcard(
                                 ObjectName(vec![alias]),
                                 WildcardAdditionalOptions {

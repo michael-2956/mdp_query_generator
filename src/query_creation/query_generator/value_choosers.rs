@@ -37,12 +37,15 @@ pub trait QueryValueChooser {
 
     fn choose_from_alias(&mut self) -> Ident;
 
+    fn choose_from_column_renames(&mut self, n_columns: usize) -> Vec<Ident>;
+
     fn reset(&mut self);
 }
 
 pub struct RandomValueChooser {
     rng: ChaCha8Rng,
     free_select_alias_index: usize,
+    free_from_rename_index: usize,
     free_from_alias_index: usize,
 }
 
@@ -51,6 +54,7 @@ impl QueryValueChooser for RandomValueChooser {
         Self {
             rng: ChaCha8Rng::seed_from_u64(1),
             free_select_alias_index: 0,
+            free_from_rename_index: 0,
             free_from_alias_index: 0,
         }
     }
@@ -131,8 +135,18 @@ impl QueryValueChooser for RandomValueChooser {
         Ident::new(format!("T{}", self.free_from_alias_index))
     }
 
+    fn choose_from_column_renames(&mut self, n_columns: usize) -> Vec<Ident> {
+        let mut out = vec![];
+        for _ in 0..self.rng.gen_range(0..n_columns) {
+            self.free_from_rename_index += 1;
+            out.push(Ident::new(format!("R{}", self.free_from_rename_index)))
+        }
+        out
+    }
+
     fn reset(&mut self) {
         self.free_select_alias_index = 0;
+        self.free_from_rename_index = 0;
         self.free_from_alias_index = 0;
     }
 }
@@ -190,6 +204,7 @@ pub struct DeterministicValueChooser {
     chosen_tables: VecWithIndex<ObjectName>,
     chosen_select_aliases: VecWithIndex<Ident>,
     chosen_from_aliases: VecWithIndex<Ident>,
+    chosen_from_renames: VecWithIndex<Vec<Ident>>,
     chosen_columns: VecWithIndex<[IdentName; 2]>,
     chosen_order_by_select_refs: VecWithIndex<Ident>,
     chosen_aggregate_functions: VecWithIndex<ObjectName>,
@@ -209,6 +224,7 @@ impl DeterministicValueChooser {
             chosen_tables: init_from_nodes!(path, ObjectName, SelectedTableName),
             chosen_select_aliases: init_from_nodes!(path, Ident, SelectAlias),
             chosen_from_aliases: init_from_nodes!(path, Ident, FromAlias),
+            chosen_from_renames: init_from_nodes!(path, Vec<Ident>, FromColumnRenames),
             chosen_columns: init_from_nodes!(path, [IdentName; 2], SelectedColumnName),
             chosen_order_by_select_refs: init_from_nodes!(path, Ident, ORDERBYSelectReference),
             chosen_aggregate_functions: init_from_nodes!(path, ObjectName, SelectedAggregateFunctions),
@@ -230,6 +246,7 @@ impl QueryValueChooser for DeterministicValueChooser {
             chosen_tables: VecWithIndex::new(),
             chosen_select_aliases: VecWithIndex::new(),
             chosen_from_aliases: VecWithIndex::new(),
+            chosen_from_renames: VecWithIndex::new(),
             chosen_columns: VecWithIndex::new(),
             chosen_order_by_select_refs: VecWithIndex::new(),
             chosen_aggregate_functions: VecWithIndex::new(),
@@ -308,6 +325,12 @@ impl QueryValueChooser for DeterministicValueChooser {
 
     fn choose_from_alias(&mut self) -> Ident { self.chosen_from_aliases.next() }
 
+    fn choose_from_column_renames(&mut self, n_columns: usize) -> Vec<Ident> {
+        let out = self.chosen_from_renames.next();
+        assert!(out.len() <= n_columns);
+        out
+    }
+
     fn reset(&mut self) {
         self.chosen_bigints.reset();
         self.chosen_integers.reset();
@@ -318,6 +341,7 @@ impl QueryValueChooser for DeterministicValueChooser {
         self.chosen_tables.reset();
         self.chosen_select_aliases.reset();
         self.chosen_from_aliases.reset();
+        self.chosen_from_renames.reset();
         self.chosen_columns.reset();
         self.chosen_order_by_select_refs.reset();
         self.chosen_qualified_wildcard_tables.reset();
