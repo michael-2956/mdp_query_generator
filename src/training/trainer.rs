@@ -62,7 +62,7 @@ impl SQLTrainer {
     /// Currently performs full-batch training (the whole dataset is a single batch)
     /// TODO: add setting for mini-batch training (not needed as of now)
     pub fn train(&mut self, mut model: Box<dyn PathwayGraphModel>) -> Result<Box<dyn PathwayGraphModel>, ConvertionError> {
-        println!("Training model... ");
+        eprintln!("Training model... ");
         model.start_epoch();
         model.start_batch();
         for (i, query) in self.dataset_queries.iter().enumerate() {
@@ -76,15 +76,15 @@ impl SQLTrainer {
             model.end_episode();
             if self.main_config.print_progress {
                 if i % 1 == 0 {
-                    print!("{}/{}      \r", i, self.dataset_queries.len());
-                    std::io::stdout().flush().unwrap();
+                    eprint!("{}/{}      \r", i, self.dataset_queries.len());
+                    std::io::stderr().flush().unwrap();
                 }
             }
         }
         model.end_batch();
         model.update_weights();
         model.end_epoch();
-        println!();
+        eprintln!();
         Ok(model)
     }
 }

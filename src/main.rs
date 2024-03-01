@@ -64,7 +64,7 @@ fn run_generation<SubMod: SubstituteModel, StC: StateChooser>(
             if config.main_config.print_progress {
                 eprint!("{}/{}      \r", i, config.main_config.num_generate);
             }
-            std::io::stdout().flush().unwrap();
+            std::io::stderr().flush().unwrap();
         }
         if i >= config.main_config.num_generate {
             break
@@ -102,12 +102,12 @@ fn test_ast_to_path(config: Config) {
     let mut tester = match TestAST2Path::with_config(config) {
         Ok(tester) => tester,
         Err(err) => {
-            println!("{}", err);
+            eprintln!("{}", err);
             return;
         },
     };
     if let Err(err) = tester.test() {
-        println!("\n{err}");
+        eprintln!("\n{err}");
     }
 }
 

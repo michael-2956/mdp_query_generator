@@ -186,7 +186,7 @@ impl PathGenerator {
     } 
 
     fn try_push_state(&mut self, state: &str) -> Result<(), ConvertionError> {
-        // println!("pushing state: {state}, path length: {}", self.current_path.len());
+        // eprintln!("pushing state: {state}, path length: {}", self.current_path.len());
         let is_new_function_initial_state = self.state_generator.has_pending_call();
         let state = SmolStr::new(state);
         self.state_selector.set_state(state.clone());

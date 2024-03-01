@@ -222,7 +222,7 @@ where
         let outgoing_weights = self.weights.get_outgoing_weights_opt(&func_name, current_node);
         if let Some(ref tracked_function) = self.track_transitions_in {
             if func_name == *tracked_function {
-                println!(
+                eprintln!(
                     "\nFunction: {func_name}\ncurrent_node = {current_node}\noutgoing_weights = {:?}\nnode_outgoing = {:?}",
                     outgoing_weights,
                     node_outgoing.iter().map(|node| node.node_common.name.clone()).collect::<Vec<_>>()
@@ -248,7 +248,7 @@ where
         } else { None };
         if let Some(ref tracked_function) = self.track_transitions_in {
             if func_name == *tracked_function {
-                println!("output = {:#?}\n", output);
+                eprintln!("output = {:#?}\n", output);
             }
         }
         output.map_or(
@@ -271,14 +271,14 @@ where
 /// Func params should include call modifier context\
 /// This is how you get call modifier context:\
 /// call_stack.last().unwrap().call_modifier_info.get_context()
-pub trait ModelFunctionContext: std::fmt::Debug + Eq + std::hash::Hash + Clone + Serialize + for<'a> Deserialize<'a> + Display {
+pub trait ModelFunctionContext: std::fmt::Debug + Eq + std::hash::Hash + Clone + Serialize + for<'a> Deserialize<'a> + Display + Ord + PartialOrd {
     fn from_call_stack_and_exit_frame(
         call_stack: &Vec<StackFrame>,
         exit_stack_frame_opt: Option<&StackFrame>
     ) -> Self;
 }
 
-#[derive(Debug, PartialEq, Eq, std::hash::Hash, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, std::hash::Hash, Clone, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct FunctionNameContext {
     func_name: SmolStr,
 }
@@ -305,7 +305,7 @@ impl std::fmt::Display for FunctionNameContext {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, std::hash::Hash, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, std::hash::Hash, Clone, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct StackedFunctionNamesContext {
     func_names: Vec<SmolStr>,
 }
@@ -337,10 +337,10 @@ impl std::fmt::Display for StackedFunctionNamesContext {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, std::hash::Hash, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, std::hash::Hash, Clone, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct DepthwiseFunctionNameContext {
-    depth: usize,
     func_name: SmolStr,
+    depth: usize,
 }
 
 impl ModelFunctionContext for DepthwiseFunctionNameContext {
@@ -354,8 +354,8 @@ impl ModelFunctionContext for DepthwiseFunctionNameContext {
             call_stack.last().unwrap()
         };
         DepthwiseFunctionNameContext {
-            depth: call_stack.len() + exit_stack_frame_opt.is_some() as usize,
             func_name: stack_frame.function_context.call_params.func_name.clone(),
+            depth: call_stack.len() + exit_stack_frame_opt.is_some() as usize,
         }
     }
 }
@@ -366,7 +366,7 @@ impl std::fmt::Display for DepthwiseFunctionNameContext {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, std::hash::Hash, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, std::hash::Hash, Clone, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct FullFunctionContext {
     call_params: CallParams,
     call_modifier_context: (BTreeMap<SmolStr, BTreeMap<SmolStr, bool>>, BTreeMap<SmolStr, bool>),
@@ -401,7 +401,7 @@ impl std::fmt::Display for FullFunctionContext {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, std::hash::Hash, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, std::hash::Hash, Clone, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct StackedFullFunctionContext {
     contexts: Vec<FullFunctionContext>,
 }
@@ -433,7 +433,7 @@ impl std::fmt::Display for StackedFullFunctionContext {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, std::hash::Hash, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, std::hash::Hash, Clone, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct DepthwiseFullFunctionContext {
     depth: usize,
     context: FullFunctionContext,

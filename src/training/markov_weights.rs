@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display};
 use std::fs::File;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::{self, Write, Read};
 use std::path::PathBuf;
 
@@ -15,7 +15,7 @@ pub struct MarkovWeights<WeightsType> {
 
 impl<FuncType> MarkovWeights<HashMap<FuncType, HashMap<SmolStr, HashMap<SmolStr, f64>>>>
 where
-    FuncType: Debug + Eq + std::hash::Hash + Clone + Serialize + for<'a> Deserialize<'a> + Display
+    FuncType: Debug + Eq + std::hash::Hash + Clone + Serialize + for<'a> Deserialize<'a> + Display + Ord + PartialOrd
 {
     pub fn new() -> Self {
         Self {
@@ -79,7 +79,7 @@ where
             .get(from).unwrap()
             .iter()
         {
-            println!("{to} -> {weight}");
+            eprintln!("{to} -> {weight}");
         }
     }
 
@@ -87,9 +87,9 @@ where
         for (from, out) in self.weights
             .get(func_name).unwrap()
         {
-            println!("{from}: ");
+            eprintln!("{from}: ");
             for (to, weight) in out {
-                println!("    {weight} -> {to}");
+                eprintln!("    {weight} -> {to}");
             }
         }
     }
@@ -97,11 +97,14 @@ where
     pub fn write_to_dot(&self, dot_file_path: &PathBuf) -> io::Result<()> {
         let mut file = File::create(dot_file_path)?;
         writeln!(file, "digraph G {{")?;
-        for (func_name, chain) in self.weights.iter() {
+        let weights_ordered = BTreeMap::from_iter(self.weights.iter());
+        for (func_name, chain) in weights_ordered {
             writeln!(file, "    subgraph {func_name} {{")?;
-            for (from, out) in chain {
-                for (to, weight) in out {
-                    writeln!(file, "        {func_name}_{from} -> {to} [label=\"  {weight:.4}\"]")?;
+            let chain_ordered = BTreeMap::from_iter(chain.iter());
+            for (from, out) in chain_ordered {
+                let out_ordered = BTreeMap::from_iter(out.iter());
+                for (to, weight) in out_ordered {
+                    writeln!(file, "        {func_name}_{from} -> {func_name}_{to} [label=\"  {weight:.4}\"]")?;
                 }
             }
             writeln!(file, "    }}")?;
@@ -112,11 +115,11 @@ where
 
     pub fn print(&self) {
         for (func_name, chain) in self.weights.iter() {
-            println!("\n=====================================================\n{func_name}: ");
+            eprintln!("\n=====================================================\n{func_name}: ");
             for (from, out) in chain {
-                println!("    {from}: ");
+                eprintln!("    {from}: ");
                 for (to, weight) in out {
-                    println!("        {weight} -> {to}");
+                    eprintln!("        {weight} -> {to}");
                 }
             }
         }

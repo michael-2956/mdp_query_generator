@@ -43,15 +43,15 @@ impl TestAST2Path {
                 std::io::stdout().flush().unwrap();
             }
             // if i < 490 { continue; }
-            // println!("Tested query: {query}");
+            // eprintln!("Tested query: {query}");
             let path = self.path_generator.get_query_path(&query)?;
             let generated_query = self.path_query_generator.generate_with_substitute_model_and_value_chooser(
                 Box::new(PathModel::from_path_nodes(&path)),
                 Box::new(DeterministicValueChooser::from_path_nodes(&path))
             );
             if *query != generated_query {
-                println!("\nAST -> path -> AST mismatch!\nOriginal  query: {}\nGenerated query: {}", query, generated_query);
-                println!("Path: {:?}", path);
+                eprintln!("\nAST -> path -> AST mismatch!\nOriginal  query: {}\nGenerated query: {}", query, generated_query);
+                eprintln!("Path: {:?}", path);
             }
         }
         Ok(())

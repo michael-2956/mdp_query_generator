@@ -124,7 +124,7 @@ impl DatabaseSchema {
         let ast = match Parser::parse_sql(&dialect, source.as_str()) {
             Ok(ast) => ast,
             Err(err) => {
-                println!("Schema file parsing error! {}", err);
+                eprintln!("Schema file parsing error! {}", err);
                 panic!();
             },
         };

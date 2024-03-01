@@ -12,6 +12,8 @@ ignore_errs = [
     "too many grouping sets present",
 ]
 
+ignored = {}
+
 total_errs = 0
 while True:
     try:
@@ -23,8 +25,19 @@ while True:
         #     print(line.replace("ERROR", colored("ERROR", 'red', attrs=['bold'])))
         #     print()
 
-        if all(line.find(ig) == -1 for ig in ignore_errs):
+        found_err = None
+        for ig in ignore_errs:
+            if ig in line:
+                found_err = ig
+
+        if found_err is None:
             print(line.replace("ERROR", colored("ERROR", 'red', attrs=['bold'])))
             total_errs += 1
+        else:
+            ignored.setdefault(found_err, 0)
+            ignored[found_err] += 1
 
 print(f"Total unignored psql errors: {total_errs}")
+print(f"Ignored:")
+for ig, num in ignored.items():
+    print(f"{ig}: {num}")

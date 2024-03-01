@@ -129,7 +129,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         };
 
         if _self.config.print_schema {
-            println!("Relations:\n{}", _self.clause_context.schema_ref());
+            eprintln!("Relations:\n{}", _self.clause_context.schema_ref());
         }
 
         _self
@@ -146,7 +146,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
 
     fn next_state(&mut self) -> SmolStr {
         let next_state = self.next_state_opt().unwrap();
-        // println!("{next_state}");
+        // eprintln!("{next_state}");
         if let Some(ref mut model) = self.train_model {
             model.process_state(
                 self.state_generator.call_stack_ref(),
