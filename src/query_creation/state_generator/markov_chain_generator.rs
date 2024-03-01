@@ -545,6 +545,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             function_modifier_info: HashMap::new(),
             dead_end_infos: HashMap::new(),
         };
+
         _self.register_value_setter(CanSkipLimitValueSetter {});
         _self.register_stateless_call_modifier(CanSkipLimitModifier {});
         _self.register_value_setter(IsGroupingSetsValueSetter {});
@@ -567,8 +568,10 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         _self.register_stateless_call_modifier(SelectHasAccessibleColumnsModifier {});
         _self.register_value_setter(NameAccessibilityOfSelectedTypesValueSetter {});
         _self.register_stateless_call_modifier(SelectedTypesAccessibleByNamingMethodModifier {});
+
         _self.fill_function_modifier_info();
         _self.reset();
+
         Ok(_self)
     }
 
@@ -652,8 +655,8 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
         self.pending_call = Some(CallParams {
             func_name: SmolStr::new("Query"),
-            selected_types: CallTypes::TypeList(accepted_types),  // CallTypes::TypeList(vec![SubgraphType::Numeric]),  // 
-            modifiers: CallModifiers::None  // CallModifiers::StaticList(vec![SmolStr::new("single value")])  //
+            selected_types: CallTypes::TypeList(accepted_types),
+            modifiers: CallModifiers::None
         });
     }
 

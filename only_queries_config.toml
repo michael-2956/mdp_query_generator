@@ -32,6 +32,7 @@ load_weights_from="weights/subgraph/stacked/untrained_db_2_performance_graph_100
 # Type save_dot_file=false to turn off
 # save_dot_file="weights_in_dot/subgraph/untrained_db_2_performance_graph_100K.dot"
 save_dot_file=false
+print_weights_after_training=false
 
 [ast_to_path_testing]
 # schema for the testing queries generation

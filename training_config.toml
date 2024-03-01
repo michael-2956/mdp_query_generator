@@ -29,6 +29,7 @@ stacked_version=false
 # Type save_dot_file=false to turn off
 save_dot_file="weights_in_dot/subgraph/tpch_default_queries.dot"
 # save_dot_file=false
+print_weights_after_training=false
 
 [ast_to_path_testing]
 # schema for the testing queries generation
@@ -39,7 +40,7 @@ n_tests=10000
 
 [training]
 # path to a file with all the training queries separated by ";\n"
-training_db_path="training_dbs/tpch_default_queries.sql"
+training_db_path="training_dbs/tpch_default_queries_no_views.sql"
 
 # schema of the training queries
 training_schema="schema/tpc-h_tables.sql"

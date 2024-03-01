@@ -1,8 +1,8 @@
-use std::{path::PathBuf, str::FromStr, io::Write};
+use std::{io::Write, path::PathBuf, str::FromStr};
 
-use sqlparser::{parser::Parser, dialect::PostgreSqlDialect, ast::{Statement, Query}};
+use sqlparser::{ast::{Query, Statement}, dialect::PostgreSqlDialect, parser::Parser};
 
-use crate::{config::{TomlReadable, Config, MainConfig}, query_creation::{state_generator::{markov_chain_generator::{error::SyntaxError, markov_chain::MarkovChain}, substitute_models::PathModel, state_choosers::MaxProbStateChooser, MarkovChainGenerator}, query_generator::{query_info::DatabaseSchema, QueryGenerator, value_choosers::DeterministicValueChooser}}};
+use crate::{config::{Config, MainConfig, TomlReadable}, query_creation::{query_generator::{query_info::DatabaseSchema, value_choosers::DeterministicValueChooser, QueryGenerator}, state_generator::{markov_chain_generator::{error::SyntaxError, markov_chain::MarkovChain}, state_choosers::MaxProbStateChooser, substitute_models::PathModel, MarkovChainGenerator}}};
 
 use super::{ast_to_path::{ConvertionError, PathGenerator}, models::PathwayGraphModel};
 

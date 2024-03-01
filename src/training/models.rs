@@ -19,6 +19,8 @@ pub struct ModelConfig {
     pub save_dot_file: Option<PathBuf>,
     // whether to use the stacked version of the model
     pub stacked_version: bool,
+    // whether to print weights after training is done
+    pub print_weights_after_training: bool,
 }
 
 impl TomlReadable for ModelConfig {
@@ -32,7 +34,8 @@ impl TomlReadable for ModelConfig {
                 || Some(PathBuf::from_str(section["save_dot_file"].as_str().unwrap()).unwrap()),
                 |x| if !x { None } else { panic!("save_dot_file can't be 'true'") },
             ),
-            stacked_version: section["stacked_version"].as_bool().unwrap()
+            stacked_version: section["stacked_version"].as_bool().unwrap(),
+            print_weights_after_training: section["print_weights_after_training"].as_bool().unwrap(),
         }
     }
 }
@@ -48,11 +51,11 @@ impl ModelConfig {
             (any, st) => panic!("\nModel is not supported:\nModel name: {any}\nStacked: {st}\n"),
         };
         if self.load_weights {
-            println!("Loading weights from {}...", self.load_weights_from.display());
+            eprintln!("Loading weights from {}...", self.load_weights_from.display());
             model.load_weights(&self.load_weights_from)?;
         }
         if let Some(ref dot_file_path) = self.save_dot_file {
-            println!("Saving .dot file to {}...", dot_file_path.display());
+            eprintln!("Saving .dot file to {}...", dot_file_path.display());
             model.write_weights_to_dot(dot_file_path)?;
         }
         Ok(model)

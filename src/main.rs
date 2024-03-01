@@ -93,7 +93,9 @@ fn run_training(config: Config) {
     let model = config.model_config.create_model().expect("Coudn't create model!");
     let model = sql_trainer.train(model).unwrap_or_else(|err| panic!("Training error!\n{err}"));
     model.write_weights(&sql_trainer.config.save_weights_to).expect("Failed writing model!");
-    model.print_weights();
+    if config.model_config.print_weights_after_training {
+        model.print_weights();
+    }
 }
 
 fn test_ast_to_path(config: Config) {
