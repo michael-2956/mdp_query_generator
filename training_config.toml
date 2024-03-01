@@ -16,18 +16,18 @@ assert_runs_on_schema=false
 print_progress=true
 
 [model]
-# which model to use. Can be: "subgraph", "full_function_context", "depthwize_full_function_context"
-model_name="subgraph"
+# which model to use. Can be: "subgraph", "full_function_context", "depthwize_full_function_context", "DepthwiseFunctionNameContext"
+model_name="DepthwiseFunctionNameContext"
 # whether to use pretrained model weights
 # TODO: apply the same logic as in save_dot_file?
 load_weights=false
 # where to load the weights from
-load_weights_from="weights/subgraph/unstacked/tpch_default_queries.mw"
+load_weights_from="weights/DepthwiseFunctionNameContext/tpch_default_queries.mw"
 # whether to use the stacked version of the model
 stacked_version=false
 # where to save a dot file with graph representation.
 # Type save_dot_file=false to turn off
-save_dot_file="weights_in_dot/subgraph/tpch_default_queries.dot"
+save_dot_file="weights_in_dot/DepthwiseFunctionNameContext/tpch_default_queries.dot"
 # save_dot_file=false
 print_weights_after_training=false
 
@@ -41,12 +41,10 @@ n_tests=10000
 [training]
 # path to a file with all the training queries separated by ";\n"
 training_db_path="training_dbs/tpch_default_queries_no_views.sql"
-
 # schema of the training queries
 training_schema="schema/tpc-h_tables.sql"
-
 # where to save model weights to
-save_weights_to="weights/subgraph/unstacked/tpch_default_queries.mw"
+save_weights_to="weights/DepthwiseFunctionNameContext/tpch_default_queries.mw"
 
 
 [query_generator]

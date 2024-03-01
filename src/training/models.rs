@@ -45,6 +45,7 @@ impl ModelConfig {
         let mut model: Box<dyn PathwayGraphModel> = match (self.model_name.as_str(), self.stacked_version) {
             ("subgraph", false) => Box::new(ModelWithMarkovWeights::<FunctionNameContext>::new()),
             ("subgraph", true) => Box::new(ModelWithMarkovWeights::<StackedFunctionNamesContext>::new()),
+            ("DepthwiseFunctionNameContext", false) => Box::new(ModelWithMarkovWeights::<DepthwiseFunctionNameContext>::new()),
             ("full_function_context", false) => Box::new(ModelWithMarkovWeights::<FullFunctionContext>::new()),
             ("full_function_context", true) => Box::new(ModelWithMarkovWeights::<StackedFullFunctionContext>::new()),
             ("depthwize_full_function_context", false) => Box::new(ModelWithMarkovWeights::<DepthwiseFullFunctionContext>::new()),
@@ -333,6 +334,35 @@ impl std::fmt::Display for StackedFunctionNamesContext {
             write!(f, "_{func_name}")?;
         }
         Ok(())
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, std::hash::Hash, Clone, Serialize, Deserialize)]
+pub struct DepthwiseFunctionNameContext {
+    depth: usize,
+    func_name: SmolStr,
+}
+
+impl ModelFunctionContext for DepthwiseFunctionNameContext {
+    fn from_call_stack_and_exit_frame(
+        call_stack: &Vec<StackFrame>,
+        exit_stack_frame_opt: Option<&StackFrame>
+    ) -> Self {
+        let stack_frame = if let Some(stack_frame) = exit_stack_frame_opt {
+            stack_frame
+        } else {
+            call_stack.last().unwrap()
+        };
+        DepthwiseFunctionNameContext {
+            depth: call_stack.len() + exit_stack_frame_opt.is_some() as usize,
+            func_name: stack_frame.function_context.call_params.func_name.clone(),
+        }
+    }
+}
+
+impl std::fmt::Display for DepthwiseFunctionNameContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}_{}", self.func_name, self.depth)
     }
 }
 

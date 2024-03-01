@@ -101,7 +101,7 @@ where
             writeln!(file, "    subgraph {func_name} {{")?;
             for (from, out) in chain {
                 for (to, weight) in out {
-                    writeln!(file, "        {from} -> {to} [label=\"  {weight:.4}\"]")?;
+                    writeln!(file, "        {func_name}_{from} -> {to} [label=\"  {weight:.4}\"]")?;
                 }
             }
             writeln!(file, "    }}")?;

@@ -42,7 +42,7 @@ fn run_generation<SubMod: SubstituteModel, StC: StateChooser>(
         if let Some(parsed_ast) = string_to_query(&query_string) {
             if config.main_config.assert_parcing_equivalence {
                 if *parsed_ast != query_ast {
-                    println!("AST mismatch! For query: {query_string}");
+                    eprintln!("AST mismatch! For query: {query_string}");
                     let mut f_g = std::fs::File::create(format!("{i}-g")).unwrap();
                     write!(f_g, "{:#?}", query_ast).unwrap();
                     let mut f_p = std::fs::File::create(format!("{i}-p")).unwrap();
@@ -71,10 +71,10 @@ fn run_generation<SubMod: SubstituteModel, StC: StateChooser>(
         }
     }
     if config.main_config.measure_generation_time {
-        println!("Average generation time: {} secs", accumulated_time_ns as f64 / 1_000_000_000f64 / config.main_config.num_generate as f64);
+        eprintln!("Average generation time: {} secs", accumulated_time_ns as f64 / 1_000_000_000f64 / config.main_config.num_generate as f64);
     }
     if config.main_config.count_equivalence {
-        println!("Equivalence: {} / {}", num_equivalent, config.main_config.num_generate);
+        eprintln!("Equivalence: {} / {}", num_equivalent, config.main_config.num_generate);
     }
 }
 
