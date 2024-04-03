@@ -124,7 +124,7 @@ impl PathGenerator {
         Ok(Self {
             current_path: vec![],
             state_generator: MarkovChainGenerator::<MaxProbStateChooser>::with_config(chain_config)?,
-            state_selector: DeterministicModel::new(),
+            state_selector: DeterministicModel::empty(),
             clause_context: ClauseContext::new(database_schema),
             aggregate_functions_distribution,
             rng: ChaCha8Rng::seed_from_u64(1),

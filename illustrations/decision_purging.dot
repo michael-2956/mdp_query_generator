@@ -1,0 +1,43 @@
+digraph G {
+    rankdir="LR";
+    ranksep=0.4;
+    graph [margin=0]
+    subgraph deps {
+        FROM [label = "FROM"]
+        T1 [label = "T1(C1)"]
+        T2 [label = "T2(C2)"]
+        FROM -> T1
+        FROM -> T2 [color = gray, style=dashed]
+        SELECT [label = "SELECT"]
+        T1 -> SELECT
+        T2 -> SELECT [color = gray, style=dashed]
+        C1 [label = "C1"]
+        C2 [label = "C2"]
+        SELECT -> C1 [color = darkgreen]
+        SELECT -> C2 [color = red]
+        END [label = "END"]
+        C1 -> END [color = gray, style=dashed]
+        C2 -> END [color = gray, style=dashed]
+    }
+
+    {
+    //     rank = same;
+    //     SELECT;FROM;END
+    //     SELECT -> FROM -> END [ style=invis ]
+    //     rankdir = LR;
+    }
+
+    // {
+    //     rank = same;
+    //     T1;C1
+    //     T1 -> C1 [ style=invis ]
+    //     rankdir = LR;
+    // }
+
+    // {
+    //     rank = same;
+    //     T2;C2
+    //     T2 -> C2 [ style=invis ]
+    //     rankdir = LR;
+    // }
+}

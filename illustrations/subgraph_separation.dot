@@ -1,0 +1,78 @@
+digraph G {
+    // rankdir="LR";
+    ranksep=0.3;
+    graph [margin=0]
+
+    subgraph program {
+        ccQuery [label = "Query", shape=rectangle, style=filled, color=cornflowerblue]
+        START [shape=rectangle, style=filled, color=gray]
+        END [shape=rectangle, style=filled, color=gray]
+        START -> ccQuery -> END
+    }
+
+    subgraph query {
+        cFROM [label = "FROM", shape=rectangle, style=filled, color=cornflowerblue]
+        cWHERE [label = "WHERE", shape=rectangle, style=filled, color=cornflowerblue]
+        cSELECT [label = "SELECT", shape=rectangle, style=filled, color=cornflowerblue]
+        qEND [label = "END"]
+        Query [shape=rectangle, style=filled, color=gold]
+        cFROM -> cSELECT[ style=invis ]
+        Query -> cFROM -> cWHERE -> cSELECT -> qEND
+        cFROM -> cSELECT
+    }
+
+    subgraph from {
+        FROM [shape=rectangle, style=filled, color=gold]
+        Table [shape=rectangle, style=filled, color=lightgreen]
+        FROM -> Table
+        cQuery [label = "Query", shape=rectangle, style=filled, color=cornflowerblue]
+        FROM -> cQuery
+        fEND [label = "END"]
+        cQuery -> fEND
+        Table -> fEND
+    }
+
+    subgraph where {
+        wEND [label = "END"]
+        cBVal [label = "Boolean expression", shape=rectangle, style=filled, color=cornflowerblue]
+        WHERE [shape=rectangle, style=filled, color=gold]
+        WHERE -> cBVal -> wEND
+    }
+
+    subgraph boolean {
+        bVal [label="Boolean expression", shape=rectangle, style=filled, color=gold]
+        bt [label="\">\""]
+        bVal -> bt
+        lt [label="\"<\""]
+        bVal -> lt
+        numval [label = "Numeric expression", shape=rectangle, style=filled, color=cornflowerblue]
+        bt -> numval
+        lt -> numval
+        dts1 [label="...", shape=plaintext]
+        numval -> dts1
+        // dts2 [label="...", shape=plaintext]
+        // lt -> dts2
+        dts [label="...", shape=plaintext]
+        bVal -> dts
+    }
+
+    // {
+    //     rank = same;
+    //     Query;cFROM;cWHERE;cSELECT;qEND
+    //     rankdir = LR;
+    // }
+
+    // {
+    //     rank = same;
+    //     T1;C1
+    //     T1 -> C1 [ style=invis ]
+    //     rankdir = LR;
+    // }
+
+    // {
+    //     rank = same;
+    //     T2;C2
+    //     T2 -> C2 [ style=invis ]
+    //     rankdir = LR;
+    // }
+}

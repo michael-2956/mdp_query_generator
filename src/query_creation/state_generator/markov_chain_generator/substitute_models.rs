@@ -7,7 +7,7 @@ use super::{markov_chain::NodeParams, StateGenerationError};
 
 /// Dynamic model for assigning probabilities when using ProbabilisticModel 
 pub trait SubstituteModel {
-    fn new() -> Self;
+    fn empty() -> Self;
     /// assigns the (unnormalized) log-probabilities to the outgoing nodes.
     /// Receives log-probability distruibution recorded in graph
     fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError>;
@@ -25,7 +25,7 @@ pub trait SubstituteModel {
 pub struct MarkovModel { }
 
 impl SubstituteModel for MarkovModel {
-    fn new() -> Self {
+    fn empty() -> Self {
         Self {}
     }
     fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError> {
@@ -52,7 +52,7 @@ impl PathModel {
 }
 
 impl SubstituteModel for PathModel {
-    fn new() -> Self {
+    fn empty() -> Self {
         Self {
             path: vec![],
             index: 0,
@@ -96,7 +96,7 @@ impl DeterministicModel {
 }
 
 impl SubstituteModel for DeterministicModel {
-    fn new() -> Self where Self: Sized {
+    fn empty() -> Self where Self: Sized {
         Self {
             state_to_choose: None,
         }
@@ -158,7 +158,7 @@ pub struct AntiCallModel {
 }
 
 impl SubstituteModel for AntiCallModel {
-    fn new() -> Self {
+    fn empty() -> Self {
         Self { stats: QueryStats::new() }
     }
 

@@ -1,0 +1,91 @@
+digraph G {
+    // rankdir="LR";
+    graph [margin=0]
+
+    subgraph ranks {
+        rank_1[style=invis]
+        rank_2[style=invis]
+        rank_3[style=invis]
+        rank_1 -> rank_2 -> rank_3[style=invis]
+        // rankdir = LR;
+    }
+
+    subgraph deps {
+        // 1. To generate the FROM clause. (universal starting decision)
+        // 2. To select a relation named T1.
+        // 3. To finish the FROM clause generation
+        // 4. To include the WHERE clause.
+        // 5. To filter using a comparison operation ">".
+        // 6. To place column C1 of type integer from table T1 on the left side of the com-
+        // parison.
+        // 7. To place a literal value 0 of type integer on the right side of the comparison.
+        // 8. To place the integer addition formula as the first output column.
+        // 9. To place column C1 of type integer from table T1 on the left side of the addi-
+        // tion.
+        // 10. To place a literal value 1 of type integer on the right side of the addition.
+        // 11. To finish generating the SELECT clause.
+        // 12. To finish the query generation process. (universal terminal decision)
+        START [label="1. START"]
+
+        FROM_T1 [label="2. T1"]
+        START -> FROM_T1
+
+        end_FROM [label="3. end FROM"]
+        FROM_T1 -> end_FROM
+
+        WHERE [label="4. WHERE"]
+        START -> WHERE
+
+        WHERE_lt [label="5. \">\""]
+        WHERE -> WHERE_lt
+        WHERE_lt_C1 [label="6. C1"]
+        FROM_T1 -> WHERE_lt_C1
+        WHERE_lt -> WHERE_lt_C1
+        WHERE_lt_0 [label="7. \"0\""]
+        WHERE_lt_C1 -> WHERE_lt_0
+        WHERE_lt -> WHERE_lt_0
+
+        end_WHERE [label="8. end WHERE"]
+        WHERE_lt_C1 -> end_WHERE
+        WHERE_lt_0 -> end_WHERE
+
+        SELECT_plus [label="9. \"+\""]
+        START -> SELECT_plus
+        SELECT_plus_C1 [label="10. C1"]
+        FROM_T1 -> SELECT_plus_C1
+        SELECT_plus -> SELECT_plus_C1
+        SELECT_plus_1 [label="11. \"1\""]
+        SELECT_plus_C1 -> SELECT_plus_1
+        SELECT_plus -> SELECT_plus_1
+
+        end_SELECT [label="12. end SELECT"]
+        SELECT_plus_C1 -> end_SELECT
+        SELECT_plus_1 -> end_SELECT
+
+        end_QUERY [label="13. END"]
+        end_SELECT -> end_QUERY
+        end_WHERE -> end_QUERY
+        end_FROM -> end_QUERY
+    }
+
+    {
+        rank = same;
+        START; FROM_T1; end_FROM
+        rank_1 -> START [style=invis]
+        rankdir = LR;
+    }
+
+    {
+        rank = same;
+        WHERE; WHERE_lt; WHERE_lt_0; WHERE_lt_C1; end_WHERE
+        rank_2 -> WHERE [style=invis]
+        rankdir = LR;
+    }
+
+    {
+        rank = same;
+        SELECT_plus; SELECT_plus_1; SELECT_plus_C1; end_SELECT; end_QUERY
+        rank_3 -> SELECT_plus [style=invis]
+        rankdir = LR;
+    }
+}

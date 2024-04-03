@@ -120,7 +120,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         let mut _self = QueryGenerator::<SubMod, StC, QVC> {
             state_generator,
             predictor_model: None,
-            substitute_model: Box::new(SubMod::new()),
+            substitute_model: Box::new(SubMod::empty()),
             value_chooser: Box::new(QVC::new()),
             clause_context: ClauseContext::new(DatabaseSchema::parse_schema(&config.table_schema_path)),
             config,
@@ -1684,7 +1684,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         if let Some(state) = self.next_state_opt() {
             panic!("Couldn't reset state_generator: Received {state}");
         }
-        self.substitute_model = Box::new(SubMod::new());
+        self.substitute_model = Box::new(SubMod::empty());
         if let Some(model) = self.predictor_model.as_mut() {
             model.end_inference();
         }
