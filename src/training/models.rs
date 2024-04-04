@@ -2,11 +2,12 @@ use std::{io, path::PathBuf, str::FromStr};
 
 use crate::{query_creation::state_generator::markov_chain_generator::{StackFrame, markov_chain::NodeParams}, config::TomlReadable};
 
-use self::markov_models::{DepthwiseFullFunctionContext, DepthwiseFunctionNameContext, FullFunctionContext, FunctionNameContext, ModelWithMarkovWeights, StackedFullFunctionContext, StackedFunctionNamesContext};
+use self::{llm_prompting_models::ChatGPTPromptingModel, markov_models::{DepthwiseFullFunctionContext, DepthwiseFunctionNameContext, FullFunctionContext, FunctionNameContext, ModelWithMarkovWeights, StackedFullFunctionContext, StackedFunctionNamesContext}};
 
 use super::ast_to_path::PathNode;
 
 pub mod markov_models;
+pub mod llm_prompting_models;
 
 pub struct ModelConfig {
     // Which model to use. Can be: "subgraph"
@@ -44,6 +45,7 @@ impl TomlReadable for ModelConfig {
 impl ModelConfig {
     pub fn create_model(&self) -> io::Result<Box<dyn PathwayGraphModel>> {
         let mut model: Box<dyn PathwayGraphModel> = match (self.model_name.as_str(), self.stacked_version) {
+            ("ChatGPTPromptingModel", _) => Box::new(ChatGPTPromptingModel::new()),
             ("subgraph", false) => Box::new(ModelWithMarkovWeights::<FunctionNameContext>::new()),
             ("subgraph", true) => Box::new(ModelWithMarkovWeights::<StackedFunctionNamesContext>::new()),
             ("DepthwiseFunctionNameContext", false) => Box::new(ModelWithMarkovWeights::<DepthwiseFunctionNameContext>::new()),
