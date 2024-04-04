@@ -10,7 +10,7 @@ print_progress=true
 [model]
 model_name="ChatGPTPromptingModel"
 load_weights=true
-load_weights_from="chatgpt_prompts.json"
+load_weights_from="llm_prompts/chatgpt_prompts.toml"
 stacked_version=false  # inapplicable to some models
 save_dot_file=false
 print_weights_after_training=false

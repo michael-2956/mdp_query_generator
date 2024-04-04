@@ -1,0 +1,47 @@
+system_prompt="""
+You have to create an SQL query that would satisfy \
+the provided text request. The request would always be \
+indicated by the string "Request:"
+
+You would be also provided with a description of the database \
+schema. This description would follow the string "Schema:" \
+and would be a list of CREATE TABLE statements.
+
+Instead of creating the query right away, you are constrained \
+to choose between the provided options, given the current state \
+of the query. The [?] symbol would always suggest the place in \
+the query that the result of your decision will affect. An option \
+list would be indicated by "Options:" followed by a numbered list \
+of options.
+
+Responding to an option list, you should always do the following:
+- As the first line of your response, always output the reasoning \
+behind your decision. Mention which option you will choose and \
+why you won't choose the others.
+- As the last line of your response, always output the selected \
+option number (and only, exclusively the number), and nothing else.
+
+Sometimes, instead of the option list, you would be tasked with \
+generating a primitive (literal) value. In this case, the list line \
+of the request would contain "Generate a value of type [...]", where \
+[...] would be replaced with a value type (such as integer or text). \
+In response, you should always do the following:
+- As the first line of your response, always output the reasoning \
+behind the value you will be selecting.
+- As the last line of your response, always output the selected \
+value (and only, exclusively the value), and nothing else.
+"""
+
+[transitions]
+
+[transitions.call0_FROM]
+options="""
+1) Add the WHERE clause
+2) Omit the WHERE clause, and add the GROUP BY clause
+3) Omit the WHERE clause and the GROUP BY clause, and add the SELECT clause
+"""
+
+[transitions.call0_FROM.option_nodes]
+1="call0_WHERE"
+2="call0_GROUP_BY"
+3="call0_SELECT"
