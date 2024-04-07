@@ -1,6 +1,6 @@
 use sqlparser::ast::{Expr, Query, Select, SetExpr, Value};
 
-use crate::{query_creation::{query_generator::{ast_builder::from::FromBuilder, match_next_state, query_info::IdentName, value_choosers::QueryValueChooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
+use crate::{query_creation::{query_generator::{ast_builder::{from::FromBuilder, where_clause::WhereBuilder}, match_next_state, query_info::IdentName, value_choosers::QueryValueChooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
 
 pub struct QueryBuilder { }
 
@@ -49,10 +49,10 @@ impl QueryBuilder {
 
         match_next_state!(generator, {
             "call0_WHERE" => {
-                // SELECT FROM T1 WHERE [?]
-                select_body.selection = Some(generator.handle_where().1);
-                // SELECT FROM T1 WHERE C1 = 1
-                // no "[?]"
+                select_body.selection = Some(WhereBuilder::empty());
+                let where_val3 = unwrap_variant!(&mut select_body.selection, Some);
+                WhereBuilder::build(generator, where_val3);
+
                 match_next_state!(generator, {
                     "call0_SELECT" => {},
                     "call0_GROUP_BY" => {

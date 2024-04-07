@@ -63,7 +63,7 @@ impl FromBuilder {
                             join_on
                         );
                         generator.clause_context.top_from_mut().activate_subfrom();
-                        *join_on = generator.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Val3)).1;
+                        TypesBuilder::build(generator, join_on, TypeAssertion::GeneratedBy(SubgraphType::Val3));
                         generator.clause_context.top_from_mut().deactivate_subfrom();
 
                         match_next_state!(generator, {
