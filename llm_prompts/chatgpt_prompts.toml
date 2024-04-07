@@ -21,6 +21,10 @@ why you won't choose the others.
 - As the last line of your response, always output the selected \
 option number (and only, exclusively the number), and nothing else.
 
+The option list would be prepended with the task description \
+that might understand the option list. This information \
+will always be indicated by "Task:"
+
 Sometimes, the option list would be prepended with some context \
 that might help make the appropriate decision. This information \
 will always be indicated by "Context:"
@@ -39,6 +43,10 @@ value (and only, exclusively the value), and nothing else.
 [transitions]
 
 [transitions.call0_FROM]
+task="""
+Select which clause you would like to build next and which ones you \
+would like to omit.
+"""
 options="""
 1) Add the WHERE clause
 2) Omit the WHERE clause, and add the GROUP BY clause

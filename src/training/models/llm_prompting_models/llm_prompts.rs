@@ -5,6 +5,10 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 pub struct TransitionPrompts {
     /// For example: """
+    /// Select whether you want a column name or expression.
+    /// """
+    task: String,
+    /// For example: """
     /// 1) column name
     /// 2) expression
     /// """

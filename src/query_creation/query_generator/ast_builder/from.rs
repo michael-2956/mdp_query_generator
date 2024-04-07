@@ -1,19 +1,13 @@
-use sqlparser::ast::{self, Ident, Join, ObjectName, TableWithJoins};
+use sqlparser::ast::{self, Join, TableWithJoins};
 
-use crate::query_creation::{query_generator::{match_next_state, value_choosers::QueryValueChooser, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}};
+use crate::query_creation::{query_generator::{ast_builder::from_item::FromItemBuilder, match_next_state, value_choosers::QueryValueChooser, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}};
 
 /// subgraph def_FROM
 pub struct FromBuilder { }
 
 impl FromBuilder {
     pub fn empty() -> Vec<TableWithJoins> {
-        vec![TableWithJoins { relation: sqlparser::ast::TableFactor::Table {
-            name: ObjectName(vec![Ident::new("[?]")]),
-            alias: None,
-            args: None,
-            columns_definition: None,
-            with_hints: vec![]
-        }, joins: vec![] }]
+        vec![TableWithJoins { relation: FromItemBuilder::empty(), joins: vec![] }]
     }
 
     pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
