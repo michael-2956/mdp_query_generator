@@ -21,14 +21,16 @@ pub struct LLMPrompts {
     /// the system prompts of the LLM agent
     pub system_prompt: String,
     /// the node transition prompts
-    pub transitions: HashMap<String, TransitionPrompts>
+    pub transitions: HashMap<String, TransitionPrompts>,
+    /// the context that each call node provides the first decision
+    /// of its subgraph with
+    pub call_node_context: HashMap<String, String>,
 }
 
 impl LLMPrompts {
     pub fn read_from_file(file_path: &PathBuf) -> std::io::Result<Self> {
         let prompts_toml_str = fs::read_to_string(file_path)?;
         let _self = toml::from_str(prompts_toml_str.as_str()).unwrap();
-        // eprintln!("Prompts: {:#?}", _self);
         Ok(_self)
     }
 }

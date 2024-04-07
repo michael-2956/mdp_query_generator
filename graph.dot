@@ -912,42 +912,45 @@ digraph G {
         call24_types -> EXIT_VAL_3
 
         AnyAll[label="ANY / ALL"]
-        AnyAllSelectOp[label="select op."]
-        AnyAllSelectIter[label="select iterable"]
-        AnyAllAnyAll[label="select ANY/ALL"]
-        AnyAllAnyAllAny[label="ANY"]
-        AnyAllAnyAllAll[label="ALL"]
         VAL_3 -> AnyAll
+        //
+        AnyAllSelectOp[label="select op."]
+        AnyAll -> AnyAllSelectOp
         call2_types_type [TYPES="[any]", label="Types type: ANY -> TP1", shape=rectangle, color=yellowgreen, style=filled]
-        AnyAll -> call2_types_type
-        call61_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
-        call2_types_type -> call61_types
-        call61_types -> AnyAllSelectOp
         AnyAllEqual [label="="]
         AnyAllSelectOp -> AnyAllEqual
-        AnyAllEqual -> AnyAllSelectIter
+        AnyAllEqual -> call2_types_type
         AnyAllUnEqual [label="<>"]
         AnyAllSelectOp -> AnyAllUnEqual
-        AnyAllUnEqual -> AnyAllSelectIter
+        AnyAllUnEqual -> call2_types_type
         AnyAllLess [label="<"]
         AnyAllSelectOp -> AnyAllLess
-        AnyAllLess -> AnyAllSelectIter
+        AnyAllLess -> call2_types_type
         AnyAllLessEqual [label="<="]
         AnyAllSelectOp -> AnyAllLessEqual
-        AnyAllLessEqual -> AnyAllSelectIter
+        AnyAllLessEqual -> call2_types_type
         AnyAllGreater [label=">"]
         AnyAllSelectOp -> AnyAllGreater
-        AnyAllGreater -> AnyAllSelectIter
+        AnyAllGreater -> call2_types_type
         AnyAllGreaterEqual [label=">="]
         AnyAllSelectOp -> AnyAllGreaterEqual
-        AnyAllGreaterEqual -> AnyAllSelectIter
+        AnyAllGreaterEqual -> call2_types_type
+        //
+        call61_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
+        call2_types_type -> call61_types
+        AnyAllAnyAll[label="select ANY/ALL"]
+        call61_types -> AnyAllAnyAll 
+        AnyAllAnyAllAny[label="ANY"]
+        AnyAllAnyAll -> AnyAllAnyAllAny
+        //
+        AnyAllSelectIter[label="select iterable"]
+        AnyAllAnyAllAny -> AnyAllSelectIter
+        AnyAllAnyAllAll[label="ALL"]
+        AnyAllAnyAll -> AnyAllAnyAllAll
+        AnyAllAnyAllAll -> AnyAllSelectIter
         call4_Query [TYPES="[compatible]", MODS="[single column]", label="Query\nTYPE: [compatible(TP1)]\nMODS: [single column]", shape=rectangle, style=filled, color=green]
         AnyAllSelectIter -> call4_Query
-        call4_Query -> AnyAllAnyAll
-        AnyAllAnyAll -> AnyAllAnyAllAny
-        AnyAllAnyAllAny -> EXIT_VAL_3
-        AnyAllAnyAll -> AnyAllAnyAllAll
-        AnyAllAnyAllAll -> EXIT_VAL_3
+        call4_Query -> EXIT_VAL_3
 
         BinaryStringLike[label="LIKE"]
         BinaryStringLikeNot [label="NOT"]

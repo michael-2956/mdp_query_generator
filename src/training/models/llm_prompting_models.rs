@@ -40,6 +40,10 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
             }
         }
 
+        if node_outgoing.len() == 1 {
+            return ModelPredictionResult::Some(node_outgoing.into_iter().map(|p| (1f64, p)).collect());
+        }
+
         ModelPredictionResult::None(node_outgoing)
     }
 }

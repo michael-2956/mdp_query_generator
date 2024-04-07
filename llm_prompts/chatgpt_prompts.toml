@@ -9,7 +9,7 @@ and would be a list of CREATE TABLE statements.
 
 Instead of creating the query right away, you are constrained \
 to choose between the provided options, given the current state \
-of the query. The [?] symbol would always suggest the place in \
+of the query. The [?] symbol would sometimes suggest the place in \
 the query that the result of your decision will affect. An option \
 list would be indicated by "Options:" followed by a numbered list \
 of options.
@@ -20,6 +20,10 @@ behind your decision. Mention which option you will choose and \
 why you won't choose the others.
 - As the last line of your response, always output the selected \
 option number (and only, exclusively the number), and nothing else.
+
+Sometimes, the option list would be prepended with some context \
+that might help make the appropriate decision. This information \
+will always be indicated by "Context:"
 
 Sometimes, instead of the option list, you would be tasked with \
 generating a primitive (literal) value. In this case, the list line \
@@ -45,3 +49,10 @@ options="""
 1="call0_WHERE"
 2="call0_GROUP_BY"
 3="call0_SELECT"
+
+[call_node_context]
+call2_types_type="""
+Before you start building the left and right hand sides of the \
+comparison operation, select the biggest type that would fit both all \
+values on the right hand side and the left hand side at the same time.
+"""

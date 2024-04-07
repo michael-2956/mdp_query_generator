@@ -1,5 +1,6 @@
 #[macro_use]
 pub mod query_info;
+pub mod ast_builder;
 pub mod call_modifiers;
 pub mod value_choosers;
 pub mod expr_precedence;
@@ -11,19 +12,17 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
-    self, BinaryOperator, DataType, DateTimeField, Expr, FunctionArg, FunctionArgExpr, Join, ObjectName, OrderByExpr, Query, Select, SelectItem, SetExpr, TableAlias, TableFactor, TableWithJoins, TimezoneInfo, TrimWhereField, UnaryOperator, Value, WildcardAdditionalOptions
+    self, BinaryOperator, DataType, DateTimeField, Expr, FunctionArg, FunctionArgExpr, ObjectName, OrderByExpr, Query, SelectItem, TableAlias, TableFactor, TimezoneInfo, TrimWhereField, UnaryOperator, Value, WildcardAdditionalOptions
 };
 
-use crate::{config::TomlReadable, training::models::PathwayGraphModel};
+use crate::{config::TomlReadable, training::models::PathwayGraphModel, unwrap_pat};
 
 use super::{
     super::{unwrap_variant, unwrap_variant_or_else},
     state_generator::{markov_chain_generator::subgraph_type::SubgraphType, subgraph_type::ContainsSubgraphType, CallTypes}
 };
 use self::{
-    aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution},
-    call_modifiers::{AvailableTableNamesValue, SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue},
-    expr_precedence::ExpressionPriority, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, DatabaseSchema, IdentName, QueryProps}, value_choosers::QueryValueChooser
+    aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, ast_builder::{types::TypesBuilder, query::QueryBuilder}, call_modifiers::{AvailableTableNamesValue, SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue}, expr_precedence::ExpressionPriority, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, DatabaseSchema, IdentName, QueryProps}, value_choosers::QueryValueChooser
 };
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
@@ -77,6 +76,27 @@ impl Unnested for Expr {
         }
     }
 }
+
+macro_rules! match_next_state {
+    ($generator:expr, { $($state:pat => $body:block),* $(,)? }) => {
+        match $generator.next_state().as_str() {
+            $(
+                $state => $body,
+            )*
+            _any => $generator.panic_unexpected(_any),
+        }
+    };
+    ($generator:expr, { $($state:pat => $body:expr),* $(,)? }) => {
+        match $generator.next_state().as_str() {
+            $(
+                $state => { $body },
+            )*
+            _any => $generator.panic_unexpected(_any),
+        }
+    };
+}
+
+pub(crate) use match_next_state;
 
 #[derive(Debug, Clone)]
 pub enum TypeAssertion<'a> {
@@ -184,102 +204,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         }
     }
 
-    /// subgraph def_Query
-    fn handle_query(&mut self) -> (Query, Vec<(Option<IdentName>, SubgraphType)>) {
-        self.substitute_model.notify_subquery_creation_begin();
-        self.clause_context.on_query_begin(self.state_generator.get_fn_modifiers_opt());
-        self.expect_state("Query");
-
-        let mut select_body = Select {
-            distinct: false,
-            top: None,
-            projection: vec![],
-            into: None,
-            from: vec![],
-            lateral_views: vec![],
-            selection: None,
-            group_by: vec![],
-            cluster_by: vec![],
-            distribute_by: vec![],
-            sort_by: vec![],
-            having: None,
-            qualify: None,
-        };
-
-        self.expect_state("call0_FROM");
-        select_body.from = self.handle_from();
-        match self.next_state().as_str() {
-            "call0_WHERE" => {
-                select_body.selection = Some(self.handle_where().1);
-                match self.next_state().as_str() {
-                    "call0_SELECT" => {},
-                    "call0_GROUP_BY" => {
-                        select_body.group_by = self.handle_group_by(); 
-                        match self.next_state().as_str() {
-                            "call0_SELECT" => {},
-                            "call0_HAVING" => {
-                                select_body.having = Some(self.handle_having().1);
-                                self.expect_state("call0_SELECT");
-                            },
-                            any => self.panic_unexpected(any),  
-                        }
-                    },
-                    any => self.panic_unexpected(any),  
-                }
-
-            },
-            "call0_SELECT" => {},
-            "call0_GROUP_BY" => {
-                select_body.group_by = self.handle_group_by();
-                match self.next_state().as_str() {
-                    "call0_SELECT" => {},
-                    "call0_HAVING" => {
-                        select_body.having = Some(self.handle_having().1);
-                        self.expect_state("call0_SELECT");
-                    },
-                    any => self.panic_unexpected(any),  
-                }
-
-            }
-            any => self.panic_unexpected(any),
-        }
-
-        select_body.projection = self.handle_select();
-        select_body.distinct = self.clause_context.query().is_distinct();
-
-        if self.clause_context.top_group_by().is_grouping_active() && !self.clause_context.query().is_aggregation_indicated() {
-            if select_body.group_by.is_empty() {
-                // Grouping is active but wasn't indicated in any way. Add GROUP BY true
-                // instead of GROUP BY (), because unsupported by parser
-                select_body.group_by = vec![Expr::Value(Value::Boolean(true))]
-            }
-        }
-
-        self.expect_state("call0_ORDER_BY");
-        let order_by = self.handle_order_by();
-
-        self.expect_state("call0_LIMIT");
-        let select_limit = self.handle_limit().1;
-
-        self.expect_state("EXIT_Query");
-        let output_type = self.clause_context.query_mut().pop_output_type();
-        // if output_type.iter().filter_map(|(o, _)| o.as_ref()).any(|o| o.value == "case") {
-        //     eprintln!("output: {:?}", output_type);
-        // }
-        self.substitute_model.notify_subquery_creation_end();
-        self.clause_context.on_query_end();
-
-        (Query {
-            with: None,
-            body: Box::new(SetExpr::Select(Box::new(select_body))),
-            order_by,
-            limit: select_limit,
-            offset: None,
-            fetch: None,
-            locks: vec![],
-        }, output_type)
-    }
-
     /// subgraph def_ORDER_BY
     fn handle_order_by(&mut self) -> Vec<OrderByExpr> {
         self.expect_state("ORDER_BY");
@@ -350,67 +274,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         order_by
     }
 
-    /// subgraph def_FROM
-    fn handle_from(&mut self) -> Vec<TableWithJoins> {
-        self.expect_state("FROM");
-
-        let mut from: Vec<TableWithJoins> = vec![];
-
-        loop {
-            self.clause_context.top_from_mut().add_subfrom();
-            from.push(TableWithJoins { relation: match self.next_state().as_str() {
-                "call0_FROM_item" => self.handle_from_item(),
-                "EXIT_FROM" => {
-                    self.clause_context.top_from_mut().delete_subfrom();
-                    break
-                },
-                any => self.panic_unexpected(any)
-            }, joins: vec![] });
-
-            match self.next_state().as_str() {
-                "FROM_cartesian_product" => { },
-                "FROM_join_by" => {
-                    let joins = &mut from.last_mut().unwrap().joins;
-                    loop {
-                        let join_type = match self.next_state().as_str() {
-                            s @ ( "FROM_join_join" | "FROM_left_join" | "FROM_right_join" | "FROM_full_join" ) => s.to_string(),
-                            any => self.panic_unexpected(any)
-                        };
-                        self.expect_states(&["FROM_join_to", "call1_FROM_item"]);
-                        let relation = self.handle_from_item();
-                        // only activate sub-from for JOIN ON
-                        self.clause_context.top_from_mut().activate_subfrom();
-                        self.expect_states(&["FROM_join_on", "call83_types"]);
-                        let join_on = ast::JoinConstraint::On(
-                            self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Val3)).1
-                        );
-                        self.clause_context.top_from_mut().deactivate_subfrom();
-                        joins.push(Join {
-                            relation,
-                            join_operator: match join_type.as_str() {
-                                "FROM_join_join" => ast::JoinOperator::Inner(join_on),
-                                "FROM_left_join" => ast::JoinOperator::LeftOuter(join_on),
-                                "FROM_right_join" => ast::JoinOperator::RightOuter(join_on),
-                                "FROM_full_join" => ast::JoinOperator::FullOuter(join_on),
-                                any => self.panic_unexpected(any)
-                            },
-                        });
-                        match self.next_state().as_str() {
-                            "FROM_join_by" => { },
-                            "FROM_cartesian_product" => break,
-                            any => self.panic_unexpected(any)
-                        }
-                    }
-                },
-                any => self.panic_unexpected(any)
-            }
-
-            self.clause_context.top_from_mut().delete_subfrom();
-        }
-        self.clause_context.top_from_mut().activate_from();
-        from
-    }
-
     /// subgraph def_FROM_item
     fn handle_from_item(&mut self) -> TableFactor {
         self.expect_state("FROM_item");
@@ -424,7 +287,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             any => self.panic_unexpected(any),
         };
 
-        let expr = match self.next_state().as_str() {
+        let table_factor = match self.next_state().as_str() {
             "FROM_item_table" => {
                 let available_table_names = &unwrap_variant!(
                     self.state_generator.get_named_value::<AvailableTableNamesValue>().unwrap(),
@@ -445,24 +308,31 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 }
             },
             "call0_Query" => {
-                let (query, column_idents_and_graph_types) = self.handle_query();
+                let mut table_factor = TableFactor::Derived {
+                    lateral: false,
+                    subquery: Box::new(QueryBuilder::empty()),
+                    alias: None,
+                };
+
+                let subquery = &mut **unwrap_pat!(&mut table_factor, TableFactor::Derived { subquery, .. }, subquery);
+                let column_idents_and_graph_types = QueryBuilder::build(self, subquery);
+                
+                let alias = &mut *unwrap_pat!(&mut table_factor, TableFactor::Derived { alias, .. }, alias);
                 if let Some(ref mut table_alias) = table_alias {
                     let n_columns = column_idents_and_graph_types.len();
                     table_alias.columns = self.value_chooser.choose_from_column_renames(n_columns);
                 }
                 self.clause_context.top_from_mut().append_query(column_idents_and_graph_types, table_alias.clone().unwrap());
-                TableFactor::Derived {
-                    lateral: false,
-                    subquery: Box::new(query),
-                    alias: table_alias,
-                }
+                *alias = table_alias;
+
+                table_factor
             },
             any => self.panic_unexpected(any),
         };
 
         self.expect_state("EXIT_FROM_item");
 
-        expr
+        table_factor
     }
 
     /// subgraph def_WHERE
@@ -878,12 +748,17 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 self.handle_column_spec()
             },
             "call1_Query" => {
-                let (subquery, column_types) = self.handle_query();
+                let mut types_value = Expr::Subquery(Box::new(QueryBuilder::empty()));
+                let subquery = &mut **unwrap_variant!(&mut types_value, Expr::Subquery);
+                let column_types = QueryBuilder::build(self, subquery);
                 let selected_type = match column_types.len() {
-                    1 => column_types[0].1.clone(),
-                    any => panic!("Subquery should have selected a single column, but selected {any}. Subquery: {subquery}"),
+                    1 => column_types.into_iter().next().unwrap().1,
+                    any => panic!(
+                        "Subquery should have selected a single column, \
+                        but selected {any} columns. Subquery: {subquery}"
+                    ),
                 };
-                (selected_type, Expr::Subquery(Box::new(subquery)))
+                (selected_type, types_value)
             },
             any => self.panic_unexpected(any),
         };
@@ -1153,6 +1028,18 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     "call55_types" => false,
                     any => self.panic_unexpected(any)
                 };
+
+                // let val3 = &mut *Box::new(Expr::Identifier(Ident::new("[?]")));
+
+                // let types_value = Box::new(Expr::Identifier(Ident::new("[?]")));  // Box::new(ExprBuilder::empty())
+                // *val3 = if is_null_not_flag {
+                //     Expr::IsNotNull(types_value)
+                // } else {
+                //     Expr::IsNull(types_value)
+                // };
+                // let expr = unwrap_pat!(val3, Expr::IsNotNull(expr) | Expr::IsNull(expr), expr);
+                // Box::new(ExprBuilder::build(expr))
+
                 let types_value = Box::new(self.handle_types(TypeAssertion::None).1);
                 if is_null_not_flag {
                     Expr::IsNotNull(types_value)
@@ -1191,10 +1078,13 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     "call2_Query" => false,
                     any => self.panic_unexpected(any)
                 };
-                Expr::Exists {
-                    subquery: Box::new(self.handle_query().0),
+                let mut expr = Expr::Exists {
+                    subquery: Box::new(QueryBuilder::empty()),
                     negated: exists_not_flag
-                }
+                };
+                let subquery = &mut **unwrap_pat!(&mut expr, Expr::Exists { subquery, .. }, subquery);
+                QueryBuilder::build(self, subquery);
+                expr
             },
             "InList" => {
                 self.expect_state("call3_types_type");
@@ -1232,12 +1122,14 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     any => self.panic_unexpected(any)
                 };
                 self.expect_state("call3_Query");
-                let query = self.handle_query().0;
-                Expr::InSubquery {
+                let mut expr = Expr::InSubquery {
                     expr: Box::new(types_value),
-                    subquery: Box::new(query),
+                    subquery: Box::new(QueryBuilder::empty()),
                     negated: in_subquery_not_flag
-                }
+                };
+                let subquery = &mut **unwrap_pat!(&mut expr, Expr::InSubquery { subquery, .. }, subquery);
+                QueryBuilder::build(self, subquery);
+                expr
             },
             "Between" => {
                 self.expect_state("call5_types_type");
@@ -1289,11 +1181,8 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 }
             },
             "AnyAll" => {
-                self.expect_state("call2_types_type");
-                let tp = self.handle_types_type();
-                self.state_generator.set_compatible_list(tp.get_compat_types());
-                self.expect_state("call61_types");
-                let types_value = self.handle_types(TypeAssertion::CompatibleWith(tp)).1;
+                let mut val3_expr;
+                
                 self.expect_state("AnyAllSelectOp");
                 let any_all_op = match self.next_state().as_str() {
                     "AnyAllEqual" => BinaryOperator::Eq,
@@ -1304,22 +1193,40 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     "AnyAllGreaterEqual" => BinaryOperator::GtEq,
                     any => self.panic_unexpected(any)
                 };
-                self.expect_state("AnyAllSelectIter");
-                let iterable = Box::new(match self.next_state().as_str() {
-                    "call4_Query" => Expr::Subquery(Box::new(self.handle_query().0)),
-                    any => self.panic_unexpected(any)
-                });
-                self.expect_state("AnyAllAnyAll");
-                let iterable = Box::new(match self.next_state().as_str() {
-                    "AnyAllAnyAllAll" => Expr::AllOp(iterable),
-                    "AnyAllAnyAllAny" => Expr::AnyOp(iterable),
-                    any => self.panic_unexpected(any),
-                });
-                Expr::BinaryOp {
-                    left: Box::new(types_value),
+                val3_expr = Expr::BinaryOp {
+                    left: Box::new(TypesBuilder::empty()),
                     op: any_all_op,
-                    right: iterable,
+                    right: Box::new(TypesBuilder::empty()),
+                };
+
+                self.expect_state("call2_types_type");
+                let tp = self.handle_types_type();
+                self.state_generator.set_compatible_list(tp.get_compat_types());
+                
+                self.expect_state("call61_types");
+                let left = &mut **unwrap_pat!(&mut val3_expr, Expr::BinaryOp { left, .. }, left);
+                *left = self.handle_types(TypeAssertion::CompatibleWith(tp)).1;
+
+                let right = &mut **unwrap_pat!(&mut val3_expr, Expr::BinaryOp { right, .. }, right);
+                self.expect_state("AnyAllAnyAll");
+                *right = match self.next_state().as_str() {
+                    "AnyAllAnyAllAll" => Expr::AllOp(Box::new(TypesBuilder::empty())),
+                    "AnyAllAnyAllAny" => Expr::AnyOp(Box::new(TypesBuilder::empty())),
+                    any => self.panic_unexpected(any),
+                };
+
+                let right_inner = &mut **unwrap_variant!(right, Expr::AllOp);
+                self.expect_state("AnyAllSelectIter");
+                match self.next_state().as_str() {
+                    "call4_Query" => {
+                        *right_inner = Expr::Subquery(Box::new(QueryBuilder::empty()));
+                        let subquery = &mut **unwrap_variant!(right_inner, Expr::Subquery);
+                        QueryBuilder::build(self, subquery);
+                    },
+                    any => self.panic_unexpected(any)
                 }
+
+                val3_expr
             },
             "BinaryStringLike" => {
                 self.expect_state("call25_types");
@@ -1678,7 +1585,8 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         if let Some(model) = self.predictor_model.as_mut() {
             model.start_inference();
         }
-        let query = self.handle_query().0;
+        let mut query = QueryBuilder::empty();
+        QueryBuilder::build(self, &mut query);
         self.value_chooser.reset();
         // reset the generator
         if let Some(state) = self.next_state_opt() {
