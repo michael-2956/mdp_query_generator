@@ -44,6 +44,19 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
             return ModelPredictionResult::Some(node_outgoing.into_iter().map(|p| (1f64, p)).collect());
         }
 
+        /// TODO impl QueryValueChooser for ChatGPTPromptingModel
+        // every method prompts chatgpt instead
+        // every chooser has its own prompt in config
+        // to use the model as a chooser
+        //
+        // then instead of calling generator.value_chooser.choose_...()
+        // we call generator.value_chooser().choose_...()
+        //
+        // value_chooser() is a method that has something like:
+        // if let Some(vc) = self.predictor_model.as_any().downcast_mut::<QueryValueChooser>() {
+        //     vc
+        // } else { self.value_chooser.as_mut().unwrap() }
+
         ModelPredictionResult::None(node_outgoing)
     }
 }

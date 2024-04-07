@@ -12,7 +12,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
-    self, BinaryOperator, DataType, DateTimeField, Expr, FunctionArg, FunctionArgExpr, ObjectName, OrderByExpr, Query, SelectItem, TableAlias, TableFactor, TimezoneInfo, TrimWhereField, UnaryOperator, Value, WildcardAdditionalOptions
+    self, BinaryOperator, DataType, DateTimeField, Expr, FunctionArg, FunctionArgExpr, ObjectName, OrderByExpr, Query, SelectItem, TimezoneInfo, TrimWhereField, UnaryOperator, Value, WildcardAdditionalOptions
 };
 
 use crate::{config::TomlReadable, training::models::PathwayGraphModel, unwrap_pat};
@@ -22,7 +22,7 @@ use super::{
     state_generator::{markov_chain_generator::subgraph_type::SubgraphType, subgraph_type::ContainsSubgraphType, CallTypes}
 };
 use self::{
-    aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, ast_builder::{types::TypesBuilder, query::QueryBuilder}, call_modifiers::{AvailableTableNamesValue, SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue}, expr_precedence::ExpressionPriority, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, DatabaseSchema, IdentName, QueryProps}, value_choosers::QueryValueChooser
+    aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, ast_builder::{types::TypesBuilder, query::QueryBuilder}, call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue}, expr_precedence::ExpressionPriority, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, DatabaseSchema, IdentName, QueryProps}, value_choosers::QueryValueChooser
 };
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
@@ -272,67 +272,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             }
         }
         order_by
-    }
-
-    /// subgraph def_FROM_item
-    fn handle_from_item(&mut self) -> TableFactor {
-        self.expect_state("FROM_item");
-
-        let mut table_alias = match self.next_state().as_str() {
-            "FROM_item_alias" => Some(TableAlias {
-                name: self.value_chooser.choose_from_alias(),
-                columns: vec![]
-            }),
-            "FROM_item_no_alias" => None,
-            any => self.panic_unexpected(any),
-        };
-
-        let table_factor = match self.next_state().as_str() {
-            "FROM_item_table" => {
-                let available_table_names = &unwrap_variant!(
-                    self.state_generator.get_named_value::<AvailableTableNamesValue>().unwrap(),
-                    ValueSetterValue::AvailableTableNames
-                ).table_names;
-                let name = self.value_chooser.choose_table_name(available_table_names);
-                if let Some(ref mut table_alias) = table_alias {
-                    let n_columns = self.clause_context.schema_ref().num_columns_in_table(&name);
-                    table_alias.columns = self.value_chooser.choose_from_column_renames(n_columns);
-                }
-                self.clause_context.add_from_table_by_name(&name, table_alias.clone());
-                TableFactor::Table {
-                    name,
-                    alias: table_alias,
-                    args: None,
-                    with_hints: vec![],
-                    columns_definition: None,
-                }
-            },
-            "call0_Query" => {
-                let mut table_factor = TableFactor::Derived {
-                    lateral: false,
-                    subquery: Box::new(QueryBuilder::empty()),
-                    alias: None,
-                };
-
-                let subquery = &mut **unwrap_pat!(&mut table_factor, TableFactor::Derived { subquery, .. }, subquery);
-                let column_idents_and_graph_types = QueryBuilder::build(self, subquery);
-                
-                let alias = &mut *unwrap_pat!(&mut table_factor, TableFactor::Derived { alias, .. }, alias);
-                if let Some(ref mut table_alias) = table_alias {
-                    let n_columns = column_idents_and_graph_types.len();
-                    table_alias.columns = self.value_chooser.choose_from_column_renames(n_columns);
-                }
-                self.clause_context.top_from_mut().append_query(column_idents_and_graph_types, table_alias.clone().unwrap());
-                *alias = table_alias;
-
-                table_factor
-            },
-            any => self.panic_unexpected(any),
-        };
-
-        self.expect_state("EXIT_FROM_item");
-
-        table_factor
     }
 
     /// subgraph def_WHERE

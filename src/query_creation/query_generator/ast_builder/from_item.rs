@@ -4,7 +4,7 @@ use crate::{query_creation::{query_generator::{call_modifiers::{AvailableTableNa
 
 use super::query::QueryBuilder;
 
-/// subgraph def_FROM
+/// subgraph def_FROM_item
 pub struct FromItemBuilder { }
 
 impl FromItemBuilder {
@@ -21,11 +21,6 @@ impl FromItemBuilder {
     pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
         generator: &mut QueryGenerator<SubMod, StC, QVC>, from_item: &mut TableFactor
     ) {
-        /// TODO: How do we manage value choosers?
-        /// Obviously, the values will need to be selected by ChatGPT.
-        /// but then the model would have to make the decisions
-        /// so basically, add the capability to make value decisions to
-        /// the model
         generator.expect_state("FROM_item");
 
         let alias = unwrap_pat!(from_item, TableFactor::Table { alias, .. }, alias);
@@ -37,7 +32,7 @@ impl FromItemBuilder {
             "FROM_item_no_alias" => None,
         });
 
-        match generator.next_state().as_str() {
+        match_next_state!(generator, {
             "FROM_item_table" => {
                 let available_table_names = &unwrap_variant!(
                     generator.state_generator.get_named_value::<AvailableTableNamesValue>().unwrap(),
@@ -73,8 +68,7 @@ impl FromItemBuilder {
                 }
                 generator.clause_context.top_from_mut().append_query(column_idents_and_graph_types, alias.clone().unwrap());
             },
-            any => generator.panic_unexpected(any),
-        };
+        });
 
         generator.expect_state("EXIT_FROM_item");
     }
