@@ -12,7 +12,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
-    self, BinaryOperator, DataType, DateTimeField, Expr, FunctionArg, FunctionArgExpr, ObjectName, OrderByExpr, Query, SelectItem, TimezoneInfo, TrimWhereField, UnaryOperator, Value, WildcardAdditionalOptions
+    self, BinaryOperator, DataType, DateTimeField, Expr, FunctionArg, FunctionArgExpr, ObjectName, Query, SelectItem, TimezoneInfo, TrimWhereField, UnaryOperator, Value, WildcardAdditionalOptions
 };
 
 use crate::{config::TomlReadable, training::models::PathwayGraphModel, unwrap_pat};
@@ -22,7 +22,7 @@ use super::{
     state_generator::{markov_chain_generator::subgraph_type::SubgraphType, subgraph_type::ContainsSubgraphType, CallTypes}
 };
 use self::{
-    aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, ast_builder::{types::TypesBuilder, query::QueryBuilder}, call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue}, expr_precedence::ExpressionPriority, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, DatabaseSchema, IdentName, QueryProps}, value_choosers::QueryValueChooser
+    aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, ast_builder::{types::TypesBuilder, query::QueryBuilder}, call_modifiers::{ValueSetterValue, WildcardRelationsValue}, expr_precedence::ExpressionPriority, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, DatabaseSchema, IdentName, QueryProps}, value_choosers::QueryValueChooser
 };
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
@@ -202,76 +202,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         } else {
             panic!("This subgraph does not accept multiple types as argument. Got: {:?}", arg_types);
         }
-    }
-
-    /// subgraph def_ORDER_BY
-    fn handle_order_by(&mut self) -> Vec<OrderByExpr> {
-        self.expect_state("ORDER_BY");
-        let mut order_by = vec![];
-        match self.next_state().as_str() {
-            "EXIT_ORDER_BY" => return order_by,
-            "order_by_list" => { },
-            any => self.panic_unexpected(any),
-        };
-        loop {
-            let expr = match self.next_state().as_str() {
-                "order_by_select_reference" => {
-                    self.expect_state("order_by_select_reference_by_alias");
-                    let aliases = &unwrap_variant!(self.state_generator
-                        .get_named_value::<SelectAccessibleColumnsValue>().unwrap(),
-                        ValueSetterValue::SelectAccessibleColumns
-                    ).accessible_columns.iter().collect::<Vec<_>>();
-                    let alias = self.value_chooser.choose_select_alias_order_by(aliases);
-                    Expr::Identifier(alias)
-                },
-                "order_by_expr" => {
-                    match self.next_state().as_str() {
-                        "call84_types" => { },
-                        "call85_types" => { },
-                        any => self.panic_unexpected(any)
-                    };
-                    self.handle_types(TypeAssertion::None).1
-                },
-                any => self.panic_unexpected(any),
-            };
-            self.expect_state("order_by_expr_done");
-            let mut order_by_expr = OrderByExpr {
-                expr: expr,
-                asc: None,
-                nulls_first: None,
-            };
-            match self.next_state().as_str() {
-                "order_by_order_selected" => { },
-                "order_by_asc" => {
-                    order_by_expr.asc = Some(true);
-                    self.expect_state("order_by_order_selected");
-                },
-                "order_by_desc" => {
-                    order_by_expr.asc = Some(false);
-                    self.expect_state("order_by_order_selected");
-                },
-                any => self.panic_unexpected(any),
-            }
-            match self.next_state().as_str() {
-                "order_by_nulls_first_selected" => { },
-                "order_by_nulls_first" => {
-                    order_by_expr.nulls_first = Some(true);
-                    self.expect_state("order_by_nulls_first_selected");
-                },
-                "order_by_nulls_last" => {
-                    order_by_expr.nulls_first = Some(false);
-                    self.expect_state("order_by_nulls_first_selected");
-                },
-                any => self.panic_unexpected(any),
-            }
-            order_by.push(order_by_expr);
-            match self.next_state().as_str() {
-                "order_by_list" => {},
-                "EXIT_ORDER_BY" => break,
-                any => self.panic_unexpected(any),
-            }
-        }
-        order_by
     }
 
     /// subgraph def_SELECT

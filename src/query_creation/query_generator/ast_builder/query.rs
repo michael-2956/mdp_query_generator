@@ -1,6 +1,6 @@
 use sqlparser::ast::{Expr, Query, Select, SetExpr, Value};
 
-use crate::{query_creation::{query_generator::{ast_builder::{from::FromBuilder, where_clause::WhereBuilder}, match_next_state, query_info::IdentName, value_choosers::QueryValueChooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
+use crate::{query_creation::{query_generator::{ast_builder::{from::FromBuilder, order_by::OrderByBuilder, where_clause::WhereBuilder}, match_next_state, query_info::IdentName, value_choosers::QueryValueChooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
 
 pub struct QueryBuilder { }
 
@@ -176,7 +176,8 @@ impl QueryBuilder {
         }
 
         generator.expect_state("call0_ORDER_BY");
-        query.order_by = generator.handle_order_by();
+        query.order_by = OrderByBuilder::empty();
+        OrderByBuilder::build(generator, &mut query.order_by);
 
         generator.expect_state("call0_LIMIT");
         query.limit = generator.handle_limit().1;
