@@ -62,6 +62,16 @@ pub struct QueryGenerator<DynMod: SubstituteModel, StC: StateChooser, QVC: Query
     clause_context: ClauseContext,
     train_model: Option<Box<dyn PathwayGraphModel>>,
     rng: ChaCha8Rng,
+    /// this is used to give a model a look at the whole query\
+    /// while it is still being constructed (in other words,\
+    /// some builder has the mutable borrow to it)
+    /// 
+    /// Since there's no multithreading for now, I used unsafe\
+    /// code to achieve that.
+    /// 
+    /// Basically we have to be able to have a look at the whole\
+    /// tree while also holding an &mut to some component of it.
+    current_query_raw_ptr: Option<*const Query>,
 }
 
 pub trait Unnested {
@@ -150,6 +160,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             config,
             train_model: None,
             rng: ChaCha8Rng::seed_from_u64(1),
+            current_query_raw_ptr: None,
         };
 
         if _self.config.print_schema {
@@ -165,7 +176,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             &mut self.clause_context,
             &mut *self.substitute_model,
             self.predictor_model.as_mut(),
-            None,
+            self.current_query_raw_ptr.map(|p| unsafe { &*p }),
         ).unwrap()
     }
 
@@ -1205,7 +1216,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             model.start_inference();
         }
         let mut query = QueryBuilder::empty();
+
+        self.current_query_raw_ptr = Some(&query);  // scary!
         QueryBuilder::build(self, &mut query);
+        self.current_query_raw_ptr.take();
+
         self.value_chooser.reset();
         // reset the generator
         if let Some(state) = self.next_state_opt() {

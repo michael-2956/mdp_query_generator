@@ -801,6 +801,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             clause_context: &ClauseContext,
             substitute_model: &mut (impl SubstituteModel + ?Sized),
             predictor_model_opt: Option<&mut Box<dyn PathwayGraphModel>>,
+            current_query_ast_opt: Option<&Query>,
         ) -> Result<(), StateGenerationError> {
         substitute_model.notify_call_stack_length(self.call_stack.len());
 
@@ -828,7 +829,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
         // probability distribution recorded in model
         let last_node_outgoing = if let Some(predictor_model) = predictor_model_opt {
-            predictor_model.predict(&self.call_stack, last_node_outgoing)
+            predictor_model.predict(&self.call_stack, last_node_outgoing, current_query_ast_opt)
         } else { ModelPredictionResult::None(last_node_outgoing) };
 
         // transform to log probabulities, if no model is present run a dynamic one
@@ -958,7 +959,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         }
 
         let (is_an_exit, new_node_name) = {
-            self.update_current_node(rng, clause_context, substitute_model, predictor_model_opt)?;
+            self.update_current_node(rng, clause_context, substitute_model, predictor_model_opt, current_query_ast_opt)?;
 
             let stack_frame = self.call_stack.last_mut().unwrap();
 

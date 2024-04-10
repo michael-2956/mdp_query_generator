@@ -2,6 +2,7 @@ use std::{collections::{BTreeMap, HashMap}, fmt::Display, io, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
+use sqlparser::ast::Query;
 
 use crate::query_creation::state_generator::markov_chain_generator::{markov_chain::{CallParams, NodeParams}, StackFrame};
 
@@ -99,7 +100,7 @@ where
         self.weights.print();
     }
 
-    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>) -> ModelPredictionResult {
+    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, _current_query_ast_opt: Option<&Query>) -> ModelPredictionResult {
         let context = &call_stack.last().unwrap().function_context;
         let func_name = FnCntxt::from_call_stack_and_exit_frame(call_stack, None);
         let current_node = &context.current_node.node_common.name;

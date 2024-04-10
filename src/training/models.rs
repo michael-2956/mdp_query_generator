@@ -1,5 +1,7 @@
 use std::{io, path::PathBuf, str::FromStr};
 
+use sqlparser::ast::Query;
+
 use crate::{query_creation::state_generator::markov_chain_generator::{StackFrame, markov_chain::NodeParams}, config::TomlReadable};
 
 use self::{llm_prompting_models::ChatGPTPromptingModel, markov_models::{DepthwiseFullFunctionContext, DepthwiseFunctionNameContext, FullFunctionContext, FunctionNameContext, ModelWithMarkovWeights, StackedFullFunctionContext, StackedFunctionNamesContext}};
@@ -122,7 +124,7 @@ pub trait PathwayGraphModel {
     fn start_inference(&mut self) { }
 
     /// predict the probability distribution over the outgoing nodes that are available
-    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>) -> ModelPredictionResult;
+    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, current_query_ast_opt: Option<&Query>) -> ModelPredictionResult;
 
     /// end the inference process
     fn end_inference(&mut self) { }

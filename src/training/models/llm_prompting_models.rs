@@ -7,6 +7,7 @@ use self::llm_prompts::LLMPrompts;
 use super::{ModelPredictionResult, PathwayGraphModel};
 
 use chatgpt::{client::ChatGPT, config::{ChatGPTEngine, ModelConfiguration}, converse::Conversation};
+use sqlparser::ast::Query;
 use tokio::runtime::{self, Runtime};
 
 mod llm_prompts;
@@ -33,7 +34,7 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
         Ok(())
     }
 
-    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>) -> ModelPredictionResult {
+    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, current_query_ast_opt: Option<&Query>) -> ModelPredictionResult {
         if let &[ref main_func] = call_stack.as_slice() {
             if main_func.function_context.current_node.node_common.name == "Query" {
                 self.initiate_conversation();
@@ -43,6 +44,8 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
         if node_outgoing.len() == 1 {
             return ModelPredictionResult::Some(node_outgoing.into_iter().map(|p| (1f64, p)).collect());
         }
+
+        eprintln!("{}", current_query_ast_opt.unwrap());
 
         /// TODO impl QueryValueChooser for ChatGPTPromptingModel
         // every method prompts chatgpt instead
