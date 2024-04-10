@@ -1,0 +1,50 @@
+digraph G {
+    // rankdir="LR";
+    graph [margin=0]
+    // ranksep=0.4;
+
+    // subgraph ranks {
+    //     rank_1[style=invis]
+    //     rank_2[style=invis]
+    //     rank_3[style=invis]
+    //     rank_1 -> rank_2 -> rank_3[style=invis]
+    //     // rankdir = LR;
+    // }
+
+    subgraph deps {
+        e_1_2_3 [label="1 - (2 + 3)", style="filled,solid", shape=rectangle, color=deepskyblue]
+        e_1_2_3_1 [label="1", style="filled", color=lightgreen]
+        e_1_2_3 -> e_1_2_3_1
+        e_1_2_3_minus [label="-", style="filled", color=lightgrey]
+        e_1_2_3 -> e_1_2_3_minus
+        e_2_3 [label="2 + 3", style="filled,solid", shape=rectangle, color=deepskyblue]
+        e_1_2_3 -> e_2_3
+        e_2_3_2 [label="2", style="filled", color=lightgreen]
+        e_2_3 -> e_2_3_2
+        e_2_3_plus [label="+", style="filled", color=lightgrey]
+        e_2_3 -> e_2_3_plus
+        e_2_3_3 [label="3", style="filled", color=lightgreen]
+        e_2_3 -> e_2_3_3
+    }
+
+    // {
+    //     rank = same;
+    //     START; FROM_T1; end_FROM
+    //     rank_1 -> START [style=invis]
+    //     rankdir = LR;
+    // }
+
+    // {
+    //     rank = same;
+    //     WHERE; WHERE_lt; WHERE_lt_0; WHERE_lt_C1; end_WHERE
+    //     rank_2 -> WHERE [style=invis]
+    //     rankdir = LR;
+    // }
+
+    // {
+    //     rank = same;
+    //     SELECT_plus; SELECT_plus_1; SELECT_plus_C1; end_SELECT; end_QUERY
+    //     rank_3 -> SELECT_plus [style=invis]
+    //     rankdir = LR;
+    // }
+}

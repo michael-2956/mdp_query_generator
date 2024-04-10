@@ -4,6 +4,7 @@ use crate::query_creation::{query_generator::{value_choosers::QueryValueChooser,
 
 use super::types::TypesBuilder;
 
+/// subgraph def_WHERE
 pub struct WhereBuilder { }
 
 impl WhereBuilder {

@@ -7,14 +7,13 @@ pub struct FromBuilder { }
 
 impl FromBuilder {
     pub fn empty() -> Vec<TableWithJoins> {
-        vec![TableWithJoins { relation: FromItemBuilder::empty(), joins: vec![] }]
+        vec![]  // the decision to include the clause is in the builder itself
     }
 
     pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
         generator: &mut QueryGenerator<SubMod, StC, QVC>, from: &mut Vec<TableWithJoins>
     ) {
         generator.expect_state("FROM");
-        *from = vec![];
 
         loop {
             generator.clause_context.top_from_mut().add_subfrom();

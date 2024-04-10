@@ -1,0 +1,69 @@
+digraph G {
+    // rankdir="LR";
+    graph [margin=0]
+    ranksep=0.4;
+
+    // subgraph ranks {
+    //     rank_1[style=invis]
+    //     rank_2[style=invis]
+    //     rank_3[style=invis]
+    //     rank_1 -> rank_2 -> rank_3[style=invis]
+    //     // rankdir = LR;
+    // }
+
+    subgraph Formula {
+        Formula [label="Formula", style="filled,solid", color=black, shape=rectangle, fillcolor=deepskyblue]
+        EXIT_Formula [label="EXIT Formula", shape=rectangle]
+        
+        call1_Formula [label="Formula", style="filled", color=deepskyblue, shape=rectangle]
+        Formula -> call1_Formula
+        Formula_plus [label="+", style=filled, color=lightgrey]
+        call1_Formula -> Formula_plus
+        Formula_minus [label="-", style=filled, color=lightgrey]
+        call1_Formula -> Formula_minus
+        call2_Formula [label="Formula", style="filled", color=deepskyblue, shape=rectangle]
+        Formula_plus -> call2_Formula
+        Formula_minus -> call2_Formula
+        call2_Formula -> EXIT_Formula
+
+        call1_Literal [label="Literal", style="filled", color=lightgreen, shape=rectangle]
+        Formula -> call1_Literal
+        call1_Literal -> EXIT_Formula
+    }
+
+    subgraph Literal {
+        Literal [label="Literal", style="filled,solid", color=black, shape=rectangle, fillcolor=lightgreen]
+        EXIT_Literal [label="EXIT Literal", shape=rectangle]
+
+        Literal_one [label="1", style=filled, color=lightgrey]
+        Literal -> Literal_one
+        Literal_one -> EXIT_Literal
+        Literal_two [label="2", style=filled, color=lightgrey]
+        Literal -> Literal_two
+        Literal_two -> EXIT_Literal
+        Literal_three [label="3", style=filled, color=lightgrey]
+        Literal -> Literal_three
+        Literal_three -> EXIT_Literal
+    }
+
+    // {
+    //     rank = same;
+    //     START; FROM_T1; end_FROM
+    //     rank_1 -> START [style=invis]
+    //     rankdir = LR;
+    // }
+
+    // {
+    //     rank = same;
+    //     WHERE; WHERE_lt; WHERE_lt_0; WHERE_lt_C1; end_WHERE
+    //     rank_2 -> WHERE [style=invis]
+    //     rankdir = LR;
+    // }
+
+    // {
+    //     rank = same;
+    //     SELECT_plus; SELECT_plus_1; SELECT_plus_C1; end_SELECT; end_QUERY
+    //     rank_3 -> SELECT_plus [style=invis]
+    //     rankdir = LR;
+    // }
+}

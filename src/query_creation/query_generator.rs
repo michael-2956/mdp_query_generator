@@ -274,15 +274,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         order_by
     }
 
-    /// subgraph def_WHERE
-    fn handle_where(&mut self) -> (SubgraphType, Expr) {
-        self.expect_state("WHERE");
-        self.expect_state("call53_types");
-        let (selection_type, selection) = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Val3));
-        self.expect_state("EXIT_WHERE");
-        (selection_type, selection)
-    }
-
     /// subgraph def_SELECT
     fn handle_select(&mut self) -> Vec<SelectItem> {
         self.expect_state("SELECT");
