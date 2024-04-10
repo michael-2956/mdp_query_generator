@@ -942,11 +942,11 @@ digraph G {
         call61_types -> AnyAllAnyAll 
         AnyAllAnyAllAny[label="ANY"]
         AnyAllAnyAll -> AnyAllAnyAllAny
+        AnyAllAnyAllAll[label="ALL"]
+        AnyAllAnyAll -> AnyAllAnyAllAll
         //
         AnyAllSelectIter[label="select iterable"]
         AnyAllAnyAllAny -> AnyAllSelectIter
-        AnyAllAnyAllAll[label="ALL"]
-        AnyAllAnyAll -> AnyAllAnyAllAll
         AnyAllAnyAllAll -> AnyAllSelectIter
         call4_Query [TYPES="[compatible]", MODS="[single column]", label="Query\nTYPE: [compatible(TP1)]\nMODS: [single column]", shape=rectangle, style=filled, color=green]
         AnyAllSelectIter -> call4_Query

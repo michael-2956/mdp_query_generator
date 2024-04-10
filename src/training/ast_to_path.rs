@@ -675,21 +675,29 @@ impl PathGenerator {
                     BinaryOperator::GtEq => {
                         match &**right {
                             Expr::AnyOp(right_inner) | Expr::AllOp(right_inner) => {
-                                self.try_push_states(&["AnyAll", "call2_types_type"])?;
+                                self.try_push_states(&["AnyAll", "AnyAllSelectOp"])?;
+                                self.try_push_state(match op {
+                                    BinaryOperator::Eq => "AnyAllEqual",
+                                    BinaryOperator::NotEq => "AnyAllUnEqual",
+                                    BinaryOperator::Lt => "AnyAllLess",
+                                    BinaryOperator::LtEq => "AnyAllLessEqual",
+                                    BinaryOperator::Gt => "AnyAllGreater",
+                                    BinaryOperator::GtEq => "AnyAllGreaterEqual",
+                                    any => unexpected_expr!(any),
+                                })?;
+                                self.try_push_state("call2_types_type")?;
                                 self.handle_types_type_and_try(TypeAssertion::None, |_self, returned_type| {
                                     _self.state_generator.set_compatible_list(returned_type.get_compat_types());
                                     _self.try_push_state("call61_types")?;
                                     _self.handle_types(left, TypeAssertion::CompatibleWith(returned_type))?;
-                                    _self.try_push_state("AnyAllSelectOp")?;
-                                    _self.try_push_state(match op {
-                                        BinaryOperator::Eq => "AnyAllEqual",
-                                        BinaryOperator::NotEq => "AnyAllUnEqual",
-                                        BinaryOperator::Lt => "AnyAllLess",
-                                        BinaryOperator::LtEq => "AnyAllLessEqual",
-                                        BinaryOperator::Gt => "AnyAllGreater",
-                                        BinaryOperator::GtEq => "AnyAllGreaterEqual",
+
+                                    _self.try_push_state("AnyAllAnyAll")?;
+                                    _self.try_push_state(match &**right {
+                                        Expr::AllOp(..) => "AnyAllAnyAllAll",
+                                        Expr::AnyOp(..) => "AnyAllAnyAllAny",
                                         any => unexpected_expr!(any),
                                     })?;
+                                    
                                     _self.try_push_state("AnyAllSelectIter")?;
                                     match &**right_inner {
                                         Expr::Subquery(query) => {
@@ -698,12 +706,7 @@ impl PathGenerator {
                                         },
                                         any => unexpected_expr!(any),
                                     }
-                                    _self.try_push_state("AnyAllAnyAll")?;
-                                    _self.try_push_state(match &**right {
-                                        Expr::AllOp(..) => "AnyAllAnyAllAll",
-                                        Expr::AnyOp(..) => "AnyAllAnyAllAny",
-                                        any => unexpected_expr!(any),
-                                    })?;
+                                    
                                     Ok(())
                                 })?;
                             },
