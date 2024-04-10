@@ -1,6 +1,6 @@
 use sqlparser::ast::{Expr, Ident};
 
-use crate::{query_creation::{query_generator::{value_choosers::QueryValueChooser, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel, CallTypes}}, unwrap_variant};
+use crate::{query_creation::{query_generator::{match_next_state, value_choosers::QueryValueChooser, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel, CallTypes}}, unwrap_variant};
 
 pub struct TypesBuilder { }
 
@@ -15,7 +15,7 @@ impl TypesBuilder {
         generator.expect_state("types");
 
         let selected_types = unwrap_variant!(generator.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
-        let selected_type = match generator.next_state().as_str() {
+        let selected_type = match_next_state!(generator, {
             "types_select_type_bigint" => SubgraphType::BigInt,
             "types_select_type_integer" => SubgraphType::Integer,
             "types_select_type_numeric" => SubgraphType::Numeric,
@@ -24,8 +24,7 @@ impl TypesBuilder {
             "types_select_type_date" => SubgraphType::Date,
             "types_select_type_interval" => SubgraphType::Interval,
             "types_select_type_timestamp" => SubgraphType::Timestamp,
-            any => generator.panic_unexpected(any),
-        };
+        });
         let allowed_type_list = SubgraphType::filter_by_selected(&selected_types, selected_type);
 
         generator.state_generator.set_known_list(allowed_type_list);

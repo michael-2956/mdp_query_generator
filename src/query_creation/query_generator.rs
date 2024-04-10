@@ -78,18 +78,18 @@ impl Unnested for Expr {
 }
 
 macro_rules! match_next_state {
-    ($generator:expr, { $($state:pat => $body:block),* $(,)? }) => {
+    ($generator:expr, { $($state:pat $(if $guard:expr)? => $body:block),* $(,)? }) => {
         match $generator.next_state().as_str() {
             $(
-                $state => $body,
+                $state $(if $guard)? => $body,
             )*
             _any => $generator.panic_unexpected(_any),
         }
     };
-    ($generator:expr, { $($state:pat => $body:expr),* $(,)? }) => {
+    ($generator:expr, { $($state:pat $(if $guard:expr)? => $body:expr),* $(,)? }) => {
         match $generator.next_state().as_str() {
             $(
-                $state => { $body },
+                $state $(if $guard)? => { $body },
             )*
             _any => $generator.panic_unexpected(_any),
         }
@@ -164,7 +164,8 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             &mut self.rng,
             &mut self.clause_context,
             &mut *self.substitute_model,
-            self.predictor_model.as_mut()
+            self.predictor_model.as_mut(),
+            None,
         ).unwrap()
     }
 
@@ -213,19 +214,18 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         self.expect_state("aggregate_function");
         // if any aggregate funciton is present in query, aggregation was succesfully indicated.
         self.clause_context.query_mut().set_aggregation_indicated();
-        let distinct = match self.next_state().as_str() {
+        let distinct = match_next_state!(self, {
             "aggregate_not_distinct" => false,
             "aggregate_distinct" => true,
-            any => self.panic_unexpected(any),
-        };
+        });
         self.expect_state("aggregate_select_return_type");
 
         let (
             aggr_args_type, aggr_arg_expr_v, aggr_return_type
-        ): (AggregateFunctionAgruments, Vec<FunctionArg>, SubgraphType) = match self.next_state().as_str() {
+        ): (AggregateFunctionAgruments, Vec<FunctionArg>, SubgraphType) = match_next_state!(self, {
             "aggregate_select_type_bigint" => {
                 let return_type = SubgraphType::BigInt;
-                let (args_type, args_expr) = match self.next_state().as_str() {
+                let (args_type, args_expr) = match_next_state!(self, {
                     "arg_star" => {
                         (AggregateFunctionAgruments::Wildcard, vec![FunctionArg::Unnamed(FunctionArgExpr::Wildcard)])
                     },
@@ -242,8 +242,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                             self.handle_types(TypeAssertion::CompatibleWith(SubgraphType::BigInt)).1
                         ))])
                     },
-                    any => self.panic_unexpected(any),
-                };
+                });
                 (args_type, args_expr, return_type)
             },
             arm @ ("aggregate_select_type_numeric" | "aggregate_select_type_text") => {
@@ -255,7 +254,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 let mut args_type_v = vec![];
                 let mut args_expr_v = vec![];
                 self.state_generator.set_compatible_list(return_type.get_compat_types());
-                match self.next_state().as_str() {
+                match_next_state!(self, {
                     arm if arm == states[0] => {
                         self.expect_state(states[1]);
                         let arg_expr = self.handle_types(TypeAssertion::CompatibleWith(return_type.clone())).1;
@@ -263,8 +262,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                         args_expr_v.push(FunctionArg::Unnamed(FunctionArgExpr::Expr(arg_expr)));
                     },
                     arm if arm == states[2] => { },
-                    any => self.panic_unexpected(any),
-                };
+                });
                 self.expect_state(states[3]);
                 let arg_expr = self.handle_types(TypeAssertion::CompatibleWith(return_type.clone())).1;
                 args_type_v.push(return_type.clone());
@@ -289,8 +287,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 ))];
                 (args_type, args_expr, return_type)
             },
-            any => self.panic_unexpected(any),
-        };
+        });
 
         let (func_names_iter, dist) = self.config.aggregate_functions_distribution.get_functions_and_dist(&aggr_args_type, &aggr_return_type);
         let aggr_name = self.value_chooser.choose_aggregate_function_name(func_names_iter, dist);
@@ -321,11 +318,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     fn handle_limit(&mut self) -> (SubgraphType, Option<Expr>) {
         self.expect_state("LIMIT");
 
-        let (limit_type, limit) = match self.next_state().as_str() {
+        let (limit_type, limit) = match_next_state!(self, {
             "query_can_skip_limit_set_val" => {
                 self.expect_state("query_can_skip_limit");
                 (SubgraphType::Undetermined, None)
-            }
+            },
             "single_row_true" => {
                 (SubgraphType::Integer, Some(Expr::Value(Value::Number("1".to_string(), false))))
             },
@@ -336,8 +333,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 );
                 (limit_type, Some(limit_expr))
             },
-            any => self.panic_unexpected(any)
-        };
+        });
         self.expect_state("EXIT_LIMIT");
 
         (limit_type, limit)
@@ -348,7 +344,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         self.expect_state("types");
 
         let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
-        let selected_type = match self.next_state().as_str() {
+        let selected_type = match_next_state!(self, {
             "types_select_type_bigint" => SubgraphType::BigInt,
             "types_select_type_integer" => SubgraphType::Integer,
             "types_select_type_numeric" => SubgraphType::Numeric,
@@ -357,8 +353,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             "types_select_type_date" => SubgraphType::Date,
             "types_select_type_interval" => SubgraphType::Interval,
             "types_select_type_timestamp" => SubgraphType::Timestamp,
-            any => self.panic_unexpected(any),
-        };
+        });
         let allowed_type_list = SubgraphType::filter_by_selected(&selected_types, selected_type);
 
         self.state_generator.set_known_list(allowed_type_list);
@@ -373,7 +368,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     fn handle_types_type(&mut self) -> SubgraphType {
         self.expect_state("types_type");
 
-        let tp = match self.next_state().as_str() {
+        let tp = match_next_state!(self, {
             "types_type_bigint" => SubgraphType::BigInt,
             "types_type_integer" => SubgraphType::Integer,
             "types_type_numeric" => SubgraphType::Numeric,
@@ -382,8 +377,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             "types_type_date" => SubgraphType::Date,
             "types_type_interval" => SubgraphType::Interval,
             "types_type_timestamp" => SubgraphType::Timestamp,
-            any => self.panic_unexpected(any),
-        };
+        });
 
         self.expect_state("EXIT_types_type");
 
@@ -395,7 +389,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         self.expect_state("types_value");
         let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
         self.state_generator.set_known_list(selected_types.clone());
-        let (selected_type, types_value) = match self.next_state().as_str() {
+        let (selected_type, types_value) = match_next_state!(self, {
             "types_value_nested" => {
                 self.expect_state("call1_types_value");
                 let (tp, expr) = self.handle_types_value(TypeAssertion::None);
@@ -439,8 +433,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 };
                 (selected_type, types_value)
             },
-            any => self.panic_unexpected(any),
-        };
+        });
         type_assertion.check(&selected_type, &types_value);
         self.expect_state("EXIT_types_value");
         (selected_type, types_value.nest_children_if_needed())
@@ -450,7 +443,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     fn handle_formulas(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("formulas");
         self.assert_single_type_argument();
-        let (selected_type, types_value) = match self.next_state().as_str() {
+        let (selected_type, types_value) = match_next_state!(self, {
             "call2_number" |
             "call1_number" |
             "call0_number" => self.handle_number(),
@@ -459,8 +452,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             "call0_date" => self.handle_date(),
             "call0_timestamp" => self.handle_timestamp(),
             "call0_interval" => self.handle_interval(),
-            any => self.panic_unexpected(any)
-        };
+        });
         self.expect_state("EXIT_formulas");
         (selected_type, types_value)
     }
@@ -469,13 +461,12 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     fn handle_literals(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("literals");
 
-        let (tp, mut expr) = match self.next_state().as_str() {
+        let (tp, mut expr) = match_next_state!(self, {
             "bool_literal" => {
-                (SubgraphType::Val3, match self.next_state().as_str() {
+                (SubgraphType::Val3, match_next_state!(self, {
                     "true" => Expr::Value(Value::Boolean(true)),
                     "false" => Expr::Value(Value::Boolean(false)),
-                    any => self.panic_unexpected(any),
-                })
+                }))
             },
             st @ (
                 "number_literal_bigint" | "number_literal_integer" | "number_literal_numeric"
@@ -507,11 +498,10 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 data_type: DataType::Timestamp(None, TimezoneInfo::None), value: self.value_chooser.choose_timestamp(),
             }),
             "interval_literal" => (SubgraphType::Interval, {
-                let with_field = match self.next_state().as_str() {
+                let with_field = match_next_state!(self, {
                     "interval_literal_format_string" => false,
                     "interval_literal_with_field" => true,
-                    any => self.panic_unexpected(any),
-                };
+                });
                 let (str_value, leading_field) = self.value_chooser.choose_interval(with_field);
                 Expr::Interval {
                     value: Box::new(Expr::Value(Value::SingleQuotedString(str_value.to_string()))),
@@ -521,25 +511,17 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     fractional_seconds_precision: None
                 }
             }),
-            any => self.panic_unexpected(any),
-        };
+        });
 
-        let next_st = match self.next_state().as_str() {
+        loop { match_next_state!(self, {
             "literals_explicit_cast" => {
                 expr = Expr::Cast { expr: Box::new(expr), data_type: tp.to_data_type() };
-                self.next_state()
-            },
-            any => SmolStr::new(any),
-        };
-
-        match next_st.as_str() {
+            }, // then "number_literal_minus" | "EXIT_literals"
             "number_literal_minus" => {
                 expr = Expr::UnaryOp { op: UnaryOperator::Minus, expr: Box::new(expr) };
-                self.expect_state("EXIT_literals");
-            },
-            "EXIT_literals" => { },
-            any => self.panic_unexpected(any),
-        }
+            }, // then "EXIT_literals"
+            "EXIT_literals" => break
+        }); }
 
         (tp, expr)
     }
@@ -551,29 +533,25 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList, || self.state_generator.print_stack()
         );
         self.expect_state("column_spec_mentioned_in_group_by");
-        let only_group_by_columns = match self.next_state().as_str() {
+        let only_group_by_columns = match_next_state!(self, {
             "column_spec_mentioned_in_group_by_yes" => true,
             "column_spec_mentioned_in_group_by_no" => false,
-            any => self.panic_unexpected(any),
-        };
+        });
         self.expect_state("column_spec_shaded_by_select");
-        let shade_by_select_aliases = match self.next_state().as_str() {
+        let shade_by_select_aliases = match_next_state!(self, {
             "column_spec_shaded_by_select_yes" => true,
             "column_spec_shaded_by_select_no" => false,
-            any => self.panic_unexpected(any),
-        };
+        });
         self.expect_state("column_spec_aggregatable_columns");
-        let only_columns_that_can_be_aggregated = match self.next_state().as_str() {
+        let only_columns_that_can_be_aggregated = match_next_state!(self, {
             "column_spec_aggregatable_columns_yes" => true,
             "column_spec_aggregatable_columns_no" => false,
-            any => self.panic_unexpected(any),
-        };
+        });
         self.expect_state("column_spec_choose_qualified");
-        let check_accessibility = match self.next_state().as_str() {
+        let check_accessibility = match_next_state!(self, {
             "qualified_column_name" => CheckAccessibility::QualifiedColumnName,
             "unqualified_column_name" => CheckAccessibility::ColumnName,
-            any => self.panic_unexpected(any)
-        };
+        });
         let column_retrieval_options = ColumnRetrievalOptions::new(
             only_group_by_columns, shade_by_select_aliases, only_columns_that_can_be_aggregated
         );
@@ -597,22 +575,20 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         self.state_generator.set_compatible_list(inner_type.get_compat_types());
         self.expect_state("call16_types");
         let types_value = self.handle_types(TypeAssertion::CompatibleWith(inner_type.clone())).1;
-        match self.next_state().as_str() {
+        match_next_state!(self, {
             "list_expr_multiple_values" => {
                 let mut list_expr: Vec<Expr> = vec![types_value];
                 loop {
-                    match self.next_state().as_str() {
+                    match_next_state!(self, {
                         "call49_types" => {
                             list_expr.push(self.handle_types(TypeAssertion::CompatibleWith(inner_type.clone())).1);
                         },
                         "EXIT_list_expr" => break,
-                        any => self.panic_unexpected(any)
-                    }
+                    })
                 }
                 (SubgraphType::ListExpr(Box::new(inner_type)), list_expr)
-            }
-            any => self.panic_unexpected(any)
-        }
+            },
+        })
     }
 
     /// subgraph def_case
@@ -627,7 +603,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         let mut results = vec![first_result];
         let mut conditions = vec![];
 
-        let operand = match self.next_state().as_str() {
+        let operand = match_next_state!(self, {
             "simple_case" => {
                 self.expect_states(&["simple_case_operand", "call8_types_type"]);
                 let operand_type = self.handle_types_type();
@@ -641,7 +617,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     let condition_expr = self.handle_types(TypeAssertion::CompatibleWith(operand_type.clone())).1;
                     conditions.push(condition_expr);
 
-                    match self.next_state().as_str() {
+                    match_next_state!(self, {
                         "simple_case_result" => {
                             self.expect_state("call80_types");
                             self.state_generator.set_compatible_list(out_type.get_compat_types());
@@ -649,8 +625,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                             results.push(result_expr);
                         },
                         "case_else" => break,
-                        any => self.panic_unexpected(any),
-                    }
+                    })
                 }
 
                 Some(Box::new(operand_expr))
@@ -662,7 +637,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     let condition_expr = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Val3)).1;
                     conditions.push(condition_expr);
 
-                    match self.next_state().as_str() {
+                    match_next_state!(self, {
                         "searched_case_result" => {
                             self.expect_state("call77_types");
                             self.state_generator.set_compatible_list(out_type.get_compat_types());
@@ -670,15 +645,13 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                             results.push(result_expr);
                         },
                         "case_else" => break,
-                        any => self.panic_unexpected(any),
-                    }
+                    })
                 }
                 None
             },
-            any => self.panic_unexpected(any),
-        };
+        });
 
-        let else_result = match self.next_state().as_str() {
+        let else_result = match_next_state!(self, {
             "call81_types" => {
                 self.state_generator.set_compatible_list(out_type.get_compat_types());
                 let else_expr = self.handle_types(TypeAssertion::CompatibleWith(out_type.clone())).1;
@@ -686,8 +659,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 Some(Box::new(else_expr))
             },
             "EXIT_case" => None,
-            any => self.panic_unexpected(any),
-        };
+        });
 
         (out_type, Expr::Case {
             operand, conditions, results, else_result
@@ -697,16 +669,15 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     /// subgraph def_VAL_3
     fn handle_val_3(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("VAL_3");
-        let val3 = match self.next_state().as_str() {
+        let val3 = match_next_state!(self, {
             "IsNull" => {
-                let is_null_not_flag = match self.next_state().as_str() {
+                let is_null_not_flag = match_next_state!(self, {
                     "IsNull_not" => {
                         self.expect_state("call55_types");
                         true
-                    }
+                    },
                     "call55_types" => false,
-                    any => self.panic_unexpected(any)
-                };
+                });
 
                 // let val3 = &mut *Box::new(Expr::Identifier(Ident::new("[?]")));
 
@@ -732,14 +703,13 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 self.expect_state("call56_types");
                 self.state_generator.set_compatible_list(tp.get_compat_types());
                 let types_value_1 = self.handle_types(TypeAssertion::CompatibleWith(tp.clone())).1;
-                let is_distinct_not_flag = match self.next_state().as_str() {
+                let is_distinct_not_flag = match_next_state!(self, {
                     "IsDistinctNOT" => {
                         self.expect_state("DISTINCT");
                         true
-                    }
+                    },
                     "DISTINCT" => false,
-                    any => self.panic_unexpected(any)
-                };
+                });
                 self.expect_state("call21_types");
                 let types_value_2 = self.handle_types(TypeAssertion::CompatibleWith(tp)).1;
                 if is_distinct_not_flag {
@@ -749,14 +719,13 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 }
             },
             "Exists" => {
-                let exists_not_flag = match self.next_state().as_str() {
+                let exists_not_flag = match_next_state!(self, {
                     "Exists_not" => {
                         self.expect_state("call2_Query");
                         true
                     },
                     "call2_Query" => false,
-                    any => self.panic_unexpected(any)
-                };
+                });
                 let mut expr = Expr::Exists {
                     subquery: Box::new(QueryBuilder::empty()),
                     negated: exists_not_flag
@@ -771,14 +740,13 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 self.state_generator.set_compatible_list(tp.get_compat_types());
                 self.expect_state("call57_types");
                 let types_value = self.handle_types(TypeAssertion::CompatibleWith(tp)).1;
-                let in_list_not_flag = match self.next_state().as_str() {
+                let in_list_not_flag = match_next_state!(self, {
                     "InListNot" => {
                         self.expect_state("InListIn");
                         true
                     },
                     "InListIn" => false,
-                    any => self.panic_unexpected(any)
-                };
+                });
                 self.expect_state("call1_list_expr");
                 Expr::InList {
                     expr: Box::new(types_value),
@@ -792,14 +760,13 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 self.state_generator.set_compatible_list(tp.get_compat_types());
                 self.expect_state("call58_types");
                 let types_value = self.handle_types(TypeAssertion::CompatibleWith(tp)).1;
-                let in_subquery_not_flag = match self.next_state().as_str() {
+                let in_subquery_not_flag = match_next_state!(self, {
                     "InSubqueryNot" => {
                         self.expect_state("InSubqueryIn");
                         true
                     },
                     "InSubqueryIn" => false,
-                    any => self.panic_unexpected(any)
-                };
+                });
                 self.expect_state("call3_Query");
                 let mut expr = Expr::InSubquery {
                     expr: Box::new(types_value),
@@ -816,14 +783,13 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 self.state_generator.set_compatible_list(tp.get_compat_types());
                 self.expect_state("call59_types");
                 let types_value_1 = self.handle_types(TypeAssertion::CompatibleWith(tp.clone())).1;
-                let between_not_flag = match self.next_state().as_str() {
+                let between_not_flag = match_next_state!(self, {
                     "BetweenBetweenNot" => {
                         self.expect_state("BetweenBetween");
                         true
                     },
                     "BetweenBetween" => false,
-                    any => self.panic_unexpected(any)
-                };
+                });
                 self.expect_state("call22_types");
                 let types_value_2 = self.handle_types(TypeAssertion::CompatibleWith(tp.clone())).1;
                 self.expect_state("BetweenBetweenAnd");
@@ -842,15 +808,14 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 self.state_generator.set_compatible_list(tp.get_compat_types());
                 self.expect_state("call60_types");
                 let types_value_1 = self.handle_types(TypeAssertion::CompatibleWith(tp.clone())).1;
-                let binary_comp_op = match self.next_state().as_str() {
+                let binary_comp_op = match_next_state!(self, {
                     "BinaryCompEqual" => BinaryOperator::Eq,
                     "BinaryCompUnEqual" => BinaryOperator::NotEq,
                     "BinaryCompLess" => BinaryOperator::Lt,
                     "BinaryCompLessEqual" => BinaryOperator::LtEq,
                     "BinaryCompGreater" => BinaryOperator::Gt,
                     "BinaryCompGreaterEqual" => BinaryOperator::GtEq,
-                    any => self.panic_unexpected(any)
-                };
+                });
                 self.expect_state("call24_types");
                 let types_value_2 = self.handle_types(TypeAssertion::CompatibleWith(tp)).1;
                 Expr::BinaryOp {
@@ -863,15 +828,14 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 let mut val3_expr;
                 
                 self.expect_state("AnyAllSelectOp");
-                let any_all_op = match self.next_state().as_str() {
+                let any_all_op = match_next_state!(self, {
                     "AnyAllEqual" => BinaryOperator::Eq,
                     "AnyAllUnEqual" => BinaryOperator::NotEq,
                     "AnyAllLess" => BinaryOperator::Lt,
                     "AnyAllLessEqual" => BinaryOperator::LtEq,
                     "AnyAllGreater" => BinaryOperator::Gt,
                     "AnyAllGreaterEqual" => BinaryOperator::GtEq,
-                    any => self.panic_unexpected(any)
-                };
+                });
                 val3_expr = Expr::BinaryOp {
                     left: Box::new(TypesBuilder::empty()),
                     op: any_all_op,
@@ -888,36 +852,33 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
 
                 let right = &mut **unwrap_pat!(&mut val3_expr, Expr::BinaryOp { right, .. }, right);
                 self.expect_state("AnyAllAnyAll");
-                *right = match self.next_state().as_str() {
+                *right = match_next_state!(self, {
                     "AnyAllAnyAllAll" => Expr::AllOp(Box::new(TypesBuilder::empty())),
                     "AnyAllAnyAllAny" => Expr::AnyOp(Box::new(TypesBuilder::empty())),
-                    any => self.panic_unexpected(any),
-                };
+                });
 
                 let right_inner = &mut **unwrap_variant!(right, Expr::AllOp);
                 self.expect_state("AnyAllSelectIter");
-                match self.next_state().as_str() {
+                match_next_state!(self, {
                     "call4_Query" => {
                         *right_inner = Expr::Subquery(Box::new(QueryBuilder::empty()));
                         let subquery = &mut **unwrap_variant!(right_inner, Expr::Subquery);
                         QueryBuilder::build(self, subquery);
                     },
-                    any => self.panic_unexpected(any)
-                }
+                });
 
                 val3_expr
             },
             "BinaryStringLike" => {
                 self.expect_state("call25_types");
                 let types_value_1 = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Text)).1;
-                let string_like_not_flag = match self.next_state().as_str() {
+                let string_like_not_flag = match_next_state!(self, {
                     "BinaryStringLikeNot" => {
                         self.expect_state("BinaryStringLikeIn");
                         true
-                    }
+                    },
                     "BinaryStringLikeIn" => false,
-                    any => self.panic_unexpected(any)
-                };
+                });
                 self.expect_state("call26_types");
                 let types_value_2 = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Text)).1;
                 Expr::Like {
@@ -930,12 +891,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             "BinaryBooleanOpV3" => {
                 self.expect_state("call27_types");
                 let types_value_1 = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Val3)).1;
-                let binary_bool_op = match self.next_state().as_str() {
+                let binary_bool_op = match_next_state!(self, {
                     "BinaryBooleanOpV3AND" => BinaryOperator::And,
                     "BinaryBooleanOpV3OR" => BinaryOperator::Or,
                     "BinaryBooleanOpV3XOR" => BinaryOperator::Xor,
-                    any => self.panic_unexpected(any)
-                };
+                });
                 self.expect_state("call28_types");
                 let types_value_2 = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Val3)).1;
                 Expr::BinaryOp {
@@ -951,8 +911,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     expr: Box::new(self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Val3)).1)
                 }
             },
-            any => self.panic_unexpected(any)
-        };
+        });
         self.expect_state("EXIT_VAL_3");
         (SubgraphType::Val3, val3)
     }
@@ -961,12 +920,12 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     fn handle_number(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("number");
         let requested_number_type = self.assert_single_type_argument();
-        let (number_type, number) = match self.next_state().as_str() {
+        let (number_type, number) = match_next_state!(self, {
             "BinaryNumberOp" => {
                 self.expect_state("call48_types");
                 self.state_generator.set_compatible_list(requested_number_type.get_compat_types());
                 let types_value_1 = self.handle_types(TypeAssertion::CompatibleWith(requested_number_type.clone())).1;
-                let numeric_binary_op = match self.next_state().as_str() {
+                let numeric_binary_op = match_next_state!(self, {
                     "binary_number_bin_and" => BinaryOperator::BitwiseAnd,
                     "binary_number_bin_or" => BinaryOperator::BitwiseOr,
                     "binary_number_bin_xor" => BinaryOperator::PGBitwiseXor,
@@ -975,8 +934,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     "binary_number_minus" => BinaryOperator::Minus,
                     "binary_number_mul" => BinaryOperator::Multiply,
                     "binary_number_plus" => BinaryOperator::Plus,
-                    any => self.panic_unexpected(any),
-                };
+                });
                 self.expect_state("call47_types");
                 let types_value_2 = self.handle_types(TypeAssertion::CompatibleWith(requested_number_type.clone())).1;
                 (requested_number_type, Expr::BinaryOp {
@@ -986,15 +944,14 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 })
             },
             "UnaryNumberOp" => {
-                let numeric_unary_op = match self.next_state().as_str() {
+                let numeric_unary_op = match_next_state!(self, {
                     "unary_number_abs" => UnaryOperator::PGAbs,
                     "unary_number_bin_not" => UnaryOperator::PGBitwiseNot,
                     "unary_number_cub_root" => UnaryOperator::PGCubeRoot,
                     "unary_number_minus" => UnaryOperator::Minus,
                     "unary_number_plus" => UnaryOperator::Plus,
                     "unary_number_sq_root" => UnaryOperator::PGSquareRoot,
-                    any => self.panic_unexpected(any),
-                };
+                });
                 if numeric_unary_op == UnaryOperator::Minus {
                     self.expect_state("call89_types");
                 } else {
@@ -1029,8 +986,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 let date = self.handle_types(TypeAssertion::CompatibleWithOneOf(&[SubgraphType::Interval, SubgraphType::Timestamp])).1;
                 (SubgraphType::Numeric, Expr::Extract { field, expr: Box::new(date) })
             },
-            any => self.panic_unexpected(any)
-        };
+        });
         self.expect_state("EXIT_number");
         (number_type, number)
     }
@@ -1038,23 +994,21 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     /// subgraph def_text
     fn handle_text(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("text");
-        let string = match self.next_state().as_str() {
+        let string = match_next_state!(self, {
             "text_trim" => {
-                let (trim_where, trim_what) = match self.next_state().as_str() {
+                let (trim_where, trim_what) = match_next_state!(self, {
                     "call6_types" => {
                         let types_value = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Text)).1;
-                        let spec_mode = match self.next_state().as_str() {
+                        let spec_mode = match_next_state!(self, {
                             "BOTH" => TrimWhereField::Both,
                             "LEADING" => TrimWhereField::Leading,
                             "TRAILING" => TrimWhereField::Trailing,
-                            any => self.panic_unexpected(any)
-                        };
+                        });
                         self.expect_state("call5_types");
                         (Some(spec_mode), Some(Box::new(types_value)))
                     },
                     "call5_types" => (None, None),
-                    any => self.panic_unexpected(any)
-                };
+                });
                 let types_value = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Text)).1;
                 Expr::Trim {
                     expr: Box::new(types_value), trim_where, trim_what
@@ -1078,7 +1032,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 let mut substring_from = None;
                 let mut substring_for = None;
                 loop {
-                    match self.next_state().as_str() {
+                    match_next_state!(self, {
                         "text_substring_from" => {
                             self.expect_state("call10_types");
                             substring_from = Some(Box::new(self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Integer)).1));
@@ -1090,8 +1044,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                             break;
                         },
                         "text_substring_end" => break,
-                        any => self.panic_unexpected(any),
-                    }
+                    })
                 }
                 Expr::Substring {
                     expr: Box::new(target_string),
@@ -1099,8 +1052,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     substring_for,
                 }
             },
-            any => self.panic_unexpected(any)
-        };
+        });
         self.expect_state("EXIT_text");
         (SubgraphType::Text, string)
     }
@@ -1109,40 +1061,36 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     fn handle_date(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("date");
 
-        let expr = match self.next_state().as_str() {
+        let expr = match_next_state!(self, {
             "date_binary" => {
-                let (mut date, op, mut integer) = match self.next_state().as_str() {
+                let (mut date, op, mut integer) = match_next_state!(self, {
                     "date_add_subtract" => {
                         self.expect_state("call86_types");
                         let date = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Date)).1;
                         self.expect_state("call88_types");
                         let integer = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Integer)).1;
-                        let op = match self.next_state().as_str() {
+                        let op = match_next_state!(self, {
                             "date_add_subtract_plus" => BinaryOperator::Plus,
                             "date_add_subtract_minus" => BinaryOperator::Minus,
-                            any => self.panic_unexpected(any),
-                        };
+                        });
                         (date, op, integer)
                     },
-                    any => self.panic_unexpected(any),
-                };
-                match self.next_state().as_str() {
+                });
+                match_next_state!(self, {
                     "date_swap_arguments" => {
                         assert!(op == BinaryOperator::Plus);
                         std::mem::swap(&mut date, &mut integer);
                         self.expect_state("EXIT_date");
                     },
                     "EXIT_date" => { },
-                    any => self.panic_unexpected(any),
-                }
+                });
                 Expr::BinaryOp {
                     left: Box::new(date),
                     op,
                     right: Box::new(integer)
                 }
             },
-            any => self.panic_unexpected(any),
-        };
+        });
         
         (SubgraphType::Date, expr)
     }
@@ -1151,40 +1099,36 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     fn handle_timestamp(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("timestamp");
 
-        let expr = match self.next_state().as_str() {
+        let expr = match_next_state!(self, {
             "timestamp_binary" => {
-                let (mut date, op, mut interval) = match self.next_state().as_str() {
+                let (mut date, op, mut interval) = match_next_state!(self, {
                     "timestamp_add_subtract" => {
                         self.expect_state("call94_types");
                         let date = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Date)).1;
                         self.expect_state("call95_types");
                         let interval = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Interval)).1;
-                        let op = match self.next_state().as_str() {
+                        let op = match_next_state!(self, {
                             "timestamp_add_subtract_plus" => BinaryOperator::Plus,
                             "timestamp_add_subtract_minus" => BinaryOperator::Minus,
-                            any => self.panic_unexpected(any),
-                        };
+                        });
                         (date, op, interval)
                     },
-                    any => self.panic_unexpected(any),
-                };
-                match self.next_state().as_str() {
+                });
+                match_next_state!(self, {
                     "timestamp_swap_arguments" => {
                         assert!(op == BinaryOperator::Plus);
                         std::mem::swap(&mut date, &mut interval);
                         self.expect_state("EXIT_timestamp");
                     },
                     "EXIT_timestamp" => { },
-                    any => self.panic_unexpected(any),
-                }
+                });
                 Expr::BinaryOp {
                     left: Box::new(date),
                     op,
                     right: Box::new(interval)
                 }
             },
-            any => self.panic_unexpected(any),
-        };
+        });
         
         (SubgraphType::Timestamp, expr)
     }
@@ -1192,7 +1136,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     /// subgraph def_select_datetime_field
     fn handle_select_datetime_field(&mut self) -> DateTimeField {
         self.expect_state("select_datetime_field");
-        let field = match self.next_state().as_str() {
+        let field = match_next_state!(self, {
             "select_datetime_field_microseconds" => DateTimeField::Microseconds,
             "select_datetime_field_milliseconds" => DateTimeField::Milliseconds,
             "select_datetime_field_second" => DateTimeField::Second,
@@ -1208,8 +1152,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             "select_datetime_field_decade" => DateTimeField::Decade,
             "select_datetime_field_century" => DateTimeField::Century,
             "select_datetime_field_millennium" => DateTimeField::Millennium,
-            any => self.panic_unexpected(any),
-        };
+        });
         self.expect_state("EXIT_select_datetime_field");
         field
     }
@@ -1218,23 +1161,21 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     fn handle_interval(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("interval");
 
-        let expr = match self.next_state().as_str() {
+        let expr = match_next_state!(self, {
             "interval_binary" => {
-                let (left, op, right) = match self.next_state().as_str() {
+                let (left, op, right) = match_next_state!(self, {
                     "interval_add_subtract" => {
                         self.expect_state("call91_types");
                         let interval_1 = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Interval)).1;
-                        let op = match self.next_state().as_str() {
+                        let op = match_next_state!(self, {
                             "interval_add_subtract_plus" => BinaryOperator::Plus,
                             "interval_add_subtract_minus" => BinaryOperator::Minus,
-                            any => self.panic_unexpected(any),
-                        };
+                        });
                         self.expect_state("call92_types");
                         let interval_2 = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Interval)).1;
                         (interval_1, op, interval_2)
                     },
-                    any => self.panic_unexpected(any),
-                };
+                });
                 Expr::BinaryOp {
                     left: Box::new(left),
                     op,
@@ -1249,8 +1190,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                     expr: Box::new(interval)
                 }
             },
-            any => self.panic_unexpected(any),
-        };
+        });
 
         self.expect_state("EXIT_interval");
         

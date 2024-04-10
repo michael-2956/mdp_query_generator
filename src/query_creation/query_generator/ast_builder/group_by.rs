@@ -31,6 +31,7 @@ impl GroupByBuilder {
             group_by.push(TypesBuilder::empty());
             let group_by_entry = group_by.last_mut().unwrap();
             let mut return_result = false;
+
             match_next_state!(generator, {
                 "call70_types" => {
                     let column_type = TypesBuilder::build(generator, group_by_entry, TypeAssertion::None);
@@ -72,6 +73,7 @@ impl GroupByBuilder {
                                     current_set.push(TypesBuilder::empty());
                                     let column_expr = current_set.last_mut().unwrap();
                                     let column_type = TypesBuilder::build(generator, column_expr, TypeAssertion::None);
+
                                     let column_name = generator.clause_context.retrieve_column_by_column_expr(
                                         &column_expr, ColumnRetrievalOptions::new(false, false, false)
                                     ).unwrap().1;
@@ -98,6 +100,7 @@ impl GroupByBuilder {
                     }
                 },
             });
+
             if return_result {
                 break
             }

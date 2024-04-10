@@ -178,7 +178,7 @@ struct Checkpoint {
 impl PathGenerator {
     fn next_state_opt(&mut self) -> Result<Option<SmolStr>, ConvertionError> {
         match self.state_generator.next_node_name(
-            &mut self.rng, &self.clause_context, &mut self.state_selector, None
+            &mut self.rng, &self.clause_context, &mut self.state_selector, None, None
         ) {
             Ok(state) => Ok(state),
             Err(err) => Err(ConvertionError::new(format!("{err}"))),

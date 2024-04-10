@@ -11,6 +11,7 @@ use core::fmt::Debug;
 use rand::seq::SliceRandom;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
+use sqlparser::ast::Query;
 use take_until::TakeUntilExt;
 
 use crate::{config::TomlReadable, query_creation::{query_generator::{call_modifiers::{AvailableTableNamesValueSetter, CanSkipLimitModifier, CanSkipLimitValueSetter, DistinctAggregationModifier, DistinctAggregationValueSetter, FromTableNamesAvailableModifier, GroupingEnabledValueSetter, GroupingModeSwitchModifier, HasAccessibleColumnsModifier, HasAccessibleColumnsValueSetter, IsColumnTypeAvailableModifier, IsColumnTypeAvailableValueSetter, IsEmptySetAllowedModifier, IsGroupingSetsValueSetter, IsWildcardAvailableModifier, NameAccessibilityOfSelectedTypesValueSetter, NamedValue, SelectAccessibleColumnsValueSetter, SelectHasAccessibleColumnsModifier, SelectIsNotDistinctModifier, SelectIsNotDistinctValueSetter, SelectedTypesAccessibleByNamingMethodModifier, StatefulCallModifier, StatelessCallModifier, ValueSetter, ValueSetterValue, WildcardRelationsValueSetter}, query_info::ClauseContext}, state_generator::markov_chain_generator::markov_chain::FunctionTypes}, training::models::{ModelPredictionResult, PathwayGraphModel}, unwrap_variant};
@@ -945,6 +946,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             clause_context: &ClauseContext,
             substitute_model: &mut (impl SubstituteModel + ?Sized),
             predictor_model_opt: Option<&mut Box<dyn PathwayGraphModel>>,
+            current_query_ast_opt: Option<&Query>,
         ) -> Result<Option<SmolStr>, StateGenerationError> {
         if let Some(call_params) = self.pending_call.take() {
             return Ok(Some(self.start_function(call_params, clause_context)));
