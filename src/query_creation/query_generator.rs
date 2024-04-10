@@ -12,7 +12,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
-    self, BinaryOperator, DataType, DateTimeField, Expr, FunctionArg, FunctionArgExpr, ObjectName, Query, SelectItem, TimezoneInfo, TrimWhereField, UnaryOperator, Value, WildcardAdditionalOptions
+    self, BinaryOperator, DataType, DateTimeField, Expr, FunctionArg, FunctionArgExpr, Ident, Query, TimezoneInfo, TrimWhereField, UnaryOperator, Value
 };
 
 use crate::{config::TomlReadable, training::models::PathwayGraphModel, unwrap_pat};
@@ -22,7 +22,7 @@ use super::{
     state_generator::{markov_chain_generator::subgraph_type::SubgraphType, subgraph_type::ContainsSubgraphType, CallTypes}
 };
 use self::{
-    aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, ast_builder::{types::TypesBuilder, query::QueryBuilder}, call_modifiers::{ValueSetterValue, WildcardRelationsValue}, expr_precedence::ExpressionPriority, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, DatabaseSchema, IdentName, QueryProps}, value_choosers::QueryValueChooser
+    aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, ast_builder::{types::TypesBuilder, query::QueryBuilder}, expr_precedence::ExpressionPriority, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, DatabaseSchema, IdentName}, value_choosers::QueryValueChooser
 };
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
@@ -97,6 +97,10 @@ macro_rules! match_next_state {
 }
 
 pub(crate) use match_next_state;
+
+pub fn empty_ident() -> Ident {
+    Ident::new("[?]")
+}
 
 #[derive(Debug, Clone)]
 pub enum TypeAssertion<'a> {
@@ -202,88 +206,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         } else {
             panic!("This subgraph does not accept multiple types as argument. Got: {:?}", arg_types);
         }
-    }
-
-    /// subgraph def_SELECT
-    fn handle_select(&mut self) -> Vec<SelectItem> {
-        self.expect_state("SELECT");
-        match self.next_state().as_str() {
-            "SELECT_DISTINCT" => {
-                self.clause_context.query_mut().set_distinct();
-                self.expect_state("SELECT_list");
-            },
-            "SELECT_list" => { },
-            any => self.panic_unexpected(any)
-        }
-
-        let mut column_idents_and_graph_types: Vec<(Option<IdentName>, SubgraphType)> = vec![];
-        let mut projection = vec![];
-
-        loop {
-            match self.next_state().as_str() {
-                "SELECT_tables_eligible_for_wildcard" => {
-                    match self.next_state().as_str() {
-                        "SELECT_wildcard" => {
-                            column_idents_and_graph_types.extend(
-                                self.clause_context.top_active_from().get_wildcard_columns_iter()
-                            );
-                            projection.push(SelectItem::Wildcard(WildcardAdditionalOptions {
-                                opt_exclude: None, opt_except: None, opt_rename: None,
-                            }));
-                        },
-                        "SELECT_qualified_wildcard" => {
-                            let wildcard_relations = unwrap_variant!(self.state_generator.get_named_value::<WildcardRelationsValue>().unwrap(), ValueSetterValue::WildcardRelations);
-                            let (alias, relation) = self.value_chooser.choose_qualified_wildcard_relation(
-                                &self.clause_context, wildcard_relations
-                            );
-                            column_idents_and_graph_types.extend(relation.get_wildcard_columns());
-                            projection.push(SelectItem::QualifiedWildcard(
-                                ObjectName(vec![alias]),
-                                WildcardAdditionalOptions {
-                                    opt_exclude: None, opt_except: None, opt_rename: None,
-                                }
-                            ));
-                        },
-                        any => self.panic_unexpected(any)
-                    }
-                },
-                alias_node @ ("SELECT_unnamed_expr" | "SELECT_expr_with_alias") => {
-                    self.expect_state("select_expr");
-                    match self.next_state().as_str() {
-                        "call73_types" => { },
-                        "call54_types" => { },
-                        any => self.panic_unexpected(any)
-                    };
-                    let (subgraph_type, expr) = self.handle_types(TypeAssertion::None);
-                    self.expect_state("select_expr_done");
-                    let (alias, select_item) = match alias_node {
-                        "SELECT_unnamed_expr" => {
-                            let alias = QueryProps::extract_alias(&expr);
-                            (alias, SelectItem::UnnamedExpr(expr))
-                        },
-                        "SELECT_expr_with_alias" => {
-                            let select_alias = self.value_chooser.choose_select_alias();
-                            (Some(select_alias.clone().into()), SelectItem::ExprWithAlias {
-                                expr, alias: select_alias,
-                            })
-                        },
-                        any => self.panic_unexpected(any)
-                    };
-                    projection.push(select_item);
-                    column_idents_and_graph_types.push((alias, subgraph_type));
-                },
-                any => self.panic_unexpected(any)
-            };
-            match self.next_state().as_str() {
-                "SELECT_list_multiple_values" => self.expect_state("SELECT_list"),
-                "EXIT_SELECT" => break,
-                any => self.panic_unexpected(any)
-            };
-        }
-
-        self.clause_context.query_mut().set_select_type(column_idents_and_graph_types);
-
-        projection
     }
 
     /// subgraph def_group_by

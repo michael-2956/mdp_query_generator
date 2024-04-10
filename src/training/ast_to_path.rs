@@ -516,10 +516,11 @@ impl PathGenerator {
                     column_idents_and_graph_types.push((alias, tp));
                 },
                 SelectItem::ExprWithAlias { expr, alias } => {
-                    self.try_push_states(&["SELECT_expr_with_alias", "select_expr", select_item_state])?;
+                    self.try_push_state("SELECT_expr_with_alias")?;
+                    self.push_node(PathNode::SelectAlias(alias.clone()));  // the order is important
+                    self.try_push_states(&["select_expr", select_item_state])?;
                     let tp = self.handle_types(expr, TypeAssertion::None)?;
                     self.try_push_state("select_expr_done")?;
-                    self.push_node(PathNode::SelectAlias(alias.clone()));  // the order is important
                     column_idents_and_graph_types.push((Some(alias.clone().into()), tp));
                 },
                 SelectItem::QualifiedWildcard(alias, ..) => {
