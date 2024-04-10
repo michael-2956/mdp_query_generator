@@ -17,7 +17,8 @@ of options.
 Responding to an option list, you should always do the following:
 - As the first line of your response, always output the reasoning \
 behind your decision. Mention which option you will choose and \
-why you won't choose the others.
+why you won't choose the others. Outline your thinking process \
+and future plans.
 - As the last line of your response, always output the selected \
 option number (and only, exclusively the number), and nothing else.
 
@@ -41,22 +42,56 @@ value (and only, exclusively the value), and nothing else.
 """
 
 [transitions]
+# HOW TO ADD THE DECISION PROMPTS:
+# [transitions.node]
+# task="""
+# """
+# options="""
+# 1) ...
+# 2) ...
+# """
+# [transitions.node.option_nodes]
+# 1=""
+# 2=""
+
 
 [transitions.call0_FROM]
 task="""
 Select which clause you would like to build next and which ones you \
 would like to omit.
+
+Note that when you choose to add the GROUP BY clause, you are only \
+effectively indicating that you want your query to be groupped, and \
+you can still choose to make the grouping implicit. In other words, \
+choose the "add the GROUP BY clause" option if you want a query such as:
+SELECT SUM(C1) FROM T1;
+where the grouping is present but is implicit.
 """
 options="""
 1) Add the WHERE clause
 2) Omit the WHERE clause, and add the GROUP BY clause
 3) Omit the WHERE clause and the GROUP BY clause, and add the SELECT clause
 """
-
 [transitions.call0_FROM.option_nodes]
 1="call0_WHERE"
 2="call0_GROUP_BY"
 3="call0_SELECT"
+
+
+[transitions.GROUP_BY]
+task="""
+Choose whether the groupping will be implicit or explicit. Choose option 1 \
+if you want to indicate grouping with aggregation, but omit the actual GROUP BY \
+clause. Choose option 2 if you want the GROUP BY clause to be explicit.
+"""
+options="""
+1) Add implicit groupping to the query.
+2) Add an explicit GROUP BY clause.
+"""
+[transitions.GROUP_BY.option_nodes]
+1="group_by_single_group"
+2="has_accessible_columns"
+
 
 [call_node_context]
 call2_types_type="""

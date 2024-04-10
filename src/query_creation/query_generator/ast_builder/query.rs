@@ -1,6 +1,6 @@
 use sqlparser::ast::{Expr, Query, Select, SetExpr, Value};
 
-use crate::{query_creation::{query_generator::{ast_builder::{from::FromBuilder, order_by::OrderByBuilder, select::SelectBuilder, where_clause::WhereBuilder}, match_next_state, query_info::IdentName, value_choosers::QueryValueChooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
+use crate::{query_creation::{query_generator::{ast_builder::{from::FromBuilder, group_by::GroupByBuilder, order_by::OrderByBuilder, select::SelectBuilder, where_clause::WhereBuilder}, match_next_state, query_info::IdentName, value_choosers::QueryValueChooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
 
 pub struct QueryBuilder { }
 
@@ -56,9 +56,8 @@ impl QueryBuilder {
                 match_next_state!(generator, {
                     "call0_SELECT" => {},
                     "call0_GROUP_BY" => {
-                        // SELECT FROM T1 WHERE C1 = 1 GROUP BY [?]
-                        select_body.group_by = generator.handle_group_by(); 
-                        // SELECT FROM T1 WHERE C1 = 1 GROUP BY C2
+                        select_body.group_by = GroupByBuilder::empty();
+                        GroupByBuilder::build(generator, &mut select_body.group_by);
                         match_next_state!(generator, {
                             "call0_SELECT" => {},
                             "call0_HAVING" => {
@@ -73,9 +72,8 @@ impl QueryBuilder {
             },
             "call0_SELECT" => {},
             "call0_GROUP_BY" => {
-                // SELECT FROM T1 GROUP BY [?]
-                select_body.group_by = generator.handle_group_by();
-                // SELECT FROM T1 GROUP BY C2
+                select_body.group_by = GroupByBuilder::empty();
+                GroupByBuilder::build(generator, &mut select_body.group_by);
                 match_next_state!(generator, {
                     "call0_SELECT" => {},
                     "call0_HAVING" => {
