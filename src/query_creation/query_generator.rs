@@ -227,24 +227,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         (tp, expr)
     }
 
-    /// subgraph def_formulas
-    fn handle_formulas(&mut self) -> (SubgraphType, Expr) {
-        self.expect_state("formulas");
-        self.assert_single_type_argument();
-        let (selected_type, types_value) = match_next_state!(self, {
-            "call2_number" |
-            "call1_number" |
-            "call0_number" => self.handle_number(),
-            "call1_VAL_3" => self.handle_val_3(),
-            "call0_text" => self.handle_text(),
-            "call0_date" => self.handle_date(),
-            "call0_timestamp" => self.handle_timestamp(),
-            "call0_interval" => self.handle_interval(),
-        });
-        self.expect_state("EXIT_formulas");
-        (selected_type, types_value)
-    }
-
     /// subgraph def_literals
     fn handle_literals(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("literals");

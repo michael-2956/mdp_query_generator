@@ -6,6 +6,8 @@ pub mod select;
 pub mod having;
 pub mod group_by;
 pub mod order_by;
+pub mod formulas;
+pub mod literals;
 pub mod from_item;
 pub mod types_type;
 pub mod types_value;
