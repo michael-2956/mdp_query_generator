@@ -47,6 +47,12 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
 
         eprintln!("{}", current_query_ast_opt.unwrap());
 
+        // if node_outgoing.iter().any(|node| [
+        //     "qualified_column_name", "unqualified_column_name"
+        // ].contains(&node.node_common.name.as_str())) {
+
+        // }
+
         /// TODO impl QueryValueChooser for ChatGPTPromptingModel
         // every method prompts chatgpt instead
         // every chooser has its own prompt in config

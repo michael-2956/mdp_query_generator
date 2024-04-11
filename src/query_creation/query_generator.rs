@@ -18,11 +18,11 @@ use sqlparser::ast::{
 use crate::{config::TomlReadable, query_creation::query_generator::ast_builders::types_type::TypesTypeBuilder, training::models::PathwayGraphModel, unwrap_pat};
 
 use super::{
-    super::{unwrap_variant, unwrap_variant_or_else},
+    super::unwrap_variant,
     state_generator::{markov_chain_generator::subgraph_type::SubgraphType, subgraph_type::ContainsSubgraphType, CallTypes}
 };
 use self::{
-    aggregate_function_settings::AggregateFunctionDistribution, ast_builders::{query::QueryBuilder, types::TypesBuilder}, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, DatabaseSchema, IdentName}, value_choosers::QueryValueChooser
+    aggregate_function_settings::AggregateFunctionDistribution, ast_builders::{query::QueryBuilder, types::TypesBuilder}, query_info::{ClauseContext, DatabaseSchema}, value_choosers::QueryValueChooser
 };
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
@@ -225,47 +225,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         let mut expr = TypesBuilder::empty();
         let tp = TypesBuilder::build(self, &mut expr, type_assertion);
         (tp, expr)
-    }
-
-    /// subgraph def_column_spec
-    fn handle_column_spec(&mut self) -> (SubgraphType, Expr) {
-        self.expect_state("column_spec");
-        let column_types = unwrap_variant_or_else!(
-            self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList, || self.state_generator.print_stack()
-        );
-        self.expect_state("column_spec_mentioned_in_group_by");
-        let only_group_by_columns = match_next_state!(self, {
-            "column_spec_mentioned_in_group_by_yes" => true,
-            "column_spec_mentioned_in_group_by_no" => false,
-        });
-        self.expect_state("column_spec_shaded_by_select");
-        let shade_by_select_aliases = match_next_state!(self, {
-            "column_spec_shaded_by_select_yes" => true,
-            "column_spec_shaded_by_select_no" => false,
-        });
-        self.expect_state("column_spec_aggregatable_columns");
-        let only_columns_that_can_be_aggregated = match_next_state!(self, {
-            "column_spec_aggregatable_columns_yes" => true,
-            "column_spec_aggregatable_columns_no" => false,
-        });
-        self.expect_state("column_spec_choose_qualified");
-        let check_accessibility = match_next_state!(self, {
-            "qualified_column_name" => CheckAccessibility::QualifiedColumnName,
-            "unqualified_column_name" => CheckAccessibility::ColumnName,
-        });
-        let column_retrieval_options = ColumnRetrievalOptions::new(
-            only_group_by_columns, shade_by_select_aliases, only_columns_that_can_be_aggregated
-        );
-        let (selected_type, qualified_column_name) = self.value_chooser.choose_column(
-            &self.clause_context, column_types, check_accessibility.clone(), column_retrieval_options
-        );
-        let ident = if check_accessibility == CheckAccessibility::QualifiedColumnName {
-            Expr::CompoundIdentifier(qualified_column_name.into_iter().map(IdentName::into).collect())
-        } else {
-            Expr::Identifier(qualified_column_name.last().unwrap().clone().into())
-        };
-        self.expect_state("EXIT_column_spec");
-        (selected_type, ident)
     }
 
     /// subgraph def_list_expr
