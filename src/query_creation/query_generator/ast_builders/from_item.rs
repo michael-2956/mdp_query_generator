@@ -54,7 +54,7 @@ impl FromItemBuilder {
             "call0_Query" => {
                 *from_item = TableFactor::Derived {
                     lateral: false,
-                    subquery: Box::new(QueryBuilder::empty()),
+                    subquery: Box::new(QueryBuilder::nothing()),
                     alias: alias.clone(),
                 };
 

@@ -2,7 +2,7 @@ use sqlparser::ast::{Expr, Value};
 
 use crate::{query_creation::{query_generator::{expr_precedence::ExpressionPriority, match_next_state, value_choosers::QueryValueChooser, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel, CallTypes}}, unwrap_variant};
 
-use super::{aggregate_function::AggregateFunctionBuilder, column_spec::ColumnSpecBuilder, formulas::FormulasBuilder, literals::LiteralsBuilder, query::QueryBuilder, types::TypesBuilder};
+use super::{aggregate_function::AggregateFunctionBuilder, case::CaseBuilder, column_spec::ColumnSpecBuilder, formulas::FormulasBuilder, literals::LiteralsBuilder, query::QueryBuilder, types::TypesBuilder};
 
 /// subgraph def_types_value
 pub struct TypesValueBuilder { }
@@ -44,11 +44,7 @@ impl TypesValueBuilder {
                 };
                 null_type
             },
-            "call0_case" => {
-                let (tp, expr) = generator.handle_case();
-                *types_value = expr;
-                tp
-            },
+            "call0_case" => CaseBuilder::build(generator, types_value),
             "call0_formulas" => FormulasBuilder::build(generator, types_value),
             "call0_literals" => LiteralsBuilder::build(generator, types_value),
             "call0_aggregate_function" => AggregateFunctionBuilder::build(generator, types_value),
@@ -57,7 +53,7 @@ impl TypesValueBuilder {
                 ColumnSpecBuilder::build(generator, types_value)
             },
             "call1_Query" => {
-                *types_value = Expr::Subquery(Box::new(QueryBuilder::empty()));
+                *types_value = Expr::Subquery(Box::new(QueryBuilder::nothing()));
                 let subquery = &mut **unwrap_variant!(types_value, Expr::Subquery);
                 let column_types = QueryBuilder::build(generator, subquery);
                 let selected_type = match column_types.len() {

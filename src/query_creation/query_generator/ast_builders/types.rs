@@ -12,6 +12,10 @@ impl TypesBuilder {
         Expr::Identifier(Ident::new("[?]"))
     }
 
+    pub fn nothing() -> Expr {
+        Expr::Identifier(Ident::new(""))
+    }
+
     pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
         generator: &mut QueryGenerator<SubMod, StC, QVC>, expr: &mut Expr, type_assertion: TypeAssertion
     ) -> SubgraphType {

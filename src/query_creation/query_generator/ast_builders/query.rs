@@ -6,7 +6,7 @@ pub struct QueryBuilder { }
 
 /// subgraph def_Query
 impl QueryBuilder {
-    pub fn empty() -> Query {
+    pub fn nothing() -> Query {
         Query {
             with: None,
             body: Box::new(SetExpr::Select(Box::new(

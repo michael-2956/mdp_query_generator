@@ -596,13 +596,14 @@ impl PathGenerator {
                 self.handle_types(expr, TypeAssertion::None)?;
             },
             x @ (Expr::IsDistinctFrom(expr_1, expr_2) | Expr::IsNotDistinctFrom(expr_1, expr_2)) =>  {
-                self.try_push_states(&["IsDistinctFrom", "call0_types_type"])?;
+                self.try_push_state("IsDistinctFrom")?;
+                if matches!(x, Expr::IsNotDistinctFrom(..)) { self.try_push_state("IsDistinctNOT")?; }
+                self.try_push_state("call0_types_type")?;
                 self.handle_types_type_and_try(TypeAssertion::None, |_self, returned_type| {
                     _self.state_generator.set_compatible_list(returned_type.get_compat_types());
                     _self.try_push_state("call56_types")?;
                     _self.handle_types(expr_1, TypeAssertion::CompatibleWith(returned_type.clone()))?;
-                    if matches!(x, Expr::IsNotDistinctFrom(..)) { _self.try_push_state("IsDistinctNOT")?; }
-                    _self.try_push_states(&["DISTINCT", "call21_types"])?;
+                    _self.try_push_state("call21_types")?;
                     _self.handle_types(expr_2, TypeAssertion::CompatibleWith(returned_type.clone()))?;
                     Ok(())
                 })?;
@@ -614,36 +615,38 @@ impl PathGenerator {
                 self.handle_query(subquery)?;
             },
             Expr::InList { expr, list, negated } => {
-                self.try_push_states(&["InList", "call3_types_type"])?;
+                self.try_push_state("InList")?;
+                if *negated { self.try_push_state("InListNot")?; }
+                self.try_push_state("call3_types_type")?;
                 self.handle_types_type_and_try(TypeAssertion::None, |_self, returned_type| {
                     _self.state_generator.set_compatible_list(returned_type.get_compat_types());
                     _self.try_push_state("call57_types")?;
                     _self.handle_types(expr, TypeAssertion::CompatibleWith(returned_type.clone()))?;
-                    if *negated { _self.try_push_state("InListNot")?; }
-                    _self.try_push_states(&["InListIn", "call1_list_expr"])?;
+                    _self.try_push_state("call1_list_expr")?;
                     _self.handle_list_expr(list)?;
                     Ok(())
                 })?;
             },
             Expr::InSubquery { expr, subquery, negated } => {
-                self.try_push_states(&["InSubquery", "call4_types_type"])?;
+                self.try_push_state("InSubquery")?;
+                if *negated { self.try_push_state("InSubqueryNot")?; }
+                self.try_push_state("call4_types_type")?;
                 self.handle_types_type_and_try(TypeAssertion::None, |_self, returned_type| {
                     _self.state_generator.set_compatible_list(returned_type.get_compat_types());
                     _self.try_push_state("call58_types")?;
                     _self.handle_types(expr, TypeAssertion::CompatibleWith(returned_type.clone()))?;
-                    if *negated { _self.try_push_state("InSubqueryNot")?; }
-                    _self.try_push_states(&["InSubqueryIn", "call3_Query"])?;
+                    _self.try_push_state("call3_Query")?;
                     _self.handle_query(subquery)?;
                     Ok(())
                 })?;
             },
             Expr::Between { expr, negated, low, high } => {
+                if *negated { panic!("Negated betweens are not supported"); }
                 self.try_push_states(&["Between", "call5_types_type"])?;
                 self.handle_types_type_and_try(TypeAssertion::None, |_self, returned_type| {
                     _self.state_generator.set_compatible_list(returned_type.get_compat_types());
                     _self.try_push_state("call59_types")?;
                     _self.handle_types(expr, TypeAssertion::CompatibleWith(returned_type.clone()))?;
-                    if *negated { _self.try_push_state("BetweenBetweenNot")?; }
                     _self.try_push_states(&["BetweenBetween", "call22_types"])?;
                     _self.handle_types(low, TypeAssertion::CompatibleWith(returned_type.clone()))?;
                     _self.try_push_states(&["BetweenBetweenAnd", "call23_types"])?;
