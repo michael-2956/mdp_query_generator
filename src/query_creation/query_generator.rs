@@ -1,6 +1,6 @@
 #[macro_use]
 pub mod query_info;
-pub mod ast_builder;
+pub mod ast_builders;
 pub mod call_modifiers;
 pub mod value_choosers;
 pub mod expr_precedence;
@@ -12,17 +12,17 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
-    BinaryOperator, DataType, DateTimeField, Expr, Ident, Query, TimezoneInfo, TrimWhereField, UnaryOperator, Value
+    BinaryOperator, DateTimeField, Expr, Ident, Query, TrimWhereField, UnaryOperator
 };
 
-use crate::{config::TomlReadable, query_creation::query_generator::ast_builder::types_type::TypesTypeBuilder, training::models::PathwayGraphModel, unwrap_pat};
+use crate::{config::TomlReadable, query_creation::query_generator::ast_builders::types_type::TypesTypeBuilder, training::models::PathwayGraphModel, unwrap_pat};
 
 use super::{
     super::{unwrap_variant, unwrap_variant_or_else},
     state_generator::{markov_chain_generator::subgraph_type::SubgraphType, subgraph_type::ContainsSubgraphType, CallTypes}
 };
 use self::{
-    aggregate_function_settings::AggregateFunctionDistribution, ast_builder::{query::QueryBuilder, types::TypesBuilder}, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, DatabaseSchema, IdentName}, value_choosers::QueryValueChooser
+    aggregate_function_settings::AggregateFunctionDistribution, ast_builders::{query::QueryBuilder, types::TypesBuilder}, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, DatabaseSchema, IdentName}, value_choosers::QueryValueChooser
 };
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
@@ -224,75 +224,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         // TODO: remove the handler
         let mut expr = TypesBuilder::empty();
         let tp = TypesBuilder::build(self, &mut expr, type_assertion);
-        (tp, expr)
-    }
-
-    /// subgraph def_literals
-    fn handle_literals(&mut self) -> (SubgraphType, Expr) {
-        self.expect_state("literals");
-
-        let (tp, mut expr) = match_next_state!(self, {
-            "bool_literal" => {
-                (SubgraphType::Val3, match_next_state!(self, {
-                    "true" => Expr::Value(Value::Boolean(true)),
-                    "false" => Expr::Value(Value::Boolean(false)),
-                }))
-            },
-            st @ (
-                "number_literal_bigint" | "number_literal_integer" | "number_literal_numeric"
-            ) => {
-                let (number_type, number_str) = match st {
-                    "number_literal_bigint" => {
-                        // NOTE:
-                        // - if bigint is too small, it will be interp. as an int by postgres.
-                        // however, int can be cast to bigint (if required), so no problem for now.
-                        // - in AST->path, the extracted 'int' path will produce the same query,
-                        // even though the intended type could be bigint, if it is too small.
-                        (SubgraphType::BigInt, self.value_chooser.choose_bigint())
-                    },
-                    "number_literal_integer" => {
-                        (SubgraphType::Integer, self.value_chooser.choose_integer())
-                    },
-                    "number_literal_numeric" => {
-                        (SubgraphType::Numeric, (self.value_chooser.choose_numeric()))
-                    },
-                    _ => unreachable!(),
-                };
-                (number_type, Expr::Value(Value::Number(number_str, false)))
-            },
-            "text_literal" => (SubgraphType::Text, Expr::Value(Value::SingleQuotedString(self.value_chooser.choose_string()))),  // TODO: hardcoded
-            "date_literal" => (SubgraphType::Date, Expr::TypedString {
-                data_type: DataType::Date, value: self.value_chooser.choose_date(),
-            }),
-            "timestamp_literal" => (SubgraphType::Timestamp, Expr::TypedString {
-                data_type: DataType::Timestamp(None, TimezoneInfo::None), value: self.value_chooser.choose_timestamp(),
-            }),
-            "interval_literal" => (SubgraphType::Interval, {
-                let with_field = match_next_state!(self, {
-                    "interval_literal_format_string" => false,
-                    "interval_literal_with_field" => true,
-                });
-                let (str_value, leading_field) = self.value_chooser.choose_interval(with_field);
-                Expr::Interval {
-                    value: Box::new(Expr::Value(Value::SingleQuotedString(str_value.to_string()))),
-                    leading_field,
-                    leading_precision: None,
-                    last_field: None,
-                    fractional_seconds_precision: None
-                }
-            }),
-        });
-
-        loop { match_next_state!(self, {
-            "literals_explicit_cast" => {
-                expr = Expr::Cast { expr: Box::new(expr), data_type: tp.to_data_type() };
-            }, // then "number_literal_minus" | "EXIT_literals"
-            "number_literal_minus" => {
-                expr = Expr::UnaryOp { op: UnaryOperator::Minus, expr: Box::new(expr) };
-            }, // then "EXIT_literals"
-            "EXIT_literals" => break
-        }); }
-
         (tp, expr)
     }
 

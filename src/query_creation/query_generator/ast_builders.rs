@@ -10,6 +10,7 @@ pub mod formulas;
 pub mod literals;
 pub mod from_item;
 pub mod types_type;
+pub mod column_spec;
 pub mod types_value;
 pub mod where_clause;
 pub mod aggregate_function;

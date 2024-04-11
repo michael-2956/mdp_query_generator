@@ -2,7 +2,7 @@ use sqlparser::ast::{Expr, Value};
 
 use crate::{query_creation::{query_generator::{expr_precedence::ExpressionPriority, match_next_state, value_choosers::QueryValueChooser, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel, CallTypes}}, unwrap_variant};
 
-use super::{aggregate_function::AggregateFunctionBuilder, formulas::FormulasBuilder, query::QueryBuilder, types::TypesBuilder};
+use super::{aggregate_function::AggregateFunctionBuilder, formulas::FormulasBuilder, literals::LiteralsBuilder, query::QueryBuilder, types::TypesBuilder};
 
 /// subgraph def_types_value
 pub struct TypesValueBuilder { }
@@ -50,11 +50,7 @@ impl TypesValueBuilder {
                 tp
             },
             "call0_formulas" => FormulasBuilder::build(generator, types_value),
-            "call0_literals" => {
-                let (tp, expr) = generator.handle_literals();
-                *types_value = expr;
-                tp
-            },
+            "call0_literals" => LiteralsBuilder::build(generator, types_value),
             "call0_aggregate_function" => AggregateFunctionBuilder::build(generator, types_value),
             "column_type_available" => {
                 generator.expect_state("call0_column_spec");

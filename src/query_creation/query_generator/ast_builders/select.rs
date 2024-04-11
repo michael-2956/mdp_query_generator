@@ -1,6 +1,6 @@
 use sqlparser::ast::{ObjectName, SelectItem, WildcardAdditionalOptions};
 
-use crate::{query_creation::{query_generator::{ast_builder::types::TypesBuilder, call_modifiers::{ValueSetterValue, WildcardRelationsValue}, empty_ident, match_next_state, query_info::{IdentName, QueryProps}, value_choosers::QueryValueChooser, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
+use crate::{query_creation::{query_generator::{ast_builders::types::TypesBuilder, call_modifiers::{ValueSetterValue, WildcardRelationsValue}, empty_ident, match_next_state, query_info::{IdentName, QueryProps}, value_choosers::QueryValueChooser, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
 
 /// subgraph def_SELECT
 pub struct SelectBuilder { }
