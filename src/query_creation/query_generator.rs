@@ -22,7 +22,7 @@ use super::{
     state_generator::{markov_chain_generator::subgraph_type::SubgraphType, subgraph_type::ContainsSubgraphType, CallTypes}
 };
 use self::{
-    aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, ast_builder::{types::TypesBuilder, query::QueryBuilder}, expr_precedence::ExpressionPriority, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, DatabaseSchema, IdentName}, value_choosers::QueryValueChooser
+    aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, ast_builder::{aggregate_function::AggregateFunctionBuilder, query::QueryBuilder, types::TypesBuilder}, expr_precedence::ExpressionPriority, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, DatabaseSchema, IdentName}, value_choosers::QueryValueChooser
 };
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
@@ -222,97 +222,10 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
 
     /// subgraph def_aggregate_function
     fn handle_aggregate_function(&mut self) -> (SubgraphType, Expr) {
-        self.expect_state("aggregate_function");
-        // if any aggregate funciton is present in query, aggregation was succesfully indicated.
-        self.clause_context.query_mut().set_aggregation_indicated();
-        let distinct = match_next_state!(self, {
-            "aggregate_not_distinct" => false,
-            "aggregate_distinct" => true,
-        });
-        self.expect_state("aggregate_select_return_type");
-
-        let (
-            aggr_args_type, aggr_arg_expr_v, aggr_return_type
-        ): (AggregateFunctionAgruments, Vec<FunctionArg>, SubgraphType) = match_next_state!(self, {
-            "aggregate_select_type_bigint" => {
-                let return_type = SubgraphType::BigInt;
-                let (args_type, args_expr) = match_next_state!(self, {
-                    "arg_star" => {
-                        (AggregateFunctionAgruments::Wildcard, vec![FunctionArg::Unnamed(FunctionArgExpr::Wildcard)])
-                    },
-                    "arg_bigint_any" => {
-                        self.expect_state("call65_types");
-                        (AggregateFunctionAgruments::AnyType, vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(
-                            self.handle_types(TypeAssertion::None).1
-                        ))])
-                    },
-                    "arg_bigint" => {
-                        self.expect_state("call75_types");
-                        self.state_generator.set_compatible_list(SubgraphType::BigInt.get_compat_types());
-                        (AggregateFunctionAgruments::TypeList(vec![SubgraphType::BigInt]), vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(
-                            self.handle_types(TypeAssertion::CompatibleWith(SubgraphType::BigInt)).1
-                        ))])
-                    },
-                });
-                (args_type, args_expr, return_type)
-            },
-            arm @ ("aggregate_select_type_numeric" | "aggregate_select_type_text") => {
-                let (return_type, states) = match arm {
-                    "aggregate_select_type_text" => (SubgraphType::Text, &["arg_double_text", "call74_types", "arg_single_text", "call63_types"]),
-                    "aggregate_select_type_numeric" => (SubgraphType::Numeric, &["arg_double_numeric", "call68_types", "arg_single_numeric", "call66_types"]),
-                    any => self.panic_unexpected(any),
-                };
-                let mut args_type_v = vec![];
-                let mut args_expr_v = vec![];
-                self.state_generator.set_compatible_list(return_type.get_compat_types());
-                match_next_state!(self, {
-                    arm if arm == states[0] => {
-                        self.expect_state(states[1]);
-                        let arg_expr = self.handle_types(TypeAssertion::CompatibleWith(return_type.clone())).1;
-                        args_type_v.push(return_type.clone());
-                        args_expr_v.push(FunctionArg::Unnamed(FunctionArgExpr::Expr(arg_expr)));
-                    },
-                    arm if arm == states[2] => { },
-                });
-                self.expect_state(states[3]);
-                let arg_expr = self.handle_types(TypeAssertion::CompatibleWith(return_type.clone())).1;
-                args_type_v.push(return_type.clone());
-                args_expr_v.push(FunctionArg::Unnamed(FunctionArgExpr::Expr(arg_expr)));
-                let args_type = AggregateFunctionAgruments::TypeList(args_type_v);
-                (args_type, args_expr_v, return_type)
-            },
-            arm @ ("aggregate_select_type_bool" | "aggregate_select_type_date" | "aggregate_select_type_timestamp" | "aggregate_select_type_interval" | "aggregate_select_type_integer") => {
-                let (return_type, states) = match arm {
-                    "aggregate_select_type_bool" => (SubgraphType::Val3, &["arg_single_3vl", "call64_types"]),
-                    "aggregate_select_type_date" => (SubgraphType::Date, &["arg_date", "call72_types"]),
-                    "aggregate_select_type_timestamp" => (SubgraphType::Timestamp, &["arg_timestamp", "call96_types"]),
-                    "aggregate_select_type_interval" => (SubgraphType::Interval, &["arg_interval", "call90_types"]),
-                    "aggregate_select_type_integer" => (SubgraphType::Integer, &["arg_integer", "call71_types"]),
-                    any => self.panic_unexpected(any),
-                };
-                let args_type = AggregateFunctionAgruments::TypeList(vec![return_type.clone()]);
-                self.expect_states(states);
-                self.state_generator.set_compatible_list(return_type.get_compat_types());
-                let args_expr = vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(
-                    self.handle_types(TypeAssertion::CompatibleWith(return_type.clone())).1,
-                ))];
-                (args_type, args_expr, return_type)
-            },
-        });
-
-        let (func_names_iter, dist) = self.config.aggregate_functions_distribution.get_functions_and_dist(&aggr_args_type, &aggr_return_type);
-        let aggr_name = self.value_chooser.choose_aggregate_function_name(func_names_iter, dist);
-
-        let expr = Expr::Function(ast::Function {
-            name: aggr_name,
-            args: aggr_arg_expr_v,
-            over: None,
-            distinct: distinct,
-            special: false,
-        });
-
-        self.expect_state("EXIT_aggregate_function");
-        (aggr_return_type,  expr)
+        // TODO: refactor this call
+        let mut expr = AggregateFunctionBuilder::empty();
+        let tp = AggregateFunctionBuilder::build(self, &mut expr);
+        (tp, expr)
     }
 
     /// subgraph def_having

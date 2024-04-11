@@ -6,3 +6,4 @@ pub mod group_by;
 pub mod order_by;
 pub mod from_item;
 pub mod where_clause;
+pub mod aggregate_function;
