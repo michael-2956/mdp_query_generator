@@ -12,7 +12,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
-    self, BinaryOperator, DataType, DateTimeField, Expr, FunctionArg, FunctionArgExpr, Ident, Query, TimezoneInfo, TrimWhereField, UnaryOperator, Value
+    BinaryOperator, DataType, DateTimeField, Expr, Ident, Query, TimezoneInfo, TrimWhereField, UnaryOperator, Value
 };
 
 use crate::{config::TomlReadable, training::models::PathwayGraphModel, unwrap_pat};
@@ -22,7 +22,7 @@ use super::{
     state_generator::{markov_chain_generator::subgraph_type::SubgraphType, subgraph_type::ContainsSubgraphType, CallTypes}
 };
 use self::{
-    aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, ast_builder::{aggregate_function::AggregateFunctionBuilder, query::QueryBuilder, types::TypesBuilder}, expr_precedence::ExpressionPriority, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, DatabaseSchema, IdentName}, value_choosers::QueryValueChooser
+    aggregate_function_settings::AggregateFunctionDistribution, ast_builder::{aggregate_function::AggregateFunctionBuilder, query::QueryBuilder, types::TypesBuilder}, expr_precedence::ExpressionPriority, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, DatabaseSchema, IdentName}, value_choosers::QueryValueChooser
 };
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
@@ -226,16 +226,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         let mut expr = AggregateFunctionBuilder::empty();
         let tp = AggregateFunctionBuilder::build(self, &mut expr);
         (tp, expr)
-    }
-
-    /// subgraph def_having
-    fn handle_having(&mut self) -> (SubgraphType, Expr) {
-        self.expect_state("HAVING");
-        self.expect_state("call45_types");
-        let (selection_type, selection) = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Val3));
-        self.clause_context.query_mut().set_aggregation_indicated();
-        self.expect_state("EXIT_HAVING");
-        (selection_type, selection)
     }
 
     /// subgraph def_LIMIT

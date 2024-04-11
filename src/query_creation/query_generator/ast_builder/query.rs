@@ -1,6 +1,6 @@
 use sqlparser::ast::{Expr, Query, Select, SetExpr, Value};
 
-use crate::{query_creation::{query_generator::{ast_builder::{from::FromBuilder, group_by::GroupByBuilder, order_by::OrderByBuilder, select::SelectBuilder, where_clause::WhereBuilder}, match_next_state, query_info::IdentName, value_choosers::QueryValueChooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
+use crate::{query_creation::{query_generator::{ast_builder::{from::FromBuilder, group_by::GroupByBuilder, having::HavingBuilder, order_by::OrderByBuilder, select::SelectBuilder, where_clause::WhereBuilder}, match_next_state, query_info::IdentName, value_choosers::QueryValueChooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
 
 pub struct QueryBuilder { }
 
@@ -61,9 +61,8 @@ impl QueryBuilder {
                         match_next_state!(generator, {
                             "call0_SELECT" => {},
                             "call0_HAVING" => {
-                                // SELECT FROM T1 WHERE C1 = 1 GROUP BY C2 HAVING [?]
-                                select_body.having = Some(generator.handle_having().1);
-                                // SELECT FROM T1 WHERE C1 = 1 GROUP BY C2 HAVING C2 > 2
+                                select_body.having = Some(HavingBuilder::empty());
+                                HavingBuilder::build(generator, select_body.having.as_mut().unwrap());
                                 generator.expect_state("call0_SELECT");
                             }, 
                         });
@@ -77,9 +76,8 @@ impl QueryBuilder {
                 match_next_state!(generator, {
                     "call0_SELECT" => {},
                     "call0_HAVING" => {
-                        // SELECT FROM T1 GROUP BY C2 HAVING [?]
-                        select_body.having = Some(generator.handle_having().1);
-                        // SELECT FROM T1 GROUP BY C2 HAVING C2 > 2
+                        select_body.having = Some(HavingBuilder::empty());
+                        HavingBuilder::build(generator, select_body.having.as_mut().unwrap());
                         generator.expect_state("call0_SELECT");
                     },
                 });
