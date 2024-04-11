@@ -1,6 +1,7 @@
 pub mod from;
 pub mod query;
 pub mod types;
+pub mod limit;
 pub mod select;
 pub mod having;
 pub mod group_by;

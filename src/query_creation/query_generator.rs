@@ -228,31 +228,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         (tp, expr)
     }
 
-    /// subgraph def_LIMIT
-    fn handle_limit(&mut self) -> (SubgraphType, Option<Expr>) {
-        self.expect_state("LIMIT");
-
-        let (limit_type, limit) = match_next_state!(self, {
-            "query_can_skip_limit_set_val" => {
-                self.expect_state("query_can_skip_limit");
-                (SubgraphType::Undetermined, None)
-            },
-            "single_row_true" => {
-                (SubgraphType::Integer, Some(Expr::Value(Value::Number("1".to_string(), false))))
-            },
-            "limit_num" => {
-                self.expect_state("call52_types");
-                let (limit_type, limit_expr) = self.handle_types(
-                    TypeAssertion::GeneratedByOneOf(&[SubgraphType::Numeric, SubgraphType::Integer, SubgraphType::BigInt]),
-                );
-                (limit_type, Some(limit_expr))
-            },
-        });
-        self.expect_state("EXIT_LIMIT");
-
-        (limit_type, limit)
-    }
-
     /// subgraph def_types
     fn handle_types(&mut self, type_assertion: TypeAssertion) -> (SubgraphType, Expr) {
         self.expect_state("types");
