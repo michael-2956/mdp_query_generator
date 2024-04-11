@@ -22,7 +22,7 @@ use super::{
     state_generator::{markov_chain_generator::subgraph_type::SubgraphType, subgraph_type::ContainsSubgraphType, CallTypes}
 };
 use self::{
-    aggregate_function_settings::AggregateFunctionDistribution, ast_builders::{query::QueryBuilder, types::TypesBuilder}, query_info::{ClauseContext, DatabaseSchema}, value_choosers::QueryValueChooser
+    aggregate_function_settings::AggregateFunctionDistribution, ast_builders::{list_expr::ListExprBuilder, query::QueryBuilder, types::TypesBuilder}, query_info::{ClauseContext, DatabaseSchema}, value_choosers::QueryValueChooser
 };
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
@@ -229,26 +229,9 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
 
     /// subgraph def_list_expr
     fn handle_list_expr(&mut self) -> (SubgraphType, Vec<Expr>) {
-        self.expect_state("list_expr");
-        self.expect_state("call6_types_type");
-        let inner_type = TypesTypeBuilder::build(self);
-        self.state_generator.set_compatible_list(inner_type.get_compat_types());
-        self.expect_state("call16_types");
-        let types_value = self.handle_types(TypeAssertion::CompatibleWith(inner_type.clone())).1;
-        match_next_state!(self, {
-            "list_expr_multiple_values" => {
-                let mut list_expr: Vec<Expr> = vec![types_value];
-                loop {
-                    match_next_state!(self, {
-                        "call49_types" => {
-                            list_expr.push(self.handle_types(TypeAssertion::CompatibleWith(inner_type.clone())).1);
-                        },
-                        "EXIT_list_expr" => break,
-                    })
-                }
-                (SubgraphType::ListExpr(Box::new(inner_type)), list_expr)
-            },
-        })
+        let mut l = ListExprBuilder::empty();
+        let tp = ListExprBuilder::build(self, &mut l);
+        (tp, l)
     }
 
     /// subgraph def_case

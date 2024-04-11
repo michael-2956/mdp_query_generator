@@ -1,4 +1,5 @@
 pub mod from;
+pub mod case;
 pub mod query;
 pub mod types;
 pub mod limit;
@@ -8,6 +9,7 @@ pub mod group_by;
 pub mod order_by;
 pub mod formulas;
 pub mod literals;
+pub mod list_expr;
 pub mod from_item;
 pub mod types_type;
 pub mod column_spec;
