@@ -15,14 +15,14 @@ use sqlparser::ast::{
     BinaryOperator, DataType, DateTimeField, Expr, Ident, Query, TimezoneInfo, TrimWhereField, UnaryOperator, Value
 };
 
-use crate::{config::TomlReadable, training::models::PathwayGraphModel, unwrap_pat};
+use crate::{config::TomlReadable, query_creation::query_generator::ast_builder::types_type::TypesTypeBuilder, training::models::PathwayGraphModel, unwrap_pat};
 
 use super::{
     super::{unwrap_variant, unwrap_variant_or_else},
     state_generator::{markov_chain_generator::subgraph_type::SubgraphType, subgraph_type::ContainsSubgraphType, CallTypes}
 };
 use self::{
-    aggregate_function_settings::AggregateFunctionDistribution, ast_builder::{aggregate_function::AggregateFunctionBuilder, query::QueryBuilder, types::TypesBuilder}, expr_precedence::ExpressionPriority, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, DatabaseSchema, IdentName}, value_choosers::QueryValueChooser
+    aggregate_function_settings::AggregateFunctionDistribution, ast_builder::{query::QueryBuilder, types::TypesBuilder}, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, DatabaseSchema, IdentName}, value_choosers::QueryValueChooser
 };
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
@@ -220,112 +220,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         }
     }
 
-    /// subgraph def_aggregate_function
-    fn handle_aggregate_function(&mut self) -> (SubgraphType, Expr) {
-        // TODO: refactor this call
-        let mut expr = AggregateFunctionBuilder::empty();
-        let tp = AggregateFunctionBuilder::build(self, &mut expr);
-        (tp, expr)
-    }
-
-    /// subgraph def_types
     fn handle_types(&mut self, type_assertion: TypeAssertion) -> (SubgraphType, Expr) {
-        self.expect_state("types");
-
-        let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
-        let selected_type = match_next_state!(self, {
-            "types_select_type_bigint" => SubgraphType::BigInt,
-            "types_select_type_integer" => SubgraphType::Integer,
-            "types_select_type_numeric" => SubgraphType::Numeric,
-            "types_select_type_3vl" => SubgraphType::Val3,
-            "types_select_type_text" => SubgraphType::Text,
-            "types_select_type_date" => SubgraphType::Date,
-            "types_select_type_interval" => SubgraphType::Interval,
-            "types_select_type_timestamp" => SubgraphType::Timestamp,
-        });
-        let allowed_type_list = SubgraphType::filter_by_selected(&selected_types, selected_type);
-
-        self.state_generator.set_known_list(allowed_type_list);
-        self.expect_state("call0_types_value");
-        let (selected_type, types_value) = self.handle_types_value(type_assertion);
-
-        self.expect_state("EXIT_types");
-        (selected_type, types_value)
-    }
-
-    /// subgraph def_types_type
-    fn handle_types_type(&mut self) -> SubgraphType {
-        self.expect_state("types_type");
-
-        let tp = match_next_state!(self, {
-            "types_type_bigint" => SubgraphType::BigInt,
-            "types_type_integer" => SubgraphType::Integer,
-            "types_type_numeric" => SubgraphType::Numeric,
-            "types_type_3vl" => SubgraphType::Val3,
-            "types_type_text" => SubgraphType::Text,
-            "types_type_date" => SubgraphType::Date,
-            "types_type_interval" => SubgraphType::Interval,
-            "types_type_timestamp" => SubgraphType::Timestamp,
-        });
-
-        self.expect_state("EXIT_types_type");
-
-        tp
-    }
-
-    /// subgraph def_types_value
-    fn handle_types_value(&mut self, type_assertion: TypeAssertion) -> (SubgraphType, Expr) {
-        self.expect_state("types_value");
-        let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
-        self.state_generator.set_known_list(selected_types.clone());
-        let (selected_type, types_value) = match_next_state!(self, {
-            "types_value_nested" => {
-                self.expect_state("call1_types_value");
-                let (tp, expr) = self.handle_types_value(TypeAssertion::None);
-                (tp, Expr::Nested(Box::new(expr)))
-            },
-            "types_value_null" => {
-                (SubgraphType::Undetermined, Expr::Value(Value::Null))
-            },
-            "types_value_typed_null" => {
-                let null_type = {
-                    let types_without_inner = selected_types.into_iter()
-                        .filter(|x| !x.has_inner()).collect::<Vec<_>>();
-                    match types_without_inner.as_slice() {
-                        [tp] => tp.clone(),
-                        any => panic!("allowed_type_list must have single element here (got {:?})", any)
-                    }
-                };
-                (null_type.clone(), Expr::Cast {
-                    expr: Box::new(Expr::Value(Value::Null)),
-                    data_type: null_type.to_data_type(),
-                })
-            },
-            "call0_case" => self.handle_case(),
-            "call0_formulas" => self.handle_formulas(),
-            "call0_literals" => self.handle_literals(),
-            "call0_aggregate_function" => self.handle_aggregate_function(),
-            "column_type_available" => {
-                self.expect_state("call0_column_spec");
-                self.handle_column_spec()
-            },
-            "call1_Query" => {
-                let mut types_value = Expr::Subquery(Box::new(QueryBuilder::empty()));
-                let subquery = &mut **unwrap_variant!(&mut types_value, Expr::Subquery);
-                let column_types = QueryBuilder::build(self, subquery);
-                let selected_type = match column_types.len() {
-                    1 => column_types.into_iter().next().unwrap().1,
-                    any => panic!(
-                        "Subquery should have selected a single column, \
-                        but selected {any} columns. Subquery: {subquery}"
-                    ),
-                };
-                (selected_type, types_value)
-            },
-        });
-        type_assertion.check(&selected_type, &types_value);
-        self.expect_state("EXIT_types_value");
-        (selected_type, types_value.nest_children_if_needed())
+        // TODO: remove the handler
+        let mut expr = TypesBuilder::empty();
+        let tp = TypesBuilder::build(self, &mut expr, type_assertion);
+        (tp, expr)
     }
 
     /// subgraph def_formulas
@@ -460,7 +359,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     fn handle_list_expr(&mut self) -> (SubgraphType, Vec<Expr>) {
         self.expect_state("list_expr");
         self.expect_state("call6_types_type");
-        let inner_type = self.handle_types_type();
+        let inner_type = TypesTypeBuilder::build(self);
         self.state_generator.set_compatible_list(inner_type.get_compat_types());
         self.expect_state("call16_types");
         let types_value = self.handle_types(TypeAssertion::CompatibleWith(inner_type.clone())).1;
@@ -485,7 +384,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         self.expect_state("case");
 
         self.expect_states(&["case_first_result", "call7_types_type"]);
-        let out_type = self.handle_types_type();
+        let out_type = TypesTypeBuilder::build(self);
         self.expect_state("call82_types");
         self.state_generator.set_compatible_list(out_type.get_compat_types());
         let first_result = self.handle_types(TypeAssertion::CompatibleWith(out_type.clone())).1;
@@ -495,7 +394,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         let operand = match_next_state!(self, {
             "simple_case" => {
                 self.expect_states(&["simple_case_operand", "call8_types_type"]);
-                let operand_type = self.handle_types_type();
+                let operand_type = TypesTypeBuilder::build(self);
                 self.expect_state("call78_types");
                 self.state_generator.set_compatible_list(operand_type.get_compat_types());
                 let operand_expr = self.handle_types(TypeAssertion::CompatibleWith(operand_type.clone())).1;
@@ -588,7 +487,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             },
             "IsDistinctFrom" => {
                 self.expect_state("call0_types_type");
-                let tp = self.handle_types_type();
+                let tp = TypesTypeBuilder::build(self);
                 self.expect_state("call56_types");
                 self.state_generator.set_compatible_list(tp.get_compat_types());
                 let types_value_1 = self.handle_types(TypeAssertion::CompatibleWith(tp.clone())).1;
@@ -625,7 +524,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             },
             "InList" => {
                 self.expect_state("call3_types_type");
-                let tp = self.handle_types_type();
+                let tp = TypesTypeBuilder::build(self);
                 self.state_generator.set_compatible_list(tp.get_compat_types());
                 self.expect_state("call57_types");
                 let types_value = self.handle_types(TypeAssertion::CompatibleWith(tp)).1;
@@ -645,7 +544,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             },
             "InSubquery" => {
                 self.expect_state("call4_types_type");
-                let tp = self.handle_types_type();
+                let tp = TypesTypeBuilder::build(self);
                 self.state_generator.set_compatible_list(tp.get_compat_types());
                 self.expect_state("call58_types");
                 let types_value = self.handle_types(TypeAssertion::CompatibleWith(tp)).1;
@@ -668,7 +567,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             },
             "Between" => {
                 self.expect_state("call5_types_type");
-                let tp = self.handle_types_type();
+                let tp = TypesTypeBuilder::build(self);
                 self.state_generator.set_compatible_list(tp.get_compat_types());
                 self.expect_state("call59_types");
                 let types_value_1 = self.handle_types(TypeAssertion::CompatibleWith(tp.clone())).1;
@@ -693,7 +592,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
             },
             "BinaryComp" => {
                 self.expect_state("call1_types_type");
-                let tp = self.handle_types_type();
+                let tp = TypesTypeBuilder::build(self);
                 self.state_generator.set_compatible_list(tp.get_compat_types());
                 self.expect_state("call60_types");
                 let types_value_1 = self.handle_types(TypeAssertion::CompatibleWith(tp.clone())).1;
@@ -732,7 +631,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
                 };
 
                 self.expect_state("call2_types_type");
-                let tp = self.handle_types_type();
+                let tp = TypesTypeBuilder::build(self);
                 self.state_generator.set_compatible_list(tp.get_compat_types());
                 
                 self.expect_state("call61_types");

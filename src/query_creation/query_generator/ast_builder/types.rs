@@ -2,6 +2,9 @@ use sqlparser::ast::{Expr, Ident};
 
 use crate::{query_creation::{query_generator::{match_next_state, value_choosers::QueryValueChooser, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel, CallTypes}}, unwrap_variant};
 
+use super::types_value::TypesValueBuilder;
+
+/// subgraph def_types
 pub struct TypesBuilder { }
 
 impl TypesBuilder {
@@ -29,8 +32,8 @@ impl TypesBuilder {
 
         generator.state_generator.set_known_list(allowed_type_list);
         generator.expect_state("call0_types_value");
-        let selected_type;
-        (selected_type, *expr) = generator.handle_types_value(type_assertion);
+        *expr = TypesValueBuilder::empty();
+        let selected_type = TypesValueBuilder::build(generator, expr, type_assertion);
 
         generator.expect_state("EXIT_types");
         selected_type

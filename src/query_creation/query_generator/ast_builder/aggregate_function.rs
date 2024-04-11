@@ -12,6 +12,7 @@ fn get_last_expr_mut(arg_v: &mut Vec<FunctionArg>) -> &mut Expr {
     unwrap_pat!(arg_v.last_mut().unwrap(), FunctionArg::Unnamed(FunctionArgExpr::Expr(expr)), expr)
 }
 
+/// subgraph def_aggregate_function
 pub struct AggregateFunctionBuilder { }
 
 impl AggregateFunctionBuilder {

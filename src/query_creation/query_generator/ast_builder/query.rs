@@ -81,7 +81,6 @@ impl QueryBuilder {
                         generator.expect_state("call0_SELECT");
                     },
                 });
-
             },
         });
 
