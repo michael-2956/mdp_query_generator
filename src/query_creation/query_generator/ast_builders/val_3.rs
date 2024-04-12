@@ -201,7 +201,7 @@ impl Val3Builder {
                 
                 generator.expect_state("call61_types");
                 let left = &mut **unwrap_pat!(val3, Expr::BinaryOp { left, .. }, left);
-                *left = generator.handle_types(TypeAssertion::CompatibleWith(tp)).1;
+                TypesBuilder::build(generator, left, TypeAssertion::CompatibleWith(tp));
 
                 let right = &mut **unwrap_pat!(val3, Expr::BinaryOp { right, .. }, right);
                 generator.expect_state("AnyAllAnyAll");

@@ -1037,13 +1037,16 @@ impl PathGenerator {
             Expr::BinaryOp {
                 left, op, right
             } => {
-                self.try_push_states(&["interval_binary", "interval_add_subtract", "call91_types"])?;
-                self.handle_types(left, TypeAssertion::GeneratedBy(SubgraphType::Interval))?; 
+                self.try_push_states(&["interval_binary", "interval_add_subtract"])?;
                 self.try_push_state(match op {
                     BinaryOperator::Plus => "interval_add_subtract_plus",
                     BinaryOperator::Minus => "interval_add_subtract_minus",
                     any => unexpected_expr!(any),
                 })?;
+
+                self.try_push_state("call91_types")?;
+                self.handle_types(left, TypeAssertion::GeneratedBy(SubgraphType::Interval))?; 
+                
                 self.try_push_state("call92_types")?;
                 self.handle_types(right, TypeAssertion::GeneratedBy(SubgraphType::Interval))?;
             },

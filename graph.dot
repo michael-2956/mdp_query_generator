@@ -1222,18 +1222,16 @@ digraph G {
 
         interval_add_subtract [label="+/-"]
         interval_binary -> interval_add_subtract
-        call91_types [TYPES="[interval]", MODS="[...]", label="TYPES: interval\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        interval_add_subtract -> call91_types
-        call92_types [TYPES="[interval]", MODS="[...]", label="TYPES: interval\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        call92_types -> EXIT_interval
-    
         interval_add_subtract_plus [label="+"]
-        call91_types -> interval_add_subtract_plus
-        interval_add_subtract_plus -> call92_types
-
+        interval_add_subtract -> interval_add_subtract_plus
         interval_add_subtract_minus [label="-"]
-        call91_types -> interval_add_subtract_minus
-        interval_add_subtract_minus -> call92_types
+        interval_add_subtract -> interval_add_subtract_minus
+        call91_types [TYPES="[interval]", MODS="[...]", label="TYPES: interval\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        interval_add_subtract_plus -> call91_types
+        interval_add_subtract_minus -> call91_types
+        call92_types [TYPES="[interval]", MODS="[...]", label="TYPES: interval\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call91_types -> call92_types
+        call92_types -> EXIT_interval
 
         interval_unary_minus [label="-interval"]
         interval -> interval_unary_minus

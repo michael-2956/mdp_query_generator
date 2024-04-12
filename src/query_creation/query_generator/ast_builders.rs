@@ -10,6 +10,7 @@ pub mod select;
 pub mod having;
 pub mod number;
 pub mod group_by;
+pub mod interval;
 pub mod order_by;
 pub mod formulas;
 pub mod literals;

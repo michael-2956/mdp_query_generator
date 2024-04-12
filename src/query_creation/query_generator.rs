@@ -11,9 +11,7 @@ use std::path::PathBuf;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
-use sqlparser::ast::{
-    BinaryOperator, Expr, Ident, Query, UnaryOperator
-};
+use sqlparser::ast::{Expr, Ident, Query};
 
 use crate::{config::TomlReadable, training::models::PathwayGraphModel};
 
@@ -22,7 +20,8 @@ use super::{
     state_generator::{markov_chain_generator::subgraph_type::SubgraphType, subgraph_type::ContainsSubgraphType, CallTypes}
 };
 use self::{
-    aggregate_function_settings::AggregateFunctionDistribution, ast_builders::{date::DateBuilder, number::NumberBuilder, query::QueryBuilder, text::TextBuilder, timestamp::TimestampBuilder, types::TypesBuilder, val_3::Val3Builder}, query_info::{ClauseContext, DatabaseSchema}, value_choosers::QueryValueChooser
+    aggregate_function_settings::AggregateFunctionDistribution, ast_builders::query::QueryBuilder,
+    query_info::{ClauseContext, DatabaseSchema}, value_choosers::QueryValueChooser
 };
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
@@ -222,89 +221,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         }
     }
 
-    fn handle_types(&mut self, type_assertion: TypeAssertion) -> (SubgraphType, Expr) {
-        // TODO: remove the handler
-        let mut expr = TypesBuilder::empty();
-        let tp = TypesBuilder::build(self, &mut expr, type_assertion);
-        (tp, expr)
-    }
-
-    fn handle_val_3(&mut self) -> (SubgraphType, Expr) {
-        // TODO: remove the handler
-        let mut l = Val3Builder::empty();
-        let tp = Val3Builder::build(self, &mut l);
-        (tp, l)
-    }
-
-    fn handle_number(&mut self) -> (SubgraphType, Expr) {
-        // TODO: remove the handler
-        let mut l = NumberBuilder::empty();
-        let tp = NumberBuilder::build(self, &mut l);
-        (tp, l)
-    }
-
-    fn handle_text(&mut self) -> (SubgraphType, Expr) {
-        // TODO: remove the handler
-        let mut l = TextBuilder::empty();
-        let tp = TextBuilder::build(self, &mut l);
-        (tp, l)
-    }
-
-    fn handle_date(&mut self) -> (SubgraphType, Expr) {
-        // TODO: remove the handler
-        let mut l = DateBuilder::empty();
-        let tp = DateBuilder::build(self, &mut l);
-        (tp, l)
-    }
-
-    fn handle_timestamp(&mut self) -> (SubgraphType, Expr) {
-        // TODO: remove the handler
-        let mut l = TimestampBuilder::empty();
-        let tp = TimestampBuilder::build(self, &mut l);
-        (tp, l)
-    }
-
-    /// subgarph def_interval
-    fn handle_interval(&mut self) -> (SubgraphType, Expr) {
-        self.expect_state("interval");
-
-        let expr = match_next_state!(self, {
-            "interval_binary" => {
-                let (left, op, right) = match_next_state!(self, {
-                    "interval_add_subtract" => {
-                        self.expect_state("call91_types");
-                        let interval_1 = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Interval)).1;
-                        let op = match_next_state!(self, {
-                            "interval_add_subtract_plus" => BinaryOperator::Plus,
-                            "interval_add_subtract_minus" => BinaryOperator::Minus,
-                        });
-                        self.expect_state("call92_types");
-                        let interval_2 = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Interval)).1;
-                        (interval_1, op, interval_2)
-                    },
-                });
-                Expr::BinaryOp {
-                    left: Box::new(left),
-                    op,
-                    right: Box::new(right)
-                }
-            },
-            "interval_unary_minus" => {
-                self.expect_state("call93_types");
-                let interval = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Interval)).1;
-                Expr::UnaryOp {
-                    op: UnaryOperator::Minus,
-                    expr: Box::new(interval)
-                }
-            },
-        });
-
-        self.expect_state("EXIT_interval");
-        
-        (SubgraphType::Interval, expr)
-    }
-
-    /// starting point; calls handle_query for the first time.\
+    /// starting point; calls QueryBuilder::build for the first time.\
     /// NOTE: If you use this function without a predictor model,\
     /// it will use uniform distributions 
     pub fn generate(&mut self) -> Query {

@@ -2,7 +2,7 @@ use sqlparser::ast::Expr;
 
 use crate::query_creation::{query_generator::{match_next_state, value_choosers::QueryValueChooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}};
 
-use super::types::TypesBuilder;
+use super::{date::DateBuilder, interval::IntervalBuilder, number::NumberBuilder, text::TextBuilder, timestamp::TimestampBuilder, types::TypesBuilder, val_3::Val3Builder};
 
 /// subgraph def_formulas
 pub struct FormulasBuilder { }
@@ -17,17 +17,16 @@ impl FormulasBuilder {
     ) -> SubgraphType {
         generator.expect_state("formulas");
         generator.assert_single_type_argument();
-        let (selected_type, types_value) = match_next_state!(generator, {
+        let selected_type = match_next_state!(generator, {
             "call2_number" |
             "call1_number" |
-            "call0_number" => generator.handle_number(),
-            "call1_VAL_3" => generator.handle_val_3(),
-            "call0_text" => generator.handle_text(),
-            "call0_date" => generator.handle_date(),
-            "call0_timestamp" => generator.handle_timestamp(),
-            "call0_interval" => generator.handle_interval(),
+            "call0_number" => NumberBuilder::build(generator, expr),
+            "call1_VAL_3" => Val3Builder::build(generator, expr),
+            "call0_text" => TextBuilder::build(generator, expr),
+            "call0_date" => DateBuilder::build(generator, expr),
+            "call0_timestamp" => TimestampBuilder::build(generator, expr),
+            "call0_interval" => IntervalBuilder::build(generator, expr),
         });
-        *expr = types_value;
         generator.expect_state("EXIT_formulas");
         selected_type
     }

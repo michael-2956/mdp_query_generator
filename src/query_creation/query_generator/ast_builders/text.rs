@@ -80,14 +80,16 @@ impl TextBuilder {
                         "text_substring_from" => {
                             generator.expect_state("call10_types");
                             let substring_from = &mut *unwrap_pat!(text, Expr::Substring { substring_from, .. }, substring_from);
-                            *substring_from = Some(Box::new(generator.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Integer)).1));
+                            *substring_from = Some(Box::new(TypesBuilder::empty()));
+                            let substring_from = &mut *substring_from.as_mut().unwrap();
+                            TypesBuilder::build(generator, substring_from, TypeAssertion::GeneratedBy(SubgraphType::Integer));
                         },
                         "text_substring_for" => {
                             generator.expect_state("call11_types");
                             let substring_for = &mut *unwrap_pat!(text, Expr::Substring { substring_for, .. }, substring_for);
-                            *substring_for = Some(Box::new(generator.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Integer)).1));
-                            generator.expect_state("text_substring_end");
-                            break;
+                            *substring_for = Some(Box::new(TypesBuilder::empty()));
+                            let substring_for = &mut *substring_for.as_mut().unwrap();
+                            TypesBuilder::build(generator, substring_for, TypeAssertion::GeneratedBy(SubgraphType::Integer));
                         },
                         "text_substring_end" => break,
                     })
