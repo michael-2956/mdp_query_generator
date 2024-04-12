@@ -982,35 +982,35 @@ digraph G {
         EXIT_number [label="EXIT number"]
 
         BinaryNumberOp[label="binary op."]
-        call47_types [TYPES="[compatible]", MODS="[...]", label="TYPES: compatible(...)\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         number -> BinaryNumberOp
-        call48_types [TYPES="[compatible]", MODS="[...]", label="TYPES: compatible(...)\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        BinaryNumberOp -> call48_types
+        call47_types [TYPES="[compatible]", MODS="[...]", label="TYPES: compatible(...)\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         binary_number_plus [label="+"]
-        call48_types -> binary_number_plus
+        BinaryNumberOp -> binary_number_plus
         binary_number_plus -> call47_types
         binary_number_minus [label="-"]
-        call48_types -> binary_number_minus
+        BinaryNumberOp -> binary_number_minus
         binary_number_minus -> call47_types
         binary_number_mul [label="*"]
-        call48_types -> binary_number_mul
+        BinaryNumberOp -> binary_number_mul
         binary_number_mul -> call47_types
         binary_number_div [label="/"]
-        call48_types -> binary_number_div
+        BinaryNumberOp -> binary_number_div
         binary_number_div -> call47_types
         binary_number_bin_or [label="|\ntn(i, bi)", TYPE_NAME="[integer, bigint]"]
-        call48_types -> binary_number_bin_or
+        BinaryNumberOp -> binary_number_bin_or
         binary_number_bin_or -> call47_types
         binary_number_bin_and [label="&\ntn(i, bi)", TYPE_NAME="[integer, bigint]"]
-        call48_types -> binary_number_bin_and
+        BinaryNumberOp -> binary_number_bin_and
         binary_number_bin_and -> call47_types
         binary_number_bin_xor [label="#\ntn(i, bi)", TYPE_NAME="[integer, bigint]"]
-        call48_types -> binary_number_bin_xor
+        BinaryNumberOp -> binary_number_bin_xor
         binary_number_bin_xor -> call47_types
         binary_number_exp [label="^\ntn(num)", TYPE_NAME="numeric"]
-        call48_types -> binary_number_exp
+        BinaryNumberOp -> binary_number_exp
         binary_number_exp -> call47_types
-        call47_types -> EXIT_number
+        call48_types [TYPES="[compatible]", MODS="[...]", label="TYPES: compatible(...)\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call47_types -> call48_types
+        call48_types -> EXIT_number
 
         UnaryNumberOp [label="unary op."]
         call1_types [TYPES="[compatible]", MODS="[...]", label="TYPES: compatible(...)\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]

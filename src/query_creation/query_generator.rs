@@ -12,7 +12,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
-    BinaryOperator, DateTimeField, Expr, Ident, Query, TrimWhereField, UnaryOperator
+    BinaryOperator, Expr, Ident, Query, TrimWhereField, UnaryOperator
 };
 
 use crate::{config::TomlReadable, training::models::PathwayGraphModel};
@@ -22,7 +22,7 @@ use super::{
     state_generator::{markov_chain_generator::subgraph_type::SubgraphType, subgraph_type::ContainsSubgraphType, CallTypes}
 };
 use self::{
-    aggregate_function_settings::AggregateFunctionDistribution, ast_builders::{query::QueryBuilder, types::TypesBuilder, val_3::Val3Builder}, query_info::{ClauseContext, DatabaseSchema}, value_choosers::QueryValueChooser
+    aggregate_function_settings::AggregateFunctionDistribution, ast_builders::{number::NumberBuilder, query::QueryBuilder, types::TypesBuilder, val_3::Val3Builder}, query_info::{ClauseContext, DatabaseSchema}, value_choosers::QueryValueChooser
 };
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
@@ -228,84 +228,17 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     }
 
     fn handle_val_3(&mut self) -> (SubgraphType, Expr) {
+        // TODO: remove the handler
         let mut l = Val3Builder::empty();
         let tp = Val3Builder::build(self, &mut l);
         (tp, l)
     }
 
-    /// subgraph def_numeric
     fn handle_number(&mut self) -> (SubgraphType, Expr) {
-        self.expect_state("number");
-        let requested_number_type = self.assert_single_type_argument();
-        let (number_type, number) = match_next_state!(self, {
-            "BinaryNumberOp" => {
-                self.expect_state("call48_types");
-                self.state_generator.set_compatible_list(requested_number_type.get_compat_types());
-                let types_value_1 = self.handle_types(TypeAssertion::CompatibleWith(requested_number_type.clone())).1;
-                let numeric_binary_op = match_next_state!(self, {
-                    "binary_number_bin_and" => BinaryOperator::BitwiseAnd,
-                    "binary_number_bin_or" => BinaryOperator::BitwiseOr,
-                    "binary_number_bin_xor" => BinaryOperator::PGBitwiseXor,
-                    "binary_number_exp" => BinaryOperator::PGExp,
-                    "binary_number_div" => BinaryOperator::Divide,
-                    "binary_number_minus" => BinaryOperator::Minus,
-                    "binary_number_mul" => BinaryOperator::Multiply,
-                    "binary_number_plus" => BinaryOperator::Plus,
-                });
-                self.expect_state("call47_types");
-                let types_value_2 = self.handle_types(TypeAssertion::CompatibleWith(requested_number_type.clone())).1;
-                (requested_number_type, Expr::BinaryOp {
-                    left: Box::new(types_value_1),
-                    op: numeric_binary_op,
-                    right: Box::new(types_value_2)
-                })
-            },
-            "UnaryNumberOp" => {
-                let numeric_unary_op = match_next_state!(self, {
-                    "unary_number_abs" => UnaryOperator::PGAbs,
-                    "unary_number_bin_not" => UnaryOperator::PGBitwiseNot,
-                    "unary_number_cub_root" => UnaryOperator::PGCubeRoot,
-                    "unary_number_minus" => UnaryOperator::Minus,
-                    "unary_number_plus" => UnaryOperator::Plus,
-                    "unary_number_sq_root" => UnaryOperator::PGSquareRoot,
-                });
-                if numeric_unary_op == UnaryOperator::Minus {
-                    self.expect_state("call89_types");
-                } else {
-                    self.expect_state("call1_types");
-                }
-                self.state_generator.set_compatible_list(requested_number_type.get_compat_types());
-                let number = self.handle_types(TypeAssertion::CompatibleWith(requested_number_type.clone())).1;
-                (requested_number_type, Expr::UnaryOp {
-                    op: numeric_unary_op,
-                    expr: Box::new(number)
-                })
-            },
-            "number_string_position" => {
-                self.expect_state("call2_types");
-                let types_value_1 = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Text)).1;
-                self.expect_state("string_position_in");
-                self.expect_state("call3_types");
-                let types_value_2 = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Text)).1;
-                (SubgraphType::Integer, Expr::Position {
-                    expr: Box::new(types_value_1),
-                    r#in: Box::new(types_value_2)
-                })
-            },
-            "number_extract_field_from_date" => {
-                self.expect_state("call0_select_datetime_field");
-                let field = self.handle_select_datetime_field();
-                self.expect_state("call97_types");
-                self.state_generator.set_compatible_list([
-                    SubgraphType::Interval.get_compat_types(),
-                    SubgraphType::Timestamp.get_compat_types(),
-                ].concat());
-                let date = self.handle_types(TypeAssertion::CompatibleWithOneOf(&[SubgraphType::Interval, SubgraphType::Timestamp])).1;
-                (SubgraphType::Numeric, Expr::Extract { field, expr: Box::new(date) })
-            },
-        });
-        self.expect_state("EXIT_number");
-        (number_type, number)
+        // TODO: remove the handler
+        let mut l = NumberBuilder::empty();
+        let tp = NumberBuilder::build(self, &mut l);
+        (tp, l)
     }
 
     /// subgraph def_text
@@ -448,30 +381,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         });
         
         (SubgraphType::Timestamp, expr)
-    }
-
-    /// subgraph def_select_datetime_field
-    fn handle_select_datetime_field(&mut self) -> DateTimeField {
-        self.expect_state("select_datetime_field");
-        let field = match_next_state!(self, {
-            "select_datetime_field_microseconds" => DateTimeField::Microseconds,
-            "select_datetime_field_milliseconds" => DateTimeField::Milliseconds,
-            "select_datetime_field_second" => DateTimeField::Second,
-            "select_datetime_field_minute" => DateTimeField::Minute,
-            "select_datetime_field_hour" => DateTimeField::Hour,
-            "select_datetime_field_day" => DateTimeField::Day,
-            "select_datetime_field_isodow" => DateTimeField::Isodow,
-            "select_datetime_field_week" => DateTimeField::Week,
-            "select_datetime_field_month" => DateTimeField::Month,
-            "select_datetime_field_quarter" => DateTimeField::Quarter,
-            "select_datetime_field_year" => DateTimeField::Year,
-            "select_datetime_field_isoyear" => DateTimeField::Isoyear,
-            "select_datetime_field_decade" => DateTimeField::Decade,
-            "select_datetime_field_century" => DateTimeField::Century,
-            "select_datetime_field_millennium" => DateTimeField::Millennium,
-        });
-        self.expect_state("EXIT_select_datetime_field");
-        field
     }
 
     /// subgarph def_interval

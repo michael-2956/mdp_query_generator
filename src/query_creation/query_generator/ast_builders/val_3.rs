@@ -1,4 +1,4 @@
-use sqlparser::ast::{BinaryOperator, Expr, Ident, UnaryOperator};
+use sqlparser::ast::{BinaryOperator, Expr, UnaryOperator};
 
 use crate::{query_creation::{query_generator::{ast_builders::{list_expr::ListExprBuilder, query::QueryBuilder, types::TypesBuilder, types_type::TypesTypeBuilder}, match_next_state, value_choosers::QueryValueChooser, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
 
@@ -7,7 +7,7 @@ pub struct Val3Builder { }
 
 impl Val3Builder {
     pub fn empty() -> Expr {
-        Expr::Identifier(Ident::new("[?]"))
+        TypesBuilder::empty()
     }
 
     pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
