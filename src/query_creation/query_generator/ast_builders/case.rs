@@ -19,6 +19,8 @@ impl CaseBuilder {
 
         *expr = Expr::Case {
             operand: None,
+            // the nothing is needed so that the result can be
+            // displayed before condition is in place
             conditions: vec![TypesBuilder::nothing()],
             results: vec![TypesBuilder::empty()],
             else_result: None
@@ -41,22 +43,19 @@ impl CaseBuilder {
                 generator.expect_state("call78_types");
                 TypesBuilder::build(generator, &mut **operand.as_mut().unwrap(), TypeAssertion::CompatibleWith(operand_type.clone()));
 
-                // remove the initial "nothing" which was put so that printing works
-                unwrap_pat!(expr, Expr::Case { conditions, .. }, conditions).pop().unwrap();
-
                 loop {
                     generator.expect_states(&["simple_case_condition", "call79_types"]);
                     generator.state_generator.set_compatible_list(operand_type.get_compat_types());
 
-                    let conditions = unwrap_pat!(expr, Expr::Case { conditions, .. }, conditions);
-                    conditions.push(TypesBuilder::empty());
-                    TypesBuilder::build(generator, conditions.last_mut().unwrap(), TypeAssertion::CompatibleWith(operand_type.clone()));
+                    let condition = unwrap_pat!(expr, Expr::Case { conditions, .. }, conditions).last_mut().unwrap();
+                    *condition = TypesBuilder::empty();
+                    TypesBuilder::build(generator, condition, TypeAssertion::CompatibleWith(operand_type.clone()));
 
                     match_next_state!(generator, {
                         "simple_case_result" => {
+                            unwrap_pat!(expr, Expr::Case { conditions, .. }, conditions).push(TypesBuilder::nothing());
                             generator.expect_state("call80_types");
                             generator.state_generator.set_compatible_list(out_type.get_compat_types());
-
                             let results = unwrap_pat!(expr, Expr::Case { results, .. }, results);
                             results.push(TypesBuilder::empty());
                             TypesBuilder::build(generator, results.last_mut().unwrap(), TypeAssertion::CompatibleWith(out_type.clone()));
@@ -66,21 +65,18 @@ impl CaseBuilder {
                 }
             },
             "searched_case" => {
-                // remove the initial "nothing" which was put so that printing works
-                unwrap_pat!(expr, Expr::Case { conditions, .. }, conditions).pop().unwrap();
-
                 loop {
                     generator.expect_states(&["searched_case_condition", "call76_types"]);
 
-                    let conditions = unwrap_pat!(expr, Expr::Case { conditions, .. }, conditions);
-                    conditions.push(TypesBuilder::empty());
-                    TypesBuilder::build(generator, conditions.last_mut().unwrap(), TypeAssertion::GeneratedBy(SubgraphType::Val3));
+                    let condition = unwrap_pat!(expr, Expr::Case { conditions, .. }, conditions).last_mut().unwrap();
+                    *condition = TypesBuilder::empty();
+                    TypesBuilder::build(generator, condition, TypeAssertion::GeneratedBy(SubgraphType::Val3));
 
                     match_next_state!(generator, {
                         "searched_case_result" => {
+                            unwrap_pat!(expr, Expr::Case { conditions, .. }, conditions).push(TypesBuilder::nothing());
                             generator.expect_state("call77_types");
                             generator.state_generator.set_compatible_list(out_type.get_compat_types());
-
                             let results = unwrap_pat!(expr, Expr::Case { results, .. }, results);
                             results.push(TypesBuilder::empty());
                             TypesBuilder::build(generator, results.last_mut().unwrap(), TypeAssertion::CompatibleWith(out_type.clone()));
