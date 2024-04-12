@@ -49,6 +49,8 @@ training_schema="schema/tpc-h_tables.sql"
 save_weights_to="weights/fullcontext/unstacked/untrained_db_2_performance_graph_100K.mw"
 
 [query_generator]
+# set to false to choose models by maximum probability
+use_probabilistic_state_chooser=true
 # Whether to use the predictor model for query generation
 use_model=false
 # print the queries in "generate" mode

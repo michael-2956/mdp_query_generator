@@ -45,13 +45,19 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
             return ModelPredictionResult::Some(node_outgoing.into_iter().map(|p| (1f64, p)).collect());
         }
 
+        // TODO: Remove this once the qualified_column_name/unqualified_column_name will be
+        // decided AFTER column selection and not before. This will work for now.
+        if node_outgoing.iter().any(|node| [
+            "qualified_column_name", "unqualified_column_name"
+        ].contains(&node.node_common.name.as_str())) {
+            return ModelPredictionResult::Some(node_outgoing.into_iter().map(
+                |node| (if node.node_common.name.as_str() == "qualified_column_name" {
+                    1f64
+                } else { 0f64 }, node)
+            ).collect())
+        }
+
         eprintln!("{}", current_query_ast_opt.unwrap());
-
-        // if node_outgoing.iter().any(|node| [
-        //     "qualified_column_name", "unqualified_column_name"
-        // ].contains(&node.node_common.name.as_str())) {
-
-        // }
 
         /// TODO impl QueryValueChooser for ChatGPTPromptingModel
         // every method prompts chatgpt instead

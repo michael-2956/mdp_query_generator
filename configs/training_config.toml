@@ -48,6 +48,7 @@ save_weights_to="weights/DepthwiseFunctionNameContext/tpch_default_queries.mw"
 
 
 [query_generator]
+use_probabilistic_state_chooser=true
 # Whether to use the predictor model for query generation
 use_model=true
 # print the queries in "generate" mode

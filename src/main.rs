@@ -5,7 +5,7 @@ use equivalence_testing::{config::{Config, ProgramArgs}, equivalence_testing_fun
 }, query_creation::{
     query_generator::{value_choosers::RandomValueChooser, QueryGenerator},
     state_generator::{
-        state_choosers::{ProbabilisticStateChooser, StateChooser},
+        state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser, StateChooser},
         substitute_models::{AntiCallModel, MarkovModel, SubstituteModel}, MarkovChainGenerator
     },
 }, training::{ast_to_path::tester::TestAST2Path, trainer::SQLTrainer}};
@@ -118,7 +118,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if config.main_config.mode == "train" {
         run_training(config);
     } else if config.main_config.mode == "generate" {
-        select_sub_model_and_run_generation::<ProbabilisticStateChooser>(config);
+        if config.generator_config.use_probabilistic_state_chooser {
+            select_sub_model_and_run_generation::<ProbabilisticStateChooser>(config);
+        } else {
+            select_sub_model_and_run_generation::<MaxProbStateChooser>(config);
+        }
     } else if config.main_config.mode == "test_ast_to_path" {
         test_ast_to_path(config);
     }

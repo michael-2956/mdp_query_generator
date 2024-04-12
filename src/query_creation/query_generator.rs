@@ -29,6 +29,7 @@ use super::state_generator::{MarkovChainGenerator, substitute_models::Substitute
 
 #[derive(Debug, Clone)]
 pub struct QueryGeneratorConfig {
+    pub use_probabilistic_state_chooser: bool,
     pub use_model: bool,
     pub print_queries: bool,
     pub print_schema: bool,
@@ -41,6 +42,7 @@ impl TomlReadable for QueryGeneratorConfig {
     fn from_toml(toml_config: &toml::Value) -> Self {
         let section = &toml_config["query_generator"];
         Self {
+            use_probabilistic_state_chooser: section["use_probabilistic_state_chooser"].as_bool().unwrap(),
             use_model: section["use_model"].as_bool().unwrap(),
             print_queries: section["print_queries"].as_bool().unwrap(),
             print_schema: section["print_schema"].as_bool().unwrap(),
