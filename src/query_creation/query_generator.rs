@@ -12,7 +12,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{
-    BinaryOperator, Expr, Ident, Query, TrimWhereField, UnaryOperator
+    BinaryOperator, Expr, Ident, Query, UnaryOperator
 };
 
 use crate::{config::TomlReadable, training::models::PathwayGraphModel};
@@ -22,7 +22,7 @@ use super::{
     state_generator::{markov_chain_generator::subgraph_type::SubgraphType, subgraph_type::ContainsSubgraphType, CallTypes}
 };
 use self::{
-    aggregate_function_settings::AggregateFunctionDistribution, ast_builders::{number::NumberBuilder, query::QueryBuilder, types::TypesBuilder, val_3::Val3Builder}, query_info::{ClauseContext, DatabaseSchema}, value_choosers::QueryValueChooser
+    aggregate_function_settings::AggregateFunctionDistribution, ast_builders::{number::NumberBuilder, query::QueryBuilder, text::TextBuilder, types::TypesBuilder, val_3::Val3Builder}, query_info::{ClauseContext, DatabaseSchema}, value_choosers::QueryValueChooser
 };
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
@@ -241,70 +241,11 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         (tp, l)
     }
 
-    /// subgraph def_text
     fn handle_text(&mut self) -> (SubgraphType, Expr) {
-        self.expect_state("text");
-        let string = match_next_state!(self, {
-            "text_trim" => {
-                let (trim_where, trim_what) = match_next_state!(self, {
-                    "call6_types" => {
-                        let types_value = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Text)).1;
-                        let spec_mode = match_next_state!(self, {
-                            "BOTH" => TrimWhereField::Both,
-                            "LEADING" => TrimWhereField::Leading,
-                            "TRAILING" => TrimWhereField::Trailing,
-                        });
-                        self.expect_state("call5_types");
-                        (Some(spec_mode), Some(Box::new(types_value)))
-                    },
-                    "call5_types" => (None, None),
-                });
-                let types_value = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Text)).1;
-                Expr::Trim {
-                    expr: Box::new(types_value), trim_where, trim_what
-                }
-            },
-            "text_concat" => {
-                self.expect_state("call7_types");
-                let types_value_1 = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Text)).1;
-                self.expect_state("text_concat_concat");
-                self.expect_state("call8_types");
-                let types_value_2 = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Text)).1;
-                Expr::BinaryOp {
-                    left: Box::new(types_value_1),
-                    op: BinaryOperator::StringConcat,
-                    right: Box::new(types_value_2)
-                }
-            },
-            "text_substring" => {
-                self.expect_state("call9_types");
-                let target_string = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Text)).1;
-                let mut substring_from = None;
-                let mut substring_for = None;
-                loop {
-                    match_next_state!(self, {
-                        "text_substring_from" => {
-                            self.expect_state("call10_types");
-                            substring_from = Some(Box::new(self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Integer)).1));
-                        },
-                        "text_substring_for" => {
-                            self.expect_state("call11_types");
-                            substring_for = Some(Box::new(self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Integer)).1));
-                            self.expect_state("text_substring_end");
-                            break;
-                        },
-                        "text_substring_end" => break,
-                    })
-                }
-                Expr::Substring {
-                    expr: Box::new(target_string),
-                    substring_from,
-                    substring_for,
-                }
-            },
-        });
-        self.expect_state("EXIT_text");
-        (SubgraphType::Text, string)
+        // TODO: remove the handler
+        let mut l = TextBuilder::empty();
+        let tp = TextBuilder::build(self, &mut l);
+        (tp, l)
     }
 
     /// subgarph def_date

@@ -1064,10 +1064,9 @@ digraph G {
 
         text_trim[label="TRIM"]
         text -> text_trim
-        call5_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        text_trim -> call5_types
         call6_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         text_trim -> call6_types
+        call5_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         BOTH []
         call6_types -> BOTH
         BOTH -> call5_types
@@ -1077,7 +1076,10 @@ digraph G {
         TRAILING []
         call6_types -> TRAILING
         TRAILING -> call5_types
-        call5_types -> EXIT_text
+        text_trim_done [label="trim done"]
+        call6_types -> text_trim_done
+        call5_types -> text_trim_done
+        text_trim_done -> EXIT_text
 
         text_concat [label="concatenation"]
         text -> text_concat

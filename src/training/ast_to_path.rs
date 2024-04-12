@@ -765,9 +765,7 @@ impl PathGenerator {
         let requested_number_type = self.assert_single_type_argument();
         let number_type = match expr {
             Expr::BinaryOp { left, op, right } => {
-                self.try_push_states(&["BinaryNumberOp", "call48_types"])?;
-                self.state_generator.set_compatible_list(requested_number_type.get_compat_types());
-                self.handle_types(left, TypeAssertion::CompatibleWith(requested_number_type.clone()))?;
+                self.try_push_state("BinaryNumberOp")?;
                 self.try_push_state(match op {
                     BinaryOperator::BitwiseAnd => "binary_number_bin_and",
                     BinaryOperator::BitwiseOr => "binary_number_bin_or",
@@ -779,7 +777,10 @@ impl PathGenerator {
                     BinaryOperator::Plus => "binary_number_plus",
                     any => unexpected_expr!(any),
                 })?;
+                self.state_generator.set_compatible_list(requested_number_type.get_compat_types());
                 self.try_push_state("call47_types")?;
+                self.handle_types(left, TypeAssertion::CompatibleWith(requested_number_type.clone()))?;
+                self.try_push_state("call48_types")?;
                 self.handle_types(right, TypeAssertion::CompatibleWith(requested_number_type.clone()))?;
                 requested_number_type
             },
@@ -833,22 +834,24 @@ impl PathGenerator {
         match expr {
             Expr::Value(Value::SingleQuotedString(_)) => self.try_push_state("text_literal")?,
             Expr::Trim { expr, trim_where, trim_what } => {
-                self.try_push_state("text_trim")?;
+                self.try_push_states(&["text_trim", "call6_types"])?;
+                self.handle_types(expr, TypeAssertion::GeneratedBy(SubgraphType::Text))?;
+
                 match (trim_where, trim_what) {
                     (Some(trim_where), Some(trim_what)) => {
-                        self.try_push_state("call6_types")?;
-                        self.handle_types(trim_what, TypeAssertion::GeneratedBy(SubgraphType::Text))?;
                         self.try_push_state(match trim_where {
                             TrimWhereField::Both => "BOTH",
                             TrimWhereField::Leading => "LEADING",
                             TrimWhereField::Trailing => "TRAILING",
                         })?;
+                        self.try_push_state("call5_types")?;
+                        self.handle_types(trim_what, TypeAssertion::GeneratedBy(SubgraphType::Text))?;
                     },
                     (None, None) => {},
                     any => unexpected_expr!(any),
                 };
-                self.try_push_state("call5_types")?;
-                self.handle_types(expr, TypeAssertion::GeneratedBy(SubgraphType::Text))?;
+                
+                self.try_push_state("text_trim_done")?;
             },
             Expr::BinaryOp { left, op, right } if *op == BinaryOperator::StringConcat => {
                 self.try_push_states(&["text_concat", "call7_types"])?;
