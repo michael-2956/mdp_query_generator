@@ -947,13 +947,25 @@ impl PathGenerator {
 
         match expr {
             Expr::BinaryOp { left, op, right } => {
+                self.try_push_states(&["timestamp_binary", "timestamp_add_subtract"])?;
+                self.try_push_state(match op {
+                    BinaryOperator::Plus => "timestamp_add_subtract_plus",
+                    BinaryOperator::Minus => "timestamp_add_subtract_minus",
+                    any => unexpected_expr!(any),
+                })?;
+
                 let mut err_str: String = "".to_string();
                 let checkpoint = self.get_checkpoint();
                 for swap_arguments in [false, true] {
+                    if swap_arguments {
+                        self.try_push_state("timestamp_swap_arguments")?;
+                    }
+
                     let (timestamp, interval) = if swap_arguments {
                         (right, left)
                     } else { (left, right) };
-                    self.try_push_states(&["timestamp_binary", "timestamp_add_subtract", "call94_types"])?;
+
+                    self.try_push_state("call94_types")?;
                     match self.handle_types(
                         timestamp, TypeAssertion::GeneratedBy(SubgraphType::Date)
                     ) {
@@ -964,6 +976,7 @@ impl PathGenerator {
                             continue;
                         },
                     };
+
                     self.try_push_state("call95_types")?;
                     match self.handle_types(
                         interval, TypeAssertion::GeneratedBy(SubgraphType::Interval)
@@ -975,17 +988,11 @@ impl PathGenerator {
                             continue;
                         },
                     };
-                    self.try_push_state(match op {
-                        BinaryOperator::Plus => "timestamp_add_subtract_plus",
-                        BinaryOperator::Minus => "timestamp_add_subtract_minus",
-                        any => unexpected_expr!(any),
-                    })?;
-                    if swap_arguments {
-                        self.try_push_state("timestamp_swap_arguments")?;
-                    }
+
                     err_str = "".to_string();
                     break;
                 }
+
                 if err_str != "" {
                     return Err(ConvertionError::new(err_str))
                 }

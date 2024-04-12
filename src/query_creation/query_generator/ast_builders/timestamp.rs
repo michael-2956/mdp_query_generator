@@ -4,62 +4,63 @@ use crate::{query_creation::{query_generator::{match_next_state, value_choosers:
 
 use super::types::TypesBuilder;
 
-/// subgarph def_date
-pub struct DateBuilder { }
+/// subgraph def_timestamp
+pub struct TimestampBuilder { }
 
-impl DateBuilder {
+impl TimestampBuilder {
     pub fn empty() -> Expr {
         TypesBuilder::empty()
     }
 
     pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
-        generator: &mut QueryGenerator<SubMod, StC, QVC>, date: &mut Expr
+        generator: &mut QueryGenerator<SubMod, StC, QVC>, timestamp: &mut Expr
     ) -> SubgraphType {
-        generator.expect_state("date");
+        generator.expect_state("timestamp");
 
         match_next_state!(generator, {
-            "date_binary" => {
-                generator.expect_state("date_add_subtract");
-
+            "timestamp_binary" => {
+                generator.expect_state("timestamp_add_subtract");
+                
                 let op = match_next_state!(generator, {
-                    "date_add_subtract_plus" => BinaryOperator::Plus,
-                    "date_add_subtract_minus" => BinaryOperator::Minus,
+                    "timestamp_add_subtract_plus" => BinaryOperator::Plus,
+                    "timestamp_add_subtract_minus" => BinaryOperator::Minus,
                 });
-                *date = Expr::BinaryOp {
+
+                *timestamp = Expr::BinaryOp {
                     left: Box::new(TypesBuilder::nothing()),
                     op,
                     right: Box::new(TypesBuilder::nothing())
                 };
 
                 let do_swap = match_next_state!(generator, {
-                    "date_swap_arguments" => {
-                        generator.expect_state("call86_types");
+                    "timestamp_swap_arguments" => {
+                        generator.expect_state("call94_types");
                         true
                     },
-                    "call86_types" => false,
+                    "call94_types" => false,
                 });
 
                 let expr = if do_swap {
-                    &mut **unwrap_pat!(date, Expr::BinaryOp { right, .. }, right)
+                    &mut **unwrap_pat!(timestamp, Expr::BinaryOp { right, .. }, right)
                 } else {
-                    &mut **unwrap_pat!(date, Expr::BinaryOp { left, .. }, left)
+                    &mut **unwrap_pat!(timestamp, Expr::BinaryOp { left, .. }, left)
                 };
                 *expr = TypesBuilder::empty();
                 TypesBuilder::build(generator, expr, TypeAssertion::GeneratedBy(SubgraphType::Date));
 
-                generator.expect_state("call88_types");
+                generator.expect_state("call95_types");
                 let expr = if do_swap {
-                    &mut **unwrap_pat!(date, Expr::BinaryOp { left, .. }, left)
+                    &mut **unwrap_pat!(timestamp, Expr::BinaryOp { left, .. }, left)
                 } else {
-                    &mut **unwrap_pat!(date, Expr::BinaryOp { right, .. }, right)
+                    &mut **unwrap_pat!(timestamp, Expr::BinaryOp { right, .. }, right)
                 };
                 *expr = TypesBuilder::empty();
-                TypesBuilder::build(generator, expr, TypeAssertion::GeneratedBy(SubgraphType::Integer));
+                TypesBuilder::build(generator, expr, TypeAssertion::GeneratedBy(SubgraphType::Interval));
             },
         });
 
-        generator.expect_state("EXIT_date");
+        generator.expect_state("EXIT_timestamp");
         
-        SubgraphType::Date
+        SubgraphType::Timestamp
     }
 }

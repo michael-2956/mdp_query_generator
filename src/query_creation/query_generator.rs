@@ -22,7 +22,7 @@ use super::{
     state_generator::{markov_chain_generator::subgraph_type::SubgraphType, subgraph_type::ContainsSubgraphType, CallTypes}
 };
 use self::{
-    aggregate_function_settings::AggregateFunctionDistribution, ast_builders::{number::NumberBuilder, query::QueryBuilder, text::TextBuilder, types::TypesBuilder, val_3::Val3Builder}, query_info::{ClauseContext, DatabaseSchema}, value_choosers::QueryValueChooser
+    aggregate_function_settings::AggregateFunctionDistribution, ast_builders::{date::DateBuilder, number::NumberBuilder, query::QueryBuilder, text::TextBuilder, timestamp::TimestampBuilder, types::TypesBuilder, val_3::Val3Builder}, query_info::{ClauseContext, DatabaseSchema}, value_choosers::QueryValueChooser
 };
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
@@ -248,80 +248,18 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         (tp, l)
     }
 
-
     fn handle_date(&mut self) -> (SubgraphType, Expr) {
-        self.expect_state("date");
-
-        let expr = match_next_state!(self, {
-            "date_binary" => {
-                let (mut date, op, mut integer) = match_next_state!(self, {
-                    "date_add_subtract" => {
-                        self.expect_state("call86_types");
-                        let date = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Date)).1;
-                        self.expect_state("call88_types");
-                        let integer = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Integer)).1;
-                        let op = match_next_state!(self, {
-                            "date_add_subtract_plus" => BinaryOperator::Plus,
-                            "date_add_subtract_minus" => BinaryOperator::Minus,
-                        });
-                        (date, op, integer)
-                    },
-                });
-                match_next_state!(self, {
-                    "date_swap_arguments" => {
-                        assert!(op == BinaryOperator::Plus);
-                        std::mem::swap(&mut date, &mut integer);
-                        self.expect_state("EXIT_date");
-                    },
-                    "EXIT_date" => { },
-                });
-                Expr::BinaryOp {
-                    left: Box::new(date),
-                    op,
-                    right: Box::new(integer)
-                }
-            },
-        });
-        
-        (SubgraphType::Date, expr)
+        // TODO: remove the handler
+        let mut l = DateBuilder::empty();
+        let tp = DateBuilder::build(self, &mut l);
+        (tp, l)
     }
 
-    /// subgraph def_timestamp
     fn handle_timestamp(&mut self) -> (SubgraphType, Expr) {
-        self.expect_state("timestamp");
-
-        let expr = match_next_state!(self, {
-            "timestamp_binary" => {
-                let (mut date, op, mut interval) = match_next_state!(self, {
-                    "timestamp_add_subtract" => {
-                        self.expect_state("call94_types");
-                        let date = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Date)).1;
-                        self.expect_state("call95_types");
-                        let interval = self.handle_types(TypeAssertion::GeneratedBy(SubgraphType::Interval)).1;
-                        let op = match_next_state!(self, {
-                            "timestamp_add_subtract_plus" => BinaryOperator::Plus,
-                            "timestamp_add_subtract_minus" => BinaryOperator::Minus,
-                        });
-                        (date, op, interval)
-                    },
-                });
-                match_next_state!(self, {
-                    "timestamp_swap_arguments" => {
-                        assert!(op == BinaryOperator::Plus);
-                        std::mem::swap(&mut date, &mut interval);
-                        self.expect_state("EXIT_timestamp");
-                    },
-                    "EXIT_timestamp" => { },
-                });
-                Expr::BinaryOp {
-                    left: Box::new(date),
-                    op,
-                    right: Box::new(interval)
-                }
-            },
-        });
-        
-        (SubgraphType::Timestamp, expr)
+        // TODO: remove the handler
+        let mut l = TimestampBuilder::empty();
+        let tp = TimestampBuilder::build(self, &mut l);
+        (tp, l)
     }
 
     /// subgarph def_interval
