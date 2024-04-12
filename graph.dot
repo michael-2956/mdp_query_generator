@@ -1119,22 +1119,21 @@ digraph G {
 
         date_add_subtract [label="+/-"]
         date_binary -> date_add_subtract
+        date_add_subtract_plus [label="+"]
+        date_add_subtract -> date_add_subtract_plus
+        date_add_subtract_minus [label="-"]
+        date_add_subtract -> date_add_subtract_minus
+        date_swap_arguments [label="int + date"]
+        date_add_subtract_plus -> date_swap_arguments
+
         call86_types [TYPES="[date]", MODS="[...]", label="TYPES: date\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        date_add_subtract -> call86_types
+        date_add_subtract_minus -> call86_types
+        date_add_subtract_plus -> call86_types
+        date_swap_arguments -> call86_types
+
         call88_types [TYPES="[integer]", MODS="[...]", label="TYPES: integer\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         call86_types -> call88_types
-    
-        date_add_subtract_plus [label="+"]
-        call88_types -> date_add_subtract_plus
-        date_add_subtract_plus -> EXIT_date
-
-        date_add_subtract_minus [label="-"]
-        call88_types -> date_add_subtract_minus
-        date_add_subtract_minus -> EXIT_date
-
-        date_swap_arguments [label="Swap arguments"]
-        date_swap_arguments -> EXIT_date
-        date_add_subtract_plus -> date_swap_arguments
+        call88_types -> EXIT_date
     }
 
     subgraph def_timestamp {

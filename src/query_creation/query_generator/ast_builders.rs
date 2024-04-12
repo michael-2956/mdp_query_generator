@@ -1,6 +1,7 @@
 pub mod from;
 pub mod case;
 pub mod text;
+pub mod date;
 pub mod val_3;
 pub mod query;
 pub mod types;

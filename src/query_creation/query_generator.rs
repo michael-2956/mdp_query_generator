@@ -248,7 +248,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
         (tp, l)
     }
 
-    /// subgarph def_date
+
     fn handle_date(&mut self) -> (SubgraphType, Expr) {
         self.expect_state("date");
 

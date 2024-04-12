@@ -884,13 +884,25 @@ impl PathGenerator {
 
         match expr {
             Expr::BinaryOp { left, op, right } => {
+                self.try_push_states(&["date_binary", "date_add_subtract"])?;
+                self.try_push_state(match op {
+                    BinaryOperator::Plus => "date_add_subtract_plus",
+                    BinaryOperator::Minus => "date_add_subtract_minus",
+                    any => unexpected_expr!(any),
+                })?;
+
                 let mut err_str: String = "".to_string();
                 let checkpoint = self.get_checkpoint();
                 for swap_arguments in [false, true] {
+                    if swap_arguments {
+                        self.try_push_state("date_swap_arguments")?;
+                    }
+
                     let (date, integer) = if swap_arguments {
                         (right, left)
                     } else { (left, right) };
-                    self.try_push_states(&["date_binary", "date_add_subtract", "call86_types"])?;
+
+                    self.try_push_state("call86_types")?;
                     match self.handle_types(
                         date, TypeAssertion::GeneratedBy(SubgraphType::Date)
                     ) {
@@ -901,6 +913,7 @@ impl PathGenerator {
                             continue;
                         },
                     };
+
                     self.try_push_state("call88_types")?;
                     match self.handle_types(
                         integer, TypeAssertion::GeneratedBy(SubgraphType::Integer)
@@ -912,17 +925,11 @@ impl PathGenerator {
                             continue;
                         },
                     };
-                    self.try_push_state(match op {
-                        BinaryOperator::Plus => "date_add_subtract_plus",
-                        BinaryOperator::Minus => "date_add_subtract_minus",
-                        any => unexpected_expr!(any),
-                    })?;
-                    if swap_arguments {
-                        self.try_push_state("date_swap_arguments")?;
-                    }
+
                     err_str = "".to_string();
                     break;
                 }
+
                 if err_str != "" {
                     return Err(ConvertionError::new(err_str))
                 }
