@@ -18,29 +18,31 @@ impl CaseBuilder {
         generator.expect_state("case");
 
         *expr = Expr::Case {
-            operand: None, conditions: vec![], results: vec![], else_result: None
+            operand: None,
+            conditions: vec![TypesBuilder::nothing()],
+            results: vec![TypesBuilder::empty()],
+            else_result: None
         };
 
         generator.expect_states(&["case_first_result", "call7_types_type"]);
         let out_type = TypesTypeBuilder::build(generator);
-
         generator.expect_state("call82_types");
         generator.state_generator.set_compatible_list(out_type.get_compat_types());
-
         let results = unwrap_pat!(expr, Expr::Case { results, .. }, results);
-        results.push(TypesBuilder::empty());
         TypesBuilder::build(generator, results.last_mut().unwrap(), TypeAssertion::CompatibleWith(out_type.clone()));
 
         match_next_state!(generator, {
             "simple_case" => {
-                generator.expect_states(&["simple_case_operand", "call8_types_type"]);
-                let operand_type = TypesTypeBuilder::build(generator);
-                generator.expect_state("call78_types");
-                generator.state_generator.set_compatible_list(operand_type.get_compat_types());
-
                 let operand = unwrap_pat!(expr, Expr::Case { operand, .. }, operand);
                 *operand = Some(Box::new(TypesBuilder::empty()));
+                generator.expect_states(&["simple_case_operand", "call8_types_type"]);
+                let operand_type = TypesTypeBuilder::build(generator);
+                generator.state_generator.set_compatible_list(operand_type.get_compat_types());
+                generator.expect_state("call78_types");
                 TypesBuilder::build(generator, &mut **operand.as_mut().unwrap(), TypeAssertion::CompatibleWith(operand_type.clone()));
+
+                // remove the initial "nothing" which was put so that printing works
+                unwrap_pat!(expr, Expr::Case { conditions, .. }, conditions).pop().unwrap();
 
                 loop {
                     generator.expect_states(&["simple_case_condition", "call79_types"]);
@@ -64,6 +66,9 @@ impl CaseBuilder {
                 }
             },
             "searched_case" => {
+                // remove the initial "nothing" which was put so that printing works
+                unwrap_pat!(expr, Expr::Case { conditions, .. }, conditions).pop().unwrap();
+
                 loop {
                     generator.expect_states(&["searched_case_condition", "call76_types"]);
 

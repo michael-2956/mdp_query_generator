@@ -57,7 +57,16 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
             ).collect())
         }
 
-        eprintln!("{}", current_query_ast_opt.unwrap());
+        let current_query_str = format!("{}", current_query_ast_opt.unwrap());
+        // if current_query_str.contains("[?]") {
+        //     eprintln!("{current_query_str}");
+        //     let outgoing_str = node_outgoing.iter().map(|node| format!("{} ", node.node_common.name)).collect::<String>();
+        //     eprintln!("{outgoing_str}\n");
+        // }
+        eprintln!("{current_query_str}");
+        let outgoing_str = node_outgoing.iter().map(|node| format!("{} ", node.node_common.name)).collect::<String>();
+        eprintln!("{outgoing_str}\n");
+        
 
         /// TODO impl QueryValueChooser for ChatGPTPromptingModel
         // every method prompts chatgpt instead

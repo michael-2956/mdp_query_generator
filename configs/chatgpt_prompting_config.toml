@@ -16,7 +16,7 @@ save_dot_file=false
 print_weights_after_training=false
 
 [query_generator]
-use_probabilistic_state_chooser=false
+use_probabilistic_state_chooser=true
 use_model=true
 print_queries=true
 print_schema=false

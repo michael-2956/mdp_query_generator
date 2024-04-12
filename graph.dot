@@ -653,16 +653,9 @@ digraph G {
         literals -> number_literal_bigint
         // number_literal_bigint -> EXIT_literals
 
-        number_literal_minus [label="-"]
-        number_literal_integer -> number_literal_minus
-        number_literal_numeric -> number_literal_minus
-        // number_literal_bigint -> number_literal_minus
-        number_literal_minus -> EXIT_literals
-
         literals_explicit_cast [label="Explicit type cast"]
-        literals_explicit_cast -> EXIT_literals
         number_literal_bigint -> literals_explicit_cast
-        literals_explicit_cast -> number_literal_minus
+        literals_explicit_cast -> EXIT_literals
 
         text_literal [label="random text literal\ntn(text)", TYPE_NAME="text"]
         literals -> text_literal

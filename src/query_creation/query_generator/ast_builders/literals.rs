@@ -45,7 +45,13 @@ impl LiteralsBuilder {
                     },
                     _ => unreachable!(),
                 };
-                *expr = Expr::Value(Value::Number(number_str, false));
+                if let Some(number_str) = number_str.strip_prefix('-') {
+                    *expr = Expr::UnaryOp { op: UnaryOperator::Minus, expr: Box::new(
+                        Expr::Value(Value::Number(number_str.to_string(), false))
+                    ) };
+                } else {
+                    *expr = Expr::Value(Value::Number(number_str.clone(), false));
+                }
                 number_type
             },
             "text_literal" => {
@@ -80,16 +86,14 @@ impl LiteralsBuilder {
                 SubgraphType::Interval
             },
         });
-        
-        loop { match_next_state!(generator, {
+
+        match_next_state!(generator, {
             "literals_explicit_cast" => {
                 *expr = Expr::Cast { expr: Box::new(expr.clone()), data_type: tp.to_data_type() };
-            }, // then "number_literal_minus" | "EXIT_literals"
-            "number_literal_minus" => {
-                *expr = Expr::UnaryOp { op: UnaryOperator::Minus, expr: Box::new(expr.clone()) };
-            }, // then "EXIT_literals"
-            "EXIT_literals" => break
-        }); }
+                generator.expect_state("EXIT_literals");
+            }, // then 
+            "EXIT_literals" => { }
+        });
 
         tp
     }

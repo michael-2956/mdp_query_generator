@@ -1434,23 +1434,22 @@ impl PathGenerator {
     
     fn handle_literals_determine_number_type(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
         let number_str = match expr {
-            Expr::UnaryOp { op, expr } if *op == UnaryOperator::Minus => {
-                let tp = self.handle_literals_determine_number_type(expr)?;
-                self.try_push_state("number_literal_minus")?;
-                return Ok(tp)
-            },
             Expr::Cast { expr, data_type } if *data_type == DataType::BigInt(None) => {
                 let tp = self.handle_literals_determine_number_type(expr)?;
                 self.try_push_state("literals_explicit_cast")?;
                 return Ok(tp)
             },
-            Expr::Value(Value::Number(ref number_str, false)) => number_str,
+            Expr::UnaryOp { op, expr } if *op == UnaryOperator::Minus => {
+                let Expr::Value(Value::Number(ref number_str, false)) = **expr else { unexpected_expr!(expr) };
+                format!("-{number_str}")
+            },
+            Expr::Value(Value::Number(ref number_str, false)) => number_str.clone(),
             any => unexpected_expr!(any),
         };
         // assume that literals are the smallest type that they fit into
         // (this is now postgres determines them)
         let checkpoint = self.get_checkpoint();
-        let err_int_str = match number_str.parse::<u32>() {
+        let err_int_str = match number_str.parse::<i32>() {
             Ok(..) => {
                 match self.try_push_state("number_literal_integer") {
                     Ok(..) => {
@@ -1468,7 +1467,7 @@ impl PathGenerator {
                 format!("{err_int}")
             }
         };
-        let err_bigint_str = match number_str.parse::<u64>() {
+        let err_bigint_str = match number_str.parse::<i64>() {
             Ok(..) => {
                 match self.try_push_state("number_literal_bigint") {
                     Ok(..) => {
