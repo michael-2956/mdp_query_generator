@@ -1,6 +1,6 @@
 use sqlparser::ast::{self, Expr, FunctionArg, FunctionArgExpr, ObjectName};
 
-use crate::{query_creation::{query_generator::{aggregate_function_settings::AggregateFunctionAgruments, empty_ident, match_next_state, value_choosers::QueryValueChooser, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
+use crate::{query_creation::{query_generator::{aggregate_function_settings::AggregateFunctionAgruments, highlight_ident, match_next_state, value_choosers::QueryValueChooser, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
 
 use super::types::TypesBuilder;
 
@@ -16,8 +16,8 @@ fn get_last_expr_mut(arg_v: &mut Vec<FunctionArg>) -> &mut Expr {
 pub struct AggregateFunctionBuilder { }
 
 impl AggregateFunctionBuilder {
-    pub fn empty() -> Expr {
-        TypesBuilder::empty()
+    pub fn highlight() -> Expr {
+        TypesBuilder::highlight()
     }
 
     pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
@@ -45,7 +45,7 @@ impl AggregateFunctionBuilder {
         generator.expect_state("aggregate_select_return_type");
 
         let args = unwrap_pat!(expr, Expr::Function(ast::Function{ args, .. }), args);
-        *args = vec![unnamed_arg(TypesBuilder::empty())];
+        *args = vec![unnamed_arg(TypesBuilder::highlight())];
 
         let (
             args_type, return_type
@@ -85,7 +85,7 @@ impl AggregateFunctionBuilder {
                     arm if arm == states[0] => {
                         generator.expect_state(states[1]);
                         TypesBuilder::build(generator, get_last_expr_mut(args), TypeAssertion::CompatibleWith(return_type.clone()));
-                        args.push(unnamed_arg(TypesBuilder::empty())); // add the placeholder for the next argument
+                        args.push(unnamed_arg(TypesBuilder::highlight())); // add the placeholder for the next argument
                         args_type_v.push(return_type.clone());
                     },
                     arm if arm == states[2] => { },
@@ -118,7 +118,7 @@ impl AggregateFunctionBuilder {
 
         let (func_names_iter, dist) = generator.config.aggregate_functions_distribution.get_functions_and_dist(&args_type, &return_type);
         let name = unwrap_pat!(expr, Expr::Function(ast::Function{ name, .. }), name);
-        *name = ObjectName(vec![empty_ident()]);
+        *name = ObjectName(vec![highlight_ident()]);
         *name = generator.value_chooser.choose_aggregate_function_name(func_names_iter, dist);
 
         generator.expect_state("EXIT_aggregate_function");

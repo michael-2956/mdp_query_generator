@@ -1,13 +1,17 @@
 use sqlparser::ast::{ObjectName, SelectItem, WildcardAdditionalOptions};
 
-use crate::{query_creation::{query_generator::{ast_builders::types::TypesBuilder, call_modifiers::{ValueSetterValue, WildcardRelationsValue}, empty_ident, match_next_state, query_info::{IdentName, QueryProps}, value_choosers::QueryValueChooser, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
+use crate::{query_creation::{query_generator::{ast_builders::types::TypesBuilder, call_modifiers::{ValueSetterValue, WildcardRelationsValue}, highlight_ident, match_next_state, query_info::{IdentName, QueryProps}, value_choosers::QueryValueChooser, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
 
 /// subgraph def_SELECT
 pub struct SelectBuilder { }
 
 impl SelectBuilder {
-    pub fn empty() -> (bool, Vec<SelectItem>) {
+    pub fn nothing() -> (bool, Vec<SelectItem>) {
         (false, vec![])
+    }
+
+    pub fn highlight() -> (bool, Vec<SelectItem>) {
+        (false, vec![SelectItem::UnnamedExpr(TypesBuilder::highlight())])
     }
 
     pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
@@ -26,7 +30,7 @@ impl SelectBuilder {
         let mut column_idents_and_graph_types: Vec<(Option<IdentName>, SubgraphType)> = vec![];
 
         loop {
-            projection.push(SelectItem::UnnamedExpr(TypesBuilder::empty()));
+            projection.push(SelectItem::UnnamedExpr(TypesBuilder::highlight()));
             let select_item = projection.last_mut().unwrap();
 
             match_next_state!(generator, {
@@ -62,7 +66,7 @@ impl SelectBuilder {
                         ),
                         "SELECT_expr_with_alias" => {
                             *select_item = SelectItem::ExprWithAlias {
-                                expr: TypesBuilder::empty(), alias: empty_ident(),
+                                expr: TypesBuilder::highlight(), alias: highlight_ident(),
                             };
                             let alias = unwrap_pat!(select_item, SelectItem::ExprWithAlias { alias, .. }, alias);
                             *alias = generator.value_chooser.choose_select_alias();

@@ -8,8 +8,8 @@ use super::{aggregate_function::AggregateFunctionBuilder, case::CaseBuilder, col
 pub struct TypesValueBuilder { }
 
 impl TypesValueBuilder {
-    pub fn empty() -> Expr {
-        TypesBuilder::empty()
+    pub fn highlight() -> Expr {
+        TypesBuilder::highlight()
     }
 
     pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
@@ -21,7 +21,7 @@ impl TypesValueBuilder {
         let selected_type = match_next_state!(generator, {
             "types_value_nested" => {
                 generator.expect_state("call1_types_value");
-                *types_value = Expr::Nested(Box::new(TypesValueBuilder::empty()));
+                *types_value = Expr::Nested(Box::new(TypesValueBuilder::highlight()));
                 let expr = &mut **unwrap_variant!(types_value, Expr::Nested);
                 TypesValueBuilder::build(generator, expr, TypeAssertion::None)
             },

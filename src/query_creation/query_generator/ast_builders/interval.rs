@@ -8,8 +8,8 @@ use super::types::TypesBuilder;
 pub struct IntervalBuilder { }
 
 impl IntervalBuilder {
-    pub fn empty() -> Expr {
-        TypesBuilder::empty()
+    pub fn highlight() -> Expr {
+        TypesBuilder::highlight()
     }
 
     pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
@@ -25,7 +25,7 @@ impl IntervalBuilder {
                     "interval_add_subtract_minus" => BinaryOperator::Minus,
                 });
                 *interval = Expr::BinaryOp {
-                    left: Box::new(TypesBuilder::empty()),
+                    left: Box::new(TypesBuilder::highlight()),
                     op,
                     right: Box::new(TypesBuilder::nothing())
                 };
@@ -36,13 +36,13 @@ impl IntervalBuilder {
 
                 generator.expect_state("call92_types");
                 let right = &mut **unwrap_pat!(interval, Expr::BinaryOp { right, .. }, right);
-                *right = TypesBuilder::empty();
+                *right = TypesBuilder::highlight();
                 TypesBuilder::build(generator, right, TypeAssertion::GeneratedBy(SubgraphType::Interval));
             },
             "interval_unary_minus" => {
                 *interval = Expr::UnaryOp {
                     op: UnaryOperator::Minus,
-                    expr: Box::new(TypesBuilder::empty())
+                    expr: Box::new(TypesBuilder::highlight())
                 };
                 generator.expect_state("call93_types");
                 let expr = &mut **unwrap_pat!(interval, Expr::UnaryOp { expr, .. }, expr);

@@ -8,7 +8,7 @@ use super::types::TypesBuilder;
 pub struct OrderByBuilder { }
 
 impl OrderByBuilder {
-    pub fn empty() -> Vec<OrderByExpr> {
+    pub fn highlight() -> Vec<OrderByExpr> {
         vec![]  // the decision to include the clause is in the builder itself
     }
 
@@ -23,7 +23,7 @@ impl OrderByBuilder {
 
         loop {
             order_by.push(OrderByExpr {
-                expr: TypesBuilder::empty(),
+                expr: TypesBuilder::highlight(),
                 asc: None,
                 nulls_first: None,
             });

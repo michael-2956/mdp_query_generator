@@ -8,8 +8,8 @@ use super::{select_datetime_field::SelectDatetimeFieldBuilder, types::TypesBuild
 pub struct NumberBuilder { }
 
 impl NumberBuilder {
-    pub fn empty() -> Expr {
-        TypesBuilder::empty()
+    pub fn highlight() -> Expr {
+        TypesBuilder::highlight()
     }
 
     pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
@@ -30,7 +30,7 @@ impl NumberBuilder {
                     "binary_number_plus" => BinaryOperator::Plus,
                 });
                 *number = Expr::BinaryOp {
-                    left: Box::new(TypesBuilder::empty()),
+                    left: Box::new(TypesBuilder::highlight()),
                     op: numeric_binary_op,
                     right: Box::new(TypesBuilder::nothing())
                 };
@@ -42,7 +42,7 @@ impl NumberBuilder {
 
                 generator.expect_state("call48_types");
                 let right = &mut **unwrap_pat!(number, Expr::BinaryOp { right, .. }, right);
-                *right = TypesBuilder::empty();
+                *right = TypesBuilder::highlight();
                 TypesBuilder::build(generator, right, TypeAssertion::CompatibleWith(requested_number_type.clone()));
 
                 requested_number_type
@@ -58,7 +58,7 @@ impl NumberBuilder {
                 });
                 *number = Expr::UnaryOp {
                     op: numeric_unary_op,
-                    expr: Box::new(TypesBuilder::empty())
+                    expr: Box::new(TypesBuilder::highlight())
                 };
                 generator.state_generator.set_compatible_list(requested_number_type.get_compat_types());
 
@@ -74,7 +74,7 @@ impl NumberBuilder {
             },
             "number_string_position" => {
                 *number = Expr::Position {
-                    expr: Box::new(TypesBuilder::empty()),
+                    expr: Box::new(TypesBuilder::highlight()),
                     r#in: Box::new(TypesBuilder::nothing())
                 };
 
@@ -84,7 +84,7 @@ impl NumberBuilder {
 
                 generator.expect_states(&["string_position_in", "call3_types"]);
                 let r#in = &mut **unwrap_pat!(number, Expr::Position { r#in, .. }, r#in);
-                *r#in = TypesBuilder::empty();
+                *r#in = TypesBuilder::highlight();
                 TypesBuilder::build(generator, r#in, TypeAssertion::GeneratedBy(SubgraphType::Text));
                 
                 SubgraphType::Integer
@@ -93,7 +93,7 @@ impl NumberBuilder {
                 generator.expect_state("call0_select_datetime_field");
                 *number = Expr::Extract {
                     field: SelectDatetimeFieldBuilder::build(generator),
-                    expr: Box::new(TypesBuilder::empty())
+                    expr: Box::new(TypesBuilder::highlight())
                 };
 
                 generator.expect_state("call97_types");

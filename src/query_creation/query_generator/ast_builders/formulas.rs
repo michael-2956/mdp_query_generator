@@ -8,8 +8,8 @@ use super::{date::DateBuilder, interval::IntervalBuilder, number::NumberBuilder,
 pub struct FormulasBuilder { }
 
 impl FormulasBuilder {
-    pub fn empty() -> Expr {
-        TypesBuilder::empty()
+    pub fn highlight() -> Expr {
+        TypesBuilder::highlight()
     }
 
     pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(

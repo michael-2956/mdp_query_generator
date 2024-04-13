@@ -8,7 +8,7 @@ use super::types_value::TypesValueBuilder;
 pub struct TypesBuilder { }
 
 impl TypesBuilder {
-    pub fn empty() -> Expr {
+    pub fn highlight() -> Expr {
         Expr::Identifier(Ident::new("[?]"))
     }
 
@@ -36,7 +36,7 @@ impl TypesBuilder {
 
         generator.state_generator.set_known_list(allowed_type_list);
         generator.expect_state("call0_types_value");
-        *expr = TypesValueBuilder::empty();
+        *expr = TypesValueBuilder::highlight();
         let selected_type = TypesValueBuilder::build(generator, expr, type_assertion);
 
         generator.expect_state("EXIT_types");

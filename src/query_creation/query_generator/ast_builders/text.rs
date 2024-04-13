@@ -8,8 +8,8 @@ use super::types::TypesBuilder;
 pub struct TextBuilder { }
 
 impl TextBuilder {
-    pub fn empty() -> Expr {
-        TypesBuilder::empty()
+    pub fn highlight() -> Expr {
+        TypesBuilder::highlight()
     }
 
     pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
@@ -19,7 +19,7 @@ impl TextBuilder {
         match_next_state!(generator, {
             "text_trim" => {
                 *text = Expr::Trim {
-                    expr: Box::new(TypesBuilder::empty()), trim_where: None, trim_what: None
+                    expr: Box::new(TypesBuilder::highlight()), trim_where: None, trim_what: None
                 };
 
                 generator.expect_state("call6_types");
@@ -38,7 +38,7 @@ impl TextBuilder {
 
                         generator.expect_state("call5_types");
                         let trim_what = &mut *unwrap_pat!(text, Expr::Trim { trim_what, .. }, trim_what);
-                        *trim_what = Some(Box::new(TypesBuilder::empty()));
+                        *trim_what = Some(Box::new(TypesBuilder::highlight()));
                         let trim_what = &mut **trim_what.as_mut().unwrap();
                         TypesBuilder::build(generator, trim_what, TypeAssertion::GeneratedBy(SubgraphType::Text));
                         
@@ -49,7 +49,7 @@ impl TextBuilder {
             },
             "text_concat" => {
                 *text = Expr::BinaryOp {
-                    left: Box::new(TypesBuilder::empty()),
+                    left: Box::new(TypesBuilder::highlight()),
                     op: BinaryOperator::StringConcat,
                     right: Box::new(TypesBuilder::nothing())
                 };
@@ -61,12 +61,12 @@ impl TextBuilder {
                 generator.expect_state("text_concat_concat");
                 generator.expect_state("call8_types");
                 let right = &mut **unwrap_pat!(text, Expr::BinaryOp { right, .. }, right);
-                *right = TypesBuilder::empty();
+                *right = TypesBuilder::highlight();
                 TypesBuilder::build(generator, right, TypeAssertion::GeneratedBy(SubgraphType::Text));
             },
             "text_substring" => {
                 *text = Expr::Substring {
-                    expr: Box::new(TypesBuilder::empty()),
+                    expr: Box::new(TypesBuilder::highlight()),
                     substring_from: None,
                     substring_for: None,
                 };
@@ -80,14 +80,14 @@ impl TextBuilder {
                         "text_substring_from" => {
                             generator.expect_state("call10_types");
                             let substring_from = &mut *unwrap_pat!(text, Expr::Substring { substring_from, .. }, substring_from);
-                            *substring_from = Some(Box::new(TypesBuilder::empty()));
+                            *substring_from = Some(Box::new(TypesBuilder::highlight()));
                             let substring_from = &mut *substring_from.as_mut().unwrap();
                             TypesBuilder::build(generator, substring_from, TypeAssertion::GeneratedBy(SubgraphType::Integer));
                         },
                         "text_substring_for" => {
                             generator.expect_state("call11_types");
                             let substring_for = &mut *unwrap_pat!(text, Expr::Substring { substring_for, .. }, substring_for);
-                            *substring_for = Some(Box::new(TypesBuilder::empty()));
+                            *substring_for = Some(Box::new(TypesBuilder::highlight()));
                             let substring_for = &mut *substring_for.as_mut().unwrap();
                             TypesBuilder::build(generator, substring_for, TypeAssertion::GeneratedBy(SubgraphType::Integer));
                         },

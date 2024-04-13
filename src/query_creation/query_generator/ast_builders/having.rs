@@ -8,8 +8,8 @@ use super::types::TypesBuilder;
 pub struct HavingBuilder { }
 
 impl HavingBuilder {
-    pub fn empty() -> Expr {
-        TypesBuilder::empty()
+    pub fn highlight() -> Expr {
+        TypesBuilder::highlight()
     }
 
     pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(

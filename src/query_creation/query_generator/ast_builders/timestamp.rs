@@ -8,8 +8,8 @@ use super::types::TypesBuilder;
 pub struct TimestampBuilder { }
 
 impl TimestampBuilder {
-    pub fn empty() -> Expr {
-        TypesBuilder::empty()
+    pub fn highlight() -> Expr {
+        TypesBuilder::highlight()
     }
 
     pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
@@ -45,7 +45,7 @@ impl TimestampBuilder {
                 } else {
                     &mut **unwrap_pat!(timestamp, Expr::BinaryOp { left, .. }, left)
                 };
-                *expr = TypesBuilder::empty();
+                *expr = TypesBuilder::highlight();
                 TypesBuilder::build(generator, expr, TypeAssertion::GeneratedBy(SubgraphType::Date));
 
                 generator.expect_state("call95_types");
@@ -54,7 +54,7 @@ impl TimestampBuilder {
                 } else {
                     &mut **unwrap_pat!(timestamp, Expr::BinaryOp { right, .. }, right)
                 };
-                *expr = TypesBuilder::empty();
+                *expr = TypesBuilder::highlight();
                 TypesBuilder::build(generator, expr, TypeAssertion::GeneratedBy(SubgraphType::Interval));
             },
         });

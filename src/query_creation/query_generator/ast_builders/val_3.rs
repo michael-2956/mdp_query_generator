@@ -6,8 +6,8 @@ use crate::{query_creation::{query_generator::{ast_builders::{list_expr::ListExp
 pub struct Val3Builder { }
 
 impl Val3Builder {
-    pub fn empty() -> Expr {
-        TypesBuilder::empty()
+    pub fn highlight() -> Expr {
+        TypesBuilder::highlight()
     }
 
     pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
@@ -24,9 +24,9 @@ impl Val3Builder {
                     "call55_types" => false,
                 });
                 *val3 = if is_null_not_flag {
-                    Expr::IsNotNull(Box::new(TypesBuilder::empty()))
+                    Expr::IsNotNull(Box::new(TypesBuilder::highlight()))
                 } else {
-                    Expr::IsNull(Box::new(TypesBuilder::empty()))
+                    Expr::IsNull(Box::new(TypesBuilder::highlight()))
                 };
 
                 let expr = &mut **unwrap_pat!(val3, Expr::IsNotNull(expr) | Expr::IsNull(expr), expr);
@@ -41,13 +41,16 @@ impl Val3Builder {
                     "call0_types_type" => false,
                 });
                 *val3 = if is_distinct_not_flag {
-                    Expr::IsNotDistinctFrom(Box::new(TypesBuilder::empty()), Box::new(TypesBuilder::nothing()))
+                    Expr::IsNotDistinctFrom(Box::new(TypesBuilder::highlight()), Box::new(TypesBuilder::highlight()))
                 } else {
-                    Expr::IsDistinctFrom(Box::new(TypesBuilder::empty()), Box::new(TypesBuilder::nothing()))
+                    Expr::IsDistinctFrom(Box::new(TypesBuilder::highlight()), Box::new(TypesBuilder::highlight()))
                 };
 
                 let tp = TypesTypeBuilder::build(generator);
                 generator.state_generator.set_compatible_list(tp.get_compat_types());
+
+                // indicate which expression we will be working on
+                **unwrap_pat!(val3, Expr::IsNotDistinctFrom(_, expr) | Expr::IsDistinctFrom(_, expr), expr) = TypesBuilder::nothing();
 
                 generator.expect_state("call56_types");
                 let expr = &mut **unwrap_pat!(val3, Expr::IsNotDistinctFrom(expr, _) | Expr::IsDistinctFrom(expr, _), expr);
@@ -55,7 +58,7 @@ impl Val3Builder {
 
                 generator.expect_state("call21_types");
                 let expr = &mut **unwrap_pat!(val3, Expr::IsNotDistinctFrom(_, expr) | Expr::IsDistinctFrom(_, expr), expr);
-                *expr = TypesBuilder::empty();
+                *expr = TypesBuilder::highlight();
                 TypesBuilder::build(generator, expr, TypeAssertion::CompatibleWith(tp.clone()));
             },
             "Exists" => {
@@ -82,13 +85,15 @@ impl Val3Builder {
                     "call3_types_type" => false,
                 });
                 *val3 = Expr::InList {
-                    expr: Box::new(TypesBuilder::empty()),
-                    list: vec![],
+                    expr: Box::new(TypesBuilder::highlight()),
+                    list: ListExprBuilder::highlight(),
                     negated: in_list_not_flag
                 };
 
                 let tp = TypesTypeBuilder::build(generator);
                 generator.state_generator.set_compatible_list(tp.get_compat_types());
+
+                *unwrap_pat!(val3, Expr::InList { list, .. }, list) = ListExprBuilder::nothing();
 
                 generator.expect_state("call57_types");
                 let expr = &mut **unwrap_pat!(val3, Expr::InList { expr, .. }, expr);
@@ -96,7 +101,7 @@ impl Val3Builder {
 
                 generator.expect_state("call1_list_expr");
                 let list = &mut *unwrap_pat!(val3, Expr::InList { list, .. }, list);
-                *list = ListExprBuilder::empty();
+                *list = ListExprBuilder::highlight();
                 ListExprBuilder::build(generator, list);
             },
             "InSubquery" => {
@@ -108,13 +113,15 @@ impl Val3Builder {
                     "call4_types_type" => false,
                 });
                 *val3 = Expr::InSubquery {
-                    expr: Box::new(TypesBuilder::empty()),
-                    subquery: Box::new(QueryBuilder::nothing()),
+                    expr: Box::new(TypesBuilder::highlight()),
+                    subquery: Box::new(QueryBuilder::highlight_type()),
                     negated: in_subquery_not_flag
                 };
 
                 let tp = TypesTypeBuilder::build(generator);
                 generator.state_generator.set_compatible_list(tp.get_compat_types());
+
+                **unwrap_pat!(val3, Expr::InSubquery { subquery, .. }, subquery) = QueryBuilder::nothing();
 
                 generator.expect_state("call58_types");
                 let expr = &mut **unwrap_pat!(val3, Expr::InSubquery { expr, .. }, expr);
@@ -126,14 +133,17 @@ impl Val3Builder {
             },
             "Between" => {
                 *val3 = Expr::Between {
-                    expr: Box::new(TypesBuilder::empty()),
+                    expr: Box::new(TypesBuilder::highlight()),
                     negated: false,
-                    low: Box::new(TypesBuilder::nothing()),
-                    high: Box::new(TypesBuilder::nothing())
+                    low: Box::new(TypesBuilder::highlight()),
+                    high: Box::new(TypesBuilder::highlight())
                 };
                 generator.expect_state("call5_types_type");
                 let tp = TypesTypeBuilder::build(generator);
                 generator.state_generator.set_compatible_list(tp.get_compat_types());
+
+                **unwrap_pat!(val3, Expr::Between { low, .. }, low) = TypesBuilder::nothing();
+                **unwrap_pat!(val3, Expr::Between { high, .. }, high) = TypesBuilder::nothing();
 
                 generator.expect_state("call59_types");
                 let expr = &mut **unwrap_pat!(val3, Expr::Between { expr, .. }, expr);
@@ -142,13 +152,13 @@ impl Val3Builder {
                 generator.expect_state("BetweenBetween");
                 generator.expect_state("call22_types");
                 let low = &mut **unwrap_pat!(val3, Expr::Between { low, .. }, low);
-                *low = TypesBuilder::empty();
+                *low = TypesBuilder::highlight();
                 TypesBuilder::build(generator, low, TypeAssertion::CompatibleWith(tp.clone()));
 
                 generator.expect_state("BetweenBetweenAnd");
                 generator.expect_state("call23_types");
                 let high = &mut **unwrap_pat!(val3, Expr::Between { high, .. }, high);
-                *high = TypesBuilder::empty();
+                *high = TypesBuilder::highlight();
                 TypesBuilder::build(generator, high, TypeAssertion::CompatibleWith(tp.clone()));
             },
             "BinaryComp" => {
@@ -161,14 +171,16 @@ impl Val3Builder {
                     "BinaryCompGreaterEqual" => BinaryOperator::GtEq,
                 });
                 *val3 = Expr::BinaryOp {
-                    left: Box::new(TypesBuilder::empty()),
+                    left: Box::new(TypesBuilder::highlight()),
                     op: binary_comp_op,
-                    right: Box::new(TypesBuilder::nothing())
+                    right: Box::new(TypesBuilder::highlight())
                 };
 
                 generator.expect_state("call1_types_type");
                 let tp = TypesTypeBuilder::build(generator);
                 generator.state_generator.set_compatible_list(tp.get_compat_types());
+
+                **unwrap_pat!(val3, Expr::BinaryOp { right, .. }, right) = TypesBuilder::nothing();
 
                 generator.expect_state("call60_types");
                 let left = &mut **unwrap_pat!(val3, Expr::BinaryOp { left, .. }, left);
@@ -176,7 +188,7 @@ impl Val3Builder {
 
                 generator.expect_state("call24_types");
                 let right = &mut **unwrap_pat!(val3, Expr::BinaryOp { right, .. }, right);
-                *right = TypesBuilder::empty();
+                *right = TypesBuilder::highlight();
                 TypesBuilder::build(generator, right, TypeAssertion::CompatibleWith(tp.clone()));
             },
             "AnyAll" => {
@@ -190,24 +202,27 @@ impl Val3Builder {
                     "AnyAllGreaterEqual" => BinaryOperator::GtEq,
                 });
                 *val3 = Expr::BinaryOp {
-                    left: Box::new(TypesBuilder::empty()),
+                    left: Box::new(TypesBuilder::highlight()),
                     op: any_all_op,
-                    right: Box::new(TypesBuilder::nothing()),
+                    right: Box::new(TypesBuilder::highlight()),
                 };
 
                 generator.expect_state("call2_types_type");
                 let tp = TypesTypeBuilder::build(generator);
                 generator.state_generator.set_compatible_list(tp.get_compat_types());
-                
+
+                **unwrap_pat!(val3, Expr::BinaryOp { right, .. }, right) = TypesBuilder::nothing();
+
                 generator.expect_state("call61_types");
                 let left = &mut **unwrap_pat!(val3, Expr::BinaryOp { left, .. }, left);
                 TypesBuilder::build(generator, left, TypeAssertion::CompatibleWith(tp));
 
                 let right = &mut **unwrap_pat!(val3, Expr::BinaryOp { right, .. }, right);
+                *right = TypesBuilder::highlight();
                 generator.expect_state("AnyAllAnyAll");
                 *right = match_next_state!(generator, {
-                    "AnyAllAnyAllAll" => Expr::AllOp(Box::new(TypesBuilder::empty())),
-                    "AnyAllAnyAllAny" => Expr::AnyOp(Box::new(TypesBuilder::empty())),
+                    "AnyAllAnyAllAll" => Expr::AllOp(Box::new(TypesBuilder::highlight())),
+                    "AnyAllAnyAllAny" => Expr::AnyOp(Box::new(TypesBuilder::highlight())),
                 });
 
                 let right_inner = &mut **unwrap_variant!(right, Expr::AllOp);
@@ -229,7 +244,7 @@ impl Val3Builder {
                     "call25_types" => false,
                 });
                 *val3 = Expr::Like {
-                    expr: Box::new(TypesBuilder::empty()),
+                    expr: Box::new(TypesBuilder::highlight()),
                     negated: text_like_not_flag,
                     pattern: Box::new(TypesBuilder::nothing()),
                     escape_char: None
@@ -241,7 +256,7 @@ impl Val3Builder {
 
                 generator.expect_state("call26_types");
                 let pattern = &mut **unwrap_pat!(val3, Expr::Like { pattern, .. }, pattern);
-                *pattern = TypesBuilder::empty();
+                *pattern = TypesBuilder::highlight();
                 TypesBuilder::build(generator, pattern, TypeAssertion::GeneratedBy(SubgraphType::Text));
             },
             "BinaryBooleanOpV3" => {
@@ -250,7 +265,7 @@ impl Val3Builder {
                     "BinaryBooleanOpV3OR" => BinaryOperator::Or,
                 });
                 *val3 = Expr::BinaryOp {
-                    left: Box::new(TypesBuilder::empty()),
+                    left: Box::new(TypesBuilder::highlight()),
                     op: binary_bool_op,
                     right: Box::new(TypesBuilder::nothing())
                 };
@@ -261,14 +276,14 @@ impl Val3Builder {
 
                 generator.expect_state("call28_types");
                 let right = &mut **unwrap_pat!(val3, Expr::BinaryOp { right, .. }, right);
-                *right = TypesBuilder::empty();
+                *right = TypesBuilder::highlight();
                 TypesBuilder::build(generator, right, TypeAssertion::GeneratedBy(SubgraphType::Val3));
             },
             "UnaryNot_VAL_3" => {
                 generator.expect_state("call30_types");
                 *val3 = Expr::UnaryOp {
                     op: UnaryOperator::Not,
-                    expr: Box::new(TypesBuilder::empty())
+                    expr: Box::new(TypesBuilder::highlight())
                 };
                 let expr = &mut **unwrap_pat!(val3, Expr::UnaryOp { expr, .. }, expr);
                 TypesBuilder::build(generator, expr, TypeAssertion::GeneratedBy(SubgraphType::Val3));

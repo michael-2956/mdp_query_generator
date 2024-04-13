@@ -5,7 +5,7 @@ use crate::{query_creation::{query_generator::{ast_builders::types::TypesBuilder
 pub struct GroupByBuilder { }
 
 impl GroupByBuilder {
-    pub fn empty() -> Vec<Expr> {
+    pub fn highlight() -> Vec<Expr> {
         vec![]
     }
 
@@ -28,7 +28,7 @@ impl GroupByBuilder {
         });
 
         loop {
-            group_by.push(TypesBuilder::empty());
+            group_by.push(TypesBuilder::highlight());
             let group_by_entry = group_by.last_mut().unwrap();
             let mut return_result = false;
 
@@ -70,7 +70,7 @@ impl GroupByBuilder {
                         loop {
                             match_next_state!(generator, {
                                 "call69_types" => {
-                                    current_set.push(TypesBuilder::empty());
+                                    current_set.push(TypesBuilder::highlight());
                                     let column_expr = current_set.last_mut().unwrap();
                                     let column_type = TypesBuilder::build(generator, column_expr, TypeAssertion::None);
 

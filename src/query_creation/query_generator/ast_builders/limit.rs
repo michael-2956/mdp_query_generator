@@ -8,8 +8,8 @@ use super::types::TypesBuilder;
 pub struct LimitBuilder { }
 
 impl LimitBuilder {
-    pub fn empty() -> Option<Expr> {
-        Some(TypesBuilder::empty())
+    pub fn highlight() -> Option<Expr> {
+        Some(TypesBuilder::highlight())
     }
 
     pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(

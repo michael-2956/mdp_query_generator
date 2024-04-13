@@ -6,7 +6,7 @@ use crate::{query_creation::{query_generator::{ast_builders::{from_item::FromIte
 pub struct FromBuilder { }
 
 impl FromBuilder {
-    pub fn empty() -> Vec<TableWithJoins> {
+    pub fn highlight() -> Vec<TableWithJoins> {
         vec![]  // the decision to include the clause is in the builder itself
     }
 
@@ -20,7 +20,7 @@ impl FromBuilder {
             match_next_state!(generator, {
                 "call0_FROM_item" => {
                     from.push(TableWithJoins {
-                        relation: FromItemBuilder::empty(),
+                        relation: FromItemBuilder::highlight(),
                         joins: vec![]
                     });
                     let from_item = &mut from.last_mut().unwrap().relation;
@@ -37,7 +37,7 @@ impl FromBuilder {
                 "FROM_join_by" => {
                     let joins = &mut from.last_mut().unwrap().joins;
                     loop {
-                        let join_on = JoinConstraint::On(TypesBuilder::empty());
+                        let join_on = JoinConstraint::On(TypesBuilder::highlight());
                         let join_operator = match_next_state!(generator, {
                             "FROM_join_join" => JoinOperator::Inner(join_on),
                             "FROM_left_join" => JoinOperator::LeftOuter(join_on),
@@ -45,7 +45,7 @@ impl FromBuilder {
                             "FROM_full_join" => JoinOperator::FullOuter(join_on),
                         });
                         joins.push(Join {
-                            relation: FromItemBuilder::empty(),
+                            relation: FromItemBuilder::highlight(),
                             join_operator,
                         });
 

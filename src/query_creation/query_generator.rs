@@ -109,7 +109,7 @@ macro_rules! match_next_state {
 
 pub(crate) use match_next_state;
 
-pub fn empty_ident() -> Ident {
+pub fn highlight_ident() -> Ident {
     Ident::new("[?]")
 }
 

@@ -8,8 +8,12 @@ use super::types::TypesBuilder;
 pub struct ListExprBuilder { }
 
 impl ListExprBuilder {
-    pub fn empty() -> Vec<Expr> {
-        vec![TypesBuilder::empty()]
+    pub fn highlight() -> Vec<Expr> {
+        vec![TypesBuilder::highlight()]
+    }
+
+    pub fn nothing() -> Vec<Expr> {
+        vec![]
     }
 
     pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
@@ -28,7 +32,7 @@ impl ListExprBuilder {
         loop {
             match_next_state!(generator, {
                 "call49_types" => {
-                    list_expr.push(TypesBuilder::empty());
+                    list_expr.push(TypesBuilder::highlight());
                     let expr = list_expr.last_mut().unwrap();
                     TypesBuilder::build(generator, expr, TypeAssertion::CompatibleWith(inner_type.clone()));
                 },

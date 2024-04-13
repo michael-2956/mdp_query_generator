@@ -1,6 +1,6 @@
 use sqlparser::ast::{ObjectName, TableAlias, TableFactor};
 
-use crate::{query_creation::{query_generator::{call_modifiers::{AvailableTableNamesValue, ValueSetterValue}, empty_ident, match_next_state, value_choosers::QueryValueChooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
+use crate::{query_creation::{query_generator::{call_modifiers::{AvailableTableNamesValue, ValueSetterValue}, highlight_ident, match_next_state, value_choosers::QueryValueChooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
 
 use super::query::QueryBuilder;
 
@@ -8,9 +8,9 @@ use super::query::QueryBuilder;
 pub struct FromItemBuilder { }
 
 impl FromItemBuilder {
-    pub fn empty() -> TableFactor {
+    pub fn highlight() -> TableFactor {
         TableFactor::Table {
-            name: ObjectName(vec![empty_ident()]),
+            name: ObjectName(vec![highlight_ident()]),
             alias: None,
             args: None,
             columns_definition: None,
