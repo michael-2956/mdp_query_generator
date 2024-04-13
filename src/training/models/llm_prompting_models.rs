@@ -66,7 +66,6 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
         eprintln!("{current_query_str}");
         let outgoing_str = node_outgoing.iter().map(|node| format!("{} ", node.node_common.name)).collect::<String>();
         eprintln!("{outgoing_str}\n");
-        
 
         /// TODO impl QueryValueChooser for ChatGPTPromptingModel
         // every method prompts chatgpt instead
@@ -81,7 +80,15 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
         //     vc
         // } else { self.value_chooser.as_mut().unwrap() }
 
-        ModelPredictionResult::None(node_outgoing)
+        let current_node = &call_stack.last().unwrap().function_context.current_node.node_common.name;
+        if let Some(
+            (_prompt, _option_nodes)
+        ) = self.prompts.as_ref().unwrap().get_prompt(current_node, &node_outgoing) {
+            // TODO: query the API here
+            ModelPredictionResult::None(node_outgoing)
+        } else {
+            ModelPredictionResult::None(node_outgoing)
+        }
     }
 }
 

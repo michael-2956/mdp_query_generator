@@ -38,8 +38,6 @@ impl ColumnSpecBuilder {
             only_group_by_columns, shade_by_select_aliases, only_columns_that_can_be_aggregated
         );
         generator.expect_state("column_spec_choose_qualified");
-        /// TODO: redo this. Should first select column, then based on whether
-        /// it's retrievable by either method, make it qualified or unqualified.
         let check_accessibility = match_next_state!(generator, {
             "qualified_column_name" => CheckAccessibility::QualifiedColumnName,
             "unqualified_column_name" => CheckAccessibility::ColumnName,
