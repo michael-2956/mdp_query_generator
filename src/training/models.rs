@@ -4,7 +4,7 @@ use sqlparser::ast::Query;
 
 use crate::{query_creation::state_generator::markov_chain_generator::{StackFrame, markov_chain::NodeParams}, config::TomlReadable};
 
-use self::{llm_prompting_models::ChatGPTPromptingModel, markov_models::{DepthwiseFullFunctionContext, DepthwiseFunctionNameContext, FullFunctionContext, FunctionNameContext, ModelWithMarkovWeights, StackedFullFunctionContext, StackedFunctionNamesContext}};
+use self::{llm_prompting_models::{ChatGPTPromptingModel, PromptTestingModel}, markov_models::{DepthwiseFullFunctionContext, DepthwiseFunctionNameContext, FullFunctionContext, FunctionNameContext, ModelWithMarkovWeights, StackedFullFunctionContext, StackedFunctionNamesContext}};
 
 use super::ast_to_path::PathNode;
 
@@ -47,6 +47,7 @@ impl TomlReadable for ModelConfig {
 impl ModelConfig {
     pub fn create_model(&self) -> io::Result<Box<dyn PathwayGraphModel>> {
         let mut model: Box<dyn PathwayGraphModel> = match (self.model_name.as_str(), self.stacked_version) {
+            ("PromptTestingModel", _) => Box::new(PromptTestingModel::new()),
             ("ChatGPTPromptingModel", _) => Box::new(ChatGPTPromptingModel::new()),
             ("subgraph", false) => Box::new(ModelWithMarkovWeights::<FunctionNameContext>::new()),
             ("subgraph", true) => Box::new(ModelWithMarkovWeights::<StackedFunctionNamesContext>::new()),

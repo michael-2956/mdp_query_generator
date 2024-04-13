@@ -1,0 +1,40 @@
+[main]
+mode="generate"
+num_generate=1
+count_equivalence=false  # count the 2vl-3vl equivalent queries
+measure_generation_time=true
+assert_parcing_equivalence=false
+assert_runs_on_schema=false
+print_progress=true
+
+[model]
+model_name="PromptTestingModel"
+load_weights=true
+load_weights_from="llm_prompts/chatgpt_prompts.toml"
+stacked_version=false  # inapplicable to some models
+save_dot_file=false
+print_weights_after_training=false
+
+[query_generator]
+use_probabilistic_state_chooser=true
+use_model=true
+print_queries=true
+print_schema=false
+table_schema_path="schema/tpc-h_tables.sql"
+# Which substitute model to use as a state selector. Can be: "anticall", "markov".
+# Assigns probabilities when the model fails to do so or is absent
+substitute_model="anticall"
+# aggregate functions settings
+aggregate_functions_distribution_map_file="aggregate_functions_distribution_map.json"
+
+[state_generator]
+graph_file_path="graph.dot"
+
+[ast_to_path_testing]
+testing_schema="schema/tpc-h_tables.sql"
+n_tests=10000
+
+[training]
+training_db_path="training_dbs/tpch_default_queries_no_views.sql"
+training_schema="schema/tpc-h_tables.sql"
+save_weights_to="weights/DepthwiseFunctionNameContext/tpch_default_queries.mw"
