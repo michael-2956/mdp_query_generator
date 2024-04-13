@@ -93,7 +93,9 @@ fn nest_rightwards_if_is_a_text_binary_op(expr: Box<Expr>, parent_priority: i32)
 impl ExpressionPriority for Expr {
     fn get_priority(&self) -> i32 {
         match self {
+            // -1 is a special value
             // no nesting, not of children nor of ourselves is needed
+            // we could've also placed 100 here but I decided to use a special value.
             Expr::Function(..) => -1,
             Expr::Nested(..) => -1,
             Expr::Value(..) => -1,
@@ -121,11 +123,11 @@ impl ExpressionPriority for Expr {
             Expr::Cube(..) => -1,
             Expr::Rollup(..) => -1,
             Expr::AggregateExpressionWithFilter { .. } => -1,
+            Expr::Cast { .. } => -1,  // can be a ::, but is a CAST(...), so no nesting, as in Function.
 
             // normal operations
             Expr::CompoundIdentifier(..) => 0,
             Expr::CompositeAccess { .. } => 0,
-            Expr::Cast { .. } => 1,  // can be a ::
             Expr::ArrayIndex { .. } => 2,
             Expr::MapAccess { .. } => 2,
             Expr::UnaryOp { op, .. } => {

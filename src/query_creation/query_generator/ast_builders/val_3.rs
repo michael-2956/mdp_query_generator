@@ -225,7 +225,7 @@ impl Val3Builder {
                     "AnyAllAnyAllAny" => Expr::AnyOp(Box::new(TypesBuilder::highlight())),
                 });
 
-                let right_inner = &mut **unwrap_variant!(right, Expr::AllOp);
+                let right_inner = &mut **unwrap_pat!(right, Expr::AllOp(inner) | Expr::AnyOp(inner), inner);
                 generator.expect_state("AnyAllSelectIter");
                 match_next_state!(generator, {
                     "call4_Query" => {
@@ -250,7 +250,6 @@ impl Val3Builder {
                     escape_char: None
                 };
 
-                generator.expect_state("call25_types");
                 let expr = &mut **unwrap_pat!(val3, Expr::Like { expr, .. }, expr);
                 TypesBuilder::build(generator, expr, TypeAssertion::GeneratedBy(SubgraphType::Text));
 

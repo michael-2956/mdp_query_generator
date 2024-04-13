@@ -653,16 +653,9 @@ digraph G {
         literals -> number_literal_bigint
         // number_literal_bigint -> EXIT_literals
 
-        number_literal_minus [label="-"]
-        number_literal_integer -> number_literal_minus
-        number_literal_numeric -> number_literal_minus
-        // number_literal_bigint -> number_literal_minus
-        number_literal_minus -> EXIT_literals
-
         literals_explicit_cast [label="Explicit type cast"]
-        literals_explicit_cast -> EXIT_literals
         number_literal_bigint -> literals_explicit_cast
-        literals_explicit_cast -> number_literal_minus
+        literals_explicit_cast -> EXIT_literals
 
         text_literal [label="random text literal\ntn(text)", TYPE_NAME="text"]
         literals -> text_literal
@@ -1145,22 +1138,22 @@ digraph G {
 
         timestamp_add_subtract [label="+/-"]
         timestamp_binary -> timestamp_add_subtract
+
+        timestamp_add_subtract_plus [label="+"]
+        timestamp_add_subtract -> timestamp_add_subtract_plus
+        timestamp_add_subtract_minus [label="-"]
+        timestamp_add_subtract -> timestamp_add_subtract_minus
+        timestamp_swap_arguments [label="Swap arguments"]
+        timestamp_add_subtract_plus -> timestamp_swap_arguments
+
         call94_types [TYPES="[date]", MODS="[...]", label="TYPES: date\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        timestamp_add_subtract -> call94_types
+        timestamp_add_subtract_plus -> call94_types
+        timestamp_add_subtract_minus -> call94_types
+        timestamp_swap_arguments -> call94_types
+
         call95_types [TYPES="[interval]", MODS="[...]", label="TYPES: interval\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
         call94_types -> call95_types
-    
-        timestamp_add_subtract_plus [label="+"]
-        call95_types -> timestamp_add_subtract_plus
-        timestamp_add_subtract_plus -> EXIT_timestamp
-
-        timestamp_add_subtract_minus [label="-"]
-        call95_types -> timestamp_add_subtract_minus
-        timestamp_add_subtract_minus -> EXIT_timestamp
-
-        timestamp_swap_arguments [label="Swap arguments"]
-        timestamp_swap_arguments -> EXIT_timestamp
-        timestamp_add_subtract_plus -> timestamp_swap_arguments
+        call95_types -> EXIT_timestamp
     }
 
     subgraph def_select_datetime_field {
@@ -1222,18 +1215,16 @@ digraph G {
 
         interval_add_subtract [label="+/-"]
         interval_binary -> interval_add_subtract
-        call91_types [TYPES="[interval]", MODS="[...]", label="TYPES: interval\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        interval_add_subtract -> call91_types
-        call92_types [TYPES="[interval]", MODS="[...]", label="TYPES: interval\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        call92_types -> EXIT_interval
-    
         interval_add_subtract_plus [label="+"]
-        call91_types -> interval_add_subtract_plus
-        interval_add_subtract_plus -> call92_types
-
+        interval_add_subtract -> interval_add_subtract_plus
         interval_add_subtract_minus [label="-"]
-        call91_types -> interval_add_subtract_minus
-        interval_add_subtract_minus -> call92_types
+        interval_add_subtract -> interval_add_subtract_minus
+        call91_types [TYPES="[interval]", MODS="[...]", label="TYPES: interval\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        interval_add_subtract_plus -> call91_types
+        interval_add_subtract_minus -> call91_types
+        call92_types [TYPES="[interval]", MODS="[...]", label="TYPES: interval\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call91_types -> call92_types
+        call92_types -> EXIT_interval
 
         interval_unary_minus [label="-interval"]
         interval -> interval_unary_minus

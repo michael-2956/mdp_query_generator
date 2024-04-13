@@ -659,14 +659,15 @@ impl PathGenerator {
                     BinaryOperator::And |
                     BinaryOperator::Or |
                     BinaryOperator::Xor => {
-                        self.try_push_states(&["BinaryBooleanOpV3", "call27_types"])?;
-                        self.handle_types(left, TypeAssertion::GeneratedBy(SubgraphType::Val3))?;
+                        self.try_push_state("BinaryBooleanOpV3")?;
                         self.try_push_state(match op {
                             BinaryOperator::And => "BinaryBooleanOpV3AND",
                             BinaryOperator::Or => "BinaryBooleanOpV3OR",
                             BinaryOperator::Xor => "BinaryBooleanOpV3XOR",
                             any => unexpected_expr!(any),
                         })?;
+                        self.try_push_state("call27_types")?;
+                        self.handle_types(left, TypeAssertion::GeneratedBy(SubgraphType::Val3))?;
                         self.try_push_state("call28_types")?;
                         self.handle_types(right, TypeAssertion::GeneratedBy(SubgraphType::Val3))?;
                     },
@@ -714,20 +715,21 @@ impl PathGenerator {
                                 })?;
                             },
                             _ => {
-                                self.try_push_states(&["BinaryComp", "call1_types_type"])?;
+                                self.try_push_state("BinaryComp")?;
+                                self.try_push_state(match op {
+                                    BinaryOperator::Eq => "BinaryCompEqual",
+                                    BinaryOperator::NotEq => "BinaryCompUnEqual",
+                                    BinaryOperator::Lt => "BinaryCompLess",
+                                    BinaryOperator::LtEq => "BinaryCompLessEqual",
+                                    BinaryOperator::Gt => "BinaryCompGreater",
+                                    BinaryOperator::GtEq => "BinaryCompGreaterEqual",
+                                    any => unexpected_expr!(any),
+                                })?;
+                                self.try_push_state("call1_types_type")?;
                                 self.handle_types_type_and_try(TypeAssertion::None, |_self, returned_type| {
                                     _self.state_generator.set_compatible_list(returned_type.get_compat_types());
                                     _self.try_push_state("call60_types")?;
                                     _self.handle_types(left, TypeAssertion::CompatibleWith(returned_type.clone()))?;
-                                    _self.try_push_state(match op {
-                                        BinaryOperator::Eq => "BinaryCompEqual",
-                                        BinaryOperator::NotEq => "BinaryCompUnEqual",
-                                        BinaryOperator::Lt => "BinaryCompLess",
-                                        BinaryOperator::LtEq => "BinaryCompLessEqual",
-                                        BinaryOperator::Gt => "BinaryCompGreater",
-                                        BinaryOperator::GtEq => "BinaryCompGreaterEqual",
-                                        any => unexpected_expr!(any),
-                                    })?;
                                     _self.try_push_state("call24_types")?;
                                     _self.handle_types(right, TypeAssertion::CompatibleWith(returned_type))?;
                                     Ok(())
@@ -739,10 +741,11 @@ impl PathGenerator {
                 }
             },
             Expr::Like { negated, expr, pattern, .. } => {
-                self.try_push_states(&["BinaryStringLike", "call25_types"])?;
-                self.handle_types(expr, TypeAssertion::GeneratedBy(SubgraphType::Text))?;
+                self.try_push_state("BinaryStringLike")?;
                 if *negated { self.try_push_state("BinaryStringLikeNot")?; }
-                self.try_push_states(&["BinaryStringLikeIn", "call26_types"])?;
+                self.try_push_state("call25_types")?;
+                self.handle_types(expr, TypeAssertion::GeneratedBy(SubgraphType::Text))?;
+                self.try_push_state("call26_types")?;
                 self.handle_types(pattern, TypeAssertion::GeneratedBy(SubgraphType::Text))?;
             }
             Expr::UnaryOp { op, expr } if *op == UnaryOperator::Not => {
@@ -1283,7 +1286,7 @@ impl PathGenerator {
                         self.restore_checkpoint(&checkpoint);
                         None
                     },
-                }).unwrap_or_else(|| (self.handle_types_value_expr_formula(expr), "type expr."))
+                }).unwrap_or_else(|| (self.handle_types_value_expr_formula(expr), "type expression"))
             },
         };
         
