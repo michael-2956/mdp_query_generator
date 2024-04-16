@@ -1,6 +1,6 @@
 use sqlparser::ast::{ObjectName, TableAlias, TableFactor};
 
-use crate::{query_creation::{query_generator::{call_modifiers::{AvailableTableNamesValue, ValueSetterValue}, highlight_ident, match_next_state, value_choosers::QueryValueChooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
+use crate::{query_creation::{query_generator::{call_modifiers::{AvailableTableNamesValue, ValueSetterValue}, highlight_ident, match_next_state, QueryGenerator}, state_generator::{state_choosers::StateChooser, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
 
 use super::query::QueryBuilder;
 
@@ -18,8 +18,8 @@ impl FromItemBuilder {
         }
     }
 
-    pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
-        generator: &mut QueryGenerator<SubMod, StC, QVC>, from_item: &mut TableFactor
+    pub fn build<SubMod: SubstituteModel, StC: StateChooser>(
+        generator: &mut QueryGenerator<SubMod, StC>, from_item: &mut TableFactor
     ) {
         generator.expect_state("FROM_item");
 

@@ -1,11 +1,11 @@
-use crate::query_creation::{query_generator::{match_next_state, value_choosers::QueryValueChooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}};
+use crate::query_creation::{query_generator::{match_next_state, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}};
 
 /// subgraph def_types_type
 pub struct TypesTypeBuilder { }
 
 impl TypesTypeBuilder {
-    pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
-        generator: &mut QueryGenerator<SubMod, StC, QVC>
+    pub fn build<SubMod: SubstituteModel, StC: StateChooser>(
+        generator: &mut QueryGenerator<SubMod, StC>
     ) -> SubgraphType {
         generator.expect_state("types_type");
 

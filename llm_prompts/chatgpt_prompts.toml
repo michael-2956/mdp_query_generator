@@ -31,10 +31,13 @@ that might help make the appropriate decision. This information \
 will always be indicated by "Context:"
 
 Sometimes, instead of the option list, you would be tasked with \
-generating a primitive (literal) value. In this case, the list line \
-of the request would contain "Generate a value of type [...]", where \
-[...] would be replaced with a value type (such as integer or text). \
-In response, you should always do the following:
+generating (choosing) a primitive value (an identifier). In this case, \
+the list line of the request would contain "Generate a value of \
+type [...]", where [...] would be replaced with a value type (such \
+as Integer or Text). In some cases, the request might also look like: \
+"Generate [...]" with arbitraty text instead of [...]. In cases when
+you'll need to choose an identifier, the request would look like: \
+"Choose [...]". In response, you should always do the following: \
 - As the first line of your response, always output the reasoning \
 behind the value you will be selecting.
 - As the last line of your response, always output the selected \
@@ -102,5 +105,19 @@ values on the right hand side and the left hand side at the same time.
 
 
 
-[value_choosers]
-
+[value_chooser_tasks]
+table_name="Choose Table Name:"
+column="Choose Column Name:"
+select_alias_order_by="Choose a select alias that you with to place in ORDER BY:"
+aggregate_function_name="Choose the name of the aggregate function:"
+bigint="Generate a value of type BigInt:"
+integer="Generate a value of type Integer:"
+numeric="Generate a value of type Numeric:"
+text="Generate a value of type Text:"
+date="Generate a value of type Date:"
+timestamp="Generate the string that would go into the timestamp value:"
+interval="Generate the string that would go into the interval value:"
+qualified_wildcard_relation="Choose the relation name for the qualified wildcard:"
+select_alias="Generate the alias for the SELECT expression:"
+from_alias="Generate the alias for the FROM relation:"
+from_column_renames="Generate the renames for the FROM relation:"

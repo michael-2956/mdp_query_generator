@@ -1,13 +1,13 @@
 use sqlparser::ast::DateTimeField;
 
-use crate::query_creation::{query_generator::{match_next_state, value_choosers::QueryValueChooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, substitute_models::SubstituteModel}};
+use crate::query_creation::{query_generator::{match_next_state, QueryGenerator}, state_generator::{state_choosers::StateChooser, substitute_models::SubstituteModel}};
 
 /// subgraph def_select_datetime_field
 pub struct SelectDatetimeFieldBuilder { }
 
 impl SelectDatetimeFieldBuilder {
-    pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
-        generator: &mut QueryGenerator<SubMod, StC, QVC>
+    pub fn build<SubMod: SubstituteModel, StC: StateChooser>(
+        generator: &mut QueryGenerator<SubMod, StC>
     ) -> DateTimeField {
         generator.expect_state("select_datetime_field");
         let field = match_next_state!(generator, {

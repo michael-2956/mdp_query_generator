@@ -7,15 +7,13 @@ use crate::{query_creation::state_generator::subgraph_type::{ContainsSubgraphTyp
 use super::{call_modifiers::WildcardRelationsValue, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, IdentName, Relation}};
 
 pub trait QueryValueChooser {
-    fn new() -> Self;
-
     fn choose_table_name(&mut self, available_table_names: &Vec<ObjectName>) -> ObjectName;
 
     fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, check_accessibility: CheckAccessibility, column_retrieval_options: ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]);
 
     fn choose_select_alias_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident;
 
-    fn choose_aggregate_function_name<'a>(&mut self, func_names_iter: impl Iterator::<Item = &'a String>, dist: WeightedIndex<f64>) -> ObjectName;
+    fn choose_aggregate_function_name(&mut self, func_names: Vec<&String>, dist: WeightedIndex<f64>) -> ObjectName;
 
     fn choose_bigint(&mut self) -> String;
     
@@ -23,7 +21,7 @@ pub trait QueryValueChooser {
 
     fn choose_numeric(&mut self) -> String;
 
-    fn choose_string(&mut self) -> String;
+    fn choose_text(&mut self) -> String;
 
     fn choose_date(&mut self) -> String;
 
@@ -50,15 +48,6 @@ pub struct RandomValueChooser {
 }
 
 impl QueryValueChooser for RandomValueChooser {
-    fn new() -> Self {
-        Self {
-            rng: ChaCha8Rng::seed_from_u64(1),
-            free_select_alias_index: 0,
-            free_from_rename_index: 0,
-            free_from_alias_index: 0,
-        }
-    }
-
     fn choose_table_name(&mut self, available_table_names: &Vec<ObjectName>) -> ObjectName {
         available_table_names[self.rng.gen_range(0..available_table_names.len())].clone()
     }
@@ -78,8 +67,8 @@ impl QueryValueChooser for RandomValueChooser {
         (**aliases.choose(&mut self.rng).as_ref().unwrap()).clone().into()
     }
 
-    fn choose_aggregate_function_name<'a>(&mut self, mut func_names_iter: impl Iterator::<Item = &'a String>, dist: WeightedIndex<f64>) -> ObjectName {
-        let selected_name = func_names_iter.nth(dist.sample(&mut self.rng)).unwrap();
+    fn choose_aggregate_function_name(&mut self, func_names: Vec<&String>, dist: WeightedIndex<f64>) -> ObjectName {
+        let selected_name = *func_names.iter().nth(dist.sample(&mut self.rng)).unwrap();
         ObjectName(vec![Ident {
             value: selected_name.clone(),
             quote_style: (None),
@@ -98,7 +87,7 @@ impl QueryValueChooser for RandomValueChooser {
         self.rng.gen_range(-5f64..=5f64).to_string()
     }
 
-    fn choose_string(&mut self) -> String {
+    fn choose_text(&mut self) -> String {
         "HJeihfbwei".to_string()
     }
 
@@ -151,19 +140,23 @@ impl QueryValueChooser for RandomValueChooser {
     }
 }
 
+impl RandomValueChooser {
+    pub fn new() -> Self {
+        Self {
+            rng: ChaCha8Rng::seed_from_u64(1),
+            free_select_alias_index: 0,
+            free_from_rename_index: 0,
+            free_from_alias_index: 0,
+        }
+    }
+}
+
 struct VecWithIndex<Tp> where Tp: Clone {
     v: Vec<Tp>,
     ind: usize
 }
 
 impl<Tp> VecWithIndex<Tp> where Tp: Clone {
-    fn new() -> Self {
-        Self {
-            v: vec![],
-            ind: 0
-        }
-    }
-
     fn with_vec(v: Vec<Tp>) -> Self {
         Self { v, ind: 0 }
     }
@@ -234,26 +227,6 @@ impl DeterministicValueChooser {
 }
 
 impl QueryValueChooser for DeterministicValueChooser {
-    fn new() -> Self {
-        Self {
-            chosen_bigints: VecWithIndex::new(),
-            chosen_integers: VecWithIndex::new(),
-            chosen_numerics: VecWithIndex::new(),
-            chosen_strings: VecWithIndex::new(),
-            chosen_dates: VecWithIndex::new(),
-            chosen_timestamps: VecWithIndex::new(),
-            chosen_intervals: VecWithIndex::new(),
-            chosen_tables: VecWithIndex::new(),
-            chosen_select_aliases: VecWithIndex::new(),
-            chosen_from_aliases: VecWithIndex::new(),
-            chosen_from_renames: VecWithIndex::new(),
-            chosen_columns: VecWithIndex::new(),
-            chosen_order_by_select_refs: VecWithIndex::new(),
-            chosen_aggregate_functions: VecWithIndex::new(),
-            chosen_qualified_wildcard_tables: VecWithIndex::new(),
-        }
-    }
-
     fn choose_table_name(&mut self, available_table_names: &Vec<ObjectName>) -> ObjectName {
         let name = self.chosen_tables.next();
         let search_name = name.to_string().to_uppercase();
@@ -286,9 +259,9 @@ impl QueryValueChooser for DeterministicValueChooser {
         ident
     }
 
-    fn choose_aggregate_function_name<'a>(&mut self, mut func_names_iter: impl Iterator::<Item = &'a String>, _dist: WeightedIndex<f64>) -> ObjectName {
+    fn choose_aggregate_function_name(&mut self, func_names: Vec<&String>, _dist: WeightedIndex<f64>) -> ObjectName {
         let aggr_func = self.chosen_aggregate_functions.next();
-        assert!(func_names_iter.any(|func_name| *func_name == aggr_func.0[0].value.to_uppercase()), "Selected aggregate function is not available: {}", aggr_func);
+        assert!(func_names.iter().any(|func_name| **func_name == aggr_func.0[0].value.to_uppercase()), "Selected aggregate function is not available: {}", aggr_func);
         aggr_func
     }
     
@@ -298,7 +271,7 @@ impl QueryValueChooser for DeterministicValueChooser {
     
     fn choose_numeric(&mut self) -> String { self.chosen_numerics.next() }
     
-    fn choose_string(&mut self) -> String { self.chosen_strings.next() }
+    fn choose_text(&mut self) -> String { self.chosen_strings.next() }
     
     fn choose_date(&mut self) -> String { self.chosen_dates.next() }
 

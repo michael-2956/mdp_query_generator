@@ -58,12 +58,12 @@ impl AggregateFunctionDistribution {
         }
     }
 
-    pub fn get_functions_and_dist(&self, arguments: &AggregateFunctionAgruments, return_type: &SubgraphType) -> (impl Iterator::<Item = &String>, WeightedIndex<f64>) {
+    pub fn get_functions_and_dist(&self, arguments: &AggregateFunctionAgruments, return_type: &SubgraphType) -> (Vec<&String>, WeightedIndex<f64>) {
         let aggr_weight_map = &self.func_map[return_type][arguments];
         let dist = WeightedIndex::new(
             aggr_weight_map.iter().map(|item| *item.1)
         ).unwrap();
-        (aggr_weight_map.keys(), dist)
+        (aggr_weight_map.keys().collect(), dist)
     }
 
     pub fn func_names_include(&mut self, arguments: &AggregateFunctionAgruments, return_type: &SubgraphType, aggr_name: &ObjectName) -> bool {

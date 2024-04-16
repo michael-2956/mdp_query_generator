@@ -1,6 +1,6 @@
 use sqlparser::ast::{BinaryOperator, Expr, TrimWhereField};
 
-use crate::{query_creation::{query_generator::{match_next_state, value_choosers::QueryValueChooser, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
+use crate::{query_creation::{query_generator::{match_next_state, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
 
 use super::types::TypesBuilder;
 
@@ -12,8 +12,8 @@ impl TextBuilder {
         TypesBuilder::highlight()
     }
 
-    pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
-        generator: &mut QueryGenerator<SubMod, StC, QVC>, text: &mut Expr
+    pub fn build<SubMod: SubstituteModel, StC: StateChooser>(
+        generator: &mut QueryGenerator<SubMod, StC>, text: &mut Expr
     ) -> SubgraphType {
         generator.expect_state("text");
         match_next_state!(generator, {

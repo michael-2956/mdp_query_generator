@@ -1,6 +1,6 @@
 use sqlparser::ast::{self, Expr, FunctionArg, FunctionArgExpr, ObjectName};
 
-use crate::{query_creation::{query_generator::{aggregate_function_settings::AggregateFunctionAgruments, highlight_ident, match_next_state, value_choosers::QueryValueChooser, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
+use crate::{query_creation::{query_generator::{aggregate_function_settings::AggregateFunctionAgruments, highlight_ident, match_next_state, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
 
 use super::types::TypesBuilder;
 
@@ -20,8 +20,8 @@ impl AggregateFunctionBuilder {
         TypesBuilder::highlight()
     }
 
-    pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
-        generator: &mut QueryGenerator<SubMod, StC, QVC>, expr: &mut Expr
+    pub fn build<SubMod: SubstituteModel, StC: StateChooser>(
+        generator: &mut QueryGenerator<SubMod, StC>, expr: &mut Expr
     ) -> SubgraphType {
         generator.expect_state("aggregate_function");
 
@@ -116,10 +116,10 @@ impl AggregateFunctionBuilder {
             },
         });
 
-        let (func_names_iter, dist) = generator.config.aggregate_functions_distribution.get_functions_and_dist(&args_type, &return_type);
+        let (func_names, dist) = generator.config.aggregate_functions_distribution.get_functions_and_dist(&args_type, &return_type);
         let name = unwrap_pat!(expr, Expr::Function(ast::Function{ name, .. }), name);
         *name = ObjectName(vec![highlight_ident()]);
-        *name = generator.value_chooser.choose_aggregate_function_name(func_names_iter, dist);
+        *name = generator.value_chooser.choose_aggregate_function_name(func_names, dist);
 
         generator.expect_state("EXIT_aggregate_function");
         return_type

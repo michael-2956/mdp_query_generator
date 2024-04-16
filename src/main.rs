@@ -3,7 +3,7 @@ use std::{io::Write, time::Instant};
 use equivalence_testing::{config::{Config, ProgramArgs}, equivalence_testing_function::{
     check_query, string_to_query
 }, query_creation::{
-    query_generator::{value_choosers::RandomValueChooser, QueryGenerator},
+    query_generator::QueryGenerator,
     state_generator::{
         state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser, StateChooser},
         substitute_models::{AntiCallModel, MarkovModel, SubstituteModel}, MarkovChainGenerator
@@ -21,7 +21,7 @@ fn run_generation<SubMod: SubstituteModel, StC: StateChooser>(
 
     let print_queries = config.generator_config.print_queries;
 
-    let mut generator = QueryGenerator::<SubMod, StC, RandomValueChooser>::from_state_generator_and_schema(markov_generator, config.generator_config);
+    let mut generator = QueryGenerator::<SubMod, StC>::from_state_generator_and_schema(markov_generator, config.generator_config);
 
     let mut accumulated_time_ns = 0;
     let mut num_equivalent = 0;

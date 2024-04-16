@@ -1,6 +1,6 @@
 use sqlparser::ast::{Expr, OrderByExpr};
 
-use crate::{query_creation::{query_generator::{call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue}, match_next_state, value_choosers::QueryValueChooser, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, substitute_models::SubstituteModel}}, unwrap_variant};
+use crate::{query_creation::{query_generator::{call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue}, match_next_state, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, substitute_models::SubstituteModel}}, unwrap_variant};
 
 use super::types::TypesBuilder;
 
@@ -12,8 +12,8 @@ impl OrderByBuilder {
         vec![]  // the decision to include the clause is in the builder itself
     }
 
-    pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
-        generator: &mut QueryGenerator<SubMod, StC, QVC>, order_by: &mut Vec<OrderByExpr>
+    pub fn build<SubMod: SubstituteModel, StC: StateChooser>(
+        generator: &mut QueryGenerator<SubMod, StC>, order_by: &mut Vec<OrderByExpr>
     ) {
         generator.expect_state("ORDER_BY");
         match_next_state!(generator, {

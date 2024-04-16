@@ -21,7 +21,7 @@ use super::{
 };
 use self::{
     aggregate_function_settings::AggregateFunctionDistribution, ast_builders::query::QueryBuilder,
-    query_info::{ClauseContext, DatabaseSchema}, value_choosers::QueryValueChooser
+    query_info::{ClauseContext, DatabaseSchema}, value_choosers::{QueryValueChooser, RandomValueChooser}
 };
 
 use super::state_generator::{MarkovChainGenerator, substitute_models::SubstituteModel, state_choosers::StateChooser};
@@ -54,12 +54,12 @@ impl TomlReadable for QueryGeneratorConfig {
     }
 }
 
-pub struct QueryGenerator<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> {
+pub struct QueryGenerator<SubMod: SubstituteModel, StC: StateChooser> {
     config: QueryGeneratorConfig,
     state_generator: MarkovChainGenerator<StC>,
     substitute_model: Box<SubMod>,
     predictor_model: Option<Box<dyn PathwayGraphModel>>,
-    value_chooser: Box<QVC>,
+    value_chooser: Box<dyn QueryValueChooser>,
     clause_context: ClauseContext,
     train_model: Option<Box<dyn PathwayGraphModel>>,
     rng: ChaCha8Rng,
@@ -150,13 +150,13 @@ impl<'a> TypeAssertion<'a> {
     }
 }
 
-impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGenerator<SubMod, StC, QVC> {
+impl<SubMod: SubstituteModel, StC: StateChooser> QueryGenerator<SubMod, StC> {
     pub fn from_state_generator_and_schema(state_generator: MarkovChainGenerator<StC>, config: QueryGeneratorConfig) -> Self {
-        let mut _self = QueryGenerator::<SubMod, StC, QVC> {
+        let mut _self = QueryGenerator::<SubMod, StC> {
             state_generator,
             predictor_model: None,
             substitute_model: Box::new(SubMod::empty()),
-            value_chooser: Box::new(QVC::new()),
+            value_chooser: Box::new(RandomValueChooser::new()),
             clause_context: ClauseContext::new(DatabaseSchema::parse_schema(&config.table_schema_path)),
             config,
             train_model: None,
@@ -170,6 +170,10 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
 
         _self
     }
+
+    // fn value_chooser(&mut self) -> &mut Box<dyn QueryValueChooser> {
+    //     &mut self.value_chooser
+    // }
 
     fn next_state_opt(&mut self) -> Option<SmolStr> {
         self.state_generator.next_node_name(
@@ -254,7 +258,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     }
 
     /// generate the next query with the provided dynamic model and value choosers
-    pub fn generate_with_substitute_model_and_value_chooser(&mut self, substitute_model: Box<SubMod>, value_chooser: Box<QVC>) -> Query {
+    pub fn generate_with_substitute_model_and_value_chooser(&mut self, substitute_model: Box<SubMod>, value_chooser: Box<dyn QueryValueChooser>) -> Query {
         self.substitute_model = substitute_model;
         self.value_chooser = value_chooser;
         self.generate()
@@ -262,8 +266,8 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
 
     /// generate the query and feed it to the model. Useful for training.
     pub fn generate_and_feed_to_model(
-            &mut self, dynamic_model: Box<SubMod>, value_chooser: Box<QVC>, model: Box<dyn PathwayGraphModel>
-        ) -> Box<dyn PathwayGraphModel> {
+        &mut self, dynamic_model: Box<SubMod>, value_chooser: Box<dyn QueryValueChooser>, model: Box<dyn PathwayGraphModel>
+    ) -> Box<dyn PathwayGraphModel> {
         self.train_model = Some(model);
         self.generate_with_substitute_model_and_value_chooser(dynamic_model, value_chooser);
         self.train_model.take().unwrap()

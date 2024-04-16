@@ -33,6 +33,8 @@ pub struct LLMPrompts {
     /// the context that each call node provides the first decision
     /// of its subgraph with
     pub call_node_context: HashMap<String, String>,
+    /// the taskds for each of the value choosers are stored here
+    pub value_chooser_tasks: HashMap<String, String>,
 }
 
 impl LLMPrompts {
@@ -56,5 +58,9 @@ impl LLMPrompts {
         Some((format!("Task: {}\
         Options:\n{options_prompt}\
         ", transition_prompts.task), &transition_prompts.option_nodes))
+    }
+
+    pub fn get_value_chooser_task(&self, task_key: &str) -> &String {
+        self.value_chooser_tasks.get(task_key).unwrap()
     }
 }

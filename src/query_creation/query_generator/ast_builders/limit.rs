@@ -1,6 +1,6 @@
 use sqlparser::ast::{Expr, Value};
 
-use crate::query_creation::{query_generator::{match_next_state, value_choosers::QueryValueChooser, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}};
+use crate::query_creation::{query_generator::{match_next_state, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}};
 
 use super::types::TypesBuilder;
 
@@ -12,8 +12,8 @@ impl LimitBuilder {
         Some(TypesBuilder::highlight())
     }
 
-    pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
-        generator: &mut QueryGenerator<SubMod, StC, QVC>, limit: &mut Option<Expr>
+    pub fn build<SubMod: SubstituteModel, StC: StateChooser>(
+        generator: &mut QueryGenerator<SubMod, StC>, limit: &mut Option<Expr>
     ) {
         generator.expect_state("LIMIT");
 

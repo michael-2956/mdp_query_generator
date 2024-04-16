@@ -1,11 +1,12 @@
 use std::{env, path::PathBuf};
 
-use crate::query_creation::state_generator::markov_chain_generator::{markov_chain::NodeParams, StackFrame};
+use crate::query_creation::{query_generator::{call_modifiers::WildcardRelationsValue, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, IdentName, Relation}, value_choosers::QueryValueChooser}, state_generator::{markov_chain_generator::{markov_chain::NodeParams, StackFrame}, subgraph_type::SubgraphType}};
 
 use super::{llm_prompts::LLMPrompts, ModelPredictionResult, PathwayGraphModel};
 
 use chatgpt::{client::ChatGPT, config::{ChatGPTEngine, ModelConfiguration}, converse::Conversation};
-use sqlparser::ast::Query;
+use rand::distributions::WeightedIndex;
+use sqlparser::ast::{DateTimeField, Ident, ObjectName, Query};
 use tokio::runtime::{self, Runtime};
 
 pub struct ChatGPTPromptingModel {
@@ -79,7 +80,7 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
         let current_node = &call_stack.last().unwrap().function_context.current_node.node_common.name;
         if let Some(
             (_prompt, _option_nodes)
-        ) = self.prompts.as_ref().unwrap().get_prompt(current_node, &node_outgoing) {
+        ) = self.prompts_ref().get_prompt(current_node, &node_outgoing) {
             // TODO: query the API here
             ModelPredictionResult::None(node_outgoing)
         } else {
@@ -110,4 +111,87 @@ impl ChatGPTPromptingModel {
             ))
         })
     }
+
+    fn prompts_ref(&self) -> &LLMPrompts {
+        self.prompts.as_ref().unwrap()
+    }
+}
+
+impl QueryValueChooser for ChatGPTPromptingModel {
+    fn choose_table_name(&mut self, _available_table_names: &Vec<ObjectName>) -> ObjectName {
+        let _task = self.prompts_ref().get_value_chooser_task("table_name");
+        todo!()
+    }
+
+    fn choose_column(&mut self, _clause_context: &ClauseContext, _column_types: Vec<SubgraphType>, _check_accessibility: CheckAccessibility, _column_retrieval_options: ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]) {
+        let _task = self.prompts_ref().get_value_chooser_task("column");
+        todo!()
+    }
+
+    fn choose_select_alias_order_by(&mut self, _aliases: &Vec<&IdentName>) -> Ident {
+        let _task = self.prompts_ref().get_value_chooser_task("select_alias_order_by");
+        todo!()
+    }
+
+    fn choose_aggregate_function_name(&mut self, _func_names_iter: Vec<&String>, _dist: WeightedIndex<f64>) -> ObjectName {
+        let _task = self.prompts_ref().get_value_chooser_task("aggregate_function_name");
+        todo!()
+    }
+
+    fn choose_bigint(&mut self) -> String {
+        let _task = self.prompts_ref().get_value_chooser_task("bigint");
+        todo!()
+    }
+
+    fn choose_integer(&mut self) -> String {
+        let _task = self.prompts_ref().get_value_chooser_task("integer");
+        todo!()
+    }
+
+    fn choose_numeric(&mut self) -> String {
+        let _task = self.prompts_ref().get_value_chooser_task("numeric");
+        todo!()
+    }
+
+    fn choose_text(&mut self) -> String {
+        let _task = self.prompts_ref().get_value_chooser_task("text");
+        todo!()
+    }
+
+    fn choose_date(&mut self) -> String {
+        let _task = self.prompts_ref().get_value_chooser_task("date");
+        todo!()
+    }
+
+    fn choose_timestamp(&mut self) -> String {
+        let _task = self.prompts_ref().get_value_chooser_task("timestamp");
+        todo!()
+    }
+
+    fn choose_interval(&mut self, _with_field: bool) -> (String, Option<DateTimeField>) {
+        let _task = self.prompts_ref().get_value_chooser_task("interval");
+        todo!()
+    }
+
+    fn choose_qualified_wildcard_relation<'a>(&mut self, _clause_context: &'a ClauseContext, _wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation) {
+        let _task = self.prompts_ref().get_value_chooser_task("qualified_wildcard_relation");
+        todo!()
+    }
+
+    fn choose_select_alias(&mut self) -> Ident {
+        let _task = self.prompts_ref().get_value_chooser_task("select_alias");
+        todo!()
+    }
+
+    fn choose_from_alias(&mut self) -> Ident {
+        let _task = self.prompts_ref().get_value_chooser_task("from_alias");
+        todo!()
+    }
+
+    fn choose_from_column_renames(&mut self, _n_columns: usize) -> Vec<Ident> {
+        let _task = self.prompts_ref().get_value_chooser_task("from_column_renames");
+        todo!()
+    }
+
+    fn reset(&mut self) { }
 }

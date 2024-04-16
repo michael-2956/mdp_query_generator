@@ -1,6 +1,6 @@
 use sqlparser::ast::{BinaryOperator, Expr, UnaryOperator};
 
-use crate::{query_creation::{query_generator::{match_next_state, value_choosers::QueryValueChooser, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
+use crate::{query_creation::{query_generator::{match_next_state, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
 
 use super::{select_datetime_field::SelectDatetimeFieldBuilder, types::TypesBuilder};
 
@@ -12,8 +12,8 @@ impl NumberBuilder {
         TypesBuilder::highlight()
     }
 
-    pub fn build<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser>(
-        generator: &mut QueryGenerator<SubMod, StC, QVC>, number: &mut Expr
+    pub fn build<SubMod: SubstituteModel, StC: StateChooser>(
+        generator: &mut QueryGenerator<SubMod, StC>, number: &mut Expr
     ) -> SubgraphType {
         generator.expect_state("number");
         let requested_number_type = generator.assert_single_type_argument();

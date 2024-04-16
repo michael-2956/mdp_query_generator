@@ -22,6 +22,15 @@ impl PathwayGraphModel for PromptTestingModel {
     /// This loads the prompts from the toml file
     fn load_weights(&mut self, file_path: &PathBuf) -> std::io::Result<()> {
         self.prompts = Some(LLMPrompts::read_from_file(file_path)?);
+        for value_chooser_key in [
+            "table_name", "column", "bigint",
+            "select_alias_order_by", "aggregate_function_name",
+            "integer", "numeric", "text", "date",
+            "timestamp", "interval", "qualified_wildcard_relation",
+            "select_alias", "from_alias", "from_column_renames",
+        ] {
+            self.prompts_ref().get_value_chooser_task(value_chooser_key);
+        }
         Ok(())
     }
 
@@ -53,7 +62,7 @@ impl PathwayGraphModel for PromptTestingModel {
             ].contains(&current_node.as_str());
         }
 
-        let prompt = self.prompts.as_ref().unwrap().get_prompt(current_node, &node_outgoing);
+        let prompt = self.prompts_ref().get_prompt(current_node, &node_outgoing);
         if prompt.is_none() {
             pass = false;
         }
@@ -75,5 +84,9 @@ impl PromptTestingModel {
         Self {
             prompts: None
         }
+    }
+
+    fn prompts_ref(&self) -> &LLMPrompts {
+        self.prompts.as_ref().unwrap()
     }
 }

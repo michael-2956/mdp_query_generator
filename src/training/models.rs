@@ -131,4 +131,11 @@ pub trait PathwayGraphModel {
     fn end_inference(&mut self) { }
 
     fn write_weights_to_dot(&self, _dot_file_path: &PathBuf) -> io::Result<()> { todo!() }
+
+    fn as_mut_any<'a>(&'a mut self) -> &'a mut dyn std::any::Any
+    where
+        Self: 'a + std::any::Any + Sized,
+    {
+        self
+    }
 }

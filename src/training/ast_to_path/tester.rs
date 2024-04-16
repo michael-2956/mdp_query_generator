@@ -8,8 +8,8 @@ pub struct TestAST2Path {
     config: AST2PathTestingConfig,
     main_config: MainConfig,
     path_generator: PathGenerator,
-    random_query_generator: QueryGenerator<AntiCallModel, ProbabilisticStateChooser, RandomValueChooser>,
-    path_query_generator: QueryGenerator<PathModel, MaxProbStateChooser, DeterministicValueChooser>,
+    random_query_generator: QueryGenerator<AntiCallModel, ProbabilisticStateChooser>,
+    path_query_generator: QueryGenerator<PathModel, MaxProbStateChooser>,
 }
 
 impl TestAST2Path {

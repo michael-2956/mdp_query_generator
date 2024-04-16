@@ -11,7 +11,7 @@ pub struct SQLTrainer {
     main_config: MainConfig,
     dataset_queries: Vec<Box<Query>>,
     path_generator: PathGenerator,
-    path_query_generator: QueryGenerator<PathModel, MaxProbStateChooser, DeterministicValueChooser>,
+    path_query_generator: QueryGenerator<PathModel, MaxProbStateChooser>,
 }
 
 #[derive(Debug, Clone)]
