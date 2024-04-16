@@ -62,13 +62,16 @@ impl PathwayGraphModel for PromptTestingModel {
             ].contains(&current_node.as_str());
         }
 
-        let prompt = self.prompts_ref().get_prompt(current_node, &node_outgoing);
+        let prompt = self.prompts_ref().generate_prompt(
+            &current_query_str, current_node, &node_outgoing, None
+        );
         if prompt.is_none() {
             pass = false;
         }
 
         if !pass {
-            let prompt_str = if let Some((prompt, option_nodes)) = prompt {
+            let prompt_str = if let Some(prompt) = prompt {
+                let option_nodes = self.prompts_ref().get_option_nodes(current_node);
                 format!("\n{prompt}\nOption Nodes: {:#?}", option_nodes)
             } else { format!("ABSCENT") };
             let outgoing_str = node_outgoing.iter().map(|node| format!("{} ", node.node_common.name)).collect::<String>();

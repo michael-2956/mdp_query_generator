@@ -4,12 +4,13 @@ use crate::query_creation::{query_generator::{call_modifiers::WildcardRelationsV
 
 use super::{llm_prompts::LLMPrompts, ModelPredictionResult, PathwayGraphModel};
 
-use chatgpt::{client::ChatGPT, config::{ChatGPTEngine, ModelConfiguration}, converse::Conversation};
+use chatgpt::{client::ChatGPT, config::{ChatGPTEngine, ModelConfiguration}, converse::Conversation, types::CompletionResponse};
 use rand::distributions::WeightedIndex;
 use sqlparser::ast::{DateTimeField, Ident, ObjectName, Query};
 use tokio::runtime::{self, Runtime};
 
 pub struct ChatGPTPromptingModel {
+    decision_context_by_depth: Vec<Option<String>>,
     current_conversation: Option<Conversation>,
     prompts: Option<LLMPrompts>,
     async_runtime: Runtime,
@@ -32,16 +33,33 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
     }
 
     fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, current_query_ast_opt: Option<&Query>) -> ModelPredictionResult {
+        // Keep the decision_context_by_depth the same length as the call stack
+        assert!(call_stack.len() <= self.decision_context_by_depth.len());
+        self.decision_context_by_depth.truncate(call_stack.len());
+        let decision_context = self.decision_context_by_depth.last().unwrap().clone();
+    
+        // If we are at the start of the generation proces, initiate the convesation with chatgpt
         if let &[ref main_func] = call_stack.as_slice() {
             if main_func.function_context.current_node.node_common.name == "Query" {
                 self.initiate_conversation();
             }
         }
+        
+        let current_node = &call_stack.last().unwrap().function_context.current_node;
+        let is_call_node = current_node.call_params.is_some();
+        let current_node_name = &current_node.node_common.name;
 
+        // Add context for the inserted subgraphs first decision
+        if is_call_node {
+            self.decision_context_by_depth.push(self.prompts_ref().get_call_node_context(current_node_name));
+        }
+
+        // No need to predict if only one outgoing node is available
         if node_outgoing.len() == 1 {
             return ModelPredictionResult::Some(node_outgoing.into_iter().map(|p| (1f64, p)).collect());
         }
 
+        // Automatically select a qualified column name.
         // TODO: Remove this once the qualified_column_name/unqualified_column_name will be
         // decided AFTER column selection and not before. This will work for now.
         if node_outgoing.iter().any(|node| [
@@ -54,40 +72,26 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
             ).collect())
         }
 
+        // Form the prompt
         let current_query_str = format!("{}", current_query_ast_opt.unwrap());
-        // if current_query_str.contains("[?]") {
-        //     eprintln!("{current_query_str}");
-        //     let outgoing_str = node_outgoing.iter().map(|node| format!("{} ", node.node_common.name)).collect::<String>();
-        //     eprintln!("{outgoing_str}\n");
-        // }
-        eprintln!("{current_query_str}");
-        let outgoing_str = node_outgoing.iter().map(|node| format!("{} ", node.node_common.name)).collect::<String>();
-        eprintln!("{outgoing_str}\n");
+        let prompt = self.prompts_ref().generate_prompt(
+            &current_query_str, current_node_name, &node_outgoing, decision_context
+        ).unwrap();
 
-        /// TODO impl QueryValueChooser for ChatGPTPromptingModel
-        // every method prompts chatgpt instead
-        // every chooser has its own prompt in config
-        // to use the model as a chooser
-        //
-        // then instead of calling value_chooser!(generator).choose_...()
-        // we call value_chooser!(generator)().choose_...()
-        //
-        // value_chooser() is a method that has something like:
-        // if let Some(vc) = self.predictor_model.as_any().downcast_mut::<QueryValueChooser>() {
-        //     vc
-        // } else { self.value_chooser.as_mut().unwrap() }
+        // Query the model and interpret the response
+        let response = self.query_model(prompt).unwrap();
+        let answer = response.message().content.lines().last().unwrap();
+        let option_nodes = self.prompts_ref().get_option_nodes(current_node_name).unwrap();
+        let node_name = option_nodes.get(answer).unwrap();
 
-        let current_node = &call_stack.last().unwrap().function_context.current_node.node_common.name;
-        if let Some(
-            (_prompt, _option_nodes)
-        ) = self.prompts_ref().get_prompt(current_node, &node_outgoing) {
-            // TODO: query the API here
-            ModelPredictionResult::None(node_outgoing)
-        } else {
-            ModelPredictionResult::None(node_outgoing)
-        }
+        // Return the prediction result
+        ModelPredictionResult::Some(node_outgoing.into_iter().map(
+            |node| (if node.node_common.name.as_str() == node_name {
+                1f64
+            } else { 0f64 }, node)
+        ).collect())
     }
-    
+
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
@@ -98,6 +102,7 @@ impl ChatGPTPromptingModel {
         let mut model_config = ModelConfiguration::default();
         model_config.engine = ChatGPTEngine::Custom("gpt-3.5-turbo-0125");
         let mut _self = Self {
+            decision_context_by_depth: vec![],
             prompts: None,
             async_runtime: runtime::Builder::new_current_thread().build().unwrap(),
             client: ChatGPT::new_with_config(
@@ -109,10 +114,14 @@ impl ChatGPTPromptingModel {
     }
 
     fn initiate_conversation(&mut self) {
+        self.current_conversation = Some(self.client.new_conversation_directed(
+            self.prompts.as_ref().unwrap().system_prompt.clone()
+        ));
+    }
+
+    fn query_model(&mut self, prompt: String) -> chatgpt::Result<CompletionResponse> {
         self.async_runtime.block_on(async {
-            self.current_conversation = Some(self.client.new_conversation_directed(
-                self.prompts.as_ref().unwrap().system_prompt.clone()
-            ))
+            self.current_conversation.as_mut().unwrap().send_message(prompt).await
         })
     }
 

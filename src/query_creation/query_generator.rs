@@ -109,8 +109,10 @@ macro_rules! match_next_state {
 
 pub(crate) use match_next_state;
 
-/// returns the value chooser of the generator, which amounts to\
+/// Returns the value chooser of the generator, which amounts to\
 /// either the .predictor_model of .value_chooser fields
+/// 
+/// Not a method because we don't want to borrow the whole generator
 macro_rules! value_chooser {
     ($generator:expr) => {{
         if let Some(predictor_model) = $generator.predictor_model.as_mut() {

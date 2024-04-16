@@ -45,7 +45,7 @@ impl LLMPrompts {
     }
 
     /// returns the prompts and a mapping from the option number to the selected node
-    pub fn get_prompt(&self, current_node: &SmolStr, outgoing_nodes: &Vec<NodeParams>) -> Option<(String, &HashMap<String, String>)> {
+    pub fn generate_prompt(&self, current_query_str: &String, current_node: &SmolStr, outgoing_nodes: &Vec<NodeParams>, decision_context: Option<String>) -> Option<String> {
         let transition_prompts = self.transitions.get(current_node.as_str())?;
         let options_prompt: String = transition_prompts.options.iter().sorted_by(
             |(a_k, _), (b_k, _)| Ord::cmp(*a_k, *b_k)
@@ -55,9 +55,22 @@ impl LLMPrompts {
                 Some(format!("    {opt_key}) {opt_prompt}\n"))
             } else { None }
         }).collect();
-        Some((format!("Task: {}\
-        Options:\n{options_prompt}\
-        ", transition_prompts.task), &transition_prompts.option_nodes))
+        let context_str = if let Some(context) = decision_context {
+            format!("Context: {context}\n\n")
+        } else { "".to_string() };
+        Some(format!(
+            "Query: {current_query_str}\n\nTask: {}\n\n{context_str}Options:\n{options_prompt}",
+            transition_prompts.task
+        ))
+    }
+
+    pub fn get_option_nodes(&self, current_node: &SmolStr) -> Option<&HashMap<String, String>> {
+        let transition_prompts = self.transitions.get(current_node.as_str())?;
+        Some(&transition_prompts.option_nodes)
+    }
+
+    pub fn get_call_node_context(&self, node_name: &SmolStr) -> Option<String> {
+        self.call_node_context.get(node_name.as_str()).cloned()
     }
 
     pub fn get_value_chooser_task(&self, task_key: &str) -> &String {
