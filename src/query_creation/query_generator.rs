@@ -54,10 +54,10 @@ impl TomlReadable for QueryGeneratorConfig {
     }
 }
 
-pub struct QueryGenerator<DynMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> {
+pub struct QueryGenerator<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> {
     config: QueryGeneratorConfig,
     state_generator: MarkovChainGenerator<StC>,
-    substitute_model: Box<DynMod>,
+    substitute_model: Box<SubMod>,
     predictor_model: Option<Box<dyn PathwayGraphModel>>,
     value_chooser: Box<QVC>,
     clause_context: ClauseContext,
@@ -254,8 +254,8 @@ impl<SubMod: SubstituteModel, StC: StateChooser, QVC: QueryValueChooser> QueryGe
     }
 
     /// generate the next query with the provided dynamic model and value choosers
-    pub fn generate_with_substitute_model_and_value_chooser(&mut self, dynamic_model: Box<SubMod>, value_chooser: Box<QVC>) -> Query {
-        self.substitute_model = dynamic_model;
+    pub fn generate_with_substitute_model_and_value_chooser(&mut self, substitute_model: Box<SubMod>, value_chooser: Box<QVC>) -> Query {
+        self.substitute_model = substitute_model;
         self.value_chooser = value_chooser;
         self.generate()
     }

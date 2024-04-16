@@ -4,7 +4,7 @@ use sqlparser::ast::Query;
 
 use crate::{query_creation::state_generator::markov_chain_generator::{StackFrame, markov_chain::NodeParams}, config::TomlReadable};
 
-use self::{llm_prompting_models::{ChatGPTPromptingModel, PromptTestingModel}, markov_models::{DepthwiseFullFunctionContext, DepthwiseFunctionNameContext, FullFunctionContext, FunctionNameContext, ModelWithMarkovWeights, StackedFullFunctionContext, StackedFunctionNamesContext}};
+use self::{llm_prompting_models::{chatgpt_model::ChatGPTPromptingModel, prompt_testing_model::PromptTestingModel}, markov_models::{DepthwiseFullFunctionContext, DepthwiseFunctionNameContext, FullFunctionContext, FunctionNameContext, ModelWithMarkovWeights, StackedFullFunctionContext, StackedFunctionNamesContext}};
 
 use super::ast_to_path::PathNode;
 
