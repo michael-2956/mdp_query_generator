@@ -17,7 +17,7 @@ use crate::{config::TomlReadable, training::models::PathwayGraphModel};
 
 use super::{
     super::unwrap_variant,
-    state_generator::{markov_chain_generator::subgraph_type::SubgraphType, subgraph_type::ContainsSubgraphType, CallTypes}
+    state_generator::{markov_chain_generator::subgraph_type::SubgraphType, CallTypes}
 };
 use self::{
     aggregate_function_settings::AggregateFunctionDistribution, ast_builders::query::QueryBuilder,
@@ -109,45 +109,22 @@ macro_rules! match_next_state {
 
 pub(crate) use match_next_state;
 
+/// returns the value chooser of the generator, which amounts to\
+/// either the .predictor_model of .value_chooser fields
+macro_rules! value_chooser {
+    ($generator:expr) => {{
+        if let Some(predictor_model) = $generator.predictor_model.as_mut() {
+            if let Some(predictor_model) = predictor_model.as_any_mut().downcast_mut::<Box<dyn QueryValueChooser>>() {
+                predictor_model
+            } else { &mut $generator.value_chooser }
+        } else { &mut $generator.value_chooser }
+    }};
+}
+
+pub(crate) use value_chooser;
+
 pub fn highlight_ident() -> Ident {
     Ident::new("[?]")
-}
-
-#[derive(Debug, Clone)]
-pub enum TypeAssertion<'a> {
-    None,
-    GeneratedBy(SubgraphType),
-    CompatibleWith(SubgraphType),
-    GeneratedByOneOf(&'a [SubgraphType]),
-    CompatibleWithOneOf(&'a [SubgraphType]),
-}
-
-impl<'a> TypeAssertion<'a> {
-    pub fn check(&'a self, selected_type: &SubgraphType, types_value: &Expr) {
-        if !self.assertion_passed(selected_type) {
-            panic!("types got an unexpected type: expected {:?}, got {:?}.\nExpr: {:?}", self, selected_type, types_value);
-        }
-    }
-
-    pub fn check_type(&'a self, selected_type: &SubgraphType) {
-        if !self.assertion_passed(selected_type) {
-            panic!("types got an unexpected type: expected {:?}, got {:?}", self, selected_type);
-        }
-    }
-
-    fn assertion_passed(&'a self, selected_type: &SubgraphType) -> bool {
-        match self {
-            TypeAssertion::None => true,
-            TypeAssertion::GeneratedBy(by) => selected_type.is_same_or_more_determined_or_undetermined(by),
-            TypeAssertion::CompatibleWith(with) => selected_type.is_compat_with(with),
-            TypeAssertion::GeneratedByOneOf(by_one_of) => {
-                by_one_of.contains_generator_of(selected_type)
-            },
-            TypeAssertion::CompatibleWithOneOf(with_one_of) => {
-                with_one_of.iter().any(|with| selected_type.is_compat_with(with))
-            },
-        }
-    }
 }
 
 impl<SubMod: SubstituteModel, StC: StateChooser> QueryGenerator<SubMod, StC> {
@@ -170,10 +147,6 @@ impl<SubMod: SubstituteModel, StC: StateChooser> QueryGenerator<SubMod, StC> {
 
         _self
     }
-
-    // fn value_chooser(&mut self) -> &mut Box<dyn QueryValueChooser> {
-    //     &mut self.value_chooser
-    // }
 
     fn next_state_opt(&mut self) -> Option<SmolStr> {
         self.state_generator.next_node_name(

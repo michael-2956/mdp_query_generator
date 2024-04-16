@@ -1,6 +1,6 @@
 use sqlparser::ast::{ObjectName, SelectItem, WildcardAdditionalOptions};
 
-use crate::{query_creation::{query_generator::{ast_builders::types::TypesBuilder, call_modifiers::{ValueSetterValue, WildcardRelationsValue}, highlight_ident, match_next_state, query_info::{IdentName, QueryProps}, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
+use crate::{query_creation::{query_generator::{ast_builders::{types::TypesBuilder, types_value::TypeAssertion}, call_modifiers::{ValueSetterValue, WildcardRelationsValue}, highlight_ident, match_next_state, query_info::{IdentName, QueryProps}, value_chooser, QueryGenerator, QueryValueChooser}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
 
 /// subgraph def_SELECT
 pub struct SelectBuilder { }
@@ -46,7 +46,7 @@ impl SelectBuilder {
                         },
                         "SELECT_qualified_wildcard" => {
                             let wildcard_relations = unwrap_variant!(generator.state_generator.get_named_value::<WildcardRelationsValue>().unwrap(), ValueSetterValue::WildcardRelations);
-                            let (alias, relation) = generator.value_chooser.choose_qualified_wildcard_relation(
+                            let (alias, relation) = value_chooser!(generator).choose_qualified_wildcard_relation(
                                 &generator.clause_context, wildcard_relations
                             );
                             column_idents_and_graph_types.extend(relation.get_wildcard_columns());
@@ -69,7 +69,7 @@ impl SelectBuilder {
                                 expr: TypesBuilder::highlight(), alias: highlight_ident(),
                             };
                             let alias = unwrap_pat!(select_item, SelectItem::ExprWithAlias { alias, .. }, alias);
-                            *alias = generator.value_chooser.choose_select_alias();
+                            *alias = value_chooser!(generator).choose_select_alias();
                             (
                                 Some(alias.clone().into()),
                                 unwrap_pat!(select_item, SelectItem::ExprWithAlias { expr, .. }, expr)

@@ -1,6 +1,6 @@
 use sqlparser::ast::Expr;
 
-use crate::{query_creation::{query_generator::{ast_builders::types::TypesBuilder, match_next_state, query_info::ColumnRetrievalOptions, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, substitute_models::SubstituteModel}}, unwrap_variant};
+use crate::{query_creation::{query_generator::{ast_builders::types::TypesBuilder, match_next_state, query_info::ColumnRetrievalOptions, QueryGenerator, ast_builders::types_value::TypeAssertion}, state_generator::{state_choosers::StateChooser, substitute_models::SubstituteModel}}, unwrap_variant};
 
 pub struct GroupByBuilder { }
 

@@ -1,6 +1,6 @@
 use sqlparser::ast::Expr;
 
-use crate::{query_creation::{query_generator::{ast_builders::types_type::TypesTypeBuilder, match_next_state, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
+use crate::{query_creation::{query_generator::{ast_builders::{types_type::TypesTypeBuilder, types_value::TypeAssertion}, match_next_state, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
 
 use super::types::TypesBuilder;
 

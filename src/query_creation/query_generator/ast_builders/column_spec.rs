@@ -1,6 +1,6 @@
 use sqlparser::ast::Expr;
 
-use crate::{query_creation::{query_generator::{match_next_state, query_info::{CheckAccessibility, ColumnRetrievalOptions, IdentName}, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel, CallTypes}}, unwrap_variant_or_else};
+use crate::{query_creation::{query_generator::{match_next_state, QueryValueChooser, query_info::{CheckAccessibility, ColumnRetrievalOptions, IdentName}, value_chooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel, CallTypes}}, unwrap_variant_or_else};
 
 use super::types::TypesBuilder;
 
@@ -42,7 +42,7 @@ impl ColumnSpecBuilder {
             "qualified_column_name" => CheckAccessibility::QualifiedColumnName,
             "unqualified_column_name" => CheckAccessibility::ColumnName,
         });
-        let (selected_type, qualified_column_name) = generator.value_chooser.choose_column(
+        let (selected_type, qualified_column_name) = value_chooser!(generator).choose_column(
             &generator.clause_context, column_types, check_accessibility.clone(), column_retrieval_options
         );
         *ident_expr = if check_accessibility == CheckAccessibility::QualifiedColumnName {

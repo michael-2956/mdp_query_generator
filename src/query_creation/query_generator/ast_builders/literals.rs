@@ -1,6 +1,6 @@
 use sqlparser::ast::{DataType, Expr, TimezoneInfo, UnaryOperator, Value};
 
-use crate::query_creation::{query_generator::{match_next_state, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}};
+use crate::query_creation::{query_generator::{match_next_state, QueryGenerator, value_chooser, QueryValueChooser}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}};
 
 use super::types::TypesBuilder;
 
@@ -35,13 +35,13 @@ impl LiteralsBuilder {
                         // however, int can be cast to bigint (if required), so no problem for now.
                         // - in AST->path, the extracted 'int' path will produce the same query,
                         // even though the intended type could be bigint, if it is too small.
-                        (SubgraphType::BigInt, generator.value_chooser.choose_bigint())
+                        (SubgraphType::BigInt, value_chooser!(generator).choose_bigint())
                     },
                     "number_literal_integer" => {
-                        (SubgraphType::Integer, generator.value_chooser.choose_integer())
+                        (SubgraphType::Integer, value_chooser!(generator).choose_integer())
                     },
                     "number_literal_numeric" => {
-                        (SubgraphType::Numeric, (generator.value_chooser.choose_numeric()))
+                        (SubgraphType::Numeric, value_chooser!(generator).choose_numeric())
                     },
                     _ => unreachable!(),
                 };
@@ -55,18 +55,18 @@ impl LiteralsBuilder {
                 number_type
             },
             "text_literal" => {
-                *expr = Expr::Value(Value::SingleQuotedString(generator.value_chooser.choose_text()));
+                *expr = Expr::Value(Value::SingleQuotedString(value_chooser!(generator).choose_text()));
                 SubgraphType::Text
             },
             "date_literal" => {
                 *expr = Expr::TypedString {
-                    data_type: DataType::Date, value: generator.value_chooser.choose_date(),
+                    data_type: DataType::Date, value: value_chooser!(generator).choose_date(),
                 };
                 SubgraphType::Date
             },
             "timestamp_literal" => {
                 *expr = Expr::TypedString {
-                    data_type: DataType::Timestamp(None, TimezoneInfo::None), value: generator.value_chooser.choose_timestamp(),
+                    data_type: DataType::Timestamp(None, TimezoneInfo::None), value: value_chooser!(generator).choose_timestamp(),
                 };
                 SubgraphType::Timestamp
             },
@@ -75,7 +75,7 @@ impl LiteralsBuilder {
                     "interval_literal_format_string" => false,
                     "interval_literal_with_field" => true,
                 });
-                let (str_value, leading_field) = generator.value_chooser.choose_interval(with_field);
+                let (str_value, leading_field) = value_chooser!(generator).choose_interval(with_field);
                 *expr = Expr::Interval {
                     value: Box::new(Expr::Value(Value::SingleQuotedString(str_value.to_string()))),
                     leading_field,

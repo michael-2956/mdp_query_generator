@@ -1,6 +1,6 @@
 use sqlparser::ast::{BinaryOperator, Expr, UnaryOperator};
 
-use crate::{query_creation::{query_generator::{match_next_state, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
+use crate::{query_creation::{query_generator::{match_next_state, QueryGenerator, ast_builders::types_value::TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
 
 use super::types::TypesBuilder;
 

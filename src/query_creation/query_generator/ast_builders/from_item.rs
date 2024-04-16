@@ -1,6 +1,6 @@
 use sqlparser::ast::{ObjectName, TableAlias, TableFactor};
 
-use crate::{query_creation::{query_generator::{call_modifiers::{AvailableTableNamesValue, ValueSetterValue}, highlight_ident, match_next_state, QueryGenerator}, state_generator::{state_choosers::StateChooser, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
+use crate::{query_creation::{query_generator::{QueryValueChooser, call_modifiers::{AvailableTableNamesValue, ValueSetterValue}, highlight_ident, match_next_state, value_chooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
 
 use super::query::QueryBuilder;
 
@@ -26,7 +26,7 @@ impl FromItemBuilder {
         let alias = unwrap_pat!(from_item, TableFactor::Table { alias, .. }, alias);
         *alias = match_next_state!(generator, {
             "FROM_item_alias" => Some(TableAlias {
-                name: generator.value_chooser.choose_from_alias(),
+                name: value_chooser!(generator).choose_from_alias(),
                 columns: vec![]
             }),
             "FROM_item_no_alias" => None,
@@ -40,13 +40,13 @@ impl FromItemBuilder {
                 ).table_names;
 
                 let name = unwrap_pat!(from_item, TableFactor::Table { name, .. }, name);
-                *name = generator.value_chooser.choose_table_name(available_table_names);
+                *name = value_chooser!(generator).choose_table_name(available_table_names);
                 let name = name.clone();
 
                 let alias = unwrap_pat!(from_item, TableFactor::Table { alias, .. }, alias);
                 if let Some(table_alias) = alias {
                     let n_columns = generator.clause_context.schema_ref().num_columns_in_table(&name);
-                    table_alias.columns = generator.value_chooser.choose_from_column_renames(n_columns);
+                    table_alias.columns = value_chooser!(generator).choose_from_column_renames(n_columns);
                 }
 
                 generator.clause_context.add_from_table_by_name(&name, alias.clone());
@@ -64,7 +64,7 @@ impl FromItemBuilder {
                 let alias = &mut *unwrap_pat!(from_item, TableFactor::Derived { alias, .. }, alias);
                 if let Some(query_alias) = alias {
                     let n_columns = column_idents_and_graph_types.len();
-                    query_alias.columns = generator.value_chooser.choose_from_column_renames(n_columns);
+                    query_alias.columns = value_chooser!(generator).choose_from_column_renames(n_columns);
                 }
                 generator.clause_context.top_from_mut().append_query(column_idents_and_graph_types, alias.clone().unwrap());
             },

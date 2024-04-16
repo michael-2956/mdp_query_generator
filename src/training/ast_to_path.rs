@@ -14,7 +14,7 @@ use crate::{
         query_generator::{
             aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution},
             call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue},
-            query_info::{ClauseContext, ClauseContextCheckpoint, ColumnRetrievalOptions, DatabaseSchema, IdentName, QueryProps}, TypeAssertion
+            query_info::{ClauseContext, ClauseContextCheckpoint, ColumnRetrievalOptions, DatabaseSchema, IdentName, QueryProps}, ast_builders::types_value::TypeAssertion
         },
         state_generator::{
             markov_chain_generator::{

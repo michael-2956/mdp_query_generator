@@ -1,8 +1,45 @@
 use sqlparser::ast::{Expr, Value};
 
-use crate::{query_creation::{query_generator::{expr_precedence::ExpressionPriority, match_next_state, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel, CallTypes}}, unwrap_variant};
+use crate::{query_creation::{query_generator::{expr_precedence::ExpressionPriority, match_next_state, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::{ContainsSubgraphType, SubgraphType}, substitute_models::SubstituteModel, CallTypes}}, unwrap_variant};
 
 use super::{aggregate_function::AggregateFunctionBuilder, case::CaseBuilder, column_spec::ColumnSpecBuilder, formulas::FormulasBuilder, literals::LiteralsBuilder, query::QueryBuilder, types::TypesBuilder};
+
+#[derive(Debug, Clone)]
+pub enum TypeAssertion<'a> {
+    None,
+    GeneratedBy(SubgraphType),
+    CompatibleWith(SubgraphType),
+    GeneratedByOneOf(&'a [SubgraphType]),
+    CompatibleWithOneOf(&'a [SubgraphType]),
+}
+
+impl<'a> TypeAssertion<'a> {
+    pub fn check(&'a self, selected_type: &SubgraphType, types_value: &Expr) {
+        if !self.assertion_passed(selected_type) {
+            panic!("types got an unexpected type: expected {:?}, got {:?}.\nExpr: {:?}", self, selected_type, types_value);
+        }
+    }
+
+    pub fn check_type(&'a self, selected_type: &SubgraphType) {
+        if !self.assertion_passed(selected_type) {
+            panic!("types got an unexpected type: expected {:?}, got {:?}", self, selected_type);
+        }
+    }
+
+    fn assertion_passed(&'a self, selected_type: &SubgraphType) -> bool {
+        match self {
+            TypeAssertion::None => true,
+            TypeAssertion::GeneratedBy(by) => selected_type.is_same_or_more_determined_or_undetermined(by),
+            TypeAssertion::CompatibleWith(with) => selected_type.is_compat_with(with),
+            TypeAssertion::GeneratedByOneOf(by_one_of) => {
+                by_one_of.contains_generator_of(selected_type)
+            },
+            TypeAssertion::CompatibleWithOneOf(with_one_of) => {
+                with_one_of.iter().any(|with| selected_type.is_compat_with(with))
+            },
+        }
+    }
+}
 
 /// subgraph def_types_value
 pub struct TypesValueBuilder { }

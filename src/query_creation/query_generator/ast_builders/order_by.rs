@@ -1,6 +1,6 @@
 use sqlparser::ast::{Expr, OrderByExpr};
 
-use crate::{query_creation::{query_generator::{call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue}, match_next_state, QueryGenerator, TypeAssertion}, state_generator::{state_choosers::StateChooser, substitute_models::SubstituteModel}}, unwrap_variant};
+use crate::{query_creation::{query_generator::{ast_builders::types_value::TypeAssertion, call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue}, match_next_state, value_chooser, QueryGenerator, QueryValueChooser}, state_generator::{state_choosers::StateChooser, substitute_models::SubstituteModel}}, unwrap_variant};
 
 use super::types::TypesBuilder;
 
@@ -36,7 +36,7 @@ impl OrderByBuilder {
                         .get_named_value::<SelectAccessibleColumnsValue>().unwrap(),
                         ValueSetterValue::SelectAccessibleColumns
                     ).accessible_columns.iter().collect::<Vec<_>>();
-                    let alias = generator.value_chooser.choose_select_alias_order_by(aliases);
+                    let alias = value_chooser!(generator).choose_select_alias_order_by(aliases);
                     order_by_expr.expr = Expr::Identifier(alias);
                 },
                 "order_by_expr" => {

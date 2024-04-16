@@ -69,8 +69,8 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
         // every chooser has its own prompt in config
         // to use the model as a chooser
         //
-        // then instead of calling generator.value_chooser.choose_...()
-        // we call generator.value_chooser().choose_...()
+        // then instead of calling value_chooser!(generator).choose_...()
+        // we call value_chooser!(generator)().choose_...()
         //
         // value_chooser() is a method that has something like:
         // if let Some(vc) = self.predictor_model.as_any().downcast_mut::<QueryValueChooser>() {
@@ -86,6 +86,10 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
         } else {
             ModelPredictionResult::None(node_outgoing)
         }
+    }
+    
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }
 
