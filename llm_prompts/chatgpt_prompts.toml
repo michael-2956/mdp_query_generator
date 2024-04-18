@@ -46,7 +46,7 @@ value (and only, exclusively the value), and nothing else.
 
 additional_weights_folder="llm_prompts/chatgpt_subgraph_prompts/"
 
-[transitions]
+# [transitions]
 # HOW TO ADD THE DECISION PROMPTS:
 # [transitions.node]
 # task="""
@@ -58,6 +58,11 @@ additional_weights_folder="llm_prompts/chatgpt_subgraph_prompts/"
 # 1=""
 # 2=""
 
+# [call_node_context]
+# node=""
+
+# [value_chooser_tasks]
+# vc_name=""
 
 [transitions.GROUP_BY]
 task="""
