@@ -12,18 +12,18 @@ pub mod markov_models;
 pub mod llm_prompting_models;
 
 pub struct ModelConfig {
-    // Which model to use. Can be: "subgraph"
+    /// Which model to use. Can be: "subgraph"
     pub model_name: String,
-    // whether to use pretrained model weights
+    /// whether to use pretrained model weights
     pub load_weights: bool,
-    // where to load the weights from
+    /// where to load the weights from
     pub load_weights_from: PathBuf,
-    // where to save a dot file with graph representation.
-    // type save_dot_file=false in config to turn off
+    /// where to save a dot file with graph representation.
+    /// type save_dot_file=false in config to turn off
     pub save_dot_file: Option<PathBuf>,
-    // whether to use the stacked version of the model
+    /// whether to use the stacked version of the model
     pub stacked_version: bool,
-    // whether to print weights after training is done
+    /// whether to print weights after training is done
     pub print_weights_after_training: bool,
 }
 

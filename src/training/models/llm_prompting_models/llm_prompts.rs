@@ -33,15 +33,42 @@ pub struct LLMPrompts {
     /// the context that each call node provides the first decision
     /// of its subgraph with
     pub call_node_context: HashMap<String, String>,
-    /// the taskds for each of the value choosers are stored here
+    /// the tasks for each of the value choosers are stored here
     pub value_chooser_tasks: HashMap<String, String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MainPromptsFile {
+    additional_weights_folder: PathBuf,
+    system_prompt: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SupplementaryPromptsFile {
+    transitions: HashMap<String, TransitionPrompts>,
+    call_node_context: HashMap<String, String>,
+    value_chooser_tasks: HashMap<String, String>,
 }
 
 impl LLMPrompts {
     pub fn read_from_file(file_path: &PathBuf) -> std::io::Result<Self> {
         let prompts_toml_str = fs::read_to_string(file_path)?;
-        let mut _self: Self = toml::from_str(prompts_toml_str.as_str()).unwrap();
-        Ok(_self)
+        let contents: MainPromptsFile = toml::from_str(&prompts_toml_str).unwrap();
+        let mut transitions = HashMap::new();
+        let mut call_node_context = HashMap::new();
+        let mut value_chooser_tasks = HashMap::new();
+        for entry in fs::read_dir(contents.additional_weights_folder).unwrap() {
+            let supp_contents: SupplementaryPromptsFile = toml::from_str(&fs::read_to_string(&entry.unwrap().path()).unwrap()).unwrap();
+            transitions.extend(supp_contents.transitions.into_iter());
+            call_node_context.extend(supp_contents.call_node_context.into_iter());
+            value_chooser_tasks.extend(supp_contents.value_chooser_tasks.into_iter());
+        }
+        Ok(Self {
+            system_prompt: contents.system_prompt,
+            transitions,
+            call_node_context,
+            value_chooser_tasks,
+        })
     }
 
     /// returns the prompts and a mapping from the option number to the selected node
