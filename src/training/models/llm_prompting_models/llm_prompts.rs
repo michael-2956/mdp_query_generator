@@ -73,7 +73,16 @@ impl LLMPrompts {
         self.call_node_context.get(node_name.as_str()).cloned()
     }
 
-    pub fn get_value_chooser_task(&self, task_key: &str) -> &String {
-        self.value_chooser_tasks.get(task_key).unwrap()
+    pub fn generate_value_chooser_options_prompt(&self, current_query_str: String, task_key: &str, options: Vec<String>) -> Option<(String, HashMap<String, String>)> {
+        let task_str = self.value_chooser_tasks.get(task_key)?;
+        let mut options_prompt = "".to_string();
+        let mut option_nodes = HashMap::new();
+        for (opt_key, opt_prompt) in options.into_iter().enumerate() {
+            options_prompt += format!("    {opt_key}) {opt_prompt}\n").as_str();
+            option_nodes.insert(opt_key.to_string(), opt_prompt);
+        }
+        Some((format!(
+            "Query: {current_query_str}\n\nTask: {task_str}\n\nOptions:\n{options_prompt}"
+        ), option_nodes))
     }
 }

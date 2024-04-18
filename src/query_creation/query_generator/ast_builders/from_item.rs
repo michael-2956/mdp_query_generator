@@ -24,6 +24,7 @@ impl FromItemBuilder {
         generator.expect_state("FROM_item");
 
         let alias = unwrap_pat!(from_item, TableFactor::Table { alias, .. }, alias);
+        // TODO: is this logical for the LLM?
         *alias = match_next_state!(generator, {
             "FROM_item_alias" => Some(TableAlias {
                 name: value_chooser!(generator).choose_from_alias(),

@@ -1,6 +1,6 @@
 use rand::{distributions::{Distribution, WeightedIndex}, seq::SliceRandom, Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
-use sqlparser::ast::{DateTimeField, Ident, ObjectName};
+use sqlparser::ast::{DateTimeField, Ident, ObjectName, Query};
 
 use crate::{query_creation::state_generator::subgraph_type::{ContainsSubgraphType, SubgraphType}, training::ast_to_path::PathNode};
 
@@ -38,6 +38,9 @@ pub trait QueryValueChooser {
     fn choose_from_column_renames(&mut self, n_columns: usize) -> Vec<Ident>;
 
     fn reset(&mut self);
+
+    /// set the current query AST for the choice that's going to be taken next
+    fn set_choice_query_ast(&mut self, _current_query_ref: &Query) { }
 }
 
 pub struct RandomValueChooser {

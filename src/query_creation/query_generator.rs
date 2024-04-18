@@ -113,20 +113,29 @@ pub(crate) use match_next_state;
 /// either the .predictor_model of .value_chooser fields
 /// 
 /// Not a method because we don't want to borrow the whole generator
+/// mutably for this, since other fields may be needed
 macro_rules! value_chooser {
     ($generator:expr) => {{
-        if let Some(predictor_model) = $generator.predictor_model.as_mut() {
+        let vc = if let Some(predictor_model) = $generator.predictor_model.as_mut() {
             if let Some(predictor_model) = predictor_model.as_any_mut().downcast_mut::<Box<dyn QueryValueChooser>>() {
                 predictor_model
             } else { &mut $generator.value_chooser }
-        } else { &mut $generator.value_chooser }
+        } else { &mut $generator.value_chooser };
+        vc.set_choice_query_ast($generator.current_query_raw_ptr.map(|p| unsafe { &*p }).unwrap());
+        vc
     }};
 }
 
 pub(crate) use value_chooser;
 
+const HIGHLIGHT_STR: &str = "[?]";
+
+pub fn highlight_str() -> String {
+    HIGHLIGHT_STR.to_string()
+}
+
 pub fn highlight_ident() -> Ident {
-    Ident::new("[?]")
+    Ident::new(HIGHLIGHT_STR)
 }
 
 impl<SubMod: SubstituteModel, StC: StateChooser> QueryGenerator<SubMod, StC> {

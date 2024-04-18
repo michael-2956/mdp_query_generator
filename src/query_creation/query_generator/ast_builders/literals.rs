@@ -1,6 +1,6 @@
 use sqlparser::ast::{DataType, Expr, TimezoneInfo, UnaryOperator, Value};
 
-use crate::query_creation::{query_generator::{match_next_state, QueryGenerator, value_chooser, QueryValueChooser}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}};
+use crate::{query_creation::{query_generator::{highlight_str, match_next_state, value_chooser, QueryGenerator, QueryValueChooser}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
 
 use super::types::TypesBuilder;
 
@@ -55,19 +55,18 @@ impl LiteralsBuilder {
                 number_type
             },
             "text_literal" => {
-                *expr = Expr::Value(Value::SingleQuotedString(value_chooser!(generator).choose_text()));
+                *expr = Expr::Value(Value::SingleQuotedString(highlight_str()));
+                *unwrap_pat!(expr, Expr::Value(Value::SingleQuotedString(s)), s) = value_chooser!(generator).choose_text();
                 SubgraphType::Text
             },
             "date_literal" => {
-                *expr = Expr::TypedString {
-                    data_type: DataType::Date, value: value_chooser!(generator).choose_date(),
-                };
+                *expr = Expr::TypedString { data_type: DataType::Date, value: highlight_str() };
+                *unwrap_pat!(expr, Expr::TypedString { value, .. }, value) = value_chooser!(generator).choose_date();
                 SubgraphType::Date
             },
             "timestamp_literal" => {
-                *expr = Expr::TypedString {
-                    data_type: DataType::Timestamp(None, TimezoneInfo::None), value: value_chooser!(generator).choose_timestamp(),
-                };
+                *expr = Expr::TypedString { data_type: DataType::Timestamp(None, TimezoneInfo::None), value: highlight_str() };
+                *unwrap_pat!(expr, Expr::TypedString { value, .. }, value) = value_chooser!(generator).choose_timestamp();
                 SubgraphType::Timestamp
             },
             "interval_literal" => {
@@ -75,14 +74,24 @@ impl LiteralsBuilder {
                     "interval_literal_format_string" => false,
                     "interval_literal_with_field" => true,
                 });
-                let (str_value, leading_field) = value_chooser!(generator).choose_interval(with_field);
+
                 *expr = Expr::Interval {
-                    value: Box::new(Expr::Value(Value::SingleQuotedString(str_value.to_string()))),
-                    leading_field,
+                    value: Box::new(Expr::Value(Value::SingleQuotedString(highlight_str()))),
+                    leading_field: None,
                     leading_precision: None,
                     last_field: None,
                     fractional_seconds_precision: None
                 };
+
+                let value = unwrap_pat!(&mut **unwrap_pat!(
+                    expr, Expr::Interval { value, .. }, value
+                ), Expr::Value(Value::SingleQuotedString(s)), s);
+
+                let leading_field;
+                (*value, leading_field) = value_chooser!(generator).choose_interval(with_field);
+
+                *unwrap_pat!(expr, Expr::Interval { leading_field, .. }, leading_field) = leading_field;
+
                 SubgraphType::Interval
             },
         });
