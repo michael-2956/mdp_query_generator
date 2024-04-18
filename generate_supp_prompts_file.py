@@ -31,6 +31,7 @@ subgraph="""subgraph def_Query {
 
 import re
 
+print("[transitions]\n\n")
 for line in subgraph.split("\n"):
     if re.compile(r"        .*\[.*\]").match(line) is not None:
         if line[8:].startswith("EXIT_"):
@@ -49,15 +50,3 @@ for line in subgraph.split("\n"):
                 to_node_name = tr_line.split("->")[1].strip()
                 print(f'{i+1}="{to_node_name}"')
             print('\n')
-
-#         print(f'''
-# [transitions.{node_name}]
-# task="""
-# """
-# [transitions.{node_name}.options]
-# 1=""
-# 2=""
-# [transitions.{node_name}.option_nodes]
-# 1=""
-# 2=""
-# ''')

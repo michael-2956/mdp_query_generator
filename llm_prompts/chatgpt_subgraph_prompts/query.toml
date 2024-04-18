@@ -35,21 +35,30 @@ where the grouping is present but is implicit.
 
 [transitions.call0_WHERE]
 task="""
+Select whether you would like to add the GROUP BY clause.
+
+Note that when you choose to add the GROUP BY clause, you are only \
+effectively indicating that you want your query to be groupped, and \
+you can still choose to make the grouping implicit. In other words, \
+choose the "Add the GROUP BY clause" option if you want a query such as:
+SELECT SUM(C1) FROM T1;
+where the grouping is present but is implicit.
 """
 [transitions.call0_WHERE.options]
-1=""
-2=""
+1="Add the GROUP BY clause"
+2="Omit the GROUP BY clause, and add the SELECT clause"
 [transitions.call0_WHERE.option_nodes]
-1="call0_SELECT"
-2="call0_GROUP_BY"
+1="call0_GROUP_BY"
+2="call0_SELECT"
 
 
 [transitions.call0_GROUP_BY]
 task="""
+Select whether you would like to add the HAVING clause.
 """
 [transitions.call0_GROUP_BY.options]
-1=""
-2=""
+1="Add the HAVING clause"
+2="Omit the HAVING clause, and add the SELECT clause"
 [transitions.call0_GROUP_BY.option_nodes]
-1="call0_SELECT"
-2="call0_HAVING"
+1="call0_HAVING"
+2="call0_SELECT"
