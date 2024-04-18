@@ -1,0 +1,62 @@
+digraph G {
+    // rankdir="LR";
+    ranksep=0.3;
+    graph [margin=0]
+
+    subgraph SELECT {
+        ccBVal [label = "Call Bool. Expr.\nmods=[]", shape=rectangle, style=filled, color=cornflowerblue]
+        SELECT [shape=rectangle, style=filled, color=gold]
+        bVal1 [label="Bool. Expr.", shape=rectangle, style=filled, color=gold]
+        dts3 [label="...", shape=plaintext]
+        SELECT -> dts3
+        SELECT -> ccBVal -> bVal1 
+        BOOL_OR1 [label="BOOL_OR\nno aggregate → OFF"]
+        bVal1 -> BOOL_OR1
+        dts21 [label="...", shape=plaintext]
+        BOOL_OR1 -> dts21
+        dts1 [label="...", shape=plaintext]
+        bVal1 -> dts1
+
+        // sEnd [label="", shape=plaintext]
+        // dts3 -> sEnd [color=none]
+        // dts1 -> sEnd [color=none]
+        // dts21 -> sEnd [color=none]
+    }
+
+    subgraph where {
+        cBVal [label = "Call Bool. Expr.\nmods=[no aggregate]", shape=rectangle, style=filled, color=cornflowerblue]
+        WHERE [shape=rectangle, style=filled, color=gold]
+        bVal [label="Bool. Expr.", shape=rectangle, style=filled, color=gold]
+        WHERE -> cBVal -> bVal
+        BOOL_OR [label="BOOL_OR\nno aggregate → OFF"]
+        bVal -> BOOL_OR
+        dts2 [label="...", shape=plaintext]
+        BOOL_OR -> dts2
+        dts [label="...", shape=plaintext]
+        bVal -> dts
+
+        wEnd [label="", shape=plaintext]
+        // dts -> wEnd [color=none]
+        // dts2 -> wEnd [color=none]
+    }
+
+    // {
+    //     rank = same;
+    //     Query;cFROM;cWHERE;cSELECT;qEND
+    //     rankdir = LR;
+    // }
+
+    // {
+    //     rank = same;
+    //     T1;C1
+    //     T1 -> C1 [ style=invis ]
+    //     rankdir = LR;
+    // }
+
+    // {
+    //     rank = same;
+    //     T2;C2
+    //     T2 -> C2 [ style=invis ]
+    //     rankdir = LR;
+    // }
+}
