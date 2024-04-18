@@ -33,3 +33,23 @@ where the grouping is present but is implicit.
 3="call0_SELECT"
 
 
+[transitions.call0_WHERE]
+task="""
+"""
+[transitions.call0_WHERE.options]
+1=""
+2=""
+[transitions.call0_WHERE.option_nodes]
+1="call0_SELECT"
+2="call0_GROUP_BY"
+
+
+[transitions.call0_GROUP_BY]
+task="""
+"""
+[transitions.call0_GROUP_BY.options]
+1=""
+2=""
+[transitions.call0_GROUP_BY.option_nodes]
+1="call0_SELECT"
+2="call0_HAVING"
