@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, path::PathBuf};
+use std::{collections::HashMap, env, fmt, path::PathBuf};
 
 use crate::query_creation::{query_generator::{call_modifiers::WildcardRelationsValue, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, IdentName, Relation}, value_choosers::QueryValueChooser}, state_generator::{markov_chain_generator::{markov_chain::NodeParams, StackFrame}, subgraph_type::SubgraphType}};
 
@@ -154,7 +154,12 @@ impl ChatGPTPromptingModel {
     //     option_nodes.get(answer).unwrap()
     // }
 
-    fn generate_value_chooser_options_prompt(&mut self, task_key: &str, options: Vec<String>) -> (String, HashMap<String, String>) {
+    fn generate_value_chooser_options_prompt<OptT>(
+        &mut self, task_key: &str, options: Vec<OptT>
+    ) -> (String, HashMap<String, OptT>)
+    where
+        OptT: fmt::Display
+    {
         let current_query_str = self.value_choice_query_str.take().unwrap();
         self.prompts_ref().generate_value_chooser_options_prompt(current_query_str, task_key, options).unwrap()
     }
@@ -166,79 +171,77 @@ impl QueryValueChooser for ChatGPTPromptingModel {
     }
 
     fn choose_table_name(&mut self, available_table_names: &Vec<ObjectName>) -> ObjectName {
-        let options = available_table_names.iter().map(|table_name| format!("{table_name}")).collect::<Vec<_>>();
-        let (prompt, options_map) = self.generate_value_chooser_options_prompt("table_name", options);
-        let option = options_map.get(&self.get_model_answer(prompt)).unwrap();
-        ObjectName(vec![Ident::new(option.clone())])
+        let (prompt, options_map) = self.generate_value_chooser_options_prompt("table_name", available_table_names.clone());
+        options_map.get(&self.get_model_answer(prompt)).unwrap().clone()
     }
 
     fn choose_column(&mut self, _clause_context: &ClauseContext, _column_types: Vec<SubgraphType>, _check_accessibility: CheckAccessibility, _column_retrieval_options: ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]) {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("column", vec![]);
+        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("column", vec![""]);
         todo!()
     }
 
     fn choose_select_alias_order_by(&mut self, _aliases: &Vec<&IdentName>) -> Ident {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("select_alias_order_by", vec![]);
+        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("select_alias_order_by", vec![""]);
         todo!()
     }
 
     fn choose_aggregate_function_name(&mut self, _func_names_iter: Vec<&String>, _dist: WeightedIndex<f64>) -> ObjectName {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("aggregate_function_name", vec![]);
+        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("aggregate_function_name", vec![""]);
         todo!()
     }
 
     fn choose_bigint(&mut self) -> String {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("bigint", vec![]);
+        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("bigint", vec![""]);
         todo!()
     }
 
     fn choose_integer(&mut self) -> String {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("integer", vec![]);
+        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("integer", vec![""]);
         todo!()
     }
 
     fn choose_numeric(&mut self) -> String {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("numeric", vec![]);
+        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("numeric", vec![""]);
         todo!()
     }
 
     fn choose_text(&mut self) -> String {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("text", vec![]);
+        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("text", vec![""]);
         todo!()
     }
 
     fn choose_date(&mut self) -> String {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("date", vec![]);
+        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("date", vec![""]);
         todo!()
     }
 
     fn choose_timestamp(&mut self) -> String {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("timestamp", vec![]);
+        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("timestamp", vec![""]);
         todo!()
     }
 
     fn choose_interval(&mut self, _with_field: bool) -> (String, Option<DateTimeField>) {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("interval", vec![]);
+        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("interval", vec![""]);
         todo!()
     }
 
     fn choose_qualified_wildcard_relation<'a>(&mut self, _clause_context: &'a ClauseContext, _wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation) {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("qualified_wildcard_relation", vec![]);
+        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("qualified_wildcard_relation", vec![""]);
         todo!()
     }
 
     fn choose_select_alias(&mut self) -> Ident {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("select_alias", vec![]);
+        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("select_alias", vec![""]);
         todo!()
     }
 
     fn choose_from_alias(&mut self) -> Ident {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("from_alias", vec![]);
+        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("from_alias", vec![""]);
         todo!()
     }
 
     fn choose_from_column_renames(&mut self, _n_columns: usize) -> Vec<Ident> {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("from_column_renames", vec![]);
+        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("from_column_renames", vec![""]);
         todo!()
     }
 

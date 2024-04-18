@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{collections::HashMap, fmt, fs, path::PathBuf};
 
 use itertools::Itertools;
 use serde::Deserialize;
@@ -73,7 +73,12 @@ impl LLMPrompts {
         self.call_node_context.get(node_name.as_str()).cloned()
     }
 
-    pub fn generate_value_chooser_options_prompt(&self, current_query_str: String, task_key: &str, options: Vec<String>) -> Option<(String, HashMap<String, String>)> {
+    pub fn generate_value_chooser_options_prompt<OptT>(
+        &self, current_query_str: String, task_key: &str, options: Vec<OptT>
+    ) -> Option<(String, HashMap<String, OptT>)>
+    where
+        OptT: fmt::Display
+    {
         let task_str = self.value_chooser_tasks.get(task_key)?;
         let mut options_prompt = "".to_string();
         let mut option_nodes = HashMap::new();

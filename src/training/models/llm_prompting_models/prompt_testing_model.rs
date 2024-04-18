@@ -30,7 +30,7 @@ impl PathwayGraphModel for PromptTestingModel {
             "select_alias", "from_alias", "from_column_renames",
         ] {
             if self.prompts_ref().generate_value_chooser_options_prompt(
-                "".to_string(), value_chooser_key, vec![]
+                "".to_string(), value_chooser_key, vec![""]
             ).is_none() {
                 panic!("No prompt set for value chooser: {value_chooser_key}")
             }
