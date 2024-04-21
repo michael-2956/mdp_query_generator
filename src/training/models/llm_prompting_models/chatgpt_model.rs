@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, fmt, path::PathBuf};
+use std::{collections::HashMap, env, fmt, hash::RandomState, path::PathBuf};
 
 use crate::query_creation::{query_generator::{call_modifiers::WildcardRelationsValue, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, IdentName, Relation}, value_choosers::QueryValueChooser}, state_generator::{markov_chain_generator::{markov_chain::NodeParams, StackFrame}, subgraph_type::SubgraphType}};
 
@@ -146,23 +146,6 @@ impl ChatGPTPromptingModel {
         self.prompts.as_ref().unwrap()
     }
 
-    /// returns selected node name
-    // fn query_model_and_parse_response(&mut self, prompt: String, current_node_name: &SmolStr) -> &String {
-    //     let response = self.query_model(prompt).unwrap();
-    //     let answer = response.message().content.lines().last().unwrap();
-    //     let option_nodes = self.prompts_ref().get_option_nodes(current_node_name).unwrap();
-    //     option_nodes.get(answer).unwrap()
-    // }
-
-    fn generate_value_chooser_options_prompt<OptT>(
-        &mut self, _task_key: &str, _options: Vec<OptT>
-    ) -> (String, HashMap<String, OptT>)
-    where
-        OptT: fmt::Display
-    {
-        unimplemented!()
-    }
-
     fn get_chosen_value<OptT>(&mut self, task_key: &str, options: Vec<OptT>) -> OptT 
     where
         OptT: fmt::Display + Clone
@@ -292,9 +275,23 @@ impl QueryValueChooser for ChatGPTPromptingModel {
         (self.get_generated_value("interval"), None)
     }
 
-    fn choose_column(&mut self, _clause_context: &ClauseContext, _column_types: Vec<SubgraphType>, _check_accessibility: CheckAccessibility, _column_retrieval_options: ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]) {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("column", vec![""]);
-        todo!()
+    fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, check_accessibility: CheckAccessibility, column_retrieval_options: ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]) {
+        let columns: Vec<_> = clause_context.get_non_empty_column_levels_by_types(
+            column_types.clone(), check_accessibility, column_retrieval_options.clone()
+        ).into_iter().flat_map(|v| v.into_iter()).collect();
+
+        let column_options_map = HashMap::<_, _, RandomState>::from_iter(columns.iter().map(
+            |(tp, [rel_name, col_name])| (
+                format!("Column {} of type {} from relation {}", col_name, tp.to_llm_str(), rel_name),
+                (tp, [rel_name, col_name])
+            )
+        ));
+
+        let map_key = self.get_chosen_value("column", column_options_map.keys().into_iter().collect());
+
+        let (tp, [rel_name, col_name]) = column_options_map.get(map_key).unwrap();
+
+        ((**tp).clone(), [(**rel_name).clone(), (**col_name).clone()])
     }
 
     fn reset(&mut self) { }

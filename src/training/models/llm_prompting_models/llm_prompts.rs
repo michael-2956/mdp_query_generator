@@ -39,7 +39,7 @@ pub struct LLMPrompts {
 
 #[derive(Debug, Deserialize)]
 struct MainPromptsFile {
-    additional_weights_folder: PathBuf,
+    additional_prompts_folder: PathBuf,
     system_prompt: String,
 }
 
@@ -57,7 +57,7 @@ impl LLMPrompts {
         let mut transitions = HashMap::new();
         let mut call_node_context = HashMap::new();
         let mut value_chooser_tasks = HashMap::new();
-        for entry in fs::read_dir(contents.additional_weights_folder).unwrap() {
+        for entry in fs::read_dir(contents.additional_prompts_folder).unwrap() {
             let supp_contents: SupplementaryPromptsFile = toml::from_str(&fs::read_to_string(&entry.unwrap().path()).unwrap()).unwrap();
             transitions.extend(supp_contents.transitions.into_iter());
             call_node_context.extend(supp_contents.call_node_context.into_iter());

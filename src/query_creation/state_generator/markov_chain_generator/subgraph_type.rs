@@ -111,6 +111,24 @@ impl Display for SubgraphType {
     }
 }
 
+impl SubgraphType {
+    /// converts type to an llm readable string
+    pub fn to_llm_str(&self) -> String {
+        match self {
+            Self::Undetermined => unimplemented!(),
+            Self::ListExpr(_) => unimplemented!(),
+            Self::Numeric => "numeric".to_string(),
+            Self::Integer => "integer".to_string(),
+            Self::BigInt => "bigint".to_string(),
+            Self::Val3 => "bool".to_string(),
+            Self::Text => "text".to_string(),
+            Self::Date => "date".to_string(),
+            Self::Interval => "interval".to_string(),
+            Self::Timestamp => "timestamp".to_string(),
+        }
+    }
+}
+
 pub trait ContainsSubgraphType {
     fn contains_generator_of(&self, tp: &SubgraphType) -> bool;
 }

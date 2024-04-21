@@ -1,0 +1,52 @@
+[transitions]
+
+
+# [transitions.column_spec_mentioned_in_group_by]
+# task="""
+# """
+# [transitions.column_spec_mentioned_in_group_by.options]
+# 1=""
+# 2=""
+# [transitions.column_spec_mentioned_in_group_by.option_nodes]
+# 1="column_spec_mentioned_in_group_by_yes"
+# 2="column_spec_mentioned_in_group_by_no"
+
+
+# [transitions.column_spec_shaded_by_select]
+# task="""
+# """
+# [transitions.column_spec_shaded_by_select.options]
+# 1=""
+# 2=""
+# [transitions.column_spec_shaded_by_select.option_nodes]
+# 1="column_spec_shaded_by_select_yes"
+# 2="column_spec_shaded_by_select_no"
+
+
+# [transitions.column_spec_aggregatable_columns]
+# task="""
+# """
+# [transitions.column_spec_aggregatable_columns.options]
+# 1=""
+# 2=""
+# [transitions.column_spec_aggregatable_columns.option_nodes]
+# 1="column_spec_aggregatable_columns_yes"
+# 2="column_spec_aggregatable_columns_no"
+
+
+# [transitions.column_spec_choose_qualified]
+# task="""
+# """
+# [transitions.column_spec_choose_qualified.options]
+# 1=""
+# 2=""
+# [transitions.column_spec_choose_qualified.option_nodes]
+# 1="qualified_column_name"
+# 2="unqualified_column_name"
+
+
+[call_node_context]
+
+
+[value_chooser_tasks]
+column="Choose column:"
