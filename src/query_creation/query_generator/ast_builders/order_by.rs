@@ -27,14 +27,8 @@ impl OrderByBuilder {
             },
             "order_by_list" => { },
         });
-        *order_by = vec![];
 
         loop {
-            order_by.push(OrderByExpr {
-                expr: TypesBuilder::highlight(),
-                asc: None,
-                nulls_first: None,
-            });
             let order_by_expr = order_by.last_mut().unwrap();
 
             match_next_state!(generator, {
@@ -81,7 +75,13 @@ impl OrderByBuilder {
             });
 
             match_next_state!(generator, {
-                "order_by_list" => {},
+                "order_by_list" => {
+                    order_by.push(OrderByExpr {
+                        expr: TypesBuilder::highlight(),
+                        asc: None,
+                        nulls_first: None,
+                    });
+                },
                 "EXIT_ORDER_BY" => break,
             });
         }
