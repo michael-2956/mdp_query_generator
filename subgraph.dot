@@ -1,48 +1,54 @@
-subgraph def_literals {
-        literals [label="Literals\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", shape=rectangle, style=filled, color=hotpink]
-        EXIT_literals [label="EXIT Literals", shape=rectangle]
+subgraph def_case {
+        case [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[]", label="CASE\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\n[mods]", shape=rectangle, style=filled, color=aquamarine]
+        EXIT_case [label="EXIT case", shape=rectangle]
 
-        bool_literal [label="boolean literal\ntn(bool)", TYPE_NAME="3VL Value"]
-        literals -> bool_literal
-        true []
-        bool_literal -> true
-        true -> EXIT_literals
-        false []
-        bool_literal -> false
-        false -> EXIT_literals
+        case_first_result [label="First result"]
+        case -> case_first_result
+        call7_types_type [TYPES="[...]", label="Types type: [...types] -> TP1", shape=rectangle, color=yellowgreen, style=filled]
+        case_first_result -> call7_types_type
+        call82_types [TYPES="[compatible]", label="TYPES: compatible(TP1)\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        call7_types_type -> call82_types
+        
+        case_else [label="ELSE"]
+        call81_types [TYPES="[compatible]", label="TYPES: compatible(TP1)\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        case_else -> call81_types
+        call81_types -> EXIT_case
+        case_else -> EXIT_case
 
-        number_literal_integer [label="random integer\ntn(i)", TYPE_NAME="integer"]
-        literals -> number_literal_integer
-        number_literal_integer -> EXIT_literals
-        number_literal_numeric [label="random numeric\ntn(num)", TYPE_NAME="numeric"]
-        literals -> number_literal_numeric
-        number_literal_numeric -> EXIT_literals
-        number_literal_bigint [label="random bigint\ntn(bi)", TYPE_NAME="bigint"]
-        literals -> number_literal_bigint
-        // number_literal_bigint -> EXIT_literals
+        simple_case [label="Simple CASE"]
+        call82_types -> simple_case
 
-        literals_explicit_cast [label="Explicit type cast"]
-        number_literal_bigint -> literals_explicit_cast
-        literals_explicit_cast -> EXIT_literals
+        simple_case_operand [label="Operand"]
+        simple_case -> simple_case_operand
+        call8_types_type [TYPES="[any]", label="Types type: ANY -> TP2", shape=rectangle, color=yellowgreen, style=filled]
+        simple_case_operand -> call8_types_type
+        call78_types [TYPES="[compatible]", MODS="[...]", label="TYPES: compatible(TP2)\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call8_types_type -> call78_types
 
-        text_literal [label="random text literal\ntn(text)", TYPE_NAME="text"]
-        literals -> text_literal
-        text_literal -> EXIT_literals
+        simple_case_condition [label="Condition"]
+        call78_types -> simple_case_condition
+        call79_types [TYPES="[compatible]", label="TYPES: compatible(TP2)\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        simple_case_condition -> call79_types
+        call79_types -> case_else
 
-        date_literal [label="DATE literal\ntn(date)", TYPE_NAME="date"]
-        literals -> date_literal
-        date_literal -> EXIT_literals
+        simple_case_result [label="Add result"]
+        call79_types -> simple_case_result
+        call80_types [TYPES="[compatible]", label="TYPES: compatible(TP1)\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        simple_case_result -> call80_types
+        call80_types -> simple_case_condition
 
-        timestamp_literal [label="Timestamp literal\ntn(timestamp)", TYPE_NAME="timestamp"]
-        literals -> timestamp_literal
-        timestamp_literal -> EXIT_literals
+        searched_case [label="Searched CASE"]
+        call82_types -> searched_case
 
-        interval_literal [label="INTERVAL literal", TYPE_NAME="interval"]
-        literals -> interval_literal
-        interval_literal_format_string [label="Formatted string"]
-        interval_literal -> interval_literal_format_string
-        interval_literal_format_string -> EXIT_literals
-        interval_literal_with_field [label="With field\n(ex.: '4' day)"]
-        interval_literal -> interval_literal_with_field
-        interval_literal_with_field -> EXIT_literals
+        searched_case_condition [label="Condition"]
+        searched_case -> searched_case_condition
+        call76_types [TYPES="[3VL Value]", label="TYPES: [3VL Value]\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        searched_case_condition -> call76_types
+        call76_types -> case_else
+
+        searched_case_result [label="Add result"]
+        call76_types -> searched_case_result
+        call77_types [TYPES="[compatible]", label="TYPES: compatible(TP1)\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        searched_case_result -> call77_types
+        call77_types -> searched_case_condition
     }

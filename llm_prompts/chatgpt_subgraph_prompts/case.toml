@@ -1,0 +1,72 @@
+[transitions]
+
+
+[transitions.call82_types]
+task="""
+Select which kind of CASE expression you would like to generate. \
+A simple case compares some operand expression to every CASE arm. Example:
+CASE C1 WHEN 1 THEN 2 WHEN 3 THEN 4 ELSE 5 END;,
+where C1 is of type integer and will be compared to 1 and 3.
+A searched case checks boolean expressions in every CASE arm until \
+it stumples upon a true one. Example:
+CASE WHEN 1=2 THEN 3 WHEN 4=4 THEN 5 ELSE 6 END;
+This would output 3 as '4=4' is the first boolean expression that evaluates to true.
+"""
+[transitions.call82_types.options]
+1="Simple CASE."
+2="Searched CASE."
+[transitions.call82_types.option_nodes]
+1="simple_case"
+2="searched_case"
+
+
+[transitions.case_else]
+task="""
+Select whether you would like to add the ELSE clause \
+to your CASE expression.
+"""
+[transitions.case_else.options]
+1="Add the ELSE clause"
+2="Finish the CASE expression generation"
+[transitions.case_else.option_nodes]
+1="call81_types"
+2="EXIT_case"
+
+
+[transitions.call79_types]
+task="""
+Select whether you would like to generate an another CASE arm.
+"""
+[transitions.call79_types.options]
+1="Finish generating CASE arms"
+2="Generate an another CASE arm"
+[transitions.call79_types.option_nodes]
+1="case_else"
+2="simple_case_result"
+
+
+[transitions.call76_types]
+task="""
+Select whether you would like to generate an another CASE arm.
+"""
+[transitions.call76_types.options]
+1="Finish generating CASE arms"
+2="Generate an another CASE arm"
+[transitions.call76_types.option_nodes]
+1="case_else"
+2="searched_case_result"
+
+
+[call_node_context]
+call7_types_type="This action will affect the output type of the CASE expression. The selected type should fit all results."
+# call82_types=""
+# call81_types=""
+call8_types_type="This action will affect the operand type of the CASE expression. The selected type should fit both the operand ifself and the expressions if will be compared to."
+# call78_types=""
+# call79_types=""
+# call80_types=""
+# call76_types=""
+# call77_types=""
+
+
+[value_chooser_tasks]
