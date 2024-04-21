@@ -264,43 +264,36 @@ impl QueryValueChooser for ChatGPTPromptingModel {
         self.get_chosen_value("select_alias_order_by", aliases.clone()).clone().into()
     }
 
-    fn choose_column(&mut self, _clause_context: &ClauseContext, _column_types: Vec<SubgraphType>, _check_accessibility: CheckAccessibility, _column_retrieval_options: ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]) {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("column", vec![""]);
-        todo!()
-    }
-
     fn choose_bigint(&mut self) -> String {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("bigint", vec![""]);
-        todo!()
+        self.get_generated_value("bigint")
     }
 
     fn choose_integer(&mut self) -> String {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("integer", vec![""]);
-        todo!()
+        self.get_generated_value("integer")
     }
 
     fn choose_numeric(&mut self) -> String {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("numeric", vec![""]);
-        todo!()
+        self.get_generated_value("numeric")
     }
 
     fn choose_text(&mut self) -> String {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("text", vec![""]);
-        todo!()
+        self.get_generated_value("text")
     }
 
     fn choose_date(&mut self) -> String {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("date", vec![""]);
-        todo!()
+        self.get_generated_value("date")
     }
 
     fn choose_timestamp(&mut self) -> String {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("timestamp", vec![""]);
-        todo!()
+        self.get_generated_value("timestamp")
     }
 
     fn choose_interval(&mut self, _with_field: bool) -> (String, Option<DateTimeField>) {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("interval", vec![""]);
+        (self.get_generated_value("interval"), None)
+    }
+
+    fn choose_column(&mut self, _clause_context: &ClauseContext, _column_types: Vec<SubgraphType>, _check_accessibility: CheckAccessibility, _column_retrieval_options: ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]) {
+        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("column", vec![""]);
         todo!()
     }
 

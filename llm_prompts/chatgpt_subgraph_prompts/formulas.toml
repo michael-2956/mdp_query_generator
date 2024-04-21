@@ -1,0 +1,38 @@
+[transitions]
+
+
+# [transitions.formulas]
+# task="""
+# """
+# [transitions.formulas.options]
+# 1=""
+# 2=""
+# 3=""
+# 4=""
+# 5=""
+# 6=""
+# 7=""
+# 8=""
+# [transitions.formulas.option_nodes]
+# 1="call2_number"
+# 2="call1_number"
+# 3="call0_number"
+# 4="call1_VAL_3"
+# 5="call0_text"
+# 6="call0_date"
+# 7="call0_timestamp"
+# 8="call0_interval"
+
+
+# [call_node_context]
+# call2_number=""
+# call1_number=""
+# call0_number=""
+# call1_VAL_3=""
+# call0_text=""
+# call0_date=""
+# call0_timestamp=""
+# call0_interval=""
+
+
+# [value_chooser_tasks]

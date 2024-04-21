@@ -1,0 +1,60 @@
+[transitions]
+
+
+# [transitions.literals]
+# task="""
+# """
+# [transitions.literals.options]
+# 1=""
+# 2=""
+# 3=""
+# 4=""
+# 5=""
+# 6=""
+# 7=""
+# 8=""
+# [transitions.literals.option_nodes]
+# 1="bool_literal"
+# 2="number_literal_integer"
+# 3="number_literal_numeric"
+# 4="number_literal_bigint"
+# 5="text_literal"
+# 6="date_literal"
+# 7="timestamp_literal"
+# 8="interval_literal"
+
+
+[transitions.bool_literal]
+task="""
+Select the boolean literal
+"""
+[transitions.bool_literal.options]
+1="true"
+2="false"
+[transitions.bool_literal.option_nodes]
+1="true"
+2="false"
+
+
+# [transitions.interval_literal]
+# task="""
+# """
+# [transitions.interval_literal.options]
+# 1=""
+# 2=""
+# [transitions.interval_literal.option_nodes]
+# 1="interval_literal_format_string"
+# 2="interval_literal_with_field"
+
+
+[call_node_context]
+
+
+[value_chooser_tasks]
+bigint="Generate a value of type BigInt:"
+integer="Generate a value of type Integer:"
+numeric="Generate a value of type Numeric:"
+text="Generate a value of type Text:"
+date="Generate a value of type Date:"
+timestamp="Generate the string that would go into the timestamp value:"
+interval="Generate the string that would go into the interval value:"
