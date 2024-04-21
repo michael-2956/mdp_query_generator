@@ -78,7 +78,6 @@ values on the right hand side and the left hand side at the same time.
 [value_chooser_tasks]
 column="Choose Column Name:"
 select_alias_order_by="Choose a select alias that you with to place in ORDER BY:"
-aggregate_function_name="Choose the name of the aggregate function:"
 bigint="Generate a value of type BigInt:"
 integer="Generate a value of type Integer:"
 numeric="Generate a value of type Numeric:"

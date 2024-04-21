@@ -1,50 +1,116 @@
-subgraph="""subgraph def_GROUP_BY {
-        GROUP_BY [label="GROUP BY", shape=rectangle, style=filled, color=gray]
-        EXIT_GROUP_BY [label="EXIT GROUP BY"]
+subgraph="""subgraph def_aggregate_function {
+        aggregate_function [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", label="aggregate function\\nTYPES=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", shape=rectangle, style=filled, color=peru]
+        EXIT_aggregate_function [label="EXIT aggregate function"]
 
-        group_by_single_group [label="single group\\n(GROUP BY ())"]
-        GROUP_BY -> group_by_single_group
-        group_by_single_group -> EXIT_GROUP_BY
+        aggregate_select_return_type [label="select\\nreturn type"]
+        aggregate_not_distinct[label="no DISTINCT\\n[set value]", set_value="distinct_aggr"]
+        aggregate_function -> aggregate_not_distinct
+        aggregate_not_distinct -> aggregate_select_return_type
+        aggregate_distinct[label="DISTINCT\\n[set value]", set_value="distinct_aggr"]
+        aggregate_function -> aggregate_distinct
+        aggregate_distinct -> aggregate_select_return_type
 
-        has_accessible_columns [label="Has selectable columns\\n[set value]", set_value="has_accessible_cols"]
-        GROUP_BY -> has_accessible_columns
-        grouping_column_list [label="columns list\\n[call mod]", call_modifier="has_accessible_cols_mod"]
-        has_accessible_columns -> grouping_column_list
 
-        call1_column_spec[TYPES="[any]", label="TYPES: [any]\\nMODS: [no nesting, no literals, no formulas, no typed nulls,\\nno subquery, no aggregate, no case]", MODS="[no nesting, no literals, no formulas, no typed nulls, no subquery, no aggregate, no case]", shape=rectangle, style=filled, color=lightblue]
-        grouping_column_list -> call1_column_spec
-        call1_column_spec -> grouping_column_list
-        call1_column_spec -> EXIT_GROUP_BY
+        aggregate_select_type_text[TYPE_NAME="text", label="text?"]
+        aggregate_select_return_type -> aggregate_select_type_text
 
-        special_grouping [label="special grouping"]
-        grouping_column_list -> special_grouping
-        set_list [label="set list"]
-        set_list_empty_allowed [label="Empty set\\n[call mod]", call_modifier="empty set allowed"]
-        set_list -> set_list_empty_allowed
-        set_list_empty_allowed -> set_list
-        set_list_empty_allowed -> grouping_column_list
-        set_list_empty_allowed -> EXIT_GROUP_BY
+        arg_single_text [label="[text]"]
+        aggregate_select_type_text -> arg_single_text
+        call63_types [TYPES="[compatible]", label="TYPES: compatible(text)\\nMODS: [no aggregate, aggregate-able columns]", MODS="[no aggregate, aggregate-able columns]", shape=rectangle, style=filled, color=lightblue]
+        arg_single_text -> call63_types
+        call63_types -> EXIT_aggregate_function
 
-        grouping_rollup [label="rollup\\n[set value]", set_value="is_grouping_sets"]
-        special_grouping -> grouping_rollup
-        grouping_rollup -> set_list
+        arg_double_text [label="[text, text]"]
+        call74_types [TYPES="[compatible]", label="TYPES: compatible(text)\\nMODS: [no aggregate, aggregate-able columns]", MODS="[no aggregate, aggregate-able columns]", shape=rectangle, style=filled, color=lightblue]
+        aggregate_select_type_text -> arg_double_text
+        arg_double_text -> call74_types
+        call74_types -> call63_types
 
-        grouping_cube [label="cube\\n[set value]", set_value="is_grouping_sets"]
-        special_grouping -> grouping_cube
-        grouping_cube -> set_list
 
-        grouping_set [label="grouping set\\n[set value]\\n(allows empty set)", set_value="is_grouping_sets"]
-        special_grouping -> grouping_set
-        grouping_set -> set_list
+        aggregate_select_type_numeric[TYPE_NAME="numeric", label="numeric?"]
+        aggregate_select_return_type -> aggregate_select_type_numeric
 
-        call2_column_spec [TYPES="[any]", label="TYPES: [any]\\n MODS: [no nesting, no literals, no formulas, no typed nulls,\\nno subquery, no aggregate, no case]", MODS="[no nesting, no literals, no formulas, no typed nulls, no subquery, no aggregate, no case]", shape=rectangle, style=filled, color=lightblue]
-        set_list -> call2_column_spec
-        call2_column_spec -> set_list
-        set_multiple [label="multiple cols in set"]
-        call2_column_spec -> set_multiple
-        set_multiple -> call2_column_spec
-        set_multiple -> EXIT_GROUP_BY
-        set_multiple -> grouping_column_list
+        arg_single_numeric [label="[numeric]"]
+        aggregate_select_type_numeric -> arg_single_numeric
+        call66_types [TYPES="[compatible]", label="TYPES: compatible(numeric)\\nMODS: [no aggregate, aggregate-able columns]", MODS="[no aggregate, aggregate-able columns]", shape=rectangle, style=filled, color=lightblue]
+        arg_single_numeric -> call66_types
+        call66_types -> EXIT_aggregate_function
+        
+        arg_double_numeric [label="[numeric, numeric]"]
+        aggregate_select_type_numeric -> arg_double_numeric   
+        call68_types[TYPES="[compatible]", label="TYPES: compatible(numeric)\\nMODS: [no aggregate, aggregate-able columns]", MODS="[no aggregate, aggregate-able columns]", shape=rectangle, style=filled, color=lightblue]
+        arg_double_numeric -> call68_types
+        call68_types -> call66_types
+
+
+        aggregate_select_type_bigint[TYPE_NAME="bigint", label="bigint?"]
+        aggregate_select_return_type -> aggregate_select_type_bigint
+
+        arg_bigint [label="[bigint]"]
+        aggregate_select_type_bigint -> arg_bigint
+        call75_types [TYPES="[compatible]", label="TYPES: compatible(bigint)\\nMODS: [no aggregate, aggregate-able columns]", MODS="[no aggregate, aggregate-able columns]", shape=rectangle, style=filled, color=lightblue]
+        arg_bigint -> call75_types
+        call75_types -> EXIT_aggregate_function
+
+        arg_bigint_any [label="[any]"]
+        aggregate_select_type_bigint -> arg_bigint_any
+        call65_types [TYPES="[any]", label="TYPES: any\\nMODS: [no aggregate, aggregate-able columns]", MODS="[no aggregate, aggregate-able columns]", shape=rectangle, style=filled, color=lightblue]
+        arg_bigint_any -> call65_types
+        call65_types -> EXIT_aggregate_function
+
+        arg_star [label="COUNT(*)\\n[call mod.]", call_modifier="distinct_aggr_mod"]
+        aggregate_select_type_bigint -> arg_star
+        arg_star -> EXIT_aggregate_function
+
+
+        aggregate_select_type_integer[TYPE_NAME="integer", label="integer?"]
+        aggregate_select_return_type -> aggregate_select_type_integer
+
+        arg_integer [label="[integer]"]
+        aggregate_select_type_integer -> arg_integer
+        call71_types [TYPES="[compatible]", label="TYPES: compatible(integer)\\nMODS: [no aggregate, aggregate-able columns]", MODS="[no aggregate, aggregate-able columns]", shape=rectangle, style=filled, color=lightblue]
+        arg_integer -> call71_types
+        call71_types -> EXIT_aggregate_function
+
+
+        aggregate_select_type_bool[TYPE_NAME="3VL Value", label="3VL Value?"]
+        aggregate_select_return_type -> aggregate_select_type_bool
+
+        arg_single_3vl [label="[3vl]"]
+        aggregate_select_type_bool -> arg_single_3vl
+        call64_types [TYPES="[compatible]", label="TYPES: compatible(3VL Value)\\nMODS: [no aggregate, aggregate-able columns]", MODS="[no aggregate, aggregate-able columns]", shape=rectangle, style=filled, color=lightblue]
+        arg_single_3vl -> call64_types
+        call64_types -> EXIT_aggregate_function
+
+
+        aggregate_select_type_date [TYPE_NAME="date", label="date?"]
+        aggregate_select_return_type -> aggregate_select_type_date
+
+        arg_date [label="[date]"]
+        aggregate_select_type_date -> arg_date
+        call72_types [TYPES="[compatible]", label="TYPES: compatible(date)\\nMODS: [no aggregate, aggregate-able columns]", MODS="[no aggregate, aggregate-able columns]", shape=rectangle, style=filled, color=lightblue]
+        arg_date -> call72_types
+        call72_types -> EXIT_aggregate_function
+
+
+        aggregate_select_type_timestamp [TYPE_NAME="timestamp", label="timestamp?"]
+        aggregate_select_return_type -> aggregate_select_type_timestamp
+
+        arg_timestamp [label="[timestamp]"]
+        aggregate_select_type_timestamp -> arg_timestamp
+        call96_types [TYPES="[compatible]", label="TYPES: compatible(timestamp)\\nMODS: [no aggregate, aggregate-able columns]", MODS="[no aggregate, aggregate-able columns]", shape=rectangle, style=filled, color=lightblue]
+        arg_timestamp -> call96_types
+        call96_types -> EXIT_aggregate_function
+
+
+        aggregate_select_type_interval [TYPE_NAME="interval", label="interval?"]
+        aggregate_select_return_type -> aggregate_select_type_interval
+
+        arg_interval [label="[interval]"]
+        aggregate_select_type_interval -> arg_interval
+        call90_types [TYPES="[compatible]", label="TYPES: compatible(interval)\\nMODS: [no aggregate, aggregate-able columns]", MODS="[no aggregate, aggregate-able columns]", shape=rectangle, style=filled, color=lightblue]
+        arg_interval -> call90_types
+        call90_types -> EXIT_aggregate_function
     }"""
 
 import re

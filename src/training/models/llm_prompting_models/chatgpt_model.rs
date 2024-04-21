@@ -255,6 +255,11 @@ impl QueryValueChooser for ChatGPTPromptingModel {
         (rel_name.into(), relation)
     }
 
+    fn choose_aggregate_function_name(&mut self, func_names: Vec<&String>, _dist: WeightedIndex<f64>) -> ObjectName {
+        let func_name = self.get_chosen_value("aggregate_function_name", func_names);
+        ObjectName(vec![Ident::new(func_name)])
+    }
+
     fn choose_column(&mut self, _clause_context: &ClauseContext, _column_types: Vec<SubgraphType>, _check_accessibility: CheckAccessibility, _column_retrieval_options: ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]) {
         let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("column", vec![""]);
         todo!()
@@ -262,11 +267,6 @@ impl QueryValueChooser for ChatGPTPromptingModel {
 
     fn choose_select_alias_order_by(&mut self, _aliases: &Vec<&IdentName>) -> Ident {
         let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("select_alias_order_by", vec![""]);
-        todo!()
-    }
-
-    fn choose_aggregate_function_name(&mut self, _func_names_iter: Vec<&String>, _dist: WeightedIndex<f64>) -> ObjectName {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("aggregate_function_name", vec![""]);
         todo!()
     }
 

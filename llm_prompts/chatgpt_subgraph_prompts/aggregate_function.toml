@@ -1,0 +1,111 @@
+[transitions]
+
+
+[transitions.aggregate_function]
+task="""
+Select whether you would like your aggregate function \
+to aggregate only DISTINCT arguments.
+Example:
+SELECT SUM(DISTINCT C1) FROM T1
+Will output 5 if C1 values are 2, 2 and 3.
+Note that adding DISTINCT will forbid you from doing \
+COUNT(*), since COUNT(DISTINCT *) is invalid code.
+"""
+[transitions.aggregate_function.options]
+1="Skip this step"
+2="Add DISTINCT"
+[transitions.aggregate_function.option_nodes]
+1="aggregate_not_distinct"
+2="aggregate_distinct"
+
+
+[transitions.aggregate_select_return_type]
+task="""
+Select the type that you want your aggregate function \
+to output. For example, since COUNT outputs the bigint \
+type, if you want to choose COUNT as your aggregate \
+function, select  bigint in this step.
+"""
+[transitions.aggregate_select_return_type.options]
+1="text"
+2="numeric"
+3="bigint"
+4="integer"
+5="bool"
+6="date"
+7="timestamp"
+8="interval"
+[transitions.aggregate_select_return_type.option_nodes]
+1="aggregate_select_type_text"
+2="aggregate_select_type_numeric"
+3="aggregate_select_type_bigint"
+4="aggregate_select_type_integer"
+5="aggregate_select_type_bool"
+6="aggregate_select_type_date"
+7="aggregate_select_type_timestamp"
+8="aggregate_select_type_interval"
+
+
+[transitions.aggregate_select_type_text]
+task="""
+Select whether your aggregate function will accept \
+two arguments or a single agrument. For example, \
+STRING_AGG needs two arguments, but MAX only needs a \
+single argument.
+"""
+[transitions.aggregate_select_type_text.options]
+1="Single argument"
+2="Two arguments"
+[transitions.aggregate_select_type_text.option_nodes]
+1="arg_single_text"
+2="arg_double_text"
+
+
+[transitions.aggregate_select_type_numeric]
+task="""
+Select whether your aggregate function will accept \
+two arguments or a single agrument. For example, \
+REGR_SXX needs two arguments, but MAX only needs a \
+single argument.
+"""
+[transitions.aggregate_select_type_numeric.options]
+1=""
+2=""
+[transitions.aggregate_select_type_numeric.option_nodes]
+1="arg_single_numeric"
+2="arg_double_numeric"
+
+
+[transitions.aggregate_select_type_bigint]
+task="""
+Select whether you would like a single-argument aggregate \
+function, COUNT with an arbitrary expression as an argument, \
+or COUNT(*). Note that the COUNT(*) option would not be an \
+available if you selected to add DISTINCT before.
+"""
+[transitions.aggregate_select_type_bigint.options]
+1="A single-argument aggregate function"
+2="COUNT(expr)"
+3="COUNT(*)"
+[transitions.aggregate_select_type_bigint.option_nodes]
+1="arg_bigint"
+2="arg_bigint_any"
+3="arg_star"
+
+
+[call_node_context]
+# call63_types=""
+# call74_types=""
+# call66_types=""
+# call68_types=""
+# call75_types=""
+# call65_types=""
+# call71_types=""
+# call64_types=""
+# call72_types=""
+# call96_types=""
+# call90_types=""
+
+
+[value_chooser_tasks]
+aggregate_function_name="Choose the name of the aggregate function:"
