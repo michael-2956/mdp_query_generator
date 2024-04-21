@@ -1,0 +1,34 @@
+[transitions]
+
+
+[transitions.list_expr_multiple_values]
+task="""
+Select whether you would like to add an another value to the list expression.
+"""
+[transitions.list_expr_multiple_values.options]
+1="Add an another value"
+2="Finish generating the list expression"
+[transitions.list_expr_multiple_values.option_nodes]
+1="call49_types"
+2="EXIT_list_expr"
+
+
+[transitions.call49_types]
+task="""
+Select whether you would like to add an another value to the list expression.
+"""
+[transitions.call49_types.options]
+1="Add an another value"
+2="Finish generating the list expression"
+[transitions.call49_types.option_nodes]
+1="call49_types"
+2="EXIT_list_expr"
+
+
+[call_node_context]
+call6_types_type="The seleted type should be able to fit all of the items that the list expression would contain"
+# call16_types=""
+# call49_types=""
+
+
+[value_chooser_tasks]

@@ -1,39 +1,19 @@
-subgraph def_column_spec {
-        column_spec [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[group by columns, shade by select aliases, aggregate-able columns]", label="column specifier\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[group by columns, shade by select aliases, aggregate-able columns]", shape=rectangle, style=filled, color=gold]
-        EXIT_column_spec [label="EXIT column specifier", shape=rectangle]
+subgraph def_list_expr {
+        list_expr [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[]", label="list expr\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\n[mods]", shape=rectangle, style=filled, color=blue]
+        EXIT_list_expr[label="EXIT list expr"]
 
-        column_spec_mentioned_in_group_by [label="Columns should be\nmentioned in group by?"]
-        column_spec -> column_spec_mentioned_in_group_by
-        column_spec_mentioned_in_group_by_yes [label="Yes\nmod. 'group by columns' -> ON", modifier="group by columns", modifier_mode="on"]
-        column_spec_mentioned_in_group_by -> column_spec_mentioned_in_group_by_yes
-        column_spec_mentioned_in_group_by_no [label="No\nmod. 'group by columns' -> OFF", modifier="group by columns", modifier_mode="off"]
-        column_spec_mentioned_in_group_by -> column_spec_mentioned_in_group_by_no
+        call6_types_type [TYPES="[...]", label="Types type: [...types] -> TP1", shape=rectangle, color=yellowgreen, style=filled]
+        list_expr -> call6_types_type
+        call16_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call6_types_type -> call16_types
 
-        column_spec_shaded_by_select [label="Column names shaded by select aliases?"]
-        column_spec_mentioned_in_group_by_yes -> column_spec_shaded_by_select
-        column_spec_mentioned_in_group_by_no -> column_spec_shaded_by_select
-        column_spec_shaded_by_select_yes [label="Yes\nmod. 'shade by select aliases' -> ON", modifier="shade by select aliases", modifier_mode="on"]
-        column_spec_shaded_by_select -> column_spec_shaded_by_select_yes
-        column_spec_shaded_by_select_no [label="No\nmod. 'shade by select aliases' -> OFF", modifier="shade by select aliases", modifier_mode="off"]
-        column_spec_shaded_by_select -> column_spec_shaded_by_select_no
+        list_expr_multiple_values [label="Multiple values"]
+        call16_types -> list_expr_multiple_values
 
-        column_spec_aggregatable_columns [label="Column can be aggregated?"]
-        column_spec_shaded_by_select_yes -> column_spec_aggregatable_columns
-        column_spec_shaded_by_select_no -> column_spec_aggregatable_columns
-        column_spec_aggregatable_columns_yes [label="Yes\nmod. 'aggregate-able columns' -> ON", modifier="aggregate-able columns", modifier_mode="on"]
-        column_spec_aggregatable_columns -> column_spec_aggregatable_columns_yes
-        column_spec_aggregatable_columns_no [label="No\nmod. 'aggregate-able columns' -> OFF", modifier="aggregate-able columns", modifier_mode="off"]
-        column_spec_aggregatable_columns -> column_spec_aggregatable_columns_no
+        call49_types [TYPES="[compatible]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", MODS="[...]", shape=rectangle, style=filled, color=lightblue]
+        list_expr_multiple_values -> call49_types
+        list_expr_multiple_values -> EXIT_list_expr
+        call49_types -> call49_types
 
-        column_spec_choose_qualified [label="Choose if qualified\n[set value]", set_value="name_accessibility_of_selected_types_value"]
-        column_spec_aggregatable_columns_yes -> column_spec_choose_qualified
-        column_spec_aggregatable_columns_no -> column_spec_choose_qualified
-
-        qualified_column_name [label="Qualified (R.COL)\n[call mod]", call_modifier="selected_types_accessible_by_naming_method"]
-        column_spec_choose_qualified -> qualified_column_name
-        qualified_column_name -> EXIT_column_spec
-
-        unqualified_column_name [label="Unqualified (COL)\n[call mod]", call_modifier="selected_types_accessible_by_naming_method"]
-        column_spec_choose_qualified -> unqualified_column_name
-        unqualified_column_name -> EXIT_column_spec
+        call49_types -> EXIT_list_expr
     }

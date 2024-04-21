@@ -29,14 +29,18 @@ impl ListExprBuilder {
         TypesBuilder::build(generator, expr, TypeAssertion::CompatibleWith(inner_type.clone()));
         generator.expect_state("list_expr_multiple_values");
 
+        list_expr.push(TypesBuilder::highlight());
         loop {
             match_next_state!(generator, {
                 "call49_types" => {
-                    list_expr.push(TypesBuilder::highlight());
                     let expr = list_expr.last_mut().unwrap();
                     TypesBuilder::build(generator, expr, TypeAssertion::CompatibleWith(inner_type.clone()));
+                    list_expr.push(TypesBuilder::highlight());
                 },
-                "EXIT_list_expr" => break,
+                "EXIT_list_expr" => {
+                    list_expr.pop();
+                    break
+                },
             })
         }
 
