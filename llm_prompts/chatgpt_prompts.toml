@@ -9,10 +9,10 @@ and would be a list of CREATE TABLE statements.
 
 Instead of creating the query right away, you are constrained \
 to choose between the provided options, given the current state \
-of the query. The [?] symbol would sometimes suggest the place in \
-the query that the result of your decision will affect. An option \
-list would be indicated by "Options:" followed by a numbered list \
-of options.
+of the query. The [?] symbol (also referred to as the highlight token) \
+would almost always suggest the place in the query that the result \
+of your decision will affect. An option list would be indicated by \
+"Options:" followed by a numbered list of options.
 
 Responding to an option list, you should always do the following:
 - As the first line of your response, always output the reasoning \

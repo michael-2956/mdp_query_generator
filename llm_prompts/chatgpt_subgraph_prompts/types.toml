@@ -1,0 +1,49 @@
+[transitions]
+
+
+[transitions.types]
+task="""
+Select the SQL data type of the expression that you want \
+to generate.
+
+Be careful: this action restricts the expression that you \
+would be able to generate in the future. Try to plan your actions \
+to deduce the correct type.
+
+For example, if you aim to generate a column identifier, \
+selecting the wrong type at this step might result in inability \
+to select the required column afterwards. So, if you want something like: \
+SELECT C1 FROM T1,
+where C1 is of type integer, you should select integer now, or otherwise \
+(for example, if you select bigint), you wouldn't be able to select C1 afterwards.
+
+Or, if you aim to generate "1 + 3", you should also select integer, since both \
+1 and 3 are integers and the expression will thus also output an integer. In \
+other words, select pg_typeof(1 + 3) would give an integer so you should select \
+an integer now. So choose wisely.
+"""
+[transitions.types.options]
+1="bigint"
+2="integer"
+3="numeric"
+4="bool"
+5="text"
+6="date"
+7="timestamp"
+8="interval"
+[transitions.types.option_nodes]
+1="types_select_type_bigint"
+2="types_select_type_integer"
+3="types_select_type_numeric"
+4="types_select_type_3vl"
+5="types_select_type_text"
+6="types_select_type_date"
+7="types_select_type_timestamp"
+8="types_select_type_interval"
+
+
+[call_node_context]
+# call0_types_value=""
+
+
+[value_chooser_tasks]

@@ -1,51 +1,44 @@
-subgraph def_ORDER_BY {
-        ORDER_BY [label="ORDER BY", shape=rectangle, style=filled, color=deepskyblue]
-        EXIT_ORDER_BY [label="EXIT ORDER BY", shape=rectangle]
+subgraph def_types_value {
+        types_value [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[aggregate-able columns, shade by select aliases, no nesting, no literals, no case, no formulas, no typed nulls, no column spec, no subquery, group by columns, enable untyped null, no aggregate]", label="Types value\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[aggregate-able columns, shade by select aliases, no nesting, no literals, no case, no formulas, no typed nulls, no column spec, no subquery, group by columns, enable untyped null]", shape=rectangle, style=filled, color=orange]
+        EXIT_types_value [shape=rectangle]
 
-        ORDER_BY -> EXIT_ORDER_BY
+        types_value_nested [label="(nested)\nmod.: 'no nesting' -> OFF", modifier="no nesting", modifier_mode="off"]
+        types_value -> types_value_nested
+        call1_types_value [TYPES="[...]", MODS="[...]", label="Types value\nTYPES: [...]\nMODS: [...]", shape=rectangle, style=filled, color=orange]
+        types_value_nested -> call1_types_value
+        call1_types_value -> EXIT_types_value
 
-        // order by basically functions like SELECT w/o aliases
-        // but no literals are allowed, and you also can
-        // reference SELECT by aliases/numbers, and the priority
-        // is on the SELECT, when ambiguous between select and from.
+        types_value_null [label="Untyped null\nmod.: 'enable untyped null' -> ON", modifier="enable untyped null", modifier_mode="on"]
+        types_value -> types_value_null
+        types_value_null -> EXIT_types_value
 
-        order_by_list [label="ORDER BY list\n[set value]", set_value="select_is_not_distinct"]
-        ORDER_BY -> order_by_list
-        order_by_expr_done [label="Expression done"]
+        types_value_typed_null [label="Typed null\nmod.: 'no typed nulls' -> OFF", modifier="no typed nulls", modifier_mode="off"]
+        types_value -> types_value_typed_null
+        types_value_typed_null -> EXIT_types_value
 
-        order_by_select_reference [label="SELECT reference\n[set value]", set_value="select_has_accessible_columns"]
-        order_by_list -> order_by_select_reference
-        order_by_select_reference_by_alias [label="by alias\n[call mod]", call_modifier="select_has_accessible_columns_mod"]
-        order_by_select_reference -> order_by_select_reference_by_alias
-        order_by_select_reference_by_alias -> order_by_expr_done
+        column_type_available [label="column type available\n[set value]", set_value="is_column_type_available_val"]
+        types_value -> column_type_available
+        call0_column_spec [TYPES="[known]", MODS="[?group by columns, ?shade by select aliases, ?aggregate-able columns]", modifier="no column spec", modifier_mode="off", call_modifier="is_column_type_available_gate", label="column specifier\nTYPE: known\nMODS: [?group by columns, ?shade by select aliases, ?aggregate-able columns]\nmod.: 'no column spec' -> OFF\n[call mod]", shape=rectangle, style=filled, color=gold]
+        column_type_available -> call0_column_spec
+        call0_column_spec -> EXIT_types_value
 
-        order_by_expr [label="Expression\n[call mod]\n[set value]", call_modifier="select_is_not_distinct_mod", set_value="grouping_enabled"]
-        order_by_list -> order_by_expr
+        call1_Query [TYPES="[known]", MODS="[single row, single column]", label="Query\nMODS: [single row, single column]\nTYPE: known\nmod.: 'no subquery' -> OFF", modifier="no subquery", modifier_mode="off", shape=rectangle, style=filled, color=green]
+        types_value -> call1_Query
+        call1_Query -> EXIT_types_value
 
-        call84_types [label="TYPES: any\nMODS: [group by columns, no literals, shade by select aliases]\ncall mod.: 'grouping mode switch'", TYPES="[any]", MODS="[group by columns, no literals, shade by select aliases]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
-        order_by_expr -> call84_types
-        call84_types -> order_by_expr_done
-        call85_types [label="TYPES: any\nMODS: [no aggregate, no literals, shade by select aliases]\ncall mod.: 'grouping mode switch'", TYPES="[any]", MODS="[no aggregate, no literals, shade by select aliases]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
-        order_by_expr -> call85_types
-        call85_types -> order_by_expr_done
+        call0_aggregate_function [TYPES="[known]", modifier="no aggregate", modifier_mode="off", label="Aggregate function\nTYPE: known\nmod.: 'no aggregate' -> OFF", shape=rectangle, style=filled, color=peru]
+        types_value -> call0_aggregate_function
+        call0_aggregate_function -> EXIT_types_value
 
-        order_by_order_selected [label="order selected"]
-        order_by_expr_done -> order_by_order_selected
-        order_by_asc [label="asc"]
-        order_by_expr_done -> order_by_asc
-        order_by_asc -> order_by_order_selected
-        order_by_desc [label="desc"]
-        order_by_expr_done -> order_by_desc
-        order_by_desc -> order_by_order_selected
+        call0_case [TYPES="[known]", MODS="[..., -no literals]", modifier="no case", modifier_mode="off", label="CASE\nTYPE: known\nMODS: [..., -no literals]\nmod.: 'no case' -> OFF", shape=rectangle, style=filled, color=aquamarine]
+        types_value -> call0_case
+        call0_case -> EXIT_types_value
 
-        order_by_nulls_order_selected [label="nulls order selected"]
-        order_by_order_selected -> order_by_nulls_order_selected
-        order_by_nulls_order_selected -> order_by_list
-        order_by_nulls_order_selected -> EXIT_ORDER_BY
-        order_by_nulls_first [label="NULLS FIRST"]
-        order_by_order_selected -> order_by_nulls_first
-        order_by_nulls_first -> order_by_nulls_order_selected
-        order_by_nulls_last [label="NULLS LAST"]
-        order_by_order_selected -> order_by_nulls_last
-        order_by_nulls_last -> order_by_nulls_order_selected
+        call0_literals [TYPES="[known]", modifier="no literals", modifier_mode="off", label="Literals\nTYPE: known\nmod.: 'no literals' -> OFF", shape=rectangle, style=filled, color=hotpink]
+        types_value -> call0_literals
+        call0_literals -> EXIT_types_value
+
+        call0_formulas [TYPES="[known]", MODS="[..., -no literals]", modifier="no formulas", modifier_mode="off", label="Formulas\nTYPES: [known]\nMODS: [..., -no literals]\nmod.: 'no formulas' -> OFF", shape=rectangle, style=filled, color=darkcyan]
+        types_value -> call0_formulas
+        call0_formulas -> EXIT_types_value
     }

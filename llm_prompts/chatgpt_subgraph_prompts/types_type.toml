@@ -1,0 +1,37 @@
+[transitions]
+
+
+[transitions.types_type]
+task="""
+Select the SQL data type of the expressions that you will be generating.
+
+Note that you should try to select the biggest type that would fit your expressions.
+So, if you want to generate the "C1 > 3" expression, where C1 is of type bigint, and \
+3 is of type integer, you should select bigint now. Note that the highlight tokens \
+should now indicate which fields your current decision will affect. You should rely on that \
+information to select the correct biggest type that will fit all of those.
+"""
+[transitions.types_type.options]
+1="bigint"
+2="integer"
+3="numeric"
+4="bool"
+5="text"
+6="date"
+7="timestamp"
+8="interval"
+[transitions.types_type.option_nodes]
+1="types_type_bigint"
+2="types_type_integer"
+3="types_type_numeric"
+4="types_type_3vl"
+5="types_type_text"
+6="types_type_date"
+7="types_type_timestamp"
+8="types_type_interval"
+
+
+[call_node_context]
+
+
+[value_chooser_tasks]

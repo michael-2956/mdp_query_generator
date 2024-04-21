@@ -1,0 +1,25 @@
+[transitions]
+
+
+[transitions.LIMIT]
+task="""
+Select whether you would like to add the LIMIT clause.
+Note that in some cases the query needs to output only a single row \
+to be valid, so you only would be able to specify LIMIT 1 of any limit \
+at all.
+"""
+[transitions.LIMIT.options]
+1="Don't add the LIMIT clause"
+2="Add LIMIT 1"
+3="Add the LIMIT clause"
+[transitions.LIMIT.option_nodes]
+1="query_can_skip_limit_set_val"
+2="single_row_true"
+3="limit_num"
+
+
+[call_node_context]
+call52_types="This decision will affect the expression in the LIMIT clause"
+
+
+[value_chooser_tasks]
