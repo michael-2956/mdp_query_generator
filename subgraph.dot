@@ -1,175 +1,51 @@
-subgraph def_VAL_3 {
-        VAL_3 [shape=rectangle, label="3VL Value\n[mods]", MODS="[]", style=filled, color=red]
-        EXIT_VAL_3 [shape=rectangle, label="EXIT 3VL Value"]
+subgraph def_text {
+        text [label="text\n[mods]", MODS="[]", shape=rectangle, style=filled, color=pink]
+        EXIT_text [label="EXIT text"]
 
-        IsNull [label="IS NULL"]
-        call55_types [TYPES="[any]", MODS="[...]", label="TYPES: ANY\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
-        VAL_3 -> IsNull
-        IsNull -> call55_types
-        IsNull_not [label="NOT"]
-        IsNull -> IsNull_not
-        IsNull_not -> call55_types
-        call55_types -> EXIT_VAL_3
+        text_trim[label="TRIM"]
+        text -> text_trim
+        call6_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        text_trim -> call6_types
+        call5_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        BOTH []
+        call6_types -> BOTH
+        BOTH -> call5_types
+        LEADING []
+        call6_types -> LEADING
+        LEADING -> call5_types
+        TRAILING []
+        call6_types -> TRAILING
+        TRAILING -> call5_types
+        text_trim_done [label="trim done"]
+        call6_types -> text_trim_done
+        call5_types -> text_trim_done
+        text_trim_done -> EXIT_text
 
-        IsDistinctFrom [label="IS DISTINCT FROM"]
-        VAL_3 -> IsDistinctFrom
-        IsDistinctNOT [label="NOT"]
-        IsDistinctFrom -> IsDistinctNOT
-        call0_types_type [TYPES="[any]", label="Types type: ANY -> TP1", shape=rectangle, color=yellowgreen, style=filled]
-        IsDistinctFrom -> call0_types_type
-        IsDistinctNOT -> call0_types_type
-        call56_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
-        call0_types_type -> call56_types
-        call21_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
-        call56_types -> call21_types
-        call21_types -> EXIT_VAL_3
+        text_concat [label="concatenation"]
+        text -> text_concat
+        call7_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        text_concat -> call7_types
+        text_concat_concat [label="||"]
+        call7_types -> text_concat_concat
+        call8_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        text_concat_concat -> call8_types
+        call8_types -> EXIT_text
 
-        Exists_not [label="NOT"]
-        Exists [label="EXISTS"]
-        call2_Query [TYPES="[any]", MODS="[]", label="Query\nTYPES: ANY", shape=rectangle, style=filled, color=green]
-        VAL_3 -> Exists
-        Exists -> call2_Query
-        call2_Query -> EXIT_VAL_3
-        Exists -> Exists_not
-        Exists_not -> call2_Query
-
-        InList[label="IN [list expr]"]
-        VAL_3 -> InList
-        InListNot [label="NOT"]
-        InList -> InListNot
-        call3_types_type [TYPES="[any]", label="Types type: ANY -> TP1", shape=rectangle, color=yellowgreen, style=filled]
-        InListNot -> call3_types_type
-        InList -> call3_types_type
-        call57_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
-        call3_types_type -> call57_types
-        call1_list_expr [TYPES="[compatible]", MODS="[...]", label="list expr\nTYPES: [compatible(TP1)]\nmodif.: [...mods]", shape=rectangle, style=filled, color=blue]
-        call57_types -> call1_list_expr
-        call1_list_expr -> EXIT_VAL_3
-
-        InSubquery[label="IN [subquery]"]
-        VAL_3 -> InSubquery
-        InSubqueryNot [label="NOT"]
-        InSubquery -> InSubqueryNot
-        call4_types_type [TYPES="[any]", label="Types type: ANY -> TP1", shape=rectangle, color=yellowgreen, style=filled]
-        InSubquery -> call4_types_type
-        InSubqueryNot -> call4_types_type
-        call58_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
-        call4_types_type -> call58_types
-        call3_Query [TYPES="[compatible]", MODS="[single column]", label="Query\nTYPE: [compatible(TP1)]\nMODS: [single column]", shape=rectangle, style=filled, color=green]
-        call58_types -> call3_Query
-        call3_Query -> EXIT_VAL_3
-
-        Between[label="BETWEEN . AND ."]
-        VAL_3 -> Between
-        call5_types_type [TYPES="[any]", label="Types type: ANY -> TP1", shape=rectangle, color=yellowgreen, style=filled]
-        Between -> call5_types_type
-        call59_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
-        call5_types_type -> call59_types
-        BetweenBetween [label="BETWEEN"]
-        call59_types -> BetweenBetween
-        call22_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        BetweenBetween -> call22_types
-        BetweenBetweenAnd [label="AND"]
-        call22_types -> BetweenBetweenAnd
-        call23_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        BetweenBetweenAnd -> call23_types
-        call23_types -> EXIT_VAL_3
-
-        BinaryComp[label="CMP"]
-        VAL_3 -> BinaryComp
-        BinaryCompEqual [label="="]
-        BinaryComp -> BinaryCompEqual
-        BinaryCompUnEqual [label="<>"]
-        BinaryComp -> BinaryCompUnEqual
-        BinaryCompLess [label="<"]
-        BinaryComp -> BinaryCompLess
-        BinaryCompLessEqual [label="<="]
-        BinaryComp -> BinaryCompLessEqual
-        BinaryCompGreater [label=">"]
-        BinaryComp -> BinaryCompGreater
-        BinaryCompGreaterEqual [label=">="]
-        BinaryComp -> BinaryCompGreaterEqual
-        call1_types_type [TYPES="[any]", label="Types type: ANY -> TP1", shape=rectangle, color=yellowgreen, style=filled]
-        BinaryCompEqual -> call1_types_type
-        BinaryCompUnEqual -> call1_types_type
-        BinaryCompLess -> call1_types_type
-        BinaryCompLessEqual -> call1_types_type
-        BinaryCompGreater -> call1_types_type
-        BinaryCompGreaterEqual -> call1_types_type
-        call60_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        call1_types_type -> call60_types
-        call24_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        call60_types -> call24_types
-        call24_types -> EXIT_VAL_3
-
-        AnyAll[label="ANY / ALL"]
-        VAL_3 -> AnyAll
-        //
-        AnyAllSelectOp[label="select op."]
-        AnyAll -> AnyAllSelectOp
-        call2_types_type [TYPES="[any]", label="Types type: ANY -> TP1", shape=rectangle, color=yellowgreen, style=filled]
-        AnyAllEqual [label="="]
-        AnyAllSelectOp -> AnyAllEqual
-        AnyAllEqual -> call2_types_type
-        AnyAllUnEqual [label="<>"]
-        AnyAllSelectOp -> AnyAllUnEqual
-        AnyAllUnEqual -> call2_types_type
-        AnyAllLess [label="<"]
-        AnyAllSelectOp -> AnyAllLess
-        AnyAllLess -> call2_types_type
-        AnyAllLessEqual [label="<="]
-        AnyAllSelectOp -> AnyAllLessEqual
-        AnyAllLessEqual -> call2_types_type
-        AnyAllGreater [label=">"]
-        AnyAllSelectOp -> AnyAllGreater
-        AnyAllGreater -> call2_types_type
-        AnyAllGreaterEqual [label=">="]
-        AnyAllSelectOp -> AnyAllGreaterEqual
-        AnyAllGreaterEqual -> call2_types_type
-        //
-        call61_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
-        call2_types_type -> call61_types
-        AnyAllAnyAll[label="select ANY/ALL"]
-        call61_types -> AnyAllAnyAll 
-        AnyAllAnyAllAny[label="ANY"]
-        AnyAllAnyAll -> AnyAllAnyAllAny
-        AnyAllAnyAllAll[label="ALL"]
-        AnyAllAnyAll -> AnyAllAnyAllAll
-        //
-        AnyAllSelectIter[label="select iterable"]
-        AnyAllAnyAllAny -> AnyAllSelectIter
-        AnyAllAnyAllAll -> AnyAllSelectIter
-        call4_Query [TYPES="[compatible]", MODS="[single column]", label="Query\nTYPE: [compatible(TP1)]\nMODS: [single column]", shape=rectangle, style=filled, color=green]
-        AnyAllSelectIter -> call4_Query
-        call4_Query -> EXIT_VAL_3
-
-        BinaryStringLike[label="LIKE"]
-        VAL_3 -> BinaryStringLike
-        BinaryStringLikeNot [label="NOT"]
-        BinaryStringLike -> BinaryStringLikeNot
-        call25_types [MODS="[...]", TYPES="[text]", label="TYPES: text\nmodif.: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        BinaryStringLike -> call25_types
-        BinaryStringLikeNot -> call25_types
-        call26_types [MODS="[...]", TYPES="[text]", label="TYPES: text\nmodif.: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        call25_types -> call26_types
-        call26_types -> EXIT_VAL_3
-
-        BinaryBooleanOpV3[label="bool op."]
-        VAL_3 -> BinaryBooleanOpV3
-        BinaryBooleanOpV3AND [label="AND"]
-        BinaryBooleanOpV3 -> BinaryBooleanOpV3AND
-        BinaryBooleanOpV3OR [label="OR"]
-        BinaryBooleanOpV3 -> BinaryBooleanOpV3OR
-        call27_types [MODS="[...]", TYPES="[3VL Value]", label="TYPES: 3VL Value\nmodif.: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        BinaryBooleanOpV3AND -> call27_types
-        BinaryBooleanOpV3OR -> call27_types
-        call28_types [MODS="[...]", TYPES="[3VL Value]", label="TYPES: 3VL Value\nmodif.: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        call27_types -> call28_types
-        call28_types -> EXIT_VAL_3
-
-        UnaryNot_VAL_3[label="NOT"]
-        call30_types [MODS="[...]", TYPES="[3VL Value]", label="TYPES: 3VL Value\nmodif.: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        VAL_3 -> UnaryNot_VAL_3
-        UnaryNot_VAL_3 -> call30_types
-        call30_types -> EXIT_VAL_3
+        text_substring[label="substring"]
+        text -> text_substring
+        call9_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        text_substring -> call9_types
+        text_substring_from [label="from"]
+        text_substring_for [label="for"]
+        call9_types -> text_substring_from
+        call9_types -> text_substring_for
+        text_substring_end [label="finish"]
+        call10_types [TYPES="[integer]", MODS="[...]", label="TYPES: [integer]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        text_substring_from -> call10_types
+        call10_types -> text_substring_for
+        call10_types -> text_substring_end
+        call11_types [TYPES="[integer]", MODS="[...]", label="TYPES: [integer]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        text_substring_for -> call11_types
+        call11_types -> text_substring_end
+        text_substring_end -> EXIT_text
     }

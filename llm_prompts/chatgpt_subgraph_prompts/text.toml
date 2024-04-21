@@ -1,0 +1,74 @@
+[transitions]
+
+
+[transitions.text]
+task="""
+Select the kind of expression you want your text expression to be.
+In this list of options, the [text]/[integer] denotes the expression you \
+would have to generate next if you select that option. And the option itself \
+denotes what will be put in the place of the highlight token.
+"""
+[transitions.text.options]
+1="TRIM([LEADING | TRAILING | BOTH] [text] FROM [text])"
+2="[text] || [text]. This will contatenate the string (text) expressions."
+3="substring([text] [from [integer]] [for [integer]])"
+[transitions.text.option_nodes]
+1="text_trim"
+2="text_concat"
+3="text_substring"
+
+
+[transitions.call6_types]
+task="""
+Select whether you would like to specify a string to trim from \
+your text expression, and if yes, how to trim it. Here, [trim_chars] \
+denotes the char you will generate next. It will be trimmed from the string.
+"""
+[transitions.call6_types.options]
+1="TRIM(BOTH [trim_chars] FROM ...). Will trim from both sides"
+2="TRIM(LEADING [trim_chars] FROM ...). Will trim from the left side"
+3="TRIM(TRAILING [trim_chars] FROM ...). Will trim from the right side"
+4="Finish the generation of the TRIM expression (will trim space characters from both sides by default)"
+[transitions.call6_types.option_nodes]
+1="BOTH"
+2="LEADING"
+3="TRAILING"
+4="text_trim_done"
+
+
+[transitions.call9_types]
+task="""
+Select whether you would like to specify from which position \
+to get the substring from.
+"""
+[transitions.call9_types.options]
+1="specify the start character number to get the substring from"
+2="do not specify the start character number, and specify the length of the substring (using 'for')"
+[transitions.call9_types.option_nodes]
+1="text_substring_from"
+2="text_substring_for"
+
+
+[transitions.call10_types]
+task="""
+Select whether you would like to specify the substring length.
+"""
+[transitions.call10_types.options]
+1="Specify the length of the substring (using 'for')"
+2="end the generation of the SUBSTRING expression"
+[transitions.call10_types.option_nodes]
+1="text_substring_for"
+2="text_substring_end"
+
+
+[call_node_context]
+# call6_types=""
+# call5_types=""
+# call7_types=""
+# call8_types=""
+# call9_types=""
+# call10_types=""
+# call11_types=""
+
+
+[value_chooser_tasks]

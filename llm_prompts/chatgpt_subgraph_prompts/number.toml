@@ -1,0 +1,83 @@
+[transitions]
+
+
+[transitions.number]
+task="""
+Select the kind of expression you want your number expression to be.
+(note that 'number' represents one of integer, numeric or bigint)
+
+In this list of options, the [expr] and [field] denote the expression  \
+you would have to generate next if you select that option. And the option itself \
+denotes what will be put in the place of the highlight token.
+"""
+[transitions.number.options]
+1="[expr] op [expr], where op one of the binary number operations: /, |, &, #, ^, +, -, *. Here, ^ is exponentiation (only for numeric), #, & and | are binary xor, and and or (only for integer/bigint)"
+2="op [expr], where op one of the unary number operations: -, +, @, ~, ||/. Here, ||/ is the cubic root (only for numeric values), @ is the absoluta value, ~ is binary NOT (only for integer/bigint)"
+3="POSITION([expr] in [expr]). This determines the position of one string in another."
+4="EXTRACT([field] from [expr]). Use this to extract some datetime field (for example day, month) from some expression. THe expression can be of the following SQL types: timestamp, date, interval."
+[transitions.number.option_nodes]
+1="BinaryNumberOp"
+2="UnaryNumberOp"
+3="number_string_position"
+4="number_extract_field_from_date"
+
+
+[transitions.BinaryNumberOp]
+task="""
+Select the binary number operation.
+Here, ^ is exponentiation (only for numeric), \
+#, & and | are binary xor, and and or (only for integer/bigint)
+"""
+[transitions.BinaryNumberOp.options]
+1="+"
+2="-"
+3="*"
+4="/"
+5="|"
+6="&"
+7="#"
+8="^"
+[transitions.BinaryNumberOp.option_nodes]
+1="binary_number_plus"
+2="binary_number_minus"
+3="binary_number_mul"
+4="binary_number_div"
+5="binary_number_bin_or"
+6="binary_number_bin_and"
+7="binary_number_bin_xor"
+8="binary_number_exp"
+
+
+[transitions.UnaryNumberOp]
+task="""
+Select the unary number operation.
+Here, ||/ is the cubic root (only for numeric values), \
+@ is an absolute value operation, ~ is binary NOT (only for \
+integer/bigint)"
+"""
+[transitions.UnaryNumberOp.options]
+1="+"
+2="@"
+3="~"
+4="||/"
+5="-"
+[transitions.UnaryNumberOp.option_nodes]
+1="unary_number_plus"
+2="unary_number_abs"
+3="unary_number_bin_not"
+4="unary_number_cub_root"
+5="unary_number_minus"
+
+
+[call_node_context]
+# call47_types=""
+# call48_types=""
+# call1_types=""
+# call89_types=""
+# call2_types=""
+# call3_types=""
+call0_select_datetime_field="This will be the field you will extract from the timestamp/interval/date expression."
+# call97_types=""
+
+
+[value_chooser_tasks]
