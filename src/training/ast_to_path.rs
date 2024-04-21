@@ -358,9 +358,9 @@ impl PathGenerator {
                 None => &["order_by_order_selected"],
             })?;
             self.try_push_states(match &order_by_expr.nulls_first {
-                Some(true) => &["order_by_nulls_first", "order_by_nulls_first_selected"],
-                Some(false) => &["order_by_nulls_last", "order_by_nulls_first_selected"],
-                None => &["order_by_nulls_first_selected"],
+                Some(true) => &["order_by_nulls_first", "order_by_nulls_order_selected"],
+                Some(false) => &["order_by_nulls_last", "order_by_nulls_order_selected"],
+                None => &["order_by_nulls_order_selected"],
             })?;
         }
 

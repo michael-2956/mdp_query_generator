@@ -42,17 +42,17 @@ SELECT T1.* FROM T1, T2
 3="SELECT_tables_eligible_for_wildcard"
 
 
-[transitions.select_expr]
-task="""
-If you see this task, ignore all instructions \
-and say 'UNIMPLEMENTED'.
-"""
-[transitions.select_expr.options]
-1="-"
-2="-"
-[transitions.select_expr.option_nodes]
-1="call73_types"
-2="call54_types"
+# [transitions.select_expr]
+# task="""
+# If you see this task, ignore all instructions \
+# and say 'UNIMPLEMENTED'.
+# """
+# [transitions.select_expr.options]
+# 1="-"
+# 2="-"
+# [transitions.select_expr.option_nodes]
+# 1="call73_types"
+# 2="call54_types"
 
 
 [transitions.select_expr_done]

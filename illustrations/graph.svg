@@ -1540,15 +1540,15 @@
 <path fill="none" stroke="black" d="M1122.79,-768.74C1088.76,-757.06 1050.34,-743.88 1020.41,-733.61"/>
 <polygon fill="black" stroke="black" points="1021.8,-730.04 1011.2,-730.11 1019.52,-736.66 1021.8,-730.04"/>
 </g>
-<!-- order_by_nulls_first_selected -->
+<!-- order_by_nulls_order_selected -->
 <g id="node103" class="node">
-<title>order_by_nulls_first_selected</title>
+<title>order_by_nulls_order_selected</title>
 <ellipse fill="none" stroke="black" cx="969" cy="-426.97" rx="83.08" ry="18"/>
 <text text-anchor="middle" x="969" y="-421.92" font-family="Times,serif" font-size="14.00">nulls order selected</text>
 </g>
-<!-- order_by_order_selected&#45;&gt;order_by_nulls_first_selected -->
+<!-- order_by_order_selected&#45;&gt;order_by_nulls_order_selected -->
 <g id="edge139" class="edge">
-<title>order_by_order_selected&#45;&gt;order_by_nulls_first_selected</title>
+<title>order_by_order_selected&#45;&gt;order_by_nulls_order_selected</title>
 <path fill="none" stroke="black" d="M934.57,-555.58C918.55,-546.93 901.06,-534.2 892,-516.97 884.56,-502.8 884.56,-495.13 892,-480.97 898.99,-467.67 910.99,-457.06 923.46,-448.94"/>
 <polygon fill="black" stroke="black" points="924.8,-451.61 931.56,-443.45 921.19,-445.62 924.8,-451.61"/>
 </g>
@@ -1588,27 +1588,27 @@
 <path fill="none" stroke="black" d="M926.21,-626.43C932.89,-617.92 941.35,-607.16 948.98,-597.45"/>
 <polygon fill="black" stroke="black" points="952.25,-599.95 955.67,-589.93 946.74,-595.63 952.25,-599.95"/>
 </g>
-<!-- order_by_nulls_first_selected&#45;&gt;EXIT_ORDER_BY -->
+<!-- order_by_nulls_order_selected&#45;&gt;EXIT_ORDER_BY -->
 <g id="edge141" class="edge">
-<title>order_by_nulls_first_selected&#45;&gt;EXIT_ORDER_BY</title>
+<title>order_by_nulls_order_selected&#45;&gt;EXIT_ORDER_BY</title>
 <path fill="none" stroke="black" d="M938.49,-409.91C920.77,-400.58 898.18,-388.69 878.72,-378.45"/>
 <polygon fill="black" stroke="black" points="880.65,-374.98 870.17,-373.42 877.39,-381.18 880.65,-374.98"/>
 </g>
-<!-- order_by_nulls_first_selected&#45;&gt;order_by_list -->
+<!-- order_by_nulls_order_selected&#45;&gt;order_by_list -->
 <g id="edge140" class="edge">
-<title>order_by_nulls_first_selected&#45;&gt;order_by_list</title>
+<title>order_by_nulls_order_selected&#45;&gt;order_by_list</title>
 <path fill="none" stroke="black" d="M1031.92,-438.98C1136.56,-459.1 1335,-505.73 1335,-569.97 1335,-798.96 1335,-798.96 1335,-798.96 1335,-955.71 1105.12,-995.22 976.93,-1005.07"/>
 <polygon fill="black" stroke="black" points="976.71,-1001.65 966.99,-1005.86 977.21,-1008.64 976.71,-1001.65"/>
 </g>
-<!-- order_by_nulls_first&#45;&gt;order_by_nulls_first_selected -->
+<!-- order_by_nulls_first&#45;&gt;order_by_nulls_order_selected -->
 <g id="edge143" class="edge">
-<title>order_by_nulls_first&#45;&gt;order_by_nulls_first_selected</title>
+<title>order_by_nulls_first&#45;&gt;order_by_nulls_order_selected</title>
 <path fill="none" stroke="black" d="M969,-480.66C969,-473.2 969,-464.29 969,-455.93"/>
 <polygon fill="black" stroke="black" points="972.5,-456.07 969,-446.07 965.5,-456.07 972.5,-456.07"/>
 </g>
-<!-- order_by_nulls_last&#45;&gt;order_by_nulls_first_selected -->
+<!-- order_by_nulls_last&#45;&gt;order_by_nulls_order_selected -->
 <g id="edge145" class="edge">
-<title>order_by_nulls_last&#45;&gt;order_by_nulls_first_selected</title>
+<title>order_by_nulls_last&#45;&gt;order_by_nulls_order_selected</title>
 <path fill="none" stroke="black" d="M1088.39,-482.95C1066.49,-472.86 1037.35,-459.44 1013.34,-448.39"/>
 <polygon fill="black" stroke="black" points="1014.95,-444.81 1004.4,-443.81 1012.02,-451.17 1014.95,-444.81"/>
 </g>

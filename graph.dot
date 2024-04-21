@@ -438,16 +438,16 @@ digraph G {
         order_by_expr_done -> order_by_desc
         order_by_desc -> order_by_order_selected
 
-        order_by_nulls_first_selected [label="nulls order selected"]
-        order_by_order_selected -> order_by_nulls_first_selected
-        order_by_nulls_first_selected -> order_by_list
-        order_by_nulls_first_selected -> EXIT_ORDER_BY
+        order_by_nulls_order_selected [label="nulls order selected"]
+        order_by_order_selected -> order_by_nulls_order_selected
+        order_by_nulls_order_selected -> order_by_list
+        order_by_nulls_order_selected -> EXIT_ORDER_BY
         order_by_nulls_first [label="NULLS FIRST"]
         order_by_order_selected -> order_by_nulls_first
-        order_by_nulls_first -> order_by_nulls_first_selected
+        order_by_nulls_first -> order_by_nulls_order_selected
         order_by_nulls_last [label="NULLS LAST"]
         order_by_order_selected -> order_by_nulls_last
-        order_by_nulls_last -> order_by_nulls_first_selected
+        order_by_nulls_last -> order_by_nulls_order_selected
     }
 
     subgraph def_LIMIT {

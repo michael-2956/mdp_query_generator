@@ -4,11 +4,11 @@
 [transitions.ORDER_BY]
 task="""
 Select whether you would like to include an ORDER BY \
-clause.
+clause into the current query or omit it entirely.
 """
 [transitions.ORDER_BY.options]
-1=""
-2=""
+1="Omit the group by clause"
+2="Add the group by clause to the current query"
 [transitions.ORDER_BY.option_nodes]
 1="EXIT_ORDER_BY"
 2="order_by_list"
@@ -16,10 +16,18 @@ clause.
 
 [transitions.order_by_list]
 task="""
+Select which kind of item you would like to add to the \
+ORDER BY clause next.
+Note that if you choose to reference an item in the the SELECT \
+clause, you will be able to do the following:
+SELECT 2 + C1 AS N1 FROM T1 ORDER BY N1
+where N1 is the said reference to an item in the SELECT clause.
+However, if you would like to add a column name or an expression \
+to the GROUP BY clause, choose "Expression" next.
 """
 [transitions.order_by_list.options]
-1=""
-2=""
+1="A SELECT item reference"
+2="Expression"
 [transitions.order_by_list.option_nodes]
 1="order_by_select_reference"
 2="order_by_expr"
@@ -27,56 +35,64 @@ task="""
 
 [transitions.order_by_expr_done]
 task="""
+Select whether you would like to specify an order for \
+the last item you added to ORDER BY, and if yes, which one.
 """
 [transitions.order_by_expr_done.options]
-1=""
-2=""
-3=""
+1="Do not specify order"
+2="Specify ASC (ascending order)"
+3="Specify DESC (descending order)"
 [transitions.order_by_expr_done.option_nodes]
 1="order_by_order_selected"
 2="order_by_asc"
 3="order_by_desc"
 
 
-[transitions.order_by_expr]
-task="""
-"""
-[transitions.order_by_expr.options]
-1=""
-2=""
-[transitions.order_by_expr.option_nodes]
-1="call84_types"
-2="call85_types"
+# [transitions.order_by_expr]
+# task="""
+# If you see this task
+# """
+# [transitions.order_by_expr.options]
+# 1=""
+# 2=""
+# [transitions.order_by_expr.option_nodes]
+# 1="call84_types"
+# 2="call85_types"
 
 
 [transitions.order_by_order_selected]
 task="""
+Select whether you would like to specify an order for \
+the NULL values for the last item you added to ORDER BY, \
+and if yes, which one.
 """
 [transitions.order_by_order_selected.options]
-1=""
-2=""
-3=""
+1="Do not specify order of NULL values"
+2="NULLS FIRST (places nulls at the start of the order)"
+3="NULLS LAST (places nulls at the end of the order)"
 [transitions.order_by_order_selected.option_nodes]
-1="order_by_nulls_first_selected"
+1="order_by_nulls_order_selected"
 2="order_by_nulls_first"
 3="order_by_nulls_last"
 
 
-[transitions.order_by_nulls_first_selected]
+[transitions.order_by_nulls_order_selected]
 task="""
+Select whether you would like to add an another item to \
+ORDER BY, or you would like to finish generating the ORDER BY clause.
 """
-[transitions.order_by_nulls_first_selected.options]
-1=""
-2=""
-[transitions.order_by_nulls_first_selected.option_nodes]
+[transitions.order_by_nulls_order_selected.options]
+1="Add an another item to ORDER BY"
+2="Finish generating the ORDER BY clause"
+[transitions.order_by_nulls_order_selected.option_nodes]
 1="order_by_list"
 2="EXIT_ORDER_BY"
 
 
 [call_node_context]
-call84_types=""
-call85_types=""
+call84_types="This decision will affect the expression in the ORDER BY clause"
+call85_types="This decision will affect the expression in the ORDER BY clause"
 
 
 [value_chooser_tasks]
-select_alias_order_by="Choose a select alias that you with to place in ORDER BY:"
+select_alias_order_by="Choose a select reference that you wish to add to ORDER BY:"

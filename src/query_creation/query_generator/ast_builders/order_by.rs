@@ -69,14 +69,14 @@ impl OrderByBuilder {
             });
 
             match_next_state!(generator, {
-                "order_by_nulls_first_selected" => { },
+                "order_by_nulls_order_selected" => { },
                 "order_by_nulls_first" => {
                     order_by_expr.nulls_first = Some(true);
-                    generator.expect_state("order_by_nulls_first_selected");
+                    generator.expect_state("order_by_nulls_order_selected");
                 },
                 "order_by_nulls_last" => {
                     order_by_expr.nulls_first = Some(false);
-                    generator.expect_state("order_by_nulls_first_selected");
+                    generator.expect_state("order_by_nulls_order_selected");
                 },
             });
 

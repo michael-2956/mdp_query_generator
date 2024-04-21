@@ -260,13 +260,12 @@ impl QueryValueChooser for ChatGPTPromptingModel {
         ObjectName(vec![Ident::new(func_name)])
     }
 
-    fn choose_column(&mut self, _clause_context: &ClauseContext, _column_types: Vec<SubgraphType>, _check_accessibility: CheckAccessibility, _column_retrieval_options: ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]) {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("column", vec![""]);
-        todo!()
+    fn choose_select_alias_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident {
+        self.get_chosen_value("select_alias_order_by", aliases.clone()).clone().into()
     }
 
-    fn choose_select_alias_order_by(&mut self, _aliases: &Vec<&IdentName>) -> Ident {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("select_alias_order_by", vec![""]);
+    fn choose_column(&mut self, _clause_context: &ClauseContext, _column_types: Vec<SubgraphType>, _check_accessibility: CheckAccessibility, _column_retrieval_options: ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]) {
+        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("column", vec![""]);
         todo!()
     }
 
