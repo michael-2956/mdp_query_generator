@@ -1,0 +1,67 @@
+[transitions]
+
+
+[transitions.call0_FROM_item]
+task="""
+Select whether you would like to JOIN \
+the generated relation with any other one.
+
+Note that a relation is not necessarily a table, \
+it can also, for example, be a subquery.
+"""
+[transitions.call0_FROM_item.options]
+1="JOIN the generated relation"
+2="DON'T JOIN the generated relation"
+[transitions.call0_FROM_item.option_nodes]
+1="FROM_join_by"
+2="FROM_cartesian_product"
+
+
+[transitions.FROM_join_by]
+task="""
+Select the method you would like to join with.
+"""
+[transitions.FROM_join_by.options]
+1="INNER JOIN"
+2="LEFT JOIN"
+3="RIGHT JOIN"
+[transitions.FROM_join_by.option_nodes]
+1="FROM_join_join"
+2="FROM_left_join"
+3="FROM_right_join"
+
+
+[transitions.call83_types]
+task="""
+Select whether you would like to JOIN \
+an another relation to the previous ones.
+"""
+[transitions.call83_types.options]
+1="JOIN an another relation"
+2="DON'T JOIN an another relation"
+[transitions.call83_types.option_nodes]
+1="FROM_join_by"
+2="FROM_cartesian_product"
+
+
+[transitions.FROM_cartesian_product]
+task="""
+Select whether you would like to finish generating the \
+FROM clause or perform a cartesian product with some \
+other relation. For example, if you have:
+SELECT  FROM T1
+A cartesian product can look like:
+SELECT  FROM T1, T2
+"""
+[transitions.FROM_cartesian_product.options]
+1="Finish generating the FROM clause."
+2="Perform a cartesean product with an another relation."
+[transitions.FROM_cartesian_product.option_nodes]
+1="EXIT_FROM"
+2="call0_FROM_item"
+
+
+[call_node_context]
+
+
+[value_chooser_tasks]

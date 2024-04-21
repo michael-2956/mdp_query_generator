@@ -100,13 +100,19 @@ impl LLMPrompts {
         self.call_node_context.get(node_name.as_str()).cloned()
     }
 
-    pub fn generate_value_chooser_options_prompt<OptT>(
-        &self, current_query_str: String, task_key: &str, options: Vec<OptT>
+    pub fn has_value_chooser_key(&self, task_key: &str) -> bool {
+        self.value_chooser_tasks.contains_key(task_key)
+    }
+
+    pub fn generate_value_chooser_options_prompt_formatted<OptT, Fmt>(
+        &self, current_query_str: String, task_key: &str, options: Vec<OptT>,
+        formatter: Fmt
     ) -> Option<(String, HashMap<String, OptT>)>
     where
-        OptT: fmt::Display
+        OptT: fmt::Display,
+        Fmt: Fn(String) -> String
     {
-        let task_str = self.value_chooser_tasks.get(task_key)?;
+        let task_str = formatter(self.value_chooser_tasks.get(task_key)?.clone());
         let mut options_prompt = "".to_string();
         let mut option_nodes = HashMap::new();
         for (opt_key, opt_prompt) in options.into_iter().enumerate() {
@@ -116,5 +122,18 @@ impl LLMPrompts {
         Some((format!(
             "Query: {current_query_str}\n\nTask: {task_str}\n\nOptions:\n{options_prompt}"
         ), option_nodes))
+    }
+
+    pub fn generate_value_chooser_generate_prompt_formatted<Fmt>(
+        &self, current_query_str: String, task_key: &str,
+        formatter: Fmt
+    ) -> Option<String> 
+    where
+        Fmt: Fn(String) -> String
+    {
+        let task_str = formatter(self.value_chooser_tasks.get(task_key)?.clone());
+        Some(format!(
+            "Query: {current_query_str}\n\nTask: {task_str}"
+        ))
     }
 }

@@ -155,14 +155,54 @@ impl ChatGPTPromptingModel {
     // }
 
     fn generate_value_chooser_options_prompt<OptT>(
-        &mut self, task_key: &str, options: Vec<OptT>
+        &mut self, _task_key: &str, _options: Vec<OptT>
     ) -> (String, HashMap<String, OptT>)
     where
         OptT: fmt::Display
     {
-        let current_query_str = self.value_choice_query_str.take().unwrap();
-        self.prompts_ref().generate_value_chooser_options_prompt(current_query_str, task_key, options).unwrap()
+        unimplemented!()
     }
+
+    fn get_chosen_value<OptT>(&mut self, task_key: &str, options: Vec<OptT>) -> OptT 
+    where
+        OptT: fmt::Display + Clone
+    {
+        self.get_chosen_value_formatted(task_key, options, |s| s)
+    }
+
+    fn get_chosen_value_formatted<OptT, Fmt>(&mut self, task_key: &str, options: Vec<OptT>, formatter: Fmt) -> OptT 
+    where
+        OptT: fmt::Display + Clone,
+        Fmt: Fn(String) -> String
+    {
+        let current_query_str = self.value_choice_query_str.take().unwrap();
+        let (prompt, options_map) = self.prompts_ref().generate_value_chooser_options_prompt_formatted(
+            current_query_str, task_key, options, formatter
+        ).unwrap();
+        options_map.get(&self.get_model_answer(prompt)).unwrap().clone()
+    }
+
+    fn get_generated_value(&mut self, task_key: &str) -> String {
+        self.get_generated_value_formatted(task_key, |s| s)
+    }
+
+    fn get_generated_value_formatted<Fmt>(&mut self, task_key: &str, formatter: Fmt) -> String 
+    where
+        Fmt: Fn(String) -> String
+    {
+        let current_query_str = self.value_choice_query_str.take().unwrap();
+        let prompt = self.prompts_ref().generate_value_chooser_generate_prompt_formatted(current_query_str, task_key, formatter).unwrap();
+        self.get_model_answer(prompt)
+    }
+}
+
+macro_rules! gen_format_fn {
+    ({$($key:expr => $value:expr),* $(,)?}) => {{|mut s| {
+        $(
+            s = s.replace(&format!("{{{}}}", $key), &$value.to_string());
+        )*
+        s
+    }}};
 }
 
 impl QueryValueChooser for ChatGPTPromptingModel {
@@ -170,9 +210,33 @@ impl QueryValueChooser for ChatGPTPromptingModel {
        self.value_choice_query_str = Some(format!("{current_query_ref}"));
     }
 
+    fn choose_from_alias(&mut self) -> Ident {
+        Ident::new(self.get_generated_value("from_alias"))
+    }
+
     fn choose_table_name(&mut self, available_table_names: &Vec<ObjectName>) -> ObjectName {
-        let (prompt, options_map) = self.generate_value_chooser_options_prompt("table_name", available_table_names.clone());
-        options_map.get(&self.get_model_answer(prompt)).unwrap().clone()
+        self.get_chosen_value("table_name", available_table_names.clone())
+    }
+
+    fn choose_from_column_renames(&mut self, n_columns: usize) -> Vec<Ident> {
+        let do_rename = self.get_chosen_value("from_column_renames_do_rename", vec!["RENAME COLUMNS", "SKIP THIS STEP"]);
+        let mut output = vec![];
+        if do_rename == "RENAME COLUMNS" {
+            for i in 1..=n_columns {
+                let do_rename_column = self.get_chosen_value_formatted(
+                    "from_column_renames", vec!["RENAME COLUMN", "STOP THE RENAMING"],
+                    gen_format_fn!({"i" => i, "n" => n_columns})
+                );
+                if do_rename_column == "STOP THE RENAMING" {
+                    break
+                }
+                output.push(Ident::new(self.get_generated_value_formatted(
+                    "from_column_renames_generate_rename",
+                    gen_format_fn!({"i" => i, "n" => n_columns})
+                )));
+            }
+        }
+        output
     }
 
     fn choose_column(&mut self, _clause_context: &ClauseContext, _column_types: Vec<SubgraphType>, _check_accessibility: CheckAccessibility, _column_retrieval_options: ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]) {
@@ -232,16 +296,6 @@ impl QueryValueChooser for ChatGPTPromptingModel {
 
     fn choose_select_alias(&mut self) -> Ident {
         let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("select_alias", vec![""]);
-        todo!()
-    }
-
-    fn choose_from_alias(&mut self) -> Ident {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("from_alias", vec![""]);
-        todo!()
-    }
-
-    fn choose_from_column_renames(&mut self, _n_columns: usize) -> Vec<Ident> {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("from_column_renames", vec![""]);
         todo!()
     }
 

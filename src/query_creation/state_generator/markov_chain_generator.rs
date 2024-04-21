@@ -504,12 +504,28 @@ impl CallModifierStates {
         clause_context: &ClauseContext,
     ) {
         let node = &function_context.current_node;
+
         // update with a cached influence result
         if let Some(affected) = stateless_node_relations.get(&node.node_common.name) {
+            // check is any value setter affects a node twice. This is not
+            // permitted and one should use a stateful call modifier instead
+            // TODO: refactor so that this actually can be forbidden
+            // if let Some((node_name, Some(state))) = self.affected_node_states.iter().find(|(node_name, state)| {
+            //     state.is_some() && affected.contains_key(*node_name)
+            // }) {
+            //     panic!(
+            //         "A value setter {} tried to affect node {node_name}, but its state\
+            //         has been already set to: {state}, and cannot be set twice",
+            //         node.node_common.sets_value_name.as_ref().unwrap()
+            //     )
+            // };
+
+            // update node states
             self.affected_node_states.extend(
                 affected.clone().into_iter().map(|(affected_node_name, how)| (affected_node_name, Some(how)))
             );
         }
+
         // update stateful affector's states
         if function_modifier_info.is_a_stateful_affector(node) {
             let affected_modifiers = function_modifier_info.get_affected_nodes(node);

@@ -1,0 +1,52 @@
+[transitions]
+
+
+[transitions.FROM_item]
+task="""
+Select whether you would like this FROM item to \
+have an alias. Note that without alias, you wouldn't \
+be able to generate a subquery, as all subqueries need an alias.
+"""
+[transitions.FROM_item.options]
+1="WITH an alias"
+2="WITHOUT an alias"
+[transitions.FROM_item.option_nodes]
+1="FROM_item_alias"
+2="FROM_item_no_alias"
+
+
+[transitions.FROM_item_alias]
+task="""
+Select whether you would like to select a table name or generate \
+a subquery to place it in the FROM clause.
+"""
+[transitions.FROM_item_alias.options]
+1="Select a table"
+2="Generate a subquery"
+[transitions.FROM_item_alias.option_nodes]
+1="FROM_item_table"
+2="call0_Query"
+
+
+[call_node_context]
+call0_Query="This decision will affect the subquery that you just decided to generate"
+
+
+[value_chooser_tasks]
+from_alias="Generate the alias for the FROM relation:"
+table_name="Choose Table Name:"
+from_column_renames_do_rename="""
+Choose whether you would like to rename columns for the relation you have just \
+generated. In SQL, you can rename columns of a relation in its alias. In syntax, \
+this would look like:
+SELECT FROM T1 AS RN(CN1, CN2)
+to rename T1 to RN and its columns to CN1, CN2.
+"""
+from_column_renames_do_rename_column="""
+You are now renaming column {i} out of {n}. Choose whether you would like to rename \
+this column or terminate the renaming process. Note that if you choose to terminate the \
+renaming process, you wouldn't be able to rename the rest of the columns.
+"""
+from_column_renames_generate_rename="""
+Generate an identifier you wish to rename the column at position {i} out of {n} with.
+"""

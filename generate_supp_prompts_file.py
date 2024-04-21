@@ -1,32 +1,21 @@
-subgraph="""subgraph def_Query {
-        Query [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[single column, single row]", label="Query\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[single column, single row]", shape=octagon, style=filled, color=green]
-        EXIT_Query [label="EXIT Query", shape=rectangle]
+subgraph="""subgraph def_FROM_item {
+        FROM_item [label="FROM item", shape=rectangle, style=filled, color=lightgreen]
+        EXIT_FROM_item [label="EXIT FROM item"]
 
-        call0_FROM [label="FROM", shape=rectangle, color=cornflowerblue, style=filled]
-        Query -> call0_FROM
+        FROM_item_alias [label="with alias\\n[set value]", set_value="available_table_names"]
+        FROM_item -> FROM_item_alias
 
-        call0_WHERE [label="WHERE", shape=rectangle, style=filled, color=darkgoldenrod1]
-        call0_FROM -> call0_WHERE
+        FROM_item_no_alias [label="without alias\\n[set value]", set_value="available_table_names"]
+        FROM_item -> FROM_item_no_alias
 
-        call0_SELECT [label="SELECT\nTYPES: [...types]\nMODS: [?single column]", TYPES="[...]", MODS="[?single column]", shape=rectangle, style=filled, color=bisque]
-        call0_WHERE -> call0_SELECT
-        call0_FROM -> call0_SELECT
-        
-        call0_GROUP_BY [label="GROUP BY", shape=rectangle, style=filled, color=gray]
-        call0_WHERE -> call0_GROUP_BY
-        call0_FROM -> call0_GROUP_BY
-        call0_GROUP_BY -> call0_SELECT
+        FROM_item_table [label="Table\\n[call mod]", call_modifier="from_table_names_available"]
+        FROM_item_no_alias -> FROM_item_table
+        FROM_item_alias -> FROM_item_table
+        FROM_item_table -> EXIT_FROM_item
 
-        call0_HAVING [label="HAVING", shape=rectangle, style=filled, color=mediumvioletred]
-        call0_GROUP_BY -> call0_HAVING
-        call0_HAVING -> call0_SELECT
-
-        call0_ORDER_BY [label="ORDER BY", shape=rectangle, style=filled, color=deepskyblue]
-        call0_SELECT -> call0_ORDER_BY
-
-        call0_LIMIT [label="LIMIT\nMODS: [?single row]", MODS="[?single row]", shape=rectangle, style=filled, color=brown]
-        call0_ORDER_BY -> call0_LIMIT
-        call0_LIMIT -> EXIT_Query
+        call0_Query [label="Query", shape=rectangle, TYPES="[any]", MODS="[]", style=filled, color=green]
+        FROM_item_alias -> call0_Query
+        call0_Query -> EXIT_FROM_item
     }"""
 
 import re
@@ -37,7 +26,7 @@ for line in subgraph.split("\n"):
         if line[8:].startswith("EXIT_"):
             continue
         node_name = line[8:].split("[")[0].strip()
-        num_outgoing = len(list(filter(lambda x: re.compile(f"        {node_name}.*->").match(x) is not None, subgraph.split("\n"))))
+        num_outgoing = len(list(filter(lambda x: re.compile(f"        {node_name}\s*->").match(x) is not None, subgraph.split("\n"))))
         if num_outgoing > 1:
             print(f"[transitions.{node_name}]")
             print('task="""')
@@ -46,11 +35,17 @@ for line in subgraph.split("\n"):
             for i in range(num_outgoing):
                 print(f'{i+1}=""')
             print(f"[transitions.{node_name}.option_nodes]")
-            for i, tr_line in enumerate(filter(lambda x: re.compile(f"        {node_name}.*->").match(x) is not None, subgraph.split("\n"))):
+            for i, tr_line in enumerate(filter(lambda x: re.compile(f"        {node_name}\s*->").match(x) is not None, subgraph.split("\n"))):
                 to_node_name = tr_line.split("->")[1].strip()
                 print(f'{i+1}="{to_node_name}"')
             print('\n')
 
-print("[call_node_context]\n\n")
+print("[call_node_context]")
+for line in subgraph.split("\n"):
+    if re.compile(r"        .*\[.*\]").match(line) is not None:
+        node_name = line[8:].split("[")[0].strip()
+        if re.compile(r"call[0-9]+_.*").match(node_name) is not None:
+            print(f'{node_name}=""')
+print('\n')
 
 print("[value_chooser_tasks]")
