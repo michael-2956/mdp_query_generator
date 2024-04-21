@@ -1804,8 +1804,8 @@ impl PathGenerator {
                                 if expr_i > 0 {
                                     self.try_push_state("set_multiple")?;
                                 }
-                                self.try_push_state("call69_types")?;
-                                let column_type = self.handle_types(column_expr, TypeAssertion::None)?;
+                                self.try_push_state("call2_column_spec")?;
+                                let column_type = self.handle_column_spec(column_expr)?;
                                 let column_name = self.clause_context.retrieve_column_by_column_expr(
                                     &column_expr, ColumnRetrievalOptions::new(false, false, false)
                                 ).unwrap().1;
@@ -1822,8 +1822,8 @@ impl PathGenerator {
                     Expr::Identifier(..) |
                     Expr::CompoundIdentifier(..)
                 ) => {
-                    self.try_push_state("call70_types")?;
-                    let column_type = self.handle_types(column_expr, TypeAssertion::None)?;
+                    self.try_push_state("call1_column_spec")?;
+                    let column_type = self.handle_column_spec(column_expr)?;
                     let column_name = self.clause_context.retrieve_column_by_column_expr(
                         &column_expr, ColumnRetrievalOptions::new(false, false, false)
                     ).unwrap().1;

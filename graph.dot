@@ -238,10 +238,10 @@ digraph G {
         grouping_column_list [label="columns list\n[call mod]", call_modifier="has_accessible_cols_mod"]
         has_accessible_columns -> grouping_column_list
 
-        call70_types[TYPES="[any]", label="TYPES: [any]\nMODS: [no nesting, no literals, no formulas, no typed nulls,\nno subquery, no aggregate, no case]", MODS="[no nesting, no literals, no formulas, no typed nulls, no subquery, no aggregate, no case]", shape=rectangle, style=filled, color=lightblue]
-        grouping_column_list -> call70_types
-        call70_types -> grouping_column_list
-        call70_types -> EXIT_GROUP_BY
+        call1_column_spec [TYPES="[any]", MODS="[]", label="column specifier\nTYPE: [any]", shape=rectangle, style=filled, color=gold]
+        grouping_column_list -> call1_column_spec
+        call1_column_spec -> grouping_column_list
+        call1_column_spec -> EXIT_GROUP_BY
 
         special_grouping [label="special grouping"]
         grouping_column_list -> special_grouping
@@ -264,12 +264,12 @@ digraph G {
         special_grouping -> grouping_set
         grouping_set -> set_list
 
-        call69_types [TYPES="[any]", label="TYPES: [any]\n MODS: [no nesting, no literals, no formulas, no typed nulls,\nno subquery, no aggregate, no case]", MODS="[no nesting, no literals, no formulas, no typed nulls, no subquery, no aggregate, no case]", shape=rectangle, style=filled, color=lightblue]
-        set_list -> call69_types
-        call69_types -> set_list
+        call2_column_spec [TYPES="[any]", MODS="[]", label="column specifier\nTYPE: [any]", shape=rectangle, style=filled, color=gold]
+        set_list -> call2_column_spec
+        call2_column_spec -> set_list
         set_multiple [label="multiple cols in set"]
-        call69_types -> set_multiple
-        set_multiple -> call69_types
+        call2_column_spec -> set_multiple
+        set_multiple -> call2_column_spec
         set_multiple -> EXIT_GROUP_BY
         set_multiple -> grouping_column_list
     }

@@ -28,20 +28,20 @@ or by one of CUBE, GROUPING SET, and ROLLUP
 1="Group by a column name"
 2="One of CUBE, GROUPING SET, and ROLLUP"
 [transitions.grouping_column_list.option_nodes]
-1="call70_types"
+1="call1_column_spec"
 2="special_grouping"
 
 
-[transitions.call70_types]
+[transitions.call1_column_spec]
 task="""
 Select whether you would like to add more \
 items to the GROUP BY clause or you would like \
 to finish generating the GROUP BY clause.
 """
-[transitions.call70_types.options]
+[transitions.call1_column_spec.options]
 1="Add an another item to the GROUP BY clause"
 2="Finish the GROUP BY clause generation"
-[transitions.call70_types.option_nodes]
+[transitions.call1_column_spec.option_nodes]
 1="grouping_column_list"
 2="EXIT_GROUP_BY"
 
@@ -81,7 +81,7 @@ Here, C1 is the selected column name.
 2="Add a column name to the set"
 [transitions.set_list.option_nodes]
 1="set_list_empty_allowed"
-2="call69_types"
+2="call2_column_spec"
 
 
 [transitions.set_list_empty_allowed]
@@ -102,7 +102,7 @@ an another set to it.
 3="EXIT_GROUP_BY"
 
 
-[transitions.call69_types]
+[transitions.call2_column_spec]
 task="""
 Select whether you would like to end the generation of the \
 current set and start generating an another one. For example, \
@@ -112,10 +112,10 @@ This will do:
 SELECT FROM T1 GROUP BY GROUPING SETS((C1, C2), ())
 and you would have to decide what will go into ().
 """
-[transitions.call69_types.options]
+[transitions.call2_column_spec.options]
 1="Finish generating the current set and add the next set"
 2="Add an another item to the current set or finish the set generation"
-[transitions.call69_types.option_nodes]
+[transitions.call2_column_spec.option_nodes]
 1="set_list"
 2="set_multiple"
 
@@ -132,14 +132,14 @@ altogether.
 2="Finish the GROUP BY clause generation"
 3="Finish generating the sets, and add an another item to the GROUP BY clause"
 [transitions.set_multiple.option_nodes]
-1="call69_types"
+1="call2_column_spec"
 2="EXIT_GROUP_BY"
 3="grouping_column_list"
 
 
 [call_node_context]
-call70_types="This will be the type of the column that you will be adding to the GROUP BY clause"
-call69_types="This will be the type of the column that you will be adding to the current set in the GROUP BY clause"
+call1_column_spec="This will be the type of the column that you will be adding to the GROUP BY clause"
+call2_column_spec="This will be the type of the column that you will be adding to the current set in the GROUP BY clause"
 
 
 [value_chooser_tasks]

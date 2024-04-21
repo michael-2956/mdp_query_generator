@@ -1,6 +1,6 @@
 use sqlparser::ast::Expr;
 
-use crate::{query_creation::{query_generator::{ast_builders::types::TypesBuilder, match_next_state, query_info::ColumnRetrievalOptions, QueryGenerator, ast_builders::types_value::TypeAssertion}, state_generator::{state_choosers::StateChooser, substitute_models::SubstituteModel}}, unwrap_variant};
+use crate::{query_creation::{query_generator::{ast_builders::{column_spec::ColumnSpecBuilder, types::TypesBuilder}, match_next_state, query_info::ColumnRetrievalOptions, QueryGenerator}, state_generator::{state_choosers::StateChooser, substitute_models::SubstituteModel}}, unwrap_variant};
 
 pub struct GroupByBuilder { }
 
@@ -33,8 +33,8 @@ impl GroupByBuilder {
             let mut return_result = false;
 
             match_next_state!(generator, {
-                "call70_types" => {
-                    let column_type = TypesBuilder::build(generator, group_by_entry, TypeAssertion::None);
+                "call1_column_spec" => {
+                    let column_type = ColumnSpecBuilder::build(generator, group_by_entry);
                     let column_name = generator.clause_context.retrieve_column_by_column_expr(
                         group_by_entry, ColumnRetrievalOptions::new(false, false, false)
                     ).unwrap().1;
@@ -69,10 +69,10 @@ impl GroupByBuilder {
 
                         loop {
                             match_next_state!(generator, {
-                                "call69_types" => {
+                                "call2_column_spec" => {
                                     current_set.push(TypesBuilder::highlight());
                                     let column_expr = current_set.last_mut().unwrap();
-                                    let column_type = TypesBuilder::build(generator, column_expr, TypeAssertion::None);
+                                    let column_type = ColumnSpecBuilder::build(generator, column_expr);
 
                                     let column_name = generator.clause_context.retrieve_column_by_column_expr(
                                         &column_expr, ColumnRetrievalOptions::new(false, false, false)
@@ -81,7 +81,7 @@ impl GroupByBuilder {
                                 }, // either set_list or set_multiple in the next iteration
                                 "set_list_empty_allowed" => { },  // one of the following breaks in the next iteration
                                 "set_list" => break,
-                                "set_multiple" => { },  // either call69_types or one of the following breaks in the next iteration
+                                "set_multiple" => { },  // either call2_column_spec or one of the following breaks in the next iteration
                                 "grouping_column_list" => {
                                     finish_grouping_sets = true;
                                     break;

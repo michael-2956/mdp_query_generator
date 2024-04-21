@@ -18,7 +18,7 @@ types_value_typed_null -> EXIT_types_value
 
 set_list_empty_allowed -> set_list
 
-call69_types -> set_list
+call2_column_spec -> set_list
 """
 
 graph = open("graph.dot", 'r').read()
