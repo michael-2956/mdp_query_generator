@@ -1,0 +1,70 @@
+digraph G {
+    // rankdir="LR";
+    ranksep=0.3;
+    graph [margin=0]
+
+    subgraph def_SELECT_old {
+        SELECT_old [label="SELECT", shape=rectangle, style=filled, color=gold]
+        EXIT_SELECT_old [label="EXIT SELECT", shape=rectangle]
+
+        SELECT_DISTINCT_old [label="DISTINCT"]
+        SELECT_old -> SELECT_DISTINCT_old
+
+        call0_expression_old [label="Expression", shape=rectangle, style=filled, color=cornflowerblue]
+        SELECT_old -> call0_expression_old
+        call0_expression_old -> call0_expression_old
+        SELECT_DISTINCT_old -> call0_expression_old
+        call0_expression_old -> EXIT_SELECT_old
+
+        space1 [label="", shape=plaintext]
+        space2 [label="", shape=plaintext]
+        space3 [label="", shape=plaintext]
+    }
+
+    subgraph def_SELECT {
+        SELECT [label="SELECT", shape=rectangle, style=filled, color=gold]
+        EXIT_SELECT [label="EXIT SELECT", shape=rectangle]
+
+        SELECT_DISTINCT [label="DISTINCT"]
+        SELECT -> SELECT_DISTINCT
+
+        call0_SELECT_item [label="SELECT item", shape=rectangle, style=filled, color=cornflowerblue]
+        SELECT_DISTINCT -> call0_SELECT_item
+        SELECT -> call0_SELECT_item
+
+        call0_SELECT_item -> EXIT_SELECT
+    }
+
+    subgraph def_SELECT_item {
+        SELECT_item [label="SELECT item", shape=rectangle, style=filled, color=gold]
+        EXIT_SELECT_item [label="EXIT SELECT", shape=rectangle]
+
+        call0_expression [label="Expression", shape=rectangle, style=filled, color=cornflowerblue]
+        SELECT_item -> call0_expression
+        call0_expression -> EXIT_SELECT_item
+
+        call1_SELECT_item [label="SELECT item", shape=rectangle, style=filled, color=cornflowerblue]
+        call0_expression -> call1_SELECT_item
+        call1_SELECT_item -> EXIT_SELECT_item
+    }
+
+    // {
+    //     rank = same;
+    //     Query;cFROM;cWHERE;cSELECT;qEND
+    //     rankdir = LR;
+    // }
+
+    // {
+    //     rank = same;
+    //     T1;C1
+    //     T1 -> C1 [ style=invis ]
+    //     rankdir = LR;
+    // }
+
+    // {
+    //     rank = same;
+    //     T2;C2
+    //     T2 -> C2 [ style=invis ]
+    //     rankdir = LR;
+    // }
+}

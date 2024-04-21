@@ -1,0 +1,80 @@
+digraph G {
+    // rankdir="LR";
+    ranksep=0.3;
+    graph [margin=0]
+
+    subgraph def_SELECT {
+        SELECT [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[single column]", label="SELECT\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[single column]", shape=rectangle, style=filled, color=bisque]
+        EXIT_SELECT [label="EXIT SELECT", shape=rectangle]
+
+        SELECT_DISTINCT [label="DISTINCT"]
+        SELECT -> SELECT_DISTINCT
+
+        call0_SELECT_item [label="SELECT item\n[...types]\n[...mods]", TYPES="[...]", MODS="[...]", shape=rectangle, style=filled, color=violet]
+        SELECT_DISTINCT -> call0_SELECT_item
+        SELECT -> call0_SELECT_item
+
+        call0_SELECT_item -> EXIT_SELECT
+    }
+
+    subgraph def_SELECT_item {
+        SELECT_item [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[single column]", label="SELECT item\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[single column]", shape=rectangle, style=filled, color=violet]
+        EXIT_SELECT_item [label="EXIT SELECT", shape=rectangle]
+        
+        SELECT_list [label="SELECT list\nset value: 'grouping_enabled'", set_value="grouping_enabled"]
+        
+        SELECT_item -> SELECT_list
+        call1_SELECT_item [label="SELECT item\n[...types]\n[...mods]\nmod.: 'single column' -> OFF", TYPES="[...]", MODS="[...]", modifier="single column", modifier_mode="off", shape=rectangle, style=filled, color=violet]
+
+        SELECT_unnamed_expr [label="Unnamed"]
+        SELECT_expr_with_alias [label="With alias"]
+        SELECT_list -> SELECT_unnamed_expr
+        SELECT_list -> SELECT_expr_with_alias
+
+        select_expr [label="Expression"]
+        SELECT_unnamed_expr -> select_expr
+        SELECT_expr_with_alias -> select_expr
+        select_expr_done [label="Expression done"]
+        select_expr_done -> call1_SELECT_item
+        select_expr_done -> EXIT_SELECT_item
+        call73_types [label="TYPES: [...types]\nMODS: [group by columns]\ncall mod.: 'grouping mode switch'", TYPES="[...]", MODS="[group by columns]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
+        select_expr -> call73_types
+        call73_types -> select_expr_done
+        call54_types [label="TYPES: [...types]\nMODS: [no aggregate]\ncall mod.: 'grouping mode switch'", TYPES="[...]", MODS="[no aggregate]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
+        select_expr -> call54_types
+        call54_types -> select_expr_done
+
+        SELECT_tables_eligible_for_wildcard [label="Set Relations for wildcards\nset_value='wildcard_relations'", set_value="wildcard_relations"]
+        SELECT_list -> SELECT_tables_eligible_for_wildcard
+
+        SELECT_wildcard [label="wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
+        SELECT_tables_eligible_for_wildcard -> SELECT_wildcard
+        SELECT_wildcard -> call1_SELECT_item
+        SELECT_wildcard -> EXIT_SELECT_item
+
+        SELECT_qualified_wildcard [label="qualified wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
+        SELECT_tables_eligible_for_wildcard -> SELECT_qualified_wildcard
+        SELECT_qualified_wildcard -> call1_SELECT_item
+        SELECT_qualified_wildcard -> EXIT_SELECT_item
+    }
+
+    // {
+    //     rank = same;
+    //     Query;cFROM;cWHERE;cSELECT;qEND
+    //     rankdir = LR;
+    // }
+
+    // {
+    //     rank = same;
+    //     T1;C1
+    //     T1 -> C1 [ style=invis ]
+    //     rankdir = LR;
+    // }
+
+    // {
+    //     rank = same;
+    //     T2;C2
+    //     T2 -> C2 [ style=invis ]
+    //     rankdir = LR;
+    // }
+}
