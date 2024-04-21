@@ -6,6 +6,10 @@ pub struct GroupByBuilder { }
 
 impl GroupByBuilder {
     pub fn highlight() -> Vec<Expr> {
+        vec![TypesBuilder::highlight()]
+    }
+
+    pub fn nothing() -> Vec<Expr> {
         vec![]
     }
 
@@ -20,12 +24,15 @@ impl GroupByBuilder {
                 generator.clause_context.top_group_by_mut().set_single_group_grouping();
                 generator.clause_context.top_group_by_mut().set_single_row_grouping();
                 generator.expect_state("EXIT_GROUP_BY");
+                *group_by = vec![];
                 return
             },
             "has_accessible_columns" => {
                 generator.expect_state("grouping_column_list");
             },
         });
+
+        *group_by = vec![];
 
         loop {
             group_by.push(TypesBuilder::highlight());

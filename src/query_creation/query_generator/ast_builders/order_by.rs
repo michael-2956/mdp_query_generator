@@ -9,7 +9,11 @@ pub struct OrderByBuilder { }
 
 impl OrderByBuilder {
     pub fn highlight() -> Vec<OrderByExpr> {
-        vec![]  // the decision to include the clause is in the builder itself
+        vec![OrderByExpr {
+            expr: TypesBuilder::highlight(),
+            asc: None,
+            nulls_first: None,
+        }]  // the decision to include the clause is in the builder itself
     }
 
     pub fn build<SubMod: SubstituteModel, StC: StateChooser>(
@@ -17,9 +21,13 @@ impl OrderByBuilder {
     ) {
         generator.expect_state("ORDER_BY");
         match_next_state!(generator, {
-            "EXIT_ORDER_BY" => return,
+            "EXIT_ORDER_BY" => {
+                *order_by = vec![];
+                return
+            },
             "order_by_list" => { },
         });
+        *order_by = vec![];
 
         loop {
             order_by.push(OrderByExpr {

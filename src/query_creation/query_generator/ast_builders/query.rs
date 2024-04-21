@@ -45,6 +45,10 @@ impl QueryBuilder {
     /// highlights the output type. Query does not\
     /// have the usual "highlight" function. Instead,\
     /// use "nothing" before generation.
+    /// 
+    /// This functiton s only needed to highlight that \
+    /// some decision will be affecting the single \
+    /// output column of the query.
     pub fn highlight_type() -> Query {
         query_with_select(false)
     }
@@ -62,21 +66,34 @@ impl QueryBuilder {
         select_body.from = FromBuilder::highlight();
         FromBuilder::build(generator, &mut select_body.from);
 
+        // highlight both clauses since the next decision will be affecting them
+        select_body.selection = Some(WhereBuilder::highlight());
+        select_body.group_by = GroupByBuilder::highlight();
         match_next_state!(generator, {
             "call0_WHERE" => {
-                select_body.selection = Some(WhereBuilder::highlight());
+                // only WHERE should be highlighted now
+                select_body.group_by = GroupByBuilder::nothing();
                 let where_val3 = unwrap_variant!(&mut select_body.selection, Some);
                 WhereBuilder::build(generator, where_val3);
 
+                // the next decision will be affecting GROUP BY
+                select_body.group_by = GroupByBuilder::highlight();
                 match_next_state!(generator, {
-                    "call0_SELECT" => {},
+                    "call0_SELECT" => {
+                        // No GROUP BY for us
+                        select_body.group_by = GroupByBuilder::nothing();
+                    },
                     "call0_GROUP_BY" => {
-                        select_body.group_by = GroupByBuilder::highlight();
                         GroupByBuilder::build(generator, &mut select_body.group_by);
+
+                        // the next decision will be affecting HAVING
+                        select_body.having = Some(HavingBuilder::highlight());
                         match_next_state!(generator, {
-                            "call0_SELECT" => {},
+                            "call0_SELECT" => {
+                                // No HAVING for us
+                                select_body.having = None;
+                            },
                             "call0_HAVING" => {
-                                select_body.having = Some(HavingBuilder::highlight());
                                 HavingBuilder::build(generator, select_body.having.as_mut().unwrap());
                                 generator.expect_state("call0_SELECT");
                             }, 
@@ -84,14 +101,23 @@ impl QueryBuilder {
                     },
                 });
             },
-            "call0_SELECT" => {},
+            "call0_SELECT" => {
+                select_body.selection = None;
+                select_body.group_by = GroupByBuilder::nothing();
+            },
             "call0_GROUP_BY" => {
-                select_body.group_by = GroupByBuilder::highlight();
+                // only GROUP BY should be highlighted now
+                select_body.selection = None;
                 GroupByBuilder::build(generator, &mut select_body.group_by);
+
+                // the next decision will be affecting HAVING
+                select_body.having = Some(HavingBuilder::highlight());
                 match_next_state!(generator, {
-                    "call0_SELECT" => {},
+                    "call0_SELECT" => {
+                        // No HAVING for us
+                        select_body.having = None;
+                    },
                     "call0_HAVING" => {
-                        select_body.having = Some(HavingBuilder::highlight());
                         HavingBuilder::build(generator, select_body.having.as_mut().unwrap());
                         generator.expect_state("call0_SELECT");
                     },
