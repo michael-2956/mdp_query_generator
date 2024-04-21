@@ -971,11 +971,17 @@ pub struct IdentName {
     ident: Ident
 }
 
-impl ToString for IdentName {
-    fn to_string(&self) -> String {
-        self.ident.value.to_uppercase()
+impl fmt::Display for IdentName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.ident.value.to_uppercase())
     }
 }
+
+// impl ToString for IdentName {
+//     fn to_string(&self) -> String {
+//         self.ident.value.to_uppercase()
+//     }
+// }
 
 impl PartialEq for IdentName {
     fn eq(&self, other: &Self) -> bool {

@@ -243,6 +243,18 @@ impl QueryValueChooser for ChatGPTPromptingModel {
         Ident::new(self.get_generated_value("select_alias"))
     }
 
+    fn choose_qualified_wildcard_relation<'a>(&mut self, clause_context: &'a ClauseContext, wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation) {
+        let available_relations = wildcard_relations.relation_levels_selectable_by_qualified_wildcard
+            .iter().filter(|x| !x.is_empty())
+            .flat_map(|v| v.iter().cloned()).collect::<Vec<_>>();
+
+        let rel_name = self.get_chosen_value("qualified_wildcard_relation", available_relations);
+
+        let relation = clause_context.get_relation_by_name(&rel_name);
+
+        (rel_name.into(), relation)
+    }
+
     fn choose_column(&mut self, _clause_context: &ClauseContext, _column_types: Vec<SubgraphType>, _check_accessibility: CheckAccessibility, _column_retrieval_options: ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]) {
         let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("column", vec![""]);
         todo!()
@@ -290,11 +302,6 @@ impl QueryValueChooser for ChatGPTPromptingModel {
 
     fn choose_interval(&mut self, _with_field: bool) -> (String, Option<DateTimeField>) {
         let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("interval", vec![""]);
-        todo!()
-    }
-
-    fn choose_qualified_wildcard_relation<'a>(&mut self, _clause_context: &'a ClauseContext, _wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation) {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("qualified_wildcard_relation", vec![""]);
         todo!()
     }
 
