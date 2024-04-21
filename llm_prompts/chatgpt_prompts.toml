@@ -64,21 +64,6 @@ additional_weights_folder="llm_prompts/chatgpt_subgraph_prompts/"
 # [value_chooser_tasks]
 # vc_name=""
 
-[transitions.GROUP_BY]
-task="""
-Choose whether the groupping will be implicit or explicit. Choose option 1 \
-if you want to indicate grouping with aggregation, but omit the actual GROUP BY \
-clause. Choose option 2 if you want the GROUP BY clause to be explicit.
-"""
-[transitions.GROUP_BY.options]
-1="Add implicit groupping to the query."
-2="Add an explicit GROUP BY clause."
-[transitions.GROUP_BY.option_nodes]
-1="group_by_single_group"
-2="has_accessible_columns"
-
-
-
 
 [call_node_context]
 call2_types_type="""

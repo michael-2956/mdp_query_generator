@@ -1,46 +1,50 @@
-subgraph="""subgraph def_SELECT {
-        SELECT [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[single column]", label="SELECT\\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\\nmods=[single column]", shape=rectangle, style=filled, color=bisque]
-        EXIT_SELECT [label="EXIT SELECT", shape=rectangle]
+subgraph="""subgraph def_GROUP_BY {
+        GROUP_BY [label="GROUP BY", shape=rectangle, style=filled, color=gray]
+        EXIT_GROUP_BY [label="EXIT GROUP BY"]
 
-        SELECT_DISTINCT [label="DISTINCT"]
-        SELECT -> SELECT_DISTINCT
+        group_by_single_group [label="single group\\n(GROUP BY ())"]
+        GROUP_BY -> group_by_single_group
+        group_by_single_group -> EXIT_GROUP_BY
 
-        SELECT_list [label="SELECT list\\nset value: 'grouping_enabled'", set_value="grouping_enabled"]
-        SELECT_DISTINCT -> SELECT_list
-        SELECT -> SELECT_list
-        SELECT_list_multiple_values [label="Multiple values\\nmod.: 'single column' -> OFF", modifier="single column", modifier_mode="off"]
-        SELECT_list_multiple_values -> SELECT_list
+        has_accessible_columns [label="Has selectable columns\\n[set value]", set_value="has_accessible_cols"]
+        GROUP_BY -> has_accessible_columns
+        grouping_column_list [label="columns list\\n[call mod]", call_modifier="has_accessible_cols_mod"]
+        has_accessible_columns -> grouping_column_list
 
-        SELECT_unnamed_expr [label="Unnamed"]
-        SELECT_expr_with_alias [label="With alias"]
-        SELECT_list -> SELECT_unnamed_expr
-        SELECT_list -> SELECT_expr_with_alias
+        call70_types[TYPES="[any]", label="TYPES: [any]\\nMODS: [no nesting, no literals, no formulas, no typed nulls,\\nno subquery, no aggregate, no case]", MODS="[no nesting, no literals, no formulas, no typed nulls, no subquery, no aggregate, no case]", shape=rectangle, style=filled, color=lightblue]
+        grouping_column_list -> call70_types
+        call70_types -> grouping_column_list
+        call70_types -> EXIT_GROUP_BY
 
-        select_expr [label="Expression"]
-        SELECT_unnamed_expr -> select_expr
-        SELECT_expr_with_alias -> select_expr
-        select_expr_done [label="Expression done"]
-        select_expr_done -> SELECT_list_multiple_values
-        select_expr_done -> EXIT_SELECT
-        call73_types [label="TYPES: [...types]\\nMODS: [group by columns]\\ncall mod.: 'grouping mode switch'", TYPES="[...]", MODS="[group by columns]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
-        select_expr -> call73_types
-        call73_types -> select_expr_done
-        call54_types [label="TYPES: [...types]\\nMODS: [no aggregate]\\ncall mod.: 'grouping mode switch'", TYPES="[...]", MODS="[no aggregate]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
-        select_expr -> call54_types
-        call54_types -> select_expr_done
+        special_grouping [label="special grouping"]
+        grouping_column_list -> special_grouping
+        set_list [label="set list"]
+        set_list_empty_allowed [label="Empty set\\n[call mod]", call_modifier="empty set allowed"]
+        set_list -> set_list_empty_allowed
+        set_list_empty_allowed -> set_list
+        set_list_empty_allowed -> grouping_column_list
+        set_list_empty_allowed -> EXIT_GROUP_BY
 
-        SELECT_tables_eligible_for_wildcard [label="Set Relations for wildcards\\nset_value='wildcard_relations'", set_value="wildcard_relations"]
-        SELECT_list -> SELECT_tables_eligible_for_wildcard
+        grouping_rollup [label="rollup\\n[set value]", set_value="is_grouping_sets"]
+        special_grouping -> grouping_rollup
+        grouping_rollup -> set_list
 
-        SELECT_wildcard [label="wildcard\\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
-        SELECT_tables_eligible_for_wildcard -> SELECT_wildcard
-        SELECT_wildcard -> SELECT_list_multiple_values
-        SELECT_wildcard -> EXIT_SELECT
+        grouping_cube [label="cube\\n[set value]", set_value="is_grouping_sets"]
+        special_grouping -> grouping_cube
+        grouping_cube -> set_list
 
-        SELECT_qualified_wildcard [label="qualified wildcard\\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
-        SELECT_tables_eligible_for_wildcard -> SELECT_qualified_wildcard
-        SELECT_qualified_wildcard -> SELECT_list_multiple_values
-        SELECT_qualified_wildcard -> EXIT_SELECT
+        grouping_set [label="grouping set\\n[set value]\\n(allows empty set)", set_value="is_grouping_sets"]
+        special_grouping -> grouping_set
+        grouping_set -> set_list
+
+        call69_types [TYPES="[any]", label="TYPES: [any]\\n MODS: [no nesting, no literals, no formulas, no typed nulls,\\nno subquery, no aggregate, no case]", MODS="[no nesting, no literals, no formulas, no typed nulls, no subquery, no aggregate, no case]", shape=rectangle, style=filled, color=lightblue]
+        set_list -> call69_types
+        call69_types -> set_list
+        set_multiple [label="multiple cols in set"]
+        call69_types -> set_multiple
+        set_multiple -> call69_types
+        set_multiple -> EXIT_GROUP_BY
+        set_multiple -> grouping_column_list
     }"""
 
 import re

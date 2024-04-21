@@ -1,0 +1,145 @@
+[transitions]
+
+
+[transitions.GROUP_BY]
+task="""
+Choose whether the groupping will be implicit or explicit. Choose option 1 \
+if you want to indicate grouping with aggregation, but omit the actual GROUP BY \
+clause. Choose option 2 if you want the GROUP BY clause to be explicit.
+Example of implicit grouping:
+SELECT SUM(C1) FROM T1;
+Example of explicit grouping:
+SELECT C2, SUM(C1) FROM T1 GROUP BY C2;
+"""
+[transitions.GROUP_BY.options]
+1="Add implicit groupping to the query."
+2="Add an explicit GROUP BY clause."
+[transitions.GROUP_BY.option_nodes]
+1="group_by_single_group"
+2="has_accessible_columns"
+
+
+[transitions.grouping_column_list]
+task="""
+Select whether you would like to group by a column name \
+or by one of CUBE, GROUPING SET, and ROLLUP
+"""
+[transitions.grouping_column_list.options]
+1="Group by a column name"
+2="One of CUBE, GROUPING SET, and ROLLUP"
+[transitions.grouping_column_list.option_nodes]
+1="call70_types"
+2="special_grouping"
+
+
+[transitions.call70_types]
+task="""
+Select whether you would like to add more \
+items to the GROUP BY clause or you would like \
+to finish generating the GROUP BY clause.
+"""
+[transitions.call70_types.options]
+1="Add an another item to the GROUP BY clause"
+2="Finish the GROUP BY clause generation"
+[transitions.call70_types.option_nodes]
+1="grouping_column_list"
+2="EXIT_GROUP_BY"
+
+
+[transitions.special_grouping]
+task="""
+Select which kind of grouping you would like to use.
+Note that after this, you will have to generate the \
+sets of columns that will go into the selected grouping \
+one by one
+"""
+[transitions.special_grouping.options]
+1="ROLLUP"
+2="CUBE"
+3="GROUPING SET"
+[transitions.special_grouping.option_nodes]
+1="grouping_rollup"
+2="grouping_cube"
+3="grouping_set"
+
+
+[transitions.set_list]
+task="""
+Select whether you would like to add an empty \
+set to your GROUPING SET.
+Example:
+SELECT FROM T1 GROUP BY GROUPING SETS((C1), ())
+Here, () is the empty set and corresponds to grouping \
+by a single group.
+If you choose to add a column name to the set, it would \
+instead look something like this:
+SELECT FROM T1 GROUP BY GROUPING SETS((C1))
+Here, C1 is the selected column name.
+"""
+[transitions.set_list.options]
+1="Add the empty set: ()"
+2="Add a column name to the set"
+[transitions.set_list.option_nodes]
+1="set_list_empty_allowed"
+2="call69_types"
+
+
+[transitions.set_list_empty_allowed]
+task="""
+Select whether you would like to continue generating the \
+GROUPING SETS, finish generating it and add an another item \
+to the GROUP BY clause, or finish the GROUP BY clause generation.
+By continuing to generate the GROUPING SETS, you will add \
+an another set to it.
+"""
+[transitions.set_list_empty_allowed.options]
+1="Add an another set to the GROUPING SETS"
+2="Finish generating GROUPING SETS, and add an another item to the GROUP BY clause"
+3="Finish the GROUP BY clause generation"
+[transitions.set_list_empty_allowed.option_nodes]
+1="set_list"
+2="grouping_column_list"
+3="EXIT_GROUP_BY"
+
+
+[transitions.call69_types]
+task="""
+Select whether you would like to end the generation of the \
+current set and start generating an another one. For example, \
+if you have:
+SELECT FROM T1 GROUP BY GROUPING SETS((C1, C2))
+This will do:
+SELECT FROM T1 GROUP BY GROUPING SETS((C1, C2), ())
+and you would have to decide what will go into ().
+"""
+[transitions.call69_types.options]
+1="Finish generating the current set and add the next set"
+2="Add an another item to the current set or finish the set generation"
+[transitions.call69_types.option_nodes]
+1="set_list"
+2="set_multiple"
+
+
+[transitions.set_multiple]
+task="""
+Select whether you would like to add an another item to the \
+current set, finish the set generation and add an another item \
+to the GROUP BY clause, or finish the GROUP BY clause generation 
+altogether.
+"""
+[transitions.set_multiple.options]
+1="Add an another item to the current set"
+2="Finish the GROUP BY clause generation"
+3="Finish generating the sets, and add an another item to the GROUP BY clause"
+[transitions.set_multiple.option_nodes]
+1="call69_types"
+2="EXIT_GROUP_BY"
+3="grouping_column_list"
+
+
+[call_node_context]
+call70_types="This will be the type of the column that you will be adding to the GROUP BY clause"
+call69_types="This will be the type of the column that you will be adding to the current set in the GROUP BY clause"
+
+
+[value_chooser_tasks]
