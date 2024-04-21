@@ -1,0 +1,207 @@
+[transitions]
+
+
+[transitions.VAL_3]
+task="""
+Select the kind of expression you want your boolean expression to be.
+In this list of options, the [expr] ([subquery]) marks the expression (query) you \
+would have to generate next if you select that option. And the option itself \
+denotes what will be put in the place of the highlight token.
+"""
+[transitions.VAL_3.options]
+1="[expr] IS NULL"
+2="[expr] IS DISTINCT FROM [expr]"
+3="EXISTS [subquery]"
+4="[expr] IN ([expr], ...)"
+5="[expr] IN [subquery]"
+6="[expr] BETWEEN [expr] AND [expr]"
+7="[expr] op [expr]. Here, [op] is one of the following comparison operations: >=, >, =, <>, <, <="
+8="[expr] op ANY/ALL([subquery]). Here, [op] is one of the following comparison operations: >=, >, =, <>, <, <=. ANY/ALL is either ANY or ALL"
+9="[expr] LIKE [expr]. Here, both expressions are strings (corresponding sql type is text). Note that the second expression should be valid for LIKE."
+10="[expr] boolop [expr]. Here, boolop is either OR or AND."
+11="NOT [expr]"
+[transitions.VAL_3.option_nodes]
+1="IsNull"
+2="IsDistinctFrom"
+3="Exists"
+4="InList"
+5="InSubquery"
+6="Between"
+7="BinaryComp"
+8="AnyAll"
+9="BinaryStringLike"
+10="BinaryBooleanOpV3"
+11="UnaryNot_VAL_3"
+
+
+[transitions.IsNull]
+task="""
+Select whether you would like to negate the IS NULL expression.
+"""
+[transitions.IsNull.options]
+1="Don't negate: [expr] IS NULL"
+2="Do negate: [expr] IS NOT NULL"
+[transitions.IsNull.option_nodes]
+1="call55_types"
+2="IsNull_not"
+
+
+[transitions.IsDistinctFrom]
+task="""
+Select whether you would like to negate the IS DISTINCT FROM expression.
+"""
+[transitions.IsDistinctFrom.options]
+1="Do negate: [expr] IS NOT DISTINCT FROM [expr]"
+2="Don't negate: [expr] IS DISTINCT FROM [expr]"
+[transitions.IsDistinctFrom.option_nodes]
+1="IsDistinctNOT"
+2="call0_types_type"
+
+
+[transitions.Exists]
+task="""
+Select whether you would like to negate the EXISTS expression.
+"""
+[transitions.Exists.options]
+1="Don't negate: EXISTS [subquery]"
+2="Do negate: NOT EXISTS [subquery]"
+[transitions.Exists.option_nodes]
+1="call2_Query"
+2="Exists_not"
+
+
+[transitions.InList]
+task="""
+Select whether you would like to negate the IN expression.
+"""
+[transitions.InList.options]
+1="Do negate: [expr] NOT IN ([expr], ...)"
+2="Don't negate: [expr] IN ([expr], ...)"
+[transitions.InList.option_nodes]
+1="InListNot"
+2="call3_types_type"
+
+
+[transitions.InSubquery]
+task="""
+Select whether you would like to negate the IN expression.
+"""
+[transitions.InSubquery.options]
+1="Do negate: [expr] NOT IN ([subquery])"
+2="Don't negate: [expr] IN ([subquery])"
+[transitions.InSubquery.option_nodes]
+1="InSubqueryNot"
+2="call4_types_type"
+
+
+[transitions.BinaryComp]
+task="""
+Select the binary comparison operation
+"""
+[transitions.BinaryComp.options]
+1="="
+2="<>"
+3="<"
+4="<="
+5=">"
+6=">="
+[transitions.BinaryComp.option_nodes]
+1="BinaryCompEqual"
+2="BinaryCompUnEqual"
+3="BinaryCompLess"
+4="BinaryCompLessEqual"
+5="BinaryCompGreater"
+6="BinaryCompGreaterEqual"
+
+
+[transitions.AnyAllSelectOp]
+task="""
+Select the binary comparison operation
+"""
+[transitions.AnyAllSelectOp.options]
+1="="
+2="<>"
+3="<"
+4="<="
+5=">"
+6=">="
+[transitions.AnyAllSelectOp.option_nodes]
+1="AnyAllEqual"
+2="AnyAllUnEqual"
+3="AnyAllLess"
+4="AnyAllLessEqual"
+5="AnyAllGreater"
+6="AnyAllGreaterEqual"
+
+
+[transitions.AnyAllAnyAll]
+task="""
+Select whether you would like to put ANY or ALL on \
+the right hand side of the expression.
+"""
+[transitions.AnyAllAnyAll.options]
+1="ANY"
+2="ALL"
+[transitions.AnyAllAnyAll.option_nodes]
+1="AnyAllAnyAllAny"
+2="AnyAllAnyAllAll"
+
+
+[transitions.BinaryStringLike]
+task="""
+Select whether you would like to negate the LIKE expression.
+"""
+[transitions.BinaryStringLike.options]
+1="Do negate: [expr] NOT LIKE [expr]"
+2="Don't negate: [expr] LIKE [expr]"
+[transitions.BinaryStringLike.option_nodes]
+1="BinaryStringLikeNot"
+2="call25_types"
+
+
+[transitions.BinaryBooleanOpV3]
+task="""
+Select the boolean operation:
+"""
+[transitions.BinaryBooleanOpV3.options]
+1="AND"
+2="OR"
+[transitions.BinaryBooleanOpV3.option_nodes]
+1="BinaryBooleanOpV3AND"
+2="BinaryBooleanOpV3OR"
+
+
+[call_node_context]
+# call55_types=""
+call0_types_type=""
+# call56_types=""
+# call21_types=""
+# call2_Query=""
+call3_types_type=""
+# call57_types=""
+# call1_list_expr=""
+call4_types_type=""
+# call58_types=""
+# call3_Query=""
+call5_types_type=""
+# call59_types=""
+# call22_types=""
+# call23_types=""
+call1_types_type=""
+# call60_types=""
+# call24_types=""
+call2_types_type="""
+Before you start building the left and right hand sides of the \
+comparison operation, select the biggest type that would fit both all \
+values on the right hand side and the left hand side at the same time.
+"""
+# call61_types=""
+# call4_Query=""
+# call25_types=""
+# call26_types=""
+# call27_types=""
+# call28_types=""
+# call30_types=""
+
+
+[value_chooser_tasks]

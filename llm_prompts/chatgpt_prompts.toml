@@ -63,11 +63,3 @@ additional_prompts_folder="llm_prompts/chatgpt_subgraph_prompts/"
 
 # [value_chooser_tasks]
 # vc_name=""
-
-
-[call_node_context]
-call2_types_type="""
-Before you start building the left and right hand sides of the \
-comparison operation, select the biggest type that would fit both all \
-values on the right hand side and the left hand side at the same time.
-"""
