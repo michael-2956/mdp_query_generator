@@ -138,8 +138,8 @@ altogether.
 
 
 [call_node_context]
-call1_column_spec="This will be the type of the column that you will be adding to the GROUP BY clause"
-call2_column_spec="This will be the type of the column that you will be adding to the current set in the GROUP BY clause"
+call1_column_spec="This will be the column that you will be adding to the GROUP BY clause"
+call2_column_spec="This will be the column that you will be adding to the current set in the GROUP BY clause"
 
 
 [value_chooser_tasks]
