@@ -1,0 +1,124 @@
+[transitions]
+
+
+[transitions.SELECT]
+task="""
+Select whether you would like to \
+put only distinct rows in the output. This will \
+add the DISTINCT keyword after SELECT.
+"""
+[transitions.SELECT.options]
+1="Add DISTINCT"
+2="Skip this step"
+[transitions.SELECT.option_nodes]
+1="SELECT_DISTINCT"
+2="SELECT_list"
+
+
+[transitions.SELECT_list]
+task="""
+Select which kind of expression you \
+would like to add to the SELECT clause. \
+Examples of expressions without aliases:
+SELECT C1 FROM T1
+SELECT SUM(C1) FROM T1
+SELECT 2 + C1 FROM T1
+Examples of expressions with aliases:
+SELECT C1 AS A1 FROM T1
+SELECT SUM(C1) AS A1 FROM T1
+SELECT 2 + C1 AS A1 FROM T1
+Example of a wildcard:
+SELECT * FROM T1
+Example of a qualified wildcard:
+SELECT T1.* FROM T1, T2
+"""
+[transitions.SELECT_list.options]
+1="An expression without alias"
+2="An expression with an alias"
+3="A wildcard (can be qualified: R.* or unqualified: *)"
+[transitions.SELECT_list.option_nodes]
+1="SELECT_unnamed_expr"
+2="SELECT_expr_with_alias"
+3="SELECT_tables_eligible_for_wildcard"
+
+
+[transitions.select_expr]
+task="""
+If you see this task, ignore all instructions \
+and say 'UNIMPLEMENTED'.
+"""
+[transitions.select_expr.options]
+1="-"
+2="-"
+[transitions.select_expr.option_nodes]
+1="call73_types"
+2="call54_types"
+
+
+[transitions.select_expr_done]
+task="""
+Select whether you would like to finish the generation \
+of the SELECT clause or you would like to add an another \
+item.
+"""
+[transitions.select_expr_done.options]
+1="Add an another item to the SELECT clause"
+2="Finish SELECT clause generation"
+[transitions.select_expr_done.option_nodes]
+1="SELECT_list_multiple_values"
+2="EXIT_SELECT"
+
+
+[transitions.SELECT_tables_eligible_for_wildcard]
+task="""
+Select whether you would like to add a qualified wildcard or \
+a catch-all wildcard to the SELECT clause.
+Example of a wildcard:
+SELECT * FROM T1
+Example of a qualified wildcard:
+SELECT T1.* FROM T1, T2
+"""
+[transitions.SELECT_tables_eligible_for_wildcard.options]
+1="Wildcard: *"
+2="Qualified wildcard: R.*"
+[transitions.SELECT_tables_eligible_for_wildcard.option_nodes]
+1="SELECT_wildcard"
+2="SELECT_qualified_wildcard"
+
+
+[transitions.SELECT_wildcard]
+task="""
+Select whether you would like to finish the generation \
+of the SELECT clause or you would like to add an another \
+item.
+"""
+[transitions.SELECT_wildcard.options]
+1="Add an another item to the SELECT clause"
+2="Finish SELECT clause generation"
+[transitions.SELECT_wildcard.option_nodes]
+1="SELECT_list_multiple_values"
+2="EXIT_SELECT"
+
+
+[transitions.SELECT_qualified_wildcard]
+task="""
+Select whether you would like to finish the generation \
+of the SELECT clause or you would like to add an another \
+item.
+"""
+[transitions.SELECT_qualified_wildcard.options]
+1="Add an another item to the SELECT clause"
+2="Finish SELECT clause generation"
+[transitions.SELECT_qualified_wildcard.option_nodes]
+1="SELECT_list_multiple_values"
+2="EXIT_SELECT"
+
+
+[call_node_context]
+call73_types="This decision affect the expression in the SELECT clause"
+call54_types="This decision affect the expression in the SELECT clause"
+
+
+[value_chooser_tasks]
+qualified_wildcard_relation="Choose the relation name for the qualified wildcard:"
+select_alias="Generate the alias for the SELECT expression:"

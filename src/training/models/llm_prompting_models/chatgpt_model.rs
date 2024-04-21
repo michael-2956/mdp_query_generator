@@ -239,6 +239,10 @@ impl QueryValueChooser for ChatGPTPromptingModel {
         output
     }
 
+    fn choose_select_alias(&mut self) -> Ident {
+        Ident::new(self.get_generated_value("select_alias"))
+    }
+
     fn choose_column(&mut self, _clause_context: &ClauseContext, _column_types: Vec<SubgraphType>, _check_accessibility: CheckAccessibility, _column_retrieval_options: ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]) {
         let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("column", vec![""]);
         todo!()
@@ -291,11 +295,6 @@ impl QueryValueChooser for ChatGPTPromptingModel {
 
     fn choose_qualified_wildcard_relation<'a>(&mut self, _clause_context: &'a ClauseContext, _wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation) {
         let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("qualified_wildcard_relation", vec![""]);
-        todo!()
-    }
-
-    fn choose_select_alias(&mut self) -> Ident {
-        let (_prompt, _options_map) = self.generate_value_chooser_options_prompt("select_alias", vec![""]);
         todo!()
     }
 
