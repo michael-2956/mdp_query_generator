@@ -1,0 +1,51 @@
+subgraph def_ORDER_BY {
+        ORDER_BY [label="ORDER BY", shape=rectangle, style=filled, color=deepskyblue]
+        EXIT_ORDER_BY [label="EXIT ORDER BY", shape=rectangle]
+
+        ORDER_BY -> EXIT_ORDER_BY
+
+        // order by basically functions like SELECT w/o aliases
+        // but no literals are allowed, and you also can
+        // reference SELECT by aliases/numbers, and the priority
+        // is on the SELECT, when ambiguous between select and from.
+
+        order_by_list [label="ORDER BY list\n[set value]", set_value="select_is_not_distinct"]
+        ORDER_BY -> order_by_list
+        order_by_expr_done [label="Expression done"]
+
+        order_by_select_reference [label="SELECT reference\n[set value]", set_value="select_has_accessible_columns"]
+        order_by_list -> order_by_select_reference
+        order_by_select_reference_by_alias [label="by alias\n[call mod]", call_modifier="select_has_accessible_columns_mod"]
+        order_by_select_reference -> order_by_select_reference_by_alias
+        order_by_select_reference_by_alias -> order_by_expr_done
+
+        order_by_expr [label="Expression\n[call mod]\n[set value]", call_modifier="select_is_not_distinct_mod", set_value="grouping_enabled"]
+        order_by_list -> order_by_expr
+
+        call84_types [label="TYPES: any\nMODS: [group by columns, no literals, shade by select aliases]\ncall mod.: 'grouping mode switch'", TYPES="[any]", MODS="[group by columns, no literals, shade by select aliases]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
+        order_by_expr -> call84_types
+        call84_types -> order_by_expr_done
+        call85_types [label="TYPES: any\nMODS: [no aggregate, no literals, shade by select aliases]\ncall mod.: 'grouping mode switch'", TYPES="[any]", MODS="[no aggregate, no literals, shade by select aliases]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
+        order_by_expr -> call85_types
+        call85_types -> order_by_expr_done
+
+        order_by_order_selected [label="order selected"]
+        order_by_expr_done -> order_by_order_selected
+        order_by_asc [label="asc"]
+        order_by_expr_done -> order_by_asc
+        order_by_asc -> order_by_order_selected
+        order_by_desc [label="desc"]
+        order_by_expr_done -> order_by_desc
+        order_by_desc -> order_by_order_selected
+
+        order_by_nulls_order_selected [label="nulls order selected"]
+        order_by_order_selected -> order_by_nulls_order_selected
+        order_by_nulls_order_selected -> order_by_list
+        order_by_nulls_order_selected -> EXIT_ORDER_BY
+        order_by_nulls_first [label="NULLS FIRST"]
+        order_by_order_selected -> order_by_nulls_first
+        order_by_nulls_first -> order_by_nulls_order_selected
+        order_by_nulls_last [label="NULLS LAST"]
+        order_by_order_selected -> order_by_nulls_last
+        order_by_nulls_last -> order_by_nulls_order_selected
+    }
