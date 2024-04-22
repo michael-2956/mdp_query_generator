@@ -75,7 +75,7 @@ impl PathwayGraphModel for PromptTestingModel {
         }
 
         if !pass {
-            let prompt_str = if let Some(prompt) = prompt {
+            let prompt_str = if let Some((prompt, _valid_options)) = prompt {
                 let option_nodes = self.prompts_ref().get_option_nodes(current_node);
                 format!("\n{prompt}\nOption Nodes: {:#?}", option_nodes)
             } else { format!("ABSCENT") };

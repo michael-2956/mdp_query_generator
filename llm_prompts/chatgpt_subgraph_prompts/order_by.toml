@@ -95,4 +95,4 @@ call85_types="This decision will affect the expression in the ORDER BY clause"
 
 
 [value_chooser_tasks]
-select_alias_order_by="Choose a select reference that you wish to add to ORDER BY:"
+select_alias_order_by="Choose a select reference that you wish to add to ORDER BY"

@@ -108,4 +108,4 @@ available if you selected to add DISTINCT before.
 
 
 [value_chooser_tasks]
-aggregate_function_name="Choose the name of the aggregate function:"
+aggregate_function_name="Choose the name of the aggregate function"

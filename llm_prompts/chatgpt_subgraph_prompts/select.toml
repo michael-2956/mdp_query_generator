@@ -120,5 +120,5 @@ call54_types="This decision affect the expression in the SELECT clause"
 
 
 [value_chooser_tasks]
-qualified_wildcard_relation="Choose the relation name for the qualified wildcard:"
-select_alias="Generate the alias for the SELECT expression:"
+qualified_wildcard_relation="Choose the relation name for the qualified wildcard"
+select_alias="Generate the alias for the SELECT expression"

@@ -3,23 +3,18 @@
 
 [transitions.call0_FROM]
 task="""
-Select which clause you would like to build next and which ones you \
+Select which action you would like to perform next and which query clauses you \
 would like to omit.
 
-Note that when you choose to add the GROUP BY clause, you are only \
-effectively indicating that you want your query to be groupped, and \
-you can still choose to make the grouping implicit. In other words, \
-choose the "add the GROUP BY clause" option if you want a query such as:
-SELECT SUM(C1) FROM T1;
-where the grouping is present but is implicit.
+You should choose "DO make the query groupped" if you want to use aggregation \
+in your current query or you want to add a GROUP BY clause.
 
-Ask yourself: will my query be grouping values, using aggregations, etc.?
-If yes, you should NOT OMIT the GROUP BY clause at this step.
+Note that if you choose to omit a clause you will not be able to add it later.
 """
 [transitions.call0_FROM.options]
-1="ADD the WHERE clause"
-2="OMIT the WHERE clause, and ADD the GROUP BY clause"
-3="OMIT the WHERE clause and OMIT the GROUP BY clause, and ADD the SELECT clause"
+1="ADD the WHERE clause."
+2="OMIT the WHERE clause, and DO make the query groupped."
+3="OMIT the WHERE clause, DON'T make the query groupped, and ADD the SELECT clause"
 [transitions.call0_FROM.option_nodes]
 1="call0_WHERE"
 2="call0_GROUP_BY"

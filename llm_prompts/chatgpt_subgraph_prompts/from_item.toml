@@ -5,7 +5,12 @@
 task="""
 Select whether you would like this FROM item to \
 have an alias. Note that without alias, you wouldn't \
-be able to generate a subquery, as all subqueries need an alias.
+be able to generate a subquery, as all subqueries need an alias. \
+However, if you want to put a table name in FROM, then \
+the alias is not required.
+Examples:
+- with an alias: SELECT C1 FROM T1 AS A1. Here, A1 is the alias.
+- without an alias: SELECT C1 FROM T1.
 """
 [transitions.FROM_item.options]
 1="WITH an alias"
@@ -33,8 +38,8 @@ call0_Query="This decision will affect the subquery that you just decided to gen
 
 
 [value_chooser_tasks]
-from_alias="Generate the alias for the FROM relation:"
-table_name="Choose Table Name:"
+from_alias="Generate the alias for the FROM relation"
+table_name="Choose Table Name"
 from_column_renames_do_rename="""
 Choose whether you would like to rename columns for the relation you have just \
 generated. In SQL, you can rename columns of a relation in its alias. In syntax, \

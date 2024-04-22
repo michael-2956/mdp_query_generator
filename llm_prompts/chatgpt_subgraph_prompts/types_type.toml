@@ -5,11 +5,14 @@
 task="""
 Select the SQL data type of the expressions that you will be generating.
 
-Note that you should try to select the biggest type that would fit your expressions.
-So, if you want to generate the "C1 > 3" expression, where C1 is of type bigint, and \
-3 is of type integer, you should select bigint now. Note that the highlight tokens \
-should now indicate which fields your current decision will affect. You should rely on that \
-information to select the correct biggest type that will fit all of those.
+To deduce the correct SQL data type, write down what expressions \
+will replace the highlight tokens that are present in the current query and why.
+Recall that the highlight tokens should now indicate which fields in the query your \
+current decision will affect.
+
+After that, select the biggest type that would fit these expressions.
+For example, if you want to generate the "C1 > 3" expression, where C1 \
+is of type bigint, and 3 is of type integer, you should select bigint now.
 """
 [transitions.types_type.options]
 1="bigint"

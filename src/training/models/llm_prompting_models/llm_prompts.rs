@@ -72,23 +72,25 @@ impl LLMPrompts {
     }
 
     /// returns the prompts and a mapping from the option number to the selected node
-    pub fn generate_prompt(&self, current_query_str: &String, current_node: &SmolStr, outgoing_nodes: &Vec<NodeParams>, decision_context: Option<String>) -> Option<String> {
+    pub fn generate_prompt(&self, current_query_str: &String, current_node: &SmolStr, outgoing_nodes: &Vec<NodeParams>, decision_context: Option<String>) -> Option<(String, Vec<String>)> {
         let transition_prompts = self.transitions.get(current_node.as_str())?;
+        let mut valid_options = vec![];
         let options_prompt: String = transition_prompts.options.iter().sorted_by(
             |(a_k, _), (b_k, _)| Ord::cmp(*a_k, *b_k)
         ).filter_map(|(opt_key, opt_prompt)| {
             let option_node = transition_prompts.option_nodes.get(opt_key).unwrap();
             if outgoing_nodes.iter().any(|node| node.node_common.name == option_node) {
+                valid_options.push(opt_key.clone());
                 Some(format!("    {opt_key}) {opt_prompt}\n"))
             } else { None }
         }).collect();
         let context_str = if let Some(context) = decision_context {
             format!("Context: {context}\n\n")
         } else { "".to_string() };
-        Some(format!(
-            "Query: {current_query_str}\n\nTask: {}\n\n{context_str}Options:\n{options_prompt}",
+        Some((format!(
+            "Current query: {current_query_str}\n\nTask: {}\n\n{context_str}Options:\n{options_prompt}",
             transition_prompts.task
-        ))
+        ), valid_options))
     }
 
     pub fn get_option_nodes(&self, current_node: &SmolStr) -> Option<&HashMap<String, String>> {
@@ -121,7 +123,7 @@ impl LLMPrompts {
             option_nodes.insert(opt_key.to_string(), opt_prompt);
         }
         Some((format!(
-            "Query: {current_query_str}\n\nTask: {task_str}\n\nOptions:\n{options_prompt}"
+            "Current query: {current_query_str}\n\nTask: {task_str}\n\nOptions:\n{options_prompt}"
         ), option_nodes))
     }
 

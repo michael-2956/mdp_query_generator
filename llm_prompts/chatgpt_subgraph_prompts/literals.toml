@@ -51,10 +51,10 @@ Select the boolean literal
 
 
 [value_chooser_tasks]
-bigint="Generate a value of type BigInt:"
-integer="Generate a value of type Integer:"
-numeric="Generate a value of type Numeric:"
-text="Generate a value of type Text:"
-date="Generate a value of type Date:"
-timestamp="Generate the string that would go into the timestamp value:"
-interval="Generate the string that would go into the interval value:"
+bigint="Generate a value of type BigInt"
+integer="Generate a value of type Integer"
+numeric="Generate a value of type Numeric"
+text="Generate a value of type Text"
+date="Generate a value of type Date"
+timestamp="Generate the string that would go into the timestamp value"
+interval="Generate the string that would go into the interval value"

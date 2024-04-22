@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, fmt, hash::RandomState, path::PathBuf};
+use std::{collections::HashMap, env, fmt, hash::RandomState, path::PathBuf, time::Duration};
 
 use crate::query_creation::{query_generator::{call_modifiers::WildcardRelationsValue, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, IdentName, Relation}, value_choosers::QueryValueChooser}, state_generator::{markov_chain_generator::{markov_chain::NodeParams, StackFrame}, subgraph_type::SubgraphType}};
 
@@ -28,6 +28,7 @@ pub struct ChatGPTPromptingModel {
     /// set_choice_query_ast method of the QueryValueChooser trait
     value_choice_query_str: Option<String>,
     prompts: Option<LLMPrompts>,
+    current_request: String,
     async_runtime: Runtime,
     client: ChatGPT,
 }
@@ -86,14 +87,24 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
         // Form the prompt
         let current_node_name = &call_stack.last().unwrap().function_context.current_node.node_common.name;
         let current_query_str = format!("{}", current_query_ast_opt.unwrap());
-        let prompt = self.prompts_ref().generate_prompt(
+        let (prompt, valid_options) = self.prompts_ref().generate_prompt(
             &current_query_str, current_node_name, &node_outgoing, decision_context
         ).unwrap();
 
         // Query the model and interpret the response
-        let answer = self.get_model_answer(prompt);
+        let mut error_msg = "".to_string();
+        let model_answer = loop {
+            let model_answer = self.get_model_answer(format!("{error_msg}{prompt}"));
+            if !valid_options.contains(&model_answer) {
+                let mut valid_options_str: String = valid_options.iter().map(|k| format!("{k}, ")).collect();
+                let valid_options_str = valid_options_str.split_off(valid_options_str.len() - 2);
+                error_msg = format!("ERROR: Invalid option: \"{model_answer}\".\nValid options are: {valid_options_str}.\nThe last line of your response should not contain anything but the option number.\n\n");
+            } else {
+                break model_answer;
+            }
+        };
         let option_nodes = self.prompts_ref().get_option_nodes(current_node_name).unwrap();
-        let node_name = option_nodes.get(&answer).unwrap().clone();
+        let node_name = option_nodes.get(&model_answer).unwrap().clone();
 
         // Return the prediction result
         self.produce_prediction(node_outgoing, &node_name)
@@ -105,10 +116,11 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
 impl ChatGPTPromptingModel {
     pub fn new() -> Self {
         let mut model_config = ModelConfiguration::default();
-        model_config.engine = ChatGPTEngine::Custom("gpt-3.5-turbo-0125");
+        model_config.engine = ChatGPTEngine::Custom("gpt-3.5-turbo");
         let mut _self = Self {
             value_choice_query_str: None,
             decision_context_by_depth: vec![],
+            current_request: "Generate this query: SELECT COUNT(*) AS total_orders FROM ORDERS;".to_string(),// "Count the total number of orders",
             prompts: None,
             async_runtime: runtime::Builder::new_current_thread().enable_all().build().unwrap(),
             client: ChatGPT::new_with_config(
@@ -134,7 +146,7 @@ impl ChatGPTPromptingModel {
 
     fn initiate_conversation(&mut self, schema_string: String) {
         let direction_message = gen_format_fn!({
-            "request" => "Generate this query: SELECT COUNT(*) AS total_orders FROM ORDERS;",// "Count the total number of orders",
+            "request" => self.current_request,
             "schema" => schema_string,
         })(self.prompts.as_ref().unwrap().system_prompt.clone());
         eprintln!("Direction message: {direction_message}\n======================\n======================\n");
@@ -145,16 +157,22 @@ impl ChatGPTPromptingModel {
         // panic!()
     }
 
-    fn query_model(&mut self, prompt: String) -> chatgpt::Result<CompletionResponse> {
+    fn query_model(&mut self, prompt: String) -> CompletionResponse {
+        let prompt = format!("Request: \"{}\"\n\n{prompt}", self.current_request);
+        eprintln!("\n\nPrompt:\n{prompt}");
         self.async_runtime.block_on(async {
-            self.current_conversation.as_mut().unwrap().send_message(prompt).await
+            let mut result = self.current_conversation.as_mut().unwrap().send_message(prompt.clone()).await;
+            while result.is_err() {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                result = self.current_conversation.as_mut().unwrap().send_message(prompt.clone()).await;
+            }
+            result.unwrap()
         })
     }
 
     fn get_model_answer(&mut self, prompt: String) -> String {
-        eprintln!("Prompt: {prompt}");
-        let response = self.query_model(prompt).unwrap();
-        eprintln!("Response: {}", response.message().content);
+        let response = self.query_model(prompt);
+        eprintln!("\n\nResponse: {}", response.message().content);
         let last_line = response.message().content.trim_end_matches('\n').lines().last().unwrap().to_string();
         eprintln!("Last line: {}\n======================\n======================\n", last_line);
         last_line
@@ -186,7 +204,7 @@ impl ChatGPTPromptingModel {
             if !options_map.contains_key(&model_answer) {
                 let mut valid_options_str: String = options_map.keys().map(|k| format!("{k}, ")).collect();
                 let valid_options_str = valid_options_str.split_off(valid_options_str.len() - 2);
-                error_msg = format!("ERROR: Invalid option: \"{model_answer}\".\nValid options are: {valid_options_str}.\n\n");
+                error_msg = format!("ERROR: Invalid option: \"{model_answer}\".\nValid options are: {valid_options_str}.\nThe last line of your response should not contain anything but the option number.\n\n");
             } else { 
                 break model_answer;
             }
@@ -208,7 +226,7 @@ impl ChatGPTPromptingModel {
         let model_answer = loop {
             let model_answer = self.get_model_answer(format!("{error_msg}{prompt}"));
             if model_answer.contains(' ') {
-                error_msg = format!("ERROR: Invalid value: \"{model_answer}\". Please regenerate the value correctly.\n\n");
+                error_msg = format!("ERROR: Invalid value: \"{model_answer}\". The last line of your response should not contain anything but the value. Please regenerate the value correctly.\n\n");
             } else { 
                 break model_answer;
             }

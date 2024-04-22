@@ -55,7 +55,7 @@ SELECT  FROM T1, T2
 """
 [transitions.FROM_cartesian_product.options]
 1="Finish generating the FROM clause."
-2="Perform a cartesean product with an another relation."
+2="Perform a cartesian product with an another relation."
 [transitions.FROM_cartesian_product.option_nodes]
 1="EXIT_FROM"
 2="call0_FROM_item"
