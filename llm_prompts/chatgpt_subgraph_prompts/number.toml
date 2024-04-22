@@ -3,7 +3,7 @@
 
 [transitions.number]
 task="""
-Select the kind of expression you want your number expression to be.
+Select the kind of formula you want your number formula to be.
 (note that 'number' represents one of integer, numeric or bigint)
 
 In this list of options, the [expr] and [field] denote the expression  \

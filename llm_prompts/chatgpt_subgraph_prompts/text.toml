@@ -3,7 +3,7 @@
 
 [transitions.text]
 task="""
-Select the kind of expression you want your text expression to be.
+Select the kind of formula you want your text formula to be.
 In this list of options, the [text]/[integer] denotes the expression you \
 would have to generate next if you select that option. And the option itself \
 denotes what will be put in the place of the highlight token.

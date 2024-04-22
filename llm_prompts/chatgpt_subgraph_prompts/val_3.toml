@@ -3,7 +3,7 @@
 
 [transitions.VAL_3]
 task="""
-Select the kind of expression you want your boolean expression to be.
+Select the kind of formula you want your boolean formula to be.
 In this list of options, the [expr] ([subquery]) marks the expression (query) you \
 would have to generate next if you select that option. And the option itself \
 denotes what will be put in the place of the highlight token.

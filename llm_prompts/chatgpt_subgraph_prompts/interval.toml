@@ -1,0 +1,37 @@
+[transitions]
+
+
+[transitions.interval]
+task="""
+Select the kind of formula you want your interval formula to be.
+In this list of options, the [interval] denotes the expression you \
+would have to generate next if you select that option. And the option itself \
+denotes what will be put in the place of the highlight token.
+"""
+[transitions.interval.options]
+1="[interval] op [interval]. Here, op is a binary addition (+) or subtraction (-) operation"
+2="-[interval]. This will negate the interval that you will be generating next."
+[transitions.interval.option_nodes]
+1="interval_binary"
+2="interval_unary_minus"
+
+
+[transitions.interval_add_subtract]
+task="""
+Select the binary operation
+"""
+[transitions.interval_add_subtract.options]
+1="[interval] + [interval]"
+2="[interval] - [interval]"
+[transitions.interval_add_subtract.option_nodes]
+1="interval_add_subtract_plus"
+2="interval_add_subtract_minus"
+
+
+[call_node_context]
+# call91_types=""
+# call92_types=""
+# call93_types=""
+
+
+[value_chooser_tasks]

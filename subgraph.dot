@@ -1,51 +1,26 @@
-subgraph def_text {
-        text [label="text\n[mods]", MODS="[]", shape=rectangle, style=filled, color=pink]
-        EXIT_text [label="EXIT text"]
+subgraph def_interval {
+        interval [label="interval\n[mods]", MODS="[]", shape=rectangle, style=filled, color=lightslateblue]
+        EXIT_interval [label="EXIT interval"]
 
-        text_trim[label="TRIM"]
-        text -> text_trim
-        call6_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        text_trim -> call6_types
-        call5_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        BOTH []
-        call6_types -> BOTH
-        BOTH -> call5_types
-        LEADING []
-        call6_types -> LEADING
-        LEADING -> call5_types
-        TRAILING []
-        call6_types -> TRAILING
-        TRAILING -> call5_types
-        text_trim_done [label="trim done"]
-        call6_types -> text_trim_done
-        call5_types -> text_trim_done
-        text_trim_done -> EXIT_text
+        interval_binary [label="Binary op."]
+        interval -> interval_binary
 
-        text_concat [label="concatenation"]
-        text -> text_concat
-        call7_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        text_concat -> call7_types
-        text_concat_concat [label="||"]
-        call7_types -> text_concat_concat
-        call8_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        text_concat_concat -> call8_types
-        call8_types -> EXIT_text
+        interval_add_subtract [label="+/-"]
+        interval_binary -> interval_add_subtract
+        interval_add_subtract_plus [label="+"]
+        interval_add_subtract -> interval_add_subtract_plus
+        interval_add_subtract_minus [label="-"]
+        interval_add_subtract -> interval_add_subtract_minus
+        call91_types [TYPES="[interval]", MODS="[...]", label="TYPES: interval\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        interval_add_subtract_plus -> call91_types
+        interval_add_subtract_minus -> call91_types
+        call92_types [TYPES="[interval]", MODS="[...]", label="TYPES: interval\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call91_types -> call92_types
+        call92_types -> EXIT_interval
 
-        text_substring[label="substring"]
-        text -> text_substring
-        call9_types [TYPES="[text]", MODS="[...]", label="TYPES: text\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        text_substring -> call9_types
-        text_substring_from [label="from"]
-        text_substring_for [label="for"]
-        call9_types -> text_substring_from
-        call9_types -> text_substring_for
-        text_substring_end [label="finish"]
-        call10_types [TYPES="[integer]", MODS="[...]", label="TYPES: [integer]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        text_substring_from -> call10_types
-        call10_types -> text_substring_for
-        call10_types -> text_substring_end
-        call11_types [TYPES="[integer]", MODS="[...]", label="TYPES: [integer]\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        text_substring_for -> call11_types
-        call11_types -> text_substring_end
-        text_substring_end -> EXIT_text
+        interval_unary_minus [label="-interval"]
+        interval -> interval_unary_minus
+        call93_types [TYPES="[interval]", MODS="[...]", label="TYPES: interval\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        interval_unary_minus -> call93_types
+        call93_types -> EXIT_interval
     }

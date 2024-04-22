@@ -1,0 +1,37 @@
+[transitions]
+
+
+[transitions.date_add_subtract]
+task="""
+Select the kind of formula you want your date formula to be.
+In this list of options, the [date]/[int] denotes the expression you \
+would have to generate next if you select that option. And the option itself \
+denotes what will be put in the place of the highlight token.
+"""
+[transitions.date_add_subtract.options]
+1="[date] + [int]. Note that if you choose this option, [int] + [date] is also possible"
+2="[date] - [int]"
+[transitions.date_add_subtract.option_nodes]
+1="date_add_subtract_plus"
+2="date_add_subtract_minus"
+
+
+[transitions.date_add_subtract_plus]
+task="""
+Select whether you would like to reverse the order of expressions in the addition operation.
+This will not affect the logic of the query, but may be desired for readability purposes.
+"""
+[transitions.date_add_subtract_plus.options]
+1="Do reverse: [int] + [date]"
+2="Don't reverse: [date] + [int]"
+[transitions.date_add_subtract_plus.option_nodes]
+1="date_swap_arguments"
+2="call86_types"
+
+
+[call_node_context]
+# call86_types=""
+# call88_types=""
+
+
+[value_chooser_tasks]
