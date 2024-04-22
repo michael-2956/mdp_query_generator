@@ -2,7 +2,7 @@ use std::{io, path::PathBuf, str::FromStr};
 
 use sqlparser::ast::Query;
 
-use crate::{query_creation::state_generator::markov_chain_generator::{StackFrame, markov_chain::NodeParams}, config::TomlReadable};
+use crate::{config::TomlReadable, query_creation::{query_generator::value_choosers::QueryValueChooser, state_generator::markov_chain_generator::{markov_chain::NodeParams, StackFrame}}};
 
 use self::{llm_prompting_models::{chatgpt_model::ChatGPTPromptingModel, prompt_testing_model::PromptTestingModel}, markov_models::{DepthwiseFullFunctionContext, DepthwiseFunctionNameContext, FullFunctionContext, FunctionNameContext, ModelWithMarkovWeights, StackedFullFunctionContext, StackedFunctionNamesContext}};
 
@@ -122,7 +122,7 @@ pub trait PathwayGraphModel {
     fn print_weights(&self) { todo!() }
 
     /// initiate the inference process
-    fn start_inference(&mut self) { }
+    fn start_inference(&mut self, _schema_string: String) { }
 
     /// predict the probability distribution over the outgoing nodes that are available
     fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, current_query_ast_opt: Option<&Query>) -> ModelPredictionResult;
@@ -132,5 +132,5 @@ pub trait PathwayGraphModel {
 
     fn write_weights_to_dot(&self, _dot_file_path: &PathBuf) -> io::Result<()> { todo!() }
 
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+    fn as_value_chooser(&mut self) -> Option<&mut dyn QueryValueChooser> { None }
 }

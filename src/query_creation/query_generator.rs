@@ -117,10 +117,10 @@ pub(crate) use match_next_state;
 macro_rules! value_chooser {
     ($generator:expr) => {{
         let vc = if let Some(predictor_model) = $generator.predictor_model.as_mut() {
-            if let Some(predictor_model) = predictor_model.as_any_mut().downcast_mut::<Box<dyn QueryValueChooser>>() {
+            if let Some(predictor_model) = predictor_model.as_value_chooser() {
                 predictor_model
-            } else { &mut $generator.value_chooser }
-        } else { &mut $generator.value_chooser };
+            } else { &mut *$generator.value_chooser }
+        } else { &mut *$generator.value_chooser };
         vc.set_choice_query_ast($generator.current_query_raw_ptr.map(|p| unsafe { &*p }).unwrap());
         vc
     }};
@@ -214,7 +214,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser> QueryGenerator<SubMod, StC> {
     /// it will use uniform distributions 
     pub fn generate(&mut self) -> Query {
         if let Some(model) = self.predictor_model.as_mut() {
-            model.start_inference();
+            model.start_inference(self.clause_context.schema_ref().get_schema_string());
         }
         let mut query = QueryBuilder::nothing();
 

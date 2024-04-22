@@ -145,10 +145,6 @@ where
     fn write_weights_to_dot(&self, dot_file_path: &PathBuf) -> io::Result<()> {
         self.weights.write_to_dot(dot_file_path)
     }
-
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
 }
 
 /// Trait for implementing diffrent Function contexts for Models with Markov Weights\

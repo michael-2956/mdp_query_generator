@@ -115,7 +115,8 @@ impl LLMPrompts {
         let task_str = formatter(self.value_chooser_tasks.get(task_key)?.clone());
         let mut options_prompt = "".to_string();
         let mut option_nodes = HashMap::new();
-        for (opt_key, opt_prompt) in options.into_iter().enumerate() {
+        for (mut opt_key, opt_prompt) in options.into_iter().enumerate() {
+            opt_key += 1;
             options_prompt += format!("    {opt_key}) {opt_prompt}\n").as_str();
             option_nodes.insert(opt_key.to_string(), opt_prompt);
         }

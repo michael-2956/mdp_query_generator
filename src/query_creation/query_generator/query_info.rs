@@ -133,6 +133,14 @@ impl DatabaseSchema {
         }
     }
 
+    pub fn get_schema_string(&self) -> String {
+        let mut output_str = "".to_string();
+        for table_def in self.table_defs.iter() {
+            output_str = format!("{output_str}\n{table_def}")
+        }
+        output_str
+    }
+
     pub fn num_columns_in_table(&self, name: &ObjectName) -> usize {
         self.get_table_def_by_name(name).columns.len()
     }

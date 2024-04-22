@@ -9,6 +9,15 @@ use rand::distributions::WeightedIndex;
 use sqlparser::ast::{DateTimeField, Ident, ObjectName, Query};
 use tokio::runtime::{self, Runtime};
 
+macro_rules! gen_format_fn {
+    ({$($key:expr => $value:expr),* $(,)?}) => {{|mut s: String| {
+        $(
+            s = s.replace(&format!("{{{}}}", $key), &$value.to_string());
+        )*
+        s
+    }}};
+}
+
 pub struct ChatGPTPromptingModel {
     /// stores unused decision context by call_stack depth\
     /// the decision context applies to the first non-choiuce\
@@ -38,9 +47,9 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
         Ok(())
     }
 
-    fn start_inference(&mut self) {
+    fn start_inference(&mut self, schema_string: String) {
         self.decision_context_by_depth = vec![None];
-        self.initiate_conversation();
+        self.initiate_conversation(schema_string);
     }
 
     fn end_inference(&mut self) {
@@ -52,19 +61,11 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
         assert!(call_stack.len() <= self.decision_context_by_depth.len());
         self.decision_context_by_depth.truncate(call_stack.len());
         let decision_context_ind = self.decision_context_by_depth.len() - 1;
-    
-        let current_node = &call_stack.last().unwrap().function_context.current_node;
-        let is_call_node = current_node.call_params.is_some();
-        let current_node_name = &current_node.node_common.name;
-
-        if is_call_node {
-            // Add context for the subgraph that will be inserted next
-            self.decision_context_by_depth.push(self.prompts_ref().get_call_node_context(current_node_name));
-        }
 
         // No need to predict if only one outgoing node is available
-        if node_outgoing.len() == 1 {
-            return ModelPredictionResult::Some(node_outgoing.into_iter().map(|p| (1f64, p)).collect());
+        if let [ref single_node] = node_outgoing.as_slice() {
+            let single_node_name = single_node.node_common.name.clone();
+            return self.produce_prediction(node_outgoing, &single_node_name)
         }
 
         // Automatically select "qualified_column_name" and "interval_literal_format_string"
@@ -75,9 +76,7 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
             "qualified_column_name", "interval_literal_format_string"
         ] {
             if node_outgoing.iter().any(|node| node.node_common.name == auto_select_state) {
-                return ModelPredictionResult::Some(node_outgoing.into_iter().map(
-                    |node| (if node.node_common.name.as_str() == auto_select_state { 1f64 } else { 0f64 }, node)
-                ).collect())
+                return self.produce_prediction(node_outgoing, auto_select_state)
             }
         }
 
@@ -85,6 +84,7 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
         let decision_context = (&mut self.decision_context_by_depth[decision_context_ind]).take();
 
         // Form the prompt
+        let current_node_name = &call_stack.last().unwrap().function_context.current_node.node_common.name;
         let current_query_str = format!("{}", current_query_ast_opt.unwrap());
         let prompt = self.prompts_ref().generate_prompt(
             &current_query_str, current_node_name, &node_outgoing, decision_context
@@ -93,19 +93,13 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
         // Query the model and interpret the response
         let answer = self.get_model_answer(prompt);
         let option_nodes = self.prompts_ref().get_option_nodes(current_node_name).unwrap();
-        let node_name = option_nodes.get(&answer).unwrap();
+        let node_name = option_nodes.get(&answer).unwrap().clone();
 
         // Return the prediction result
-        ModelPredictionResult::Some(node_outgoing.into_iter().map(
-            |node| (if node.node_common.name.as_str() == node_name {
-                1f64
-            } else { 0f64 }, node)
-        ).collect())
+        self.produce_prediction(node_outgoing, &node_name)
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
+    fn as_value_chooser(&mut self) -> Option<&mut dyn QueryValueChooser> { Some(self) }
 }
 
 impl ChatGPTPromptingModel {
@@ -116,7 +110,7 @@ impl ChatGPTPromptingModel {
             value_choice_query_str: None,
             decision_context_by_depth: vec![],
             prompts: None,
-            async_runtime: runtime::Builder::new_current_thread().build().unwrap(),
+            async_runtime: runtime::Builder::new_current_thread().enable_all().build().unwrap(),
             client: ChatGPT::new_with_config(
                 env::var("OPENAI_API_KEY").unwrap(), model_config
             ).unwrap(),
@@ -125,10 +119,26 @@ impl ChatGPTPromptingModel {
         _self
     }
 
-    fn initiate_conversation(&mut self) {
-        self.current_conversation = Some(self.client.new_conversation_directed(
-            self.prompts.as_ref().unwrap().system_prompt.clone()
-        ));
+    fn produce_prediction(&mut self, node_outgoing: Vec<NodeParams>, selected_node: &str) -> ModelPredictionResult {
+        if let Some(call_node) = node_outgoing.iter().find(
+            // if we selected a call node
+            |node| node.call_params.is_some() && node.node_common.name.as_str() == selected_node
+        ) {
+            // add call node context to stack
+            self.decision_context_by_depth.push(self.prompts_ref().get_call_node_context(&call_node.node_common.name));
+        }
+        ModelPredictionResult::Some(node_outgoing.into_iter().map(
+            |node| (if node.node_common.name.as_str() == selected_node { 1f64 } else { 0f64 }, node)
+        ).collect())
+    }
+
+    fn initiate_conversation(&mut self, schema_string: String) {
+        let direction_message = gen_format_fn!({
+            "request" => "Count the total number of orders",
+            "schema" => schema_string,
+        })(self.prompts.as_ref().unwrap().system_prompt.clone());
+        eprintln!("Direction message: {direction_message}\n======================\n======================\n");
+        self.current_conversation = Some(self.client.new_conversation_directed(direction_message));
     }
 
     fn query_model(&mut self, prompt: String) -> chatgpt::Result<CompletionResponse> {
@@ -138,8 +148,12 @@ impl ChatGPTPromptingModel {
     }
 
     fn get_model_answer(&mut self, prompt: String) -> String {
+        eprintln!("Prompt: {prompt}");
         let response = self.query_model(prompt).unwrap();
-        response.message().content.lines().last().unwrap().to_string()
+        eprintln!("Response: {}", response.message().content);
+        let last_line = response.message().content.trim_end_matches('\n').lines().last().unwrap().to_string();
+        eprintln!("Last line: {}\n======================\n======================\n", last_line);
+        last_line
     }
 
     fn prompts_ref(&self) -> &LLMPrompts {
@@ -177,15 +191,6 @@ impl ChatGPTPromptingModel {
         let prompt = self.prompts_ref().generate_value_chooser_generate_prompt_formatted(current_query_str, task_key, formatter).unwrap();
         self.get_model_answer(prompt)
     }
-}
-
-macro_rules! gen_format_fn {
-    ({$($key:expr => $value:expr),* $(,)?}) => {{|mut s| {
-        $(
-            s = s.replace(&format!("{{{}}}", $key), &$value.to_string());
-        )*
-        s
-    }}};
 }
 
 impl QueryValueChooser for ChatGPTPromptingModel {

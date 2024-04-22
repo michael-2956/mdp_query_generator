@@ -1,6 +1,6 @@
 use sqlparser::ast::{DataType, Expr, TimezoneInfo, UnaryOperator, Value};
 
-use crate::{query_creation::{query_generator::{highlight_str, match_next_state, value_chooser, QueryGenerator, QueryValueChooser}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
+use crate::{query_creation::{query_generator::{highlight_str, match_next_state, value_chooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
 
 use super::types::TypesBuilder;
 

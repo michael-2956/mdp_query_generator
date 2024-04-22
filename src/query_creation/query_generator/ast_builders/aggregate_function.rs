@@ -1,6 +1,6 @@
 use sqlparser::ast::{self, Expr, FunctionArg, FunctionArgExpr, ObjectName};
 
-use crate::{query_creation::{query_generator::{aggregate_function_settings::AggregateFunctionAgruments, QueryValueChooser, highlight_ident, match_next_state, value_chooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
+use crate::{query_creation::{query_generator::{aggregate_function_settings::AggregateFunctionAgruments, highlight_ident, match_next_state, value_chooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
 
 use super::{types::TypesBuilder, types_value::TypeAssertion};
 

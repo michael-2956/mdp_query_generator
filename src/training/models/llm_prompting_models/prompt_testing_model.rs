@@ -85,10 +85,6 @@ impl PathwayGraphModel for PromptTestingModel {
         
         ModelPredictionResult::None(node_outgoing)
     }
-
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
 }
 
 impl PromptTestingModel {

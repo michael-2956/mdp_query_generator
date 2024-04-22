@@ -20,7 +20,14 @@ behind your decision. Mention which option you will choose and \
 why you won't choose the others. Outline your thinking process \
 and future plans.
 - As the last line of your response, always output the selected \
-option number (and only, exclusively the number), and nothing else.
+option NUMBER (and only, exclusively the NUMBER, without option \
+text or any other explanation), and nothing else. For example, \
+if you want to select option "1) WITH an alias", the last line \
+should read "1".
+- Note that if the some option number is missing from the list \
+of options, you cannot select this number. For example, if \
+the option list reads "1) ... 2) ... 4) ...", you can't select \
+option 3, even if you have been able to select it before.
 
 The option list would be prepended with the task description \
 that might understand the option list. This information \
@@ -41,7 +48,16 @@ you'll need to choose an identifier, the request would look like: \
 - As the first line of your response, always output the reasoning \
 behind the value you will be selecting.
 - As the last line of your response, always output the selected \
-value (and only, exclusively the value), and nothing else.
+value (and only, exclusively the value), and nothing else. For example, \
+if you are selecting an option number, you should NOT respond with "1) option text" \
+but simply "1". If you are generating a value, you should NEVER respond with things such as \
+"Generated value: TableAlias" but you should ALWAYS respond with things such as "TableAlias". \
+Always remember that the generated value in the last line of the response will directly appear in the query.
+
+HERE'S THE REQUEST FOR WHICH YOU ARE TASKED TO GENERATE AN SQL QUERY:
+"{request}"
+HERE'S THE DATABASE SCHEMA:
+"{schema}"
 """
 
 additional_prompts_folder="llm_prompts/chatgpt_subgraph_prompts/"
