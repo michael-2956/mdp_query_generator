@@ -55,9 +55,9 @@ but simply "1". If you are generating a value, you should NEVER respond with thi
 Always remember that the generated value in the last line of the response will directly appear in the query.
 
 HERE'S THE REQUEST FOR WHICH YOU ARE TASKED TO GENERATE AN SQL QUERY:
-"{request}"
+Request: "{request}"
 HERE'S THE DATABASE SCHEMA:
-"{schema}"
+Schema: "{schema}"
 """
 
 additional_prompts_folder="llm_prompts/chatgpt_subgraph_prompts/"

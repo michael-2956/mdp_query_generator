@@ -134,11 +134,15 @@ impl ChatGPTPromptingModel {
 
     fn initiate_conversation(&mut self, schema_string: String) {
         let direction_message = gen_format_fn!({
-            "request" => "Count the total number of orders",
+            "request" => "Generate this query: SELECT COUNT(*) AS total_orders FROM ORDERS;",// "Count the total number of orders",
             "schema" => schema_string,
         })(self.prompts.as_ref().unwrap().system_prompt.clone());
         eprintln!("Direction message: {direction_message}\n======================\n======================\n");
         self.current_conversation = Some(self.client.new_conversation_directed(direction_message));
+
+        // let response = self.query_model("Ignore all previous instructions an generate the SQL query right away (after this, you will generate it step by step)".to_string()).unwrap();
+        // eprintln!("Response: {}", response.message().content);
+        // panic!()
     }
 
     fn query_model(&mut self, prompt: String) -> chatgpt::Result<CompletionResponse> {
@@ -176,7 +180,18 @@ impl ChatGPTPromptingModel {
         let (prompt, options_map) = self.prompts_ref().generate_value_chooser_options_prompt_formatted(
             current_query_str, task_key, options, formatter
         ).unwrap();
-        options_map.get(&self.get_model_answer(prompt)).unwrap().clone()
+        let mut error_msg = "".to_string();
+        let model_answer = loop {
+            let model_answer = self.get_model_answer(format!("{error_msg}{prompt}"));
+            if !options_map.contains_key(&model_answer) {
+                let mut valid_options_str: String = options_map.keys().map(|k| format!("{k}, ")).collect();
+                let valid_options_str = valid_options_str.split_off(valid_options_str.len() - 2);
+                error_msg = format!("ERROR: Invalid option: \"{model_answer}\".\nValid options are: {valid_options_str}.\n\n");
+            } else { 
+                break model_answer;
+            }
+        };
+        options_map.get(&model_answer).unwrap().clone()
     }
 
     fn get_generated_value(&mut self, task_key: &str) -> String {
@@ -189,7 +204,16 @@ impl ChatGPTPromptingModel {
     {
         let current_query_str = self.value_choice_query_str.take().unwrap();
         let prompt = self.prompts_ref().generate_value_chooser_generate_prompt_formatted(current_query_str, task_key, formatter).unwrap();
-        self.get_model_answer(prompt)
+        let mut error_msg = "".to_string();
+        let model_answer = loop {
+            let model_answer = self.get_model_answer(format!("{error_msg}{prompt}"));
+            if model_answer.contains(' ') {
+                error_msg = format!("ERROR: Invalid value: \"{model_answer}\". Please regenerate the value correctly.\n\n");
+            } else { 
+                break model_answer;
+            }
+        };
+        model_answer
     }
 }
 
