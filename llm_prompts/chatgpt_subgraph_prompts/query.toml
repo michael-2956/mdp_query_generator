@@ -4,17 +4,35 @@
 [transitions.call0_FROM]
 task="""
 Select which action you would like to perform next and which query clauses you \
-would like to omit.
+would like to omit in the highlighted query.
 
 You should choose "DO make the query groupped" if you want to use aggregation \
 in your current query or you want to add a GROUP BY clause.
 
-Note that if you choose to omit a clause you will not be able to add it later.
+Write down the answer to this question: Will the current query need to use an aggregate function \
+or a GROUP BY clause to satisfy the text description? (recall what aggregate functions in SQL are)
+If yes, select "DO make the query groupped".
+
+IMPORTANT: If you choose to OMIT some clause you will not be able to add it later.
 """
 [transitions.call0_FROM.options]
-1="ADD the WHERE clause."
-2="OMIT the WHERE clause, and DO make the query groupped."
-3="OMIT the WHERE clause, DON'T make the query groupped, and ADD the SELECT clause"
+1="ADD the WHERE clause. You will be able to add grouping or a SELECT clause later."
+2="OMIT the WHERE clause, and DO make the query groupped. You will be able to add a SELECT clause later."
+3="OMIT the WHERE clause, DON'T make the query groupped, and ADD the SELECT clause. You won't be able to use aggregate functions."
+# [transitions.call0_FROM]
+# task="""
+# Decide the next step in constructing your SQL query. Evaluate whether your query requires the use of specific SQL clauses based on generic needs rather than a specific task.
+
+# - **Aggregation Functions**: Consider if your query needs to summarize data (e.g., COUNT, AVG, SUM) which requires an aggregation function. 
+# - **GROUP BY Clause**: Determine if there's a need to group your data based on one or more columns, useful in conjunction with aggregate functions.
+# - **WHERE Clause**: Decide if you need to filter records based on certain conditions before applying other operations.
+
+# IMPORTANT: Once you choose to omit a clause, you cannot add it later. Choose wisely based on potential query needs.
+# """
+# [transitions.call0_FROM.options]
+# 1="ADD a WHERE clause, allowing for data filtering. Suitable for scenarios requiring specific data subsets before further processing."
+# 2="OMIT the WHERE clause and prepare for aggregation. Ideal for queries that aggregate data without initial filtering."
+# 3="OMIT both WHERE and aggregation clauses if your query requires straightforward data retrieval without specific constraints or summaries."
 [transitions.call0_FROM.option_nodes]
 1="call0_WHERE"
 2="call0_GROUP_BY"
@@ -23,21 +41,18 @@ Note that if you choose to omit a clause you will not be able to add it later.
 
 [transitions.call0_WHERE]
 task="""
-Select whether you would like to add the GROUP BY clause.
+Select whether you would like to make the highlighted query groupped.
 
-Note that when you choose to add the GROUP BY clause, you are only \
-effectively indicating that you want your query to be groupped, and \
-you can still choose to make the grouping implicit. In other words, \
-choose the "Add the GROUP BY clause" option if you want a query such as:
-SELECT SUM(C1) FROM T1;
-where the grouping is present but is implicit.
+You should choose "DO make the query groupped" if you want to use aggregation \
+in your current query or you want to add a GROUP BY clause.
 
-Ask yourself: will my query be grouping values, using aggregations, etc.?
-If yes, you should NOT OMIT the GROUP BY clause at this step.
+Write down the answer to this question: Will the current query need to use an aggregate function \
+or a GROUP BY clause to satisfy the task description?
+If yes, select "DO make the query groupped".
 """
 [transitions.call0_WHERE.options]
-1="ADD the GROUP BY clause"
-2="OMIT the GROUP BY clause, and ADD the SELECT clause"
+1="DO make the query groupped. You will be able to add a SELECT clause later."
+2="DON'T make the query groupped, and ADD the SELECT clause."
 [transitions.call0_WHERE.option_nodes]
 1="call0_GROUP_BY"
 2="call0_SELECT"
@@ -48,7 +63,7 @@ task="""
 Select whether you would like to add the HAVING clause.
 """
 [transitions.call0_GROUP_BY.options]
-1="Add the HAVING clause"
+1="Add the HAVING clause. You will be able to add a SELECT clause later."
 2="Omit the HAVING clause, and add the SELECT clause"
 [transitions.call0_GROUP_BY.option_nodes]
 1="call0_HAVING"

@@ -85,7 +85,7 @@ available if you selected to add DISTINCT before.
 """
 [transitions.aggregate_select_type_bigint.options]
 1="A single-argument aggregate function"
-2="COUNT(expr)"
+2="COUNT([expr])"
 3="COUNT(*)"
 [transitions.aggregate_select_type_bigint.option_nodes]
 1="arg_bigint"

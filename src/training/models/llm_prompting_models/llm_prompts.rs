@@ -29,17 +29,24 @@ pub struct LLMPrompts {
     /// the system prompts of the LLM agent
     pub system_prompt: String,
     /// the node transition prompts
-    pub transitions: HashMap<String, TransitionPrompts>,
+    transitions: HashMap<String, TransitionPrompts>,
     /// the context that each call node provides the first decision
     /// of its subgraph with
-    pub call_node_context: HashMap<String, String>,
+    call_node_context: HashMap<String, String>,
     /// the tasks for each of the value choosers are stored here
-    pub value_chooser_tasks: HashMap<String, String>,
+    value_chooser_tasks: HashMap<String, String>,
+    /// whether to print the prompts and responses
+    pub print_prompts_and_responses: bool,
+    pub query_requests: Vec<String>,
+    pub backtrack_prompt: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct MainPromptsFile {
     additional_prompts_folder: PathBuf,
+    print_prompts_and_responses: bool,
+    query_requests_file_path: PathBuf,
+    backtrack_prompt: String,
     system_prompt: String,
 }
 
@@ -48,6 +55,11 @@ struct SupplementaryPromptsFile {
     transitions: HashMap<String, TransitionPrompts>,
     call_node_context: HashMap<String, String>,
     value_chooser_tasks: HashMap<String, String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct QueryRequests {
+    requests: Vec<String>
 }
 
 impl LLMPrompts {
@@ -63,7 +75,11 @@ impl LLMPrompts {
             call_node_context.extend(supp_contents.call_node_context.into_iter());
             value_chooser_tasks.extend(supp_contents.value_chooser_tasks.into_iter());
         }
+        let query_requests: QueryRequests = toml::from_str(&fs::read_to_string(&contents.query_requests_file_path).unwrap()).unwrap();
         Ok(Self {
+            print_prompts_and_responses: contents.print_prompts_and_responses,
+            backtrack_prompt: contents.backtrack_prompt,
+            query_requests: query_requests.requests,
             system_prompt: contents.system_prompt,
             transitions,
             call_node_context,
@@ -88,7 +104,7 @@ impl LLMPrompts {
             format!("Context: {context}\n\n")
         } else { "".to_string() };
         Some((format!(
-            "Current query: {current_query_str}\n\nTask: {}\n\n{context_str}Options:\n{options_prompt}",
+            "Current SQL Query: {current_query_str}\n\nDecision Required: {}\n\n{context_str}Options:\n{options_prompt}",
             transition_prompts.task
         ), valid_options))
     }
@@ -123,7 +139,7 @@ impl LLMPrompts {
             option_nodes.insert(opt_key.to_string(), opt_prompt);
         }
         Some((format!(
-            "Current query: {current_query_str}\n\nTask: {task_str}\n\nOptions:\n{options_prompt}"
+            "Current SQL Query: {current_query_str}\n\nDecision Required: {task_str}\n\nOptions:\n{options_prompt}"
         ), option_nodes))
     }
 
@@ -136,7 +152,7 @@ impl LLMPrompts {
     {
         let task_str = formatter(self.value_chooser_tasks.get(task_key)?.clone());
         Some(format!(
-            "Query: {current_query_str}\n\nTask: {task_str}"
+            "Query: {current_query_str}\n\nDecision Required: {task_str}"
         ))
     }
 }

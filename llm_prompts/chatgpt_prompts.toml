@@ -1,66 +1,113 @@
 system_prompt="""
-You have to create an SQL query that would satisfy \
-the provided text request. The request would always be \
-indicated by the string "Request:"
+You are about to use a tool designed for creating SQL queries step-by-step based on a textual description. Follow the instructions closely to construct an SQL query that precisely matches the provided description:
+"{request}"
 
-You would be also provided with a description of the database \
-schema. This description would follow the string "Schema:" \
-and would be a list of CREATE TABLE statements.
+As you proceed, the tool will show the current state of the SQL query. A highlighted token "[?]" indicates where your current selection will impact the query.
 
-Instead of creating the query right away, you are constrained \
-to choose between the provided options, given the current state \
-of the query. The [?] symbol (also referred to as the highlight token) \
-would almost always suggest the place in the query that the result \
-of your decision will affect. An option list would be indicated by \
-"Options:" followed by a numbered list of options.
+To make a selection:
+1. Type only the option number at the end of your response.
+2. Ensure nothing but the option number is on the last line.
 
-Responding to an option list, you should always do the following:
-- As the first line of your response, always output the reasoning \
-behind your decision. Mention which option you will choose and \
-why you won't choose the others. Outline your thinking process \
-and future plans.
-- As the last line of your response, always output the selected \
-option NUMBER (and only, exclusively the NUMBER, without option \
-text or any other explanation), and nothing else. For example, \
-if you want to select option "1) WITH an alias", the last line \
-should read "1".
-- Note that if the some option number is missing from the list \
-of options, you cannot select this number. For example, if \
-the option list reads "1) ... 2) ... 4) ...", you can't select \
-option 3, even if you have been able to select it before.
+When prompted to input a value directly:
+1. Write the value on the last line of your response for the tool to process it correctly.
 
-The option list would be prepended with the task description \
-that might understand the option list. This information \
-will always be indicated by "Task:"
+Note:
+- Each decision is final; once confirmed, you cannot modify it.
+- Clearly state the reasoning for each choice at the beginning of your response.
 
-Sometimes, the option list would be prepended with some context \
-that might help make the appropriate decision. This information \
-will always be indicated by "Context:"
-
-Sometimes, instead of the option list, you would be tasked with \
-generating (choosing) a primitive value (an identifier). In this case, \
-the list line of the request would contain "Generate a value of \
-type [...]", where [...] would be replaced with a value type (such \
-as Integer or Text). In some cases, the request might also look like: \
-"Generate [...]" with arbitraty text instead of [...]. In cases when
-you'll need to choose an identifier, the request would look like: \
-"Choose [...]". In response, you should always do the following: \
-- As the first line of your response, always output the reasoning \
-behind the value you will be selecting.
-- As the last line of your response, always output the selected \
-value (and only, exclusively the value), and nothing else. For example, \
-if you are selecting an option number, you should NOT respond with "1) option text" \
-but simply "1". If you are generating a value, you should NEVER respond with things such as \
-"Generated value: TableAlias" but you should ALWAYS respond with things such as "TableAlias". \
-Always remember that the generated value in the last line of the response will directly appear in the query.
-
-HERE'S THE REQUEST FOR WHICH YOU ARE TASKED TO GENERATE AN SQL QUERY:
-Request: "{request}"
-HERE'S THE DATABASE SCHEMA:
-Schema: "{schema}"
+Example responses demonstrating how to interact with the tool:
+```
+I choose option 2) ORDERS because it includes the data needed about orders.
+2
+```
+```
+I input the number 3, as the column value must be multiplied by this factor.
+3
+```
+```
+I select option 1 to apply a WHERE clause for filtering specific rows.
+1
+```
+```
+I enter "OK" because this is the value that indicates a successful operation in the STATUS column.
+OK
+```
 """
 
+# system_prompt="""
+# You have to create an SQL query that would satisfy \
+# the provided text request. The request would always be \
+# indicated by the string "Request:"
+
+# You would be also provided with a description of the database \
+# schema. This description would follow the string "Schema:" \
+# and would be a list of CREATE TABLE statements.
+
+# Instead of creating the query right away, you are constrained \
+# to choose between the provided options, given the current state \
+# of the query. The [?] symbol (also referred to as the highlight token) \
+# would almost always suggest the place in the query that the result \
+# of your decision will affect. An option list would be indicated by \
+# "Options:" followed by a numbered list of options.
+
+# Responding to an option list, you should always do the following:
+# - As the first line of your response, always output the reasoning \
+# behind your decision. Mention which option you will choose and \
+# why you won't choose the others. Outline your thinking process \
+# and future plans.
+# - As the last line of your response, always output the selected \
+# option NUMBER (and only, exclusively the NUMBER, without option \
+# text or any other explanation), and nothing else. For example, \
+# if you want to select option "1) WITH an alias", the last line \
+# should read "1".
+# - Note that if the some option number is missing from the list \
+# of options, you cannot select this number. For example, if \
+# the option list reads "1) ... 2) ... 4) ...", you can't select \
+# option 3, even if you have been able to select it before.
+
+# The option list would be prepended with the task description \
+# that might understand the option list. This information \
+# will always be indicated by "Task:"
+
+# Sometimes, the option list would be prepended with some context \
+# that might help make the appropriate decision. This information \
+# will always be indicated by "Context:"
+
+# Sometimes, instead of the option list, you would be tasked with \
+# generating (choosing) a primitive value (an identifier). In this case, \
+# the list line of the request would contain "Generate a value of \
+# type [...]", where [...] would be replaced with a value type (such \
+# as Integer or Text). In some cases, the request might also look like: \
+# "Generate [...]" with arbitraty text instead of [...]. In cases when
+# you'll need to choose an identifier, the request would look like: \
+# "Choose [...]". In response, you should always do the following: \
+# - As the first line of your response, always output the reasoning \
+# behind the value you will be selecting.
+# - As the last line of your response, always output the selected \
+# value (and only, exclusively the value), and nothing else. For example, \
+# if you are selecting an option number, you should NOT respond with "1) option text" \
+# but simply "1". If you are generating a value, you should NEVER respond with things such as \
+# "Generated value: TableAlias" but you should ALWAYS respond with things such as "TableAlias". \
+# Always remember that the generated value in the last line of the response will directly appear in the query.
+
+# HERE'S THE REQUEST FOR WHICH YOU ARE TASKED TO GENERATE AN SQL QUERY:
+# Request: "{request}"
+# HERE'S THE DATABASE SCHEMA:
+# Schema: "{schema}"
+# """
+
 additional_prompts_folder="llm_prompts/chatgpt_subgraph_prompts/"
+
+print_prompts_and_responses=true
+
+query_requests_file_path="llm_prompts/query_requests/test_requests.toml"
+
+backtrack_prompt="""
+Write down the answer to this question: Does the current query satisfy the task description perfectly?
+If you wish to undo your decisions, at the last line of your next response, \
+output "RETURN TO DECISION #", where # is the number of the decision you with to return to.
+Otherwise, output "CONTINUE".
+"""
 
 # [transitions]
 # HOW TO ADD THE DECISION PROMPTS:

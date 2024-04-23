@@ -159,7 +159,18 @@ impl<SubMod: SubstituteModel, StC: StateChooser> QueryGenerator<SubMod, StC> {
         _self
     }
 
+    fn perform_model_backtracking(&mut self) {
+        if let Some(model) = self.predictor_model.as_mut() {
+            if let Some(backtracking_checkpoint) = model.try_get_backtracking_checkpoint() {
+                self.state_generator.restore_chain_state(backtracking_checkpoint);
+            }
+            let chain_state_checkpoint = self.state_generator.get_chain_state_checkpoint(false);
+            model.add_checkpoint(chain_state_checkpoint);
+        }
+    }
+
     fn next_state_opt(&mut self) -> Option<SmolStr> {
+        self.perform_model_backtracking();
         self.state_generator.next_node_name(
             &mut self.rng,
             &mut self.clause_context,

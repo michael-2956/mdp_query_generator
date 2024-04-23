@@ -3,17 +3,17 @@
 
 [transitions.types_value]
 task="""
-Select which kind of expression you would like to generate in place of the current highlight token.
+Select which kind of expression you would like to replace the current highlight token with.
 """
 [transitions.types_value.options]
-1="A nested expression. This will add parentheses in place of the current highlight token, and you would need to populate them with an expression afterwards."
+1="A nested expression: ([expr]). This will add parentheses in place of the current highlight token, and you would need to populate them with an expression afterwards."
 2="NULL"
 3="A typed NULL. This will put null::[type] in place of the current highlight token depending on the type you selected before"
 4="A column identifier. Select this if you want to put a column in place of the current highlight token."
 5="A subquery. Select this if you want to put a single column, single row subquery in place of the current highlight token."
 6="An aggregate function. Select this if you want to put an aggregate function in place of the current highlight token."
 7="CASE expression. Select this if you want to put a CASE expression in place of the current highlight token."
-8="A primitive/literal. Select this if you want to put a primitive/literal in place of the current highlight token. For example, 1, 'abc', date '01.01.1978' are all literal values."
+8="A value such as: 1, 'abc', date '01.01.1978', true, etc."
 9="A formula. Select this if you want to put a formila in place of the current highlight token. Examples include '1 + 2 * C1' (for types such as integer), 'l_shipdate <= date '1998-12-01' - interval '90' day' (for bool), etc. (depending on the selected type)"
 [transitions.types_value.option_nodes]
 1="types_value_nested"

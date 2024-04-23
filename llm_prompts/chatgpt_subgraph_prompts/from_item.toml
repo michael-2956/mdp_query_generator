@@ -1,16 +1,25 @@
 [transitions]
 
+# Select whether you would like this FROM item to \
+# have an alias. Note that without alias, you wouldn't \
+# be able to generate a subquery, as all subqueries need an alias. \
+# However, if you want to put a table name in FROM, then \
+# the alias is not required, as you will be able to reference the \
+# table name without one.
+# Examples:
+# - with an alias: SELECT C1 FROM T1 AS A1. Here, A1 is the alias.
+# - without an alias: SELECT C1 FROM T1.
 
 [transitions.FROM_item]
 task="""
-Select whether you would like this FROM item to \
-have an alias. Note that without alias, you wouldn't \
-be able to generate a subquery, as all subqueries need an alias. \
-However, if you want to put a table name in FROM, then \
-the alias is not required.
-Examples:
-- with an alias: SELECT C1 FROM T1 AS A1. Here, A1 is the alias.
-- without an alias: SELECT C1 FROM T1.
+Choose whether to use an alias for the item in the FROM clause. Using an \
+alias allows for subqueries and easier reference within the query. If you \
+plan to use just a table name directly in the FROM clause, an alias isn't \
+necessary as the table can be referenced by its name.
+
+Explanation:
+- With an alias: SELECT A1.C1 FROM T1 AS A1. "A1" is the alias, making it easier to reference in complex queries.
+- Without an alias: SELECT T1.C1 FROM T1. The table "T1" is directly referenced without an alias.
 """
 [transitions.FROM_item.options]
 1="WITH an alias"

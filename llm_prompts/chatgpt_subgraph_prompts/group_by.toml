@@ -6,13 +6,16 @@ task="""
 You chose to make the query groupped. Now you need to decide whether to include \
 the GROUP BY clause itself.
 
-Note that choosing to OMIT the GROUP BY clause is a \
-valid action if you want to create an aggregation query without an explicit GROUP BY \
-clause. For example: `SELECT SUM(C1) FROM T1` is such a query.
+Write down the answer to this question: Will the current query need to treat all of \
+the rows in a relation as a single group to satisfy the task description? 
+For example: `SELECT SUM(C1) FROM T1` is such a query.
+If yes, choose to option to "OMIT the GROUP BY clause and group by a single group"
+
+However, if you indend to group by a specific column(s), choose to add the GROUP BY clause add this step.
 """
 [transitions.GROUP_BY.options]
-1="OMIT the GROUP BY clause."
-2="ADD the GROUP BY clause."
+1="OMIT the GROUP BY clause and group by a single group."
+2="ADD the GROUP BY clause. You won't be able to group by a single group."
 [transitions.GROUP_BY.option_nodes]
 1="group_by_single_group"
 2="has_accessible_columns"

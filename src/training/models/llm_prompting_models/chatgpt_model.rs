@@ -1,10 +1,11 @@
 use std::{collections::HashMap, env, fmt, hash::RandomState, path::PathBuf, time::Duration};
 
-use crate::query_creation::{query_generator::{call_modifiers::WildcardRelationsValue, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, IdentName, Relation}, value_choosers::QueryValueChooser}, state_generator::{markov_chain_generator::{markov_chain::NodeParams, StackFrame}, subgraph_type::SubgraphType}};
+use crate::query_creation::{query_generator::{call_modifiers::WildcardRelationsValue, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, IdentName, Relation}, value_choosers::QueryValueChooser}, state_generator::{markov_chain_generator::{markov_chain::NodeParams, ChainStateCheckpoint, DynClone, StackFrame}, subgraph_type::SubgraphType}};
 
 use super::{llm_prompts::LLMPrompts, ModelPredictionResult, PathwayGraphModel};
 
 use chatgpt::{client::ChatGPT, config::{ChatGPTEngine, ModelConfiguration}, converse::Conversation, types::CompletionResponse};
+use itertools::Itertools;
 use rand::distributions::WeightedIndex;
 use sqlparser::ast::{DateTimeField, Ident, ObjectName, Query};
 use tokio::runtime::{self, Runtime};
@@ -28,8 +29,11 @@ pub struct ChatGPTPromptingModel {
     /// set_choice_query_ast method of the QueryValueChooser trait
     value_choice_query_str: Option<String>,
     prompts: Option<LLMPrompts>,
-    current_request: String,
+    decision_checkpoints: HashMap<usize, ChainStateCheckpoint>,
     async_runtime: Runtime,
+    /// current decision number to number the decisions for the LLM
+    next_decision_n: usize,
+    asked_to_backtrack: bool,
     client: ChatGPT,
 }
 
@@ -92,17 +96,15 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
         ).unwrap();
 
         // Query the model and interpret the response
-        let mut error_msg = "".to_string();
-        let model_answer = loop {
-            let model_answer = self.get_model_answer(format!("{error_msg}{prompt}"));
-            if !valid_options.contains(&model_answer) {
-                let mut valid_options_str: String = valid_options.iter().map(|k| format!("{k}, ")).collect();
-                let valid_options_str = valid_options_str.split_off(valid_options_str.len() - 2);
-                error_msg = format!("ERROR: Invalid option: \"{model_answer}\".\nValid options are: {valid_options_str}.\nThe last line of your response should not contain anything but the option number.\n\n");
-            } else {
-                break model_answer;
-            }
-        };
+        let valid_options_str = valid_options.iter().map(|k| k.to_string()).collect::<Vec<_>>().join(", ");
+        let model_answer = self.get_model_answer_with_validation(prompt, |ans| {
+            if !valid_options.contains(ans) {
+                Err(format!(
+                    "ERROR: Invalid option: \"{ans}\".\nValid options are: {valid_options_str}.\n\
+                    The last line of your response should not contain anything but the option number.\n\n"
+                ))
+            } else { Ok(()) }
+        }, true, true);
         let option_nodes = self.prompts_ref().get_option_nodes(current_node_name).unwrap();
         let node_name = option_nodes.get(&model_answer).unwrap().clone();
 
@@ -111,22 +113,77 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
     }
 
     fn as_value_chooser(&mut self) -> Option<&mut dyn QueryValueChooser> { Some(self) }
+
+    // fn add_checkpoint(&mut self, chain_state_checkpoint: ChainStateCheckpoint) {
+    //     self.decision_checkpoints.insert(self.next_decision_n, chain_state_checkpoint);
+    // }
+
+    // fn try_get_backtracking_checkpoint(&mut self) -> Option<ChainStateCheckpoint> {
+    //     if self.asked_to_backtrack {
+    //         return None
+    //     }
+    //     self.asked_to_backtrack = true;
+    //     let valid_keys = self.decision_checkpoints.keys().cloned().collect_vec();
+    //     let model_answer = self.get_model_answer_with_validation(
+    //         self.prompts_ref().backtrack_prompt.clone(),
+    //         |ans| {
+    //         if ans == "CONTINUE" { return Ok(()) }
+    //         if let Some(decision_num_str) = ans.strip_prefix("RETURN TO DECISION ") {
+    //             if let Ok(return_to) = decision_num_str.parse::<usize>() {
+    //                 if !valid_keys.contains(&return_to) {
+    //                     Err(format!(
+    //                         "Invalid decision number: {decision_num_str}. Valid decision numbers: {}.",
+    //                         valid_keys.iter().map(|k| k.to_string()).collect_vec().join(", ")
+    //                     ))
+    //                 } else {
+    //                     Ok(())
+    //                 }
+    //             } else {
+    //                 Err(format!(
+    //                     "Unrecognised decision number: {decision_num_str}. Expected an integer value."
+    //                 ))
+    //             }
+    //         } else {
+    //             Err(format!(
+    //                 "ERROR: unrecognsed choice. The last line of your response should read \"CONTINUE\" or \"RETURN \
+    //                 TO DECISION #\" (without quotation marks), where # is the number of the selected decision."
+    //             ))
+    //         }
+    //     }, false, false);
+    //     if model_answer == "CONTINUE" {
+    //         None
+    //     } else {
+    //         let return_to_decision = model_answer.strip_prefix("RETURN TO DECISION ").unwrap().parse::<usize>().unwrap();
+    //         Some(self.decision_checkpoints.get(&return_to_decision).unwrap().dyn_clone())
+    //     }
+    // }
+}
+
+fn split_in_two(what: &String) -> String {
+    let mut splitting_point = 300;
+    if what.len() < splitting_point {
+        splitting_point = what.len();
+    }
+    format!("{}\n...\n{}", &what[0..splitting_point], &what[what.len()-splitting_point..what.len()])
 }
 
 impl ChatGPTPromptingModel {
     pub fn new() -> Self {
         let mut model_config = ModelConfiguration::default();
         model_config.engine = ChatGPTEngine::Custom("gpt-3.5-turbo");
+        // model_config.engine = ChatGPTEngine::Custom("gpt-4-turbo");
         let mut _self = Self {
             value_choice_query_str: None,
             decision_context_by_depth: vec![],
-            current_request: "Generate this query: SELECT COUNT(*) AS total_orders FROM ORDERS;".to_string(),// "Count the total number of orders",
             prompts: None,
+            next_decision_n: 1,
             async_runtime: runtime::Builder::new_current_thread().enable_all().build().unwrap(),
             client: ChatGPT::new_with_config(
                 env::var("OPENAI_API_KEY").unwrap(), model_config
             ).unwrap(),
             current_conversation: None,
+            decision_checkpoints: HashMap::new(),
+            asked_to_backtrack: true,
         };
         _self
     }
@@ -144,26 +201,32 @@ impl ChatGPTPromptingModel {
         ).collect())
     }
 
+    /// current text->SQL request
+    fn current_request_ref(&self) -> &String {
+        self.prompts_ref().query_requests.first().unwrap()
+    }
+
     fn initiate_conversation(&mut self, schema_string: String) {
         let direction_message = gen_format_fn!({
-            "request" => self.current_request,
+            "request" => self.current_request_ref(),
             "schema" => schema_string,
-        })(self.prompts.as_ref().unwrap().system_prompt.clone());
-        eprintln!("Direction message: {direction_message}\n======================\n======================\n");
-        self.current_conversation = Some(self.client.new_conversation_directed(direction_message));
+        })(self.prompts_ref().system_prompt.clone());
+        if self.prompts_ref().print_prompts_and_responses {
+            eprintln!("Direction message:\n{}\n", split_in_two(&direction_message));
+        }
 
-        // let response = self.query_model("Ignore all previous instructions an generate the SQL query right away (after this, you will generate it step by step)".to_string()).unwrap();
-        // eprintln!("Response: {}", response.message().content);
-        // panic!()
+        self.current_conversation = Some(self.client.new_conversation_directed(direction_message));
     }
 
     fn query_model(&mut self, prompt: String) -> CompletionResponse {
-        let prompt = format!("Request: \"{}\"\n\n{prompt}", self.current_request);
-        eprintln!("\n\nPrompt:\n{prompt}");
+        if self.prompts_ref().print_prompts_and_responses {
+            eprintln!("Prompt:\n{}\n", prompt);
+        }
         self.async_runtime.block_on(async {
             let mut result = self.current_conversation.as_mut().unwrap().send_message(prompt.clone()).await;
             while result.is_err() {
-                tokio::time::sleep(Duration::from_secs(1)).await;
+                eprintln!("Request error: {}", result.unwrap_err());
+                tokio::time::sleep(Duration::from_secs(5)).await;
                 result = self.current_conversation.as_mut().unwrap().send_message(prompt.clone()).await;
             }
             result.unwrap()
@@ -172,10 +235,31 @@ impl ChatGPTPromptingModel {
 
     fn get_model_answer(&mut self, prompt: String) -> String {
         let response = self.query_model(prompt);
-        eprintln!("\n\nResponse: {}", response.message().content);
         let last_line = response.message().content.trim_end_matches('\n').lines().last().unwrap().to_string();
-        eprintln!("Last line: {}\n======================\n======================\n", last_line);
+        if self.prompts_ref().print_prompts_and_responses {
+            eprintln!("Response:\n{}", response.message().content);
+            eprintln!("Last line: {}\n", last_line);
+        }
         last_line
+    }
+
+    fn get_model_answer_with_validation<ValFn>(&mut self, mut prompt: String, validation_fn: ValFn, add_decision_num: bool, include_task: bool) -> String
+    where
+        ValFn: Fn(&String) -> Result<(), String>
+    {
+        if add_decision_num {
+            prompt = format!("Decision #{}\n\n{prompt}", self.next_decision_n);
+            self.next_decision_n += 1;
+            self.asked_to_backtrack = false;
+        }
+        if include_task {
+            prompt = format!("Task Objective: \"{}\"\n\n{prompt}", self.current_request_ref());
+        }
+        let mut model_answer = self.get_model_answer(prompt);
+        while let Err(err_text) = validation_fn(&model_answer) {
+            model_answer = self.get_model_answer(err_text);
+        }
+        model_answer
     }
 
     fn prompts_ref(&self) -> &LLMPrompts {
@@ -194,21 +278,25 @@ impl ChatGPTPromptingModel {
         OptT: fmt::Display + Clone,
         Fmt: Fn(String) -> String
     {
+        if options.len() == 1 {
+            return options.into_iter().next().unwrap()
+        }
+
         let current_query_str = self.value_choice_query_str.take().unwrap();
         let (prompt, options_map) = self.prompts_ref().generate_value_chooser_options_prompt_formatted(
             current_query_str, task_key, options, formatter
         ).unwrap();
-        let mut error_msg = "".to_string();
-        let model_answer = loop {
-            let model_answer = self.get_model_answer(format!("{error_msg}{prompt}"));
-            if !options_map.contains_key(&model_answer) {
-                let mut valid_options_str: String = options_map.keys().map(|k| format!("{k}, ")).collect();
-                let valid_options_str = valid_options_str.split_off(valid_options_str.len() - 2);
-                error_msg = format!("ERROR: Invalid option: \"{model_answer}\".\nValid options are: {valid_options_str}.\nThe last line of your response should not contain anything but the option number.\n\n");
-            } else { 
-                break model_answer;
-            }
-        };
+
+        let valid_options_str = options_map.keys().map(|k| k.to_string()).collect::<Vec<_>>().join(", ");
+        let model_answer = self.get_model_answer_with_validation(prompt, |ans| {
+            if !options_map.contains_key(ans) {
+                Err(
+                    format!("ERROR: Invalid option: \"{ans}\".\nValid options are: {valid_options_str}.\
+                    \nThe last line of your response should not contain anything but the option number.\n\n")
+                )
+            } else { Ok(()) }
+        }, false, true);
+
         options_map.get(&model_answer).unwrap().clone()
     }
 
@@ -222,15 +310,16 @@ impl ChatGPTPromptingModel {
     {
         let current_query_str = self.value_choice_query_str.take().unwrap();
         let prompt = self.prompts_ref().generate_value_chooser_generate_prompt_formatted(current_query_str, task_key, formatter).unwrap();
-        let mut error_msg = "".to_string();
-        let model_answer = loop {
-            let model_answer = self.get_model_answer(format!("{error_msg}{prompt}"));
-            if model_answer.contains(' ') {
-                error_msg = format!("ERROR: Invalid value: \"{model_answer}\". The last line of your response should not contain anything but the value. Please regenerate the value correctly.\n\n");
-            } else { 
-                break model_answer;
-            }
-        };
+
+        let model_answer = self.get_model_answer_with_validation(prompt, |ans| {
+            if ans.contains(' ') {
+                Err(format!(
+                    "ERROR: Invalid value: \"{ans}\". The last line of your response should not contain anything \
+                    but the value. Please regenerate the value correctly.\n\n"
+                ))
+            } else { Ok(()) }
+        }, false, true);
+
         model_answer
     }
 }

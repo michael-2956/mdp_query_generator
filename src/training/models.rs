@@ -2,7 +2,7 @@ use std::{io, path::PathBuf, str::FromStr};
 
 use sqlparser::ast::Query;
 
-use crate::{config::TomlReadable, query_creation::{query_generator::value_choosers::QueryValueChooser, state_generator::markov_chain_generator::{markov_chain::NodeParams, StackFrame}}};
+use crate::{config::TomlReadable, query_creation::{query_generator::value_choosers::QueryValueChooser, state_generator::markov_chain_generator::{markov_chain::NodeParams, ChainStateCheckpoint, StackFrame}}};
 
 use self::{llm_prompting_models::{chatgpt_model::ChatGPTPromptingModel, prompt_testing_model::PromptTestingModel}, markov_models::{DepthwiseFullFunctionContext, DepthwiseFunctionNameContext, FullFunctionContext, FunctionNameContext, ModelWithMarkovWeights, StackedFullFunctionContext, StackedFunctionNamesContext}};
 
@@ -119,7 +119,7 @@ pub trait PathwayGraphModel {
     fn load_weights(&mut self, file_path: &PathBuf) -> io::Result<()>;
 
     /// print weights to stdout
-    fn print_weights(&self) { todo!() }
+    fn print_weights(&self) { unimplemented!() }
 
     /// initiate the inference process
     fn start_inference(&mut self, _schema_string: String) { }
@@ -130,7 +130,11 @@ pub trait PathwayGraphModel {
     /// end the inference process
     fn end_inference(&mut self) { }
 
-    fn write_weights_to_dot(&self, _dot_file_path: &PathBuf) -> io::Result<()> { todo!() }
+    fn write_weights_to_dot(&self, _dot_file_path: &PathBuf) -> io::Result<()> { unimplemented!() }
 
     fn as_value_chooser(&mut self) -> Option<&mut dyn QueryValueChooser> { None }
+
+    fn add_checkpoint(&mut self, _chain_state_checkpoint: ChainStateCheckpoint) { }
+
+    fn try_get_backtracking_checkpoint(&mut self) -> Option<ChainStateCheckpoint> { None }
 }
