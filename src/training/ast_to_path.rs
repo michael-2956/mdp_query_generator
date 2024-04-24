@@ -261,6 +261,8 @@ impl PathGenerator {
             self.handle_where(selection)?;
         }
 
+        self.try_push_state("WHERE_done")?;
+
         if select_body.group_by.len() != 0 {
             self.handle_query_after_group_by(select_body, true)?;
         } else {

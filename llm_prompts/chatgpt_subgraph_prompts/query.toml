@@ -3,68 +3,40 @@
 
 [transitions.call0_FROM]
 task="""
-Select which action you would like to perform next and which query clauses you \
-would like to omit in the highlighted query.
-
-You should choose "DO make the query groupped" if you want to use aggregation \
-in your current query or you want to add a GROUP BY clause.
-
-Write down the answer to this question: Will the current query need to use an aggregate function \
-or a GROUP BY clause to satisfy the text description? (recall what aggregate functions in SQL are)
-If yes, select "DO make the query groupped".
-
-IMPORTANT: If you choose to OMIT some clause you will not be able to add it later.
+Choose whether to include the WHERE clause in the highlighted query.
 """
 [transitions.call0_FROM.options]
-1="ADD the WHERE clause. You will be able to add grouping or a SELECT clause later."
-2="OMIT the WHERE clause, and DO make the query groupped. You will be able to add a SELECT clause later."
-3="OMIT the WHERE clause, DON'T make the query groupped, and ADD the SELECT clause. You won't be able to use aggregate functions."
-# [transitions.call0_FROM]
-# task="""
-# Decide the next step in constructing your SQL query. Evaluate whether your query requires the use of specific SQL clauses based on generic needs rather than a specific task.
-
-# - **Aggregation Functions**: Consider if your query needs to summarize data (e.g., COUNT, AVG, SUM) which requires an aggregation function. 
-# - **GROUP BY Clause**: Determine if there's a need to group your data based on one or more columns, useful in conjunction with aggregate functions.
-# - **WHERE Clause**: Decide if you need to filter records based on certain conditions before applying other operations.
-
-# IMPORTANT: Once you choose to omit a clause, you cannot add it later. Choose wisely based on potential query needs.
-# """
-# [transitions.call0_FROM.options]
-# 1="ADD a WHERE clause, allowing for data filtering. Suitable for scenarios requiring specific data subsets before further processing."
-# 2="OMIT the WHERE clause and prepare for aggregation. Ideal for queries that aggregate data without initial filtering."
-# 3="OMIT both WHERE and aggregation clauses if your query requires straightforward data retrieval without specific constraints or summaries."
+1="ADD a WHERE clause, allowing for data filtering. Suitable for scenarios requiring specific data subsets before further processing."
+2="SKIP this step."
 [transitions.call0_FROM.option_nodes]
 1="call0_WHERE"
-2="call0_GROUP_BY"
-3="call0_SELECT"
+2="WHERE_done"
 
-
-[transitions.call0_WHERE]
+[transitions.WHERE_done]
 task="""
 Select whether you would like to make the highlighted query groupped.
 
 You should choose "DO make the query groupped" if you want to use aggregation \
 in your current query or you want to add a GROUP BY clause.
 
-Write down the answer to this question: Will the current query need to use an aggregate function \
-or a GROUP BY clause to satisfy the task description?
+Write down the answer to this question: Will the current query need to use an \
+aggregate function or a GROUP BY clause to satisfy the task description?
 If yes, select "DO make the query groupped".
 """
-[transitions.call0_WHERE.options]
-1="DO make the query groupped. You will be able to add a SELECT clause later."
-2="DON'T make the query groupped, and ADD the SELECT clause."
-[transitions.call0_WHERE.option_nodes]
+[transitions.WHERE_done.options]
+1="DO make the query groupped."
+2="DON'T make the query groupped. You won't be able to use aggregate functions in this query."
+[transitions.WHERE_done.option_nodes]
 1="call0_GROUP_BY"
 2="call0_SELECT"
-
 
 [transitions.call0_GROUP_BY]
 task="""
 Select whether you would like to add the HAVING clause.
 """
 [transitions.call0_GROUP_BY.options]
-1="Add the HAVING clause. You will be able to add a SELECT clause later."
-2="Omit the HAVING clause, and add the SELECT clause"
+1="Add the HAVING clause."
+2="OMIT the HAVING clause. You won't be able to add it later."
 [transitions.call0_GROUP_BY.option_nodes]
 1="call0_HAVING"
 2="call0_SELECT"

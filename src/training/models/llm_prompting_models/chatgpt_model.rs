@@ -1,11 +1,10 @@
 use std::{collections::HashMap, env, fmt, hash::RandomState, path::PathBuf, time::Duration};
 
-use crate::query_creation::{query_generator::{call_modifiers::WildcardRelationsValue, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, IdentName, Relation}, value_choosers::QueryValueChooser}, state_generator::{markov_chain_generator::{markov_chain::NodeParams, ChainStateCheckpoint, DynClone, StackFrame}, subgraph_type::SubgraphType}};
+use crate::query_creation::{query_generator::{call_modifiers::WildcardRelationsValue, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, IdentName, Relation}, value_choosers::QueryValueChooser}, state_generator::{markov_chain_generator::{markov_chain::NodeParams, StackFrame}, subgraph_type::SubgraphType}};
 
 use super::{llm_prompts::LLMPrompts, ModelPredictionResult, PathwayGraphModel};
 
 use chatgpt::{client::ChatGPT, config::{ChatGPTEngine, ModelConfiguration}, converse::Conversation, types::CompletionResponse};
-use itertools::Itertools;
 use rand::distributions::WeightedIndex;
 use sqlparser::ast::{DateTimeField, Ident, ObjectName, Query};
 use tokio::runtime::{self, Runtime};
@@ -29,7 +28,7 @@ pub struct ChatGPTPromptingModel {
     /// set_choice_query_ast method of the QueryValueChooser trait
     value_choice_query_str: Option<String>,
     prompts: Option<LLMPrompts>,
-    decision_checkpoints: HashMap<usize, ChainStateCheckpoint>,
+    // _decision_checkpoints: HashMap<usize, ChainStateCheckpoint>,
     async_runtime: Runtime,
     /// current decision number to number the decisions for the LLM
     next_decision_n: usize,
@@ -182,7 +181,7 @@ impl ChatGPTPromptingModel {
                 env::var("OPENAI_API_KEY").unwrap(), model_config
             ).unwrap(),
             current_conversation: None,
-            decision_checkpoints: HashMap::new(),
+            // _decision_checkpoints: HashMap::new(),
             asked_to_backtrack: true,
         };
         _self

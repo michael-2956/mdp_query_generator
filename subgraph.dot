@@ -1,26 +1,32 @@
-subgraph def_interval {
-        interval [label="interval\n[mods]", MODS="[]", shape=rectangle, style=filled, color=lightslateblue]
-        EXIT_interval [label="EXIT interval"]
+subgraph def_Query {
+        Query [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[single column, single row]", label="Query\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[single column, single row]", shape=octagon, style=filled, color=green]
+        EXIT_Query [label="EXIT Query", shape=rectangle]
 
-        interval_binary [label="Binary op."]
-        interval -> interval_binary
+        call0_FROM [label="FROM", shape=rectangle, color=cornflowerblue, style=filled]
+        Query -> call0_FROM
 
-        interval_add_subtract [label="+/-"]
-        interval_binary -> interval_add_subtract
-        interval_add_subtract_plus [label="+"]
-        interval_add_subtract -> interval_add_subtract_plus
-        interval_add_subtract_minus [label="-"]
-        interval_add_subtract -> interval_add_subtract_minus
-        call91_types [TYPES="[interval]", MODS="[...]", label="TYPES: interval\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        interval_add_subtract_plus -> call91_types
-        interval_add_subtract_minus -> call91_types
-        call92_types [TYPES="[interval]", MODS="[...]", label="TYPES: interval\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        call91_types -> call92_types
-        call92_types -> EXIT_interval
+        call0_WHERE [label="WHERE", shape=rectangle, style=filled, color=darkgoldenrod1]
+        call0_FROM -> call0_WHERE
 
-        interval_unary_minus [label="-interval"]
-        interval -> interval_unary_minus
-        call93_types [TYPES="[interval]", MODS="[...]", label="TYPES: interval\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
-        interval_unary_minus -> call93_types
-        call93_types -> EXIT_interval
+        WHERE_done [label="WHERE done"]
+        call0_FROM -> WHERE_done
+        call0_WHERE -> WHERE_done
+
+        call0_SELECT [label="SELECT\nTYPES: [...types]\nMODS: [?single column]", TYPES="[...]", MODS="[?single column]", shape=rectangle, style=filled, color=bisque]
+        WHERE_done -> call0_SELECT
+        
+        call0_GROUP_BY [label="GROUP BY", shape=rectangle, style=filled, color=gray]
+        WHERE_done -> call0_GROUP_BY
+        call0_GROUP_BY -> call0_SELECT
+
+        call0_HAVING [label="HAVING", shape=rectangle, style=filled, color=mediumvioletred]
+        call0_GROUP_BY -> call0_HAVING
+        call0_HAVING -> call0_SELECT
+
+        call0_ORDER_BY [label="ORDER BY", shape=rectangle, style=filled, color=deepskyblue]
+        call0_SELECT -> call0_ORDER_BY
+
+        call0_LIMIT [label="LIMIT\nMODS: [?single row]", MODS="[?single row]", shape=rectangle, style=filled, color=brown]
+        call0_ORDER_BY -> call0_LIMIT
+        call0_LIMIT -> EXIT_Query
     }

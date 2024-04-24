@@ -85,13 +85,15 @@ digraph G {
         call0_WHERE [label="WHERE", shape=rectangle, style=filled, color=darkgoldenrod1]
         call0_FROM -> call0_WHERE
 
+        WHERE_done [label="WHERE done"]
+        call0_FROM -> WHERE_done
+        call0_WHERE -> WHERE_done
+
         call0_SELECT [label="SELECT\nTYPES: [...types]\nMODS: [?single column]", TYPES="[...]", MODS="[?single column]", shape=rectangle, style=filled, color=bisque]
-        call0_WHERE -> call0_SELECT
-        call0_FROM -> call0_SELECT
+        WHERE_done -> call0_SELECT
         
         call0_GROUP_BY [label="GROUP BY", shape=rectangle, style=filled, color=gray]
-        call0_WHERE -> call0_GROUP_BY
-        call0_FROM -> call0_GROUP_BY
+        WHERE_done -> call0_GROUP_BY
         call0_GROUP_BY -> call0_SELECT
 
         call0_HAVING [label="HAVING", shape=rectangle, style=filled, color=mediumvioletred]

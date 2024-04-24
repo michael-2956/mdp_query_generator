@@ -1,6 +1,6 @@
 use sqlparser::ast::{Expr, Query, Select, SetExpr, Value};
 
-use crate::{query_creation::{query_generator::{ast_builders::{from::FromBuilder, group_by::GroupByBuilder, having::HavingBuilder, limit::LimitBuilder, order_by::OrderByBuilder, select::SelectBuilder, where_clause::WhereBuilder}, match_next_state, query_info::IdentName, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
+use crate::{query_creation::{query_generator::{ast_builders::{from::FromBuilder, group_by::GroupByBuilder, having::HavingBuilder, limit::LimitBuilder, order_by::OrderByBuilder, select::SelectBuilder, where_clause::WhereBuilder}, match_next_state, query_info::IdentName, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
 
 pub struct QueryBuilder { }
 
@@ -66,62 +66,34 @@ impl QueryBuilder {
         select_body.from = FromBuilder::highlight();
         FromBuilder::build(generator, &mut select_body.from);
 
-        // highlight both clauses since the next decision will be affecting them
         select_body.selection = Some(WhereBuilder::highlight());
-        select_body.group_by = GroupByBuilder::highlight();
         match_next_state!(generator, {
             "call0_WHERE" => {
-                // only WHERE should be highlighted now
-                select_body.group_by = GroupByBuilder::nothing();
-                let where_val3 = unwrap_variant!(&mut select_body.selection, Some);
+                let where_val3 = select_body.selection.as_mut().unwrap();
                 WhereBuilder::build(generator, where_val3);
-
-                // the next decision will be affecting GROUP BY
-                select_body.group_by = GroupByBuilder::highlight();
-                match_next_state!(generator, {
-                    "call0_SELECT" => {
-                        // No GROUP BY for us
-                        select_body.group_by = GroupByBuilder::nothing();
-                    },
-                    "call0_GROUP_BY" => {
-                        GroupByBuilder::build(generator, &mut select_body.group_by);
-
-                        // the next decision will be affecting HAVING
-                        select_body.having = Some(HavingBuilder::highlight());
-                        match_next_state!(generator, {
-                            "call0_SELECT" => {
-                                // No HAVING for us
-                                select_body.having = None;
-                            },
-                            "call0_HAVING" => {
-                                HavingBuilder::build(generator, select_body.having.as_mut().unwrap());
-                                generator.expect_state("call0_SELECT");
-                            }, 
-                        });
-                    },
-                });
+                generator.expect_state("WHERE_done");
             },
-            "call0_SELECT" => {
-                select_body.selection = None;
-                select_body.group_by = GroupByBuilder::nothing();
-            },
+            "WHERE_done" => { select_body.selection = None; },
+        });
+
+        select_body.group_by = GroupByBuilder::highlight();
+        match_next_state!(generator, {
             "call0_GROUP_BY" => {
-                // only GROUP BY should be highlighted now
-                select_body.selection = None;
                 GroupByBuilder::build(generator, &mut select_body.group_by);
 
-                // the next decision will be affecting HAVING
                 select_body.having = Some(HavingBuilder::highlight());
                 match_next_state!(generator, {
-                    "call0_SELECT" => {
-                        // No HAVING for us
-                        select_body.having = None;
-                    },
                     "call0_HAVING" => {
                         HavingBuilder::build(generator, select_body.having.as_mut().unwrap());
                         generator.expect_state("call0_SELECT");
                     },
+                    "call0_SELECT" => {
+                        select_body.having = None;
+                    },
                 });
+            },
+            "call0_SELECT" => {
+                select_body.group_by = GroupByBuilder::nothing();
             },
         });
 
