@@ -1,13 +1,13 @@
 use smol_str::SmolStr;
 
-use crate::training::ast_to_path::PathNode;
+use crate::{config::TomlReadable, training::ast_to_path::PathNode};
 
 use super::{markov_chain::NodeParams, StateGenerationError};
 
 
 /// Dynamic model for assigning probabilities when using ProbabilisticModel 
 pub trait SubstituteModel {
-    fn empty() -> Self;
+    fn reset(&mut self);
     /// assigns the (unnormalized) log-probabilities to the outgoing nodes.
     /// Receives log-probability distruibution recorded in graph
     fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError>;
@@ -24,13 +24,18 @@ pub trait SubstituteModel {
 /// preserves the probabilities
 pub struct MarkovModel { }
 
-impl SubstituteModel for MarkovModel {
-    fn empty() -> Self {
+impl MarkovModel {
+    pub fn new() -> Self {
         Self {}
     }
+}
+
+impl SubstituteModel for MarkovModel {
     fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError> {
         Ok(node_outgoing)
     }
+
+    fn reset(&mut self) { }
 }
 
 /// uses a predetermined path to generate probabilities
@@ -49,16 +54,16 @@ impl PathModel {
             index: 0,
         }
     }
-}
 
-impl SubstituteModel for PathModel {
-    fn empty() -> Self {
+    pub fn empty() -> Self {
         Self {
             path: vec![],
             index: 0,
         }
     }
+}
 
+impl SubstituteModel for PathModel {
     fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError> {
         let node_name = &self.path[self.index];
         self.index += 1;
@@ -81,6 +86,13 @@ impl SubstituteModel for PathModel {
             ).collect())
         }
     }
+
+    fn reset(&mut self) {
+        *self = Self {
+            path: vec![],
+            index: 0,
+        };
+    }
 }
 
 /// uses the current state to generate the next probability set
@@ -93,15 +105,15 @@ impl DeterministicModel {
     pub fn set_state(&mut self, state: SmolStr) {
         self.state_to_choose = Some(state);
     }
-}
 
-impl SubstituteModel for DeterministicModel {
-    fn empty() -> Self where Self: Sized {
+    pub fn empty() -> Self {
         Self {
             state_to_choose: None,
         }
     }
+}
 
+impl SubstituteModel for DeterministicModel {
     fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError> {
         let node_name = self.state_to_choose.take().unwrap();
         if node_outgoing.iter().find(|(.., node)| node.node_common.name == node_name).is_none() {
@@ -121,6 +133,12 @@ impl SubstituteModel for DeterministicModel {
                     node,
                 )
             ).collect())
+        }
+    }
+
+    fn reset(&mut self) {
+        *self = Self {
+            state_to_choose: None,
         }
     }
 }
@@ -148,22 +166,42 @@ impl QueryStats {
     }
 }
 
+#[derive(Clone)]
+pub struct AntiCallModelConfig {
+    stir_level: usize,
+}
+
+impl TomlReadable for AntiCallModelConfig {
+    fn from_toml(toml_config: &toml::Value) -> Self {
+        let section = &toml_config["anticall_sub_model"];
+        Self {
+            stir_level: section["stir_level"].as_integer().unwrap() as usize,
+        }
+    }
+}
+
 /// this model alters the probabilies in a way that tries to omit the call nodes
 /// once certain stack length is reached, making the probabilities lower for
 /// nodes that are further from exit in terms of call nodes
 pub struct AntiCallModel {
     /// used to store running query statistics, such as
     /// the current level of nesting
-    pub stats: QueryStats,
+    stats: QueryStats,
+    sub_models_config: AntiCallModelConfig,
+}
+
+impl AntiCallModel {
+    pub fn new(sub_models_config: AntiCallModelConfig) -> Self {
+        Self {
+            stats: QueryStats::new(),
+            sub_models_config
+        }
+    }
 }
 
 impl SubstituteModel for AntiCallModel {
-    fn empty() -> Self {
-        Self { stats: QueryStats::new() }
-    }
-
     fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError> {
-        let prob_multiplier = if self.stats.current_stack_length > 6 { 100f64 } else { 0f64 };
+        let prob_multiplier = if self.stats.current_stack_length > self.sub_models_config.stir_level { 100f64 } else { 0f64 };
         Ok(node_outgoing.into_iter().map(|(l_p, node)| (
             l_p - (node.min_calls_until_function_exit as f64) * prob_multiplier,
             node
@@ -184,5 +222,9 @@ impl SubstituteModel for AntiCallModel {
 
     fn notify_call_stack_length(&mut self, stack_len: usize) {
         self.stats.current_stack_length = stack_len;
+    }
+    
+    fn reset(&mut self) {
+        self.stats = QueryStats::new();
     }
 }

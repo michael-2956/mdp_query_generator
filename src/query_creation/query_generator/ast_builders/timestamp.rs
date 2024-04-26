@@ -1,6 +1,6 @@
 use sqlparser::ast::{BinaryOperator, Expr};
 
-use crate::{query_creation::{query_generator::{match_next_state, QueryGenerator, ast_builders::types_value::TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
+use crate::{query_creation::{query_generator::{match_next_state, QueryGenerator, ast_builders::types_value::TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}}, unwrap_pat};
 
 use super::types::TypesBuilder;
 
@@ -12,8 +12,8 @@ impl TimestampBuilder {
         TypesBuilder::highlight()
     }
 
-    pub fn build<SubMod: SubstituteModel, StC: StateChooser>(
-        generator: &mut QueryGenerator<SubMod, StC>, timestamp: &mut Expr
+    pub fn build<StC: StateChooser>(
+        generator: &mut QueryGenerator<StC>, timestamp: &mut Expr
     ) -> SubgraphType {
         generator.expect_state("timestamp");
 

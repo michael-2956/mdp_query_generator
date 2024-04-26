@@ -146,7 +146,7 @@ impl QueryValueChooser for RandomValueChooser {
 impl RandomValueChooser {
     pub fn new() -> Self {
         Self {
-            rng: ChaCha8Rng::seed_from_u64(1),
+            rng: ChaCha8Rng::seed_from_u64(0),
             free_select_alias_index: 0,
             free_from_rename_index: 0,
             free_from_alias_index: 0,

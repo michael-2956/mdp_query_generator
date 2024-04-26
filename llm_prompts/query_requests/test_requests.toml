@@ -1,4 +1,5 @@
 requests = [
-    "Count the total number of orders", # SELECT COUNT(*) AS total_orders FROM ORDERS;
+    # "Count the total number of orders", # SELECT COUNT(*) AS total_orders FROM ORDERS;
+    "Generate a report by joining customer, order, and line item tables to sum revenue (item price adjusted by discount) per order from customers in the 'BUILDING' segment, with orders placed before and items shipped after mid-March 1995, grouped by order key, order date, and shipping priority, and sorted by descending revenue and order date.",
     # "This query calculates several aggregate metrics for each combination of return flag and line status from the \"lineitem\" table, including sum of quantity (sum_qty), sum of extended price (sum_base_price), sum of discounted price (sum_disc_price), sum of charged price (sum_charge), average quantity (avg_qty), average extended price (avg_price), average discount (avg_disc), and count of orders (count_order), filtering records where the shipping date is within 90 days before December 1, 1998, and presents the results sorted by return flag and line status."
 ]

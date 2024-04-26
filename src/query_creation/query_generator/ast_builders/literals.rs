@@ -1,6 +1,6 @@
 use sqlparser::ast::{DataType, Expr, TimezoneInfo, UnaryOperator, Value};
 
-use crate::{query_creation::{query_generator::{highlight_str, match_next_state, value_chooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
+use crate::{query_creation::{query_generator::{highlight_str, match_next_state, value_chooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}}, unwrap_pat};
 
 use super::types::TypesBuilder;
 
@@ -12,8 +12,8 @@ impl LiteralsBuilder {
         TypesBuilder::highlight()
     }
 
-    pub fn build<SubMod: SubstituteModel, StC: StateChooser>(
-        generator: &mut QueryGenerator<SubMod, StC>, expr: &mut Expr
+    pub fn build<StC: StateChooser>(
+        generator: &mut QueryGenerator<StC>, expr: &mut Expr
     ) -> SubgraphType {
         generator.expect_state("literals");
 

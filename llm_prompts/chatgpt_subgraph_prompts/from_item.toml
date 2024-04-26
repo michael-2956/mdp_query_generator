@@ -20,6 +20,8 @@ necessary as the table can be referenced by its name.
 Explanation:
 - With an alias: SELECT A1.C1 FROM T1 AS A1. "A1" is the alias, making it easier to reference in complex queries.
 - Without an alias: SELECT T1.C1 FROM T1. The table "T1" is directly referenced without an alias.
+
+You can only set an alias for one relation at a time.
 """
 [transitions.FROM_item.options]
 1="WITH an alias"

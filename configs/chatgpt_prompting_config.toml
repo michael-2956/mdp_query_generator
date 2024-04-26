@@ -38,3 +38,7 @@ n_tests=10000
 training_db_path="training_dbs/tpch_default_queries_no_views.sql"
 training_schema="schema/tpc-h_tables.sql"
 save_weights_to="weights/DepthwiseFunctionNameContext/tpch_default_queries.mw"
+
+[anticall_sub_model]
+# anticall dynamic model settings
+stir_level=6

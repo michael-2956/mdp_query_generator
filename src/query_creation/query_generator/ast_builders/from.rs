@@ -1,6 +1,6 @@
 use sqlparser::ast::{Join, JoinConstraint, JoinOperator, TableWithJoins};
 
-use crate::{query_creation::{query_generator::{ast_builders::{from_item::FromItemBuilder, types::TypesBuilder}, match_next_state, QueryGenerator, ast_builders::types_value::TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
+use crate::{query_creation::{query_generator::{ast_builders::{from_item::FromItemBuilder, types::TypesBuilder}, match_next_state, QueryGenerator, ast_builders::types_value::TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}}, unwrap_pat};
 
 /// subgraph def_FROM
 pub struct FromBuilder { }
@@ -10,8 +10,8 @@ impl FromBuilder {
         vec![]  // the decision to include the clause is in the builder itself
     }
 
-    pub fn build<SubMod: SubstituteModel, StC: StateChooser>(
-        generator: &mut QueryGenerator<SubMod, StC>, from: &mut Vec<TableWithJoins>
+    pub fn build<StC: StateChooser>(
+        generator: &mut QueryGenerator<StC>, from: &mut Vec<TableWithJoins>
     ) {
         generator.expect_state("FROM");
 

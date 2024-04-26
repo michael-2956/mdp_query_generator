@@ -8,8 +8,8 @@ pub struct TestAST2Path {
     config: AST2PathTestingConfig,
     main_config: MainConfig,
     path_generator: PathGenerator,
-    random_query_generator: QueryGenerator<AntiCallModel, ProbabilisticStateChooser>,
-    path_query_generator: QueryGenerator<PathModel, MaxProbStateChooser>,
+    random_query_generator: QueryGenerator<ProbabilisticStateChooser>,
+    path_query_generator: QueryGenerator<MaxProbStateChooser>,
 }
 
 impl TestAST2Path {
@@ -25,10 +25,12 @@ impl TestAST2Path {
             random_query_generator: QueryGenerator::from_state_generator_and_schema(
                 MarkovChainGenerator::with_config(&config.chain_config).unwrap(),
                 config.generator_config.clone(),
+                Box::new(AntiCallModel::new(config.anticall_model_config)),
             ),
             path_query_generator: QueryGenerator::from_state_generator_and_schema(
                 MarkovChainGenerator::with_config(&config.chain_config).unwrap(),
                 config.generator_config,
+                Box::new(PathModel::empty())
             ),
         })
     }

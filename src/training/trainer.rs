@@ -11,7 +11,7 @@ pub struct SQLTrainer {
     main_config: MainConfig,
     dataset_queries: Vec<Box<Query>>,
     path_generator: PathGenerator,
-    path_query_generator: QueryGenerator<PathModel, MaxProbStateChooser>,
+    path_query_generator: QueryGenerator<MaxProbStateChooser>,
 }
 
 #[derive(Debug, Clone)]
@@ -49,6 +49,7 @@ impl SQLTrainer {
             path_query_generator: QueryGenerator::from_state_generator_and_schema(
                 MarkovChainGenerator::with_config(&config.chain_config).unwrap(),
                 config.generator_config.clone(),
+                Box::new(PathModel::empty()),
             ),
             config: config.training_config.clone(),
             main_config: config.main_config.clone(),

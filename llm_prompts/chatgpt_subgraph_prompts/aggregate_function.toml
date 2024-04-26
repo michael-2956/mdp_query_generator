@@ -69,8 +69,8 @@ REGR_SXX needs two arguments, but MAX only needs a \
 single argument.
 """
 [transitions.aggregate_select_type_numeric.options]
-1=""
-2=""
+1="Single argument"
+2="Two arguments"
 [transitions.aggregate_select_type_numeric.option_nodes]
 1="arg_single_numeric"
 2="arg_double_numeric"

@@ -70,5 +70,6 @@ aggregate_functions_distribution_map_file="aggregate_functions_distribution_map.
 graph_file_path="graph.dot"
 # graph_file_path="performance_untrained_graph.dot"
 
-[dynmod_anticall]
-# TODO: anticall dynamic model settings
+[anticall_sub_model]
+# anticall dynamic model settings
+stir_level=6

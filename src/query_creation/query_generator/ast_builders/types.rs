@@ -1,6 +1,6 @@
 use sqlparser::ast::{Expr, Ident};
 
-use crate::{query_creation::{query_generator::{match_next_state, QueryGenerator, ast_builders::types_value::TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel, CallTypes}}, unwrap_variant};
+use crate::{query_creation::{query_generator::{match_next_state, QueryGenerator, ast_builders::types_value::TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, CallTypes}}, unwrap_variant};
 
 use super::types_value::TypesValueBuilder;
 
@@ -16,8 +16,8 @@ impl TypesBuilder {
         Expr::Identifier(Ident::new(""))
     }
 
-    pub fn build<SubMod: SubstituteModel, StC: StateChooser>(
-        generator: &mut QueryGenerator<SubMod, StC>, expr: &mut Expr, type_assertion: TypeAssertion
+    pub fn build<StC: StateChooser>(
+        generator: &mut QueryGenerator<StC>, expr: &mut Expr, type_assertion: TypeAssertion
     ) -> SubgraphType {
         generator.expect_state("types");
 

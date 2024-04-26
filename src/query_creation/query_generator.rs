@@ -54,10 +54,10 @@ impl TomlReadable for QueryGeneratorConfig {
     }
 }
 
-pub struct QueryGenerator<SubMod: SubstituteModel, StC: StateChooser> {
+pub struct QueryGenerator<StC: StateChooser> {
     config: QueryGeneratorConfig,
     state_generator: MarkovChainGenerator<StC>,
-    substitute_model: Box<SubMod>,
+    substitute_model: Box<dyn SubstituteModel>,
     predictor_model: Option<Box<dyn PathwayGraphModel>>,
     value_chooser: Box<dyn QueryValueChooser>,
     clause_context: ClauseContext,
@@ -138,17 +138,17 @@ pub fn highlight_ident() -> Ident {
     Ident::new(HIGHLIGHT_STR)
 }
 
-impl<SubMod: SubstituteModel, StC: StateChooser> QueryGenerator<SubMod, StC> {
-    pub fn from_state_generator_and_schema(state_generator: MarkovChainGenerator<StC>, config: QueryGeneratorConfig) -> Self {
-        let mut _self = QueryGenerator::<SubMod, StC> {
+impl<StC: StateChooser> QueryGenerator<StC> {
+    pub fn from_state_generator_and_schema(state_generator: MarkovChainGenerator<StC>, config: QueryGeneratorConfig, substitute_model: Box<dyn SubstituteModel>) -> Self {
+        let mut _self = QueryGenerator::<StC> {
             state_generator,
             predictor_model: None,
-            substitute_model: Box::new(SubMod::empty()),
+            substitute_model,
             value_chooser: Box::new(RandomValueChooser::new()),
             clause_context: ClauseContext::new(DatabaseSchema::parse_schema(&config.table_schema_path)),
             config,
             train_model: None,
-            rng: ChaCha8Rng::seed_from_u64(1),
+            rng: ChaCha8Rng::seed_from_u64(0),
             current_query_raw_ptr: None,
         };
 
@@ -159,7 +159,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser> QueryGenerator<SubMod, StC> {
         _self
     }
 
-    fn perform_model_backtracking(&mut self) {
+    fn _perform_model_backtracking(&mut self) {
         if let Some(model) = self.predictor_model.as_mut() {
             if let Some(backtracking_checkpoint) = model.try_get_backtracking_checkpoint() {
                 self.state_generator.restore_chain_state(backtracking_checkpoint);
@@ -170,7 +170,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser> QueryGenerator<SubMod, StC> {
     }
 
     fn next_state_opt(&mut self) -> Option<SmolStr> {
-        self.perform_model_backtracking();
+        // self.perform_model_backtracking();
         self.state_generator.next_node_name(
             &mut self.rng,
             &mut self.clause_context,
@@ -238,7 +238,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser> QueryGenerator<SubMod, StC> {
         if let Some(state) = self.next_state_opt() {
             panic!("Couldn't reset state_generator: Received {state}");
         }
-        self.substitute_model = Box::new(SubMod::empty());
+        self.substitute_model.reset();
         if let Some(model) = self.predictor_model.as_mut() {
             model.end_inference();
         }
@@ -253,7 +253,7 @@ impl<SubMod: SubstituteModel, StC: StateChooser> QueryGenerator<SubMod, StC> {
     }
 
     /// generate the next query with the provided dynamic model and value choosers
-    pub fn generate_with_substitute_model_and_value_chooser(&mut self, substitute_model: Box<SubMod>, value_chooser: Box<dyn QueryValueChooser>) -> Query {
+    pub fn generate_with_substitute_model_and_value_chooser(&mut self, substitute_model: Box<dyn SubstituteModel>, value_chooser: Box<dyn QueryValueChooser>) -> Query {
         self.substitute_model = substitute_model;
         self.value_chooser = value_chooser;
         self.generate()
@@ -261,10 +261,10 @@ impl<SubMod: SubstituteModel, StC: StateChooser> QueryGenerator<SubMod, StC> {
 
     /// generate the query and feed it to the model. Useful for training.
     pub fn generate_and_feed_to_model(
-        &mut self, dynamic_model: Box<SubMod>, value_chooser: Box<dyn QueryValueChooser>, model: Box<dyn PathwayGraphModel>
+        &mut self, substitute_model: Box<dyn SubstituteModel>, value_chooser: Box<dyn QueryValueChooser>, model: Box<dyn PathwayGraphModel>
     ) -> Box<dyn PathwayGraphModel> {
         self.train_model = Some(model);
-        self.generate_with_substitute_model_and_value_chooser(dynamic_model, value_chooser);
+        self.generate_with_substitute_model_and_value_chooser(substitute_model, value_chooser);
         self.train_model.take().unwrap()
     }
 }

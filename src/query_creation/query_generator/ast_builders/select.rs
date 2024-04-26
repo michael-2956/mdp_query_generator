@@ -1,6 +1,6 @@
 use sqlparser::ast::{ObjectName, SelectItem, WildcardAdditionalOptions};
 
-use crate::{query_creation::{query_generator::{ast_builders::{types::TypesBuilder, types_value::TypeAssertion}, call_modifiers::{ValueSetterValue, WildcardRelationsValue}, highlight_ident, match_next_state, query_info::{IdentName, QueryProps}, value_chooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat, unwrap_variant};
+use crate::{query_creation::{query_generator::{ast_builders::{types::TypesBuilder, types_value::TypeAssertion}, call_modifiers::{ValueSetterValue, WildcardRelationsValue}, highlight_ident, match_next_state, query_info::{IdentName, QueryProps}, value_chooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}}, unwrap_pat, unwrap_variant};
 
 /// subgraph def_SELECT
 pub struct SelectBuilder { }
@@ -14,8 +14,8 @@ impl SelectBuilder {
         (false, vec![SelectItem::UnnamedExpr(TypesBuilder::highlight())])
     }
 
-    pub fn build<SubMod: SubstituteModel, StC: StateChooser>(
-        generator: &mut QueryGenerator<SubMod, StC>, distinct: &mut bool, projection: &mut Vec<SelectItem>
+    pub fn build<StC: StateChooser>(
+        generator: &mut QueryGenerator<StC>, distinct: &mut bool, projection: &mut Vec<SelectItem>
     ) {
         generator.expect_state("SELECT");
         match_next_state!(generator, {

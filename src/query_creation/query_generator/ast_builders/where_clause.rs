@@ -1,6 +1,6 @@
 use sqlparser::ast::Expr;
 
-use crate::query_creation::{query_generator::{QueryGenerator, ast_builders::types_value::TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}};
+use crate::query_creation::{query_generator::{QueryGenerator, ast_builders::types_value::TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}};
 
 use super::types::TypesBuilder;
 
@@ -12,8 +12,8 @@ impl WhereBuilder {
         TypesBuilder::highlight()
     }
 
-    pub fn build<SubMod: SubstituteModel, StC: StateChooser>(
-        generator: &mut QueryGenerator<SubMod, StC>, expr: &mut Expr
+    pub fn build<StC: StateChooser>(
+        generator: &mut QueryGenerator<StC>, expr: &mut Expr
     ) -> SubgraphType {
         generator.expect_state("WHERE");
         generator.expect_state("call53_types");

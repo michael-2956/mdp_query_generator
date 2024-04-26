@@ -1,6 +1,6 @@
 use sqlparser::ast::{Expr, Query, Select, SetExpr, Value};
 
-use crate::{query_creation::{query_generator::{ast_builders::{from::FromBuilder, group_by::GroupByBuilder, having::HavingBuilder, limit::LimitBuilder, order_by::OrderByBuilder, select::SelectBuilder, where_clause::WhereBuilder}, match_next_state, query_info::IdentName, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel}}, unwrap_pat};
+use crate::{query_creation::{query_generator::{ast_builders::{from::FromBuilder, group_by::GroupByBuilder, having::HavingBuilder, limit::LimitBuilder, order_by::OrderByBuilder, select::SelectBuilder, where_clause::WhereBuilder}, match_next_state, query_info::IdentName, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}}, unwrap_pat};
 
 pub struct QueryBuilder { }
 
@@ -53,8 +53,8 @@ impl QueryBuilder {
         query_with_select(false)
     }
 
-    pub fn build<SubMod: SubstituteModel, StC: StateChooser>(
-        generator: &mut QueryGenerator<SubMod, StC>, query: &mut Query
+    pub fn build<StC: StateChooser>(
+        generator: &mut QueryGenerator<StC>, query: &mut Query
     ) -> Vec<(Option<IdentName>, SubgraphType)> {
         generator.substitute_model.notify_subquery_creation_begin();
         generator.clause_context.on_query_begin(generator.state_generator.get_fn_modifiers_opt());

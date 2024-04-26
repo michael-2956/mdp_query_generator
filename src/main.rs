@@ -12,8 +12,8 @@ use equivalence_testing::{config::{Config, ProgramArgs}, equivalence_testing_fun
 
 use structopt::StructOpt;
 
-fn run_generation<SubMod: SubstituteModel, StC: StateChooser>(
-        markov_generator: MarkovChainGenerator<StC>, config: Config,
+fn run_generation<StC: StateChooser>(
+        markov_generator: MarkovChainGenerator<StC>, config: Config, sub_model: Box<dyn SubstituteModel>
     ) {
     let mut predictor_model = if config.generator_config.use_model {
         Some(config.model_config.create_model().expect("Error creating model for inference"))
@@ -21,7 +21,7 @@ fn run_generation<SubMod: SubstituteModel, StC: StateChooser>(
 
     let print_queries = config.generator_config.print_queries;
 
-    let mut generator = QueryGenerator::<SubMod, StC>::from_state_generator_and_schema(markov_generator, config.generator_config);
+    let mut generator = QueryGenerator::<StC>::from_state_generator_and_schema(markov_generator, config.generator_config, sub_model);
 
     let mut accumulated_time_ns = 0;
     let mut num_equivalent = 0;
@@ -81,11 +81,13 @@ fn run_generation<SubMod: SubstituteModel, StC: StateChooser>(
 fn select_sub_model_and_run_generation<StC: StateChooser>(config: Config) {
     let markov_generator = MarkovChainGenerator::<StC>::with_config(&config.chain_config).expect("Could not create generator!");
 
-    match config.generator_config.substitute_model_name.as_str() {
-        "anticall" => run_generation::<AntiCallModel, _>(markov_generator, config),
-        "markov" => run_generation::<MarkovModel, _>(markov_generator, config),
+    let sub_model: Box<dyn SubstituteModel> = match config.generator_config.substitute_model_name.as_str() {
+        "anticall" => Box::new(AntiCallModel::new(config.anticall_model_config.clone())),
+        "markov" => Box::new(MarkovModel::new()),
         any => panic!("Unexpected dynamic model name in config: {any}"),
-    }
+    };
+
+    run_generation::<_>(markov_generator, config, sub_model);
 }
 
 fn run_training(config: Config) {

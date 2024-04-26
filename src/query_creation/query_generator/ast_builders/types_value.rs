@@ -1,6 +1,6 @@
 use sqlparser::ast::{Expr, Value};
 
-use crate::{query_creation::{query_generator::{expr_precedence::ExpressionPriority, match_next_state, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::{ContainsSubgraphType, SubgraphType}, substitute_models::SubstituteModel, CallTypes}}, unwrap_variant};
+use crate::{query_creation::{query_generator::{expr_precedence::ExpressionPriority, match_next_state, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::{ContainsSubgraphType, SubgraphType}, CallTypes}}, unwrap_variant};
 
 use super::{aggregate_function::AggregateFunctionBuilder, case::CaseBuilder, column_spec::ColumnSpecBuilder, formulas::FormulasBuilder, literals::LiteralsBuilder, query::QueryBuilder, types::TypesBuilder};
 
@@ -49,8 +49,8 @@ impl TypesValueBuilder {
         TypesBuilder::highlight()
     }
 
-    pub fn build<SubMod: SubstituteModel, StC: StateChooser>(
-        generator: &mut QueryGenerator<SubMod, StC>, types_value: &mut Expr, type_assertion: TypeAssertion
+    pub fn build<StC: StateChooser>(
+        generator: &mut QueryGenerator<StC>, types_value: &mut Expr, type_assertion: TypeAssertion
     ) -> SubgraphType {
         generator.expect_state("types_value");
         let selected_types = unwrap_variant!(generator.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);

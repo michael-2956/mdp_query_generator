@@ -99,8 +99,8 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
         let model_answer = self.get_model_answer_with_validation(prompt, |ans| {
             if !valid_options.contains(ans) {
                 Err(format!(
-                    "ERROR: Invalid option: \"{ans}\".\nValid options are: {valid_options_str}.\n\
-                    The last line of your response should not contain anything but the option number.\n\n"
+                    "ERROR: Unrecognised option: \"{ans}\".\nValid options are: {valid_options_str}.\n\
+                    Ensure the last line of your response contains only the option number you are selecting, with no additional text or characters.\n\n"
                 ))
             } else { Ok(()) }
         }, true, true);
@@ -226,9 +226,12 @@ impl ChatGPTPromptingModel {
             while result.is_err() {
                 eprintln!("Request error: {}", result.unwrap_err());
                 tokio::time::sleep(Duration::from_secs(5)).await;
-                result = self.current_conversation.as_mut().unwrap().send_message(prompt.clone()).await;
+                result = self.client.send_history(&self.current_conversation.as_ref().unwrap().history).await;
             }
-            result.unwrap()
+            let response = result.unwrap();
+            assert!(response.message().role == chatgpt::types::Role::Assistant);
+            self.current_conversation.as_mut().unwrap().history.push(response.message().clone());
+            response
         })
     }
 
@@ -290,8 +293,9 @@ impl ChatGPTPromptingModel {
         let model_answer = self.get_model_answer_with_validation(prompt, |ans| {
             if !options_map.contains_key(ans) {
                 Err(
-                    format!("ERROR: Invalid option: \"{ans}\".\nValid options are: {valid_options_str}.\
-                    \nThe last line of your response should not contain anything but the option number.\n\n")
+                    format!("ERROR: Unrecognised option: \"{ans}\".\nValid options are: {valid_options_str}.\
+                    \nEnsure the last line of your response contains only the option number you are selecting, \
+                    with no additional text or characters.\n\n")
                 )
             } else { Ok(()) }
         }, false, true);
@@ -311,10 +315,10 @@ impl ChatGPTPromptingModel {
         let prompt = self.prompts_ref().generate_value_chooser_generate_prompt_formatted(current_query_str, task_key, formatter).unwrap();
 
         let model_answer = self.get_model_answer_with_validation(prompt, |ans| {
-            if ans.contains(' ') {
+            if ans.contains(' ') || ans.contains('`') || ans.contains(';') {
                 Err(format!(
-                    "ERROR: Invalid value: \"{ans}\". The last line of your response should not contain anything \
-                    but the value. Please regenerate the value correctly.\n\n"
+                    "ERROR: Unrecognised value: \"{ans}\". Ensure the last line of your response contains \
+                    only the value, with no additional text or characters.\n\n"
                 ))
             } else { Ok(()) }
         }, false, true);

@@ -1,6 +1,6 @@
 use sqlparser::ast::Expr;
 
-use crate::{query_creation::{query_generator::{ast_builders::{column_spec::ColumnSpecBuilder, types::TypesBuilder}, match_next_state, query_info::ColumnRetrievalOptions, QueryGenerator}, state_generator::{state_choosers::StateChooser, substitute_models::SubstituteModel}}, unwrap_variant};
+use crate::{query_creation::{query_generator::{ast_builders::{column_spec::ColumnSpecBuilder, types::TypesBuilder}, match_next_state, query_info::ColumnRetrievalOptions, QueryGenerator}, state_generator::state_choosers::StateChooser}, unwrap_variant};
 
 pub struct GroupByBuilder { }
 
@@ -13,8 +13,8 @@ impl GroupByBuilder {
         vec![]
     }
 
-    pub fn build<SubMod: SubstituteModel, StC: StateChooser>(
-        generator: &mut QueryGenerator<SubMod, StC>, group_by: &mut Vec<Expr>
+    pub fn build<StC: StateChooser>(
+        generator: &mut QueryGenerator<StC>, group_by: &mut Vec<Expr>
     ) {
         generator.expect_state("GROUP_BY");
 

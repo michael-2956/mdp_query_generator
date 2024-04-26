@@ -21,7 +21,7 @@ use crate::{
                 error::SyntaxError, markov_chain::{CallModifiers, MarkovChain}, ChainStateCheckpoint, DynClone, StateGeneratorConfig
             },
             state_choosers::MaxProbStateChooser,
-            subgraph_type::{ContainsSubgraphType, SubgraphType}, substitute_models::{DeterministicModel, SubstituteModel}, CallTypes, MarkovChainGenerator
+            subgraph_type::{ContainsSubgraphType, SubgraphType}, substitute_models::DeterministicModel, CallTypes, MarkovChainGenerator
         }
     },
     unwrap_pat, unwrap_variant, unwrap_variant_or_else
@@ -127,7 +127,7 @@ impl PathGenerator {
             state_selector: DeterministicModel::empty(),
             clause_context: ClauseContext::new(database_schema),
             aggregate_functions_distribution,
-            rng: ChaCha8Rng::seed_from_u64(1),
+            rng: ChaCha8Rng::seed_from_u64(0),
         })
     }
 

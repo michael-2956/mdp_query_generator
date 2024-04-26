@@ -1,6 +1,6 @@
 use sqlparser::ast::Expr;
 
-use crate::{query_creation::{query_generator::{match_next_state, query_info::{CheckAccessibility, ColumnRetrievalOptions, IdentName}, value_chooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, substitute_models::SubstituteModel, CallTypes}}, unwrap_variant_or_else};
+use crate::{query_creation::{query_generator::{match_next_state, query_info::{CheckAccessibility, ColumnRetrievalOptions, IdentName}, value_chooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, CallTypes}}, unwrap_variant_or_else};
 
 use super::types::TypesBuilder;
 
@@ -12,8 +12,8 @@ impl ColumnSpecBuilder {
         TypesBuilder::highlight()
     }
 
-    pub fn build<SubMod: SubstituteModel, StC: StateChooser>(
-        generator: &mut QueryGenerator<SubMod, StC>, ident_expr: &mut Expr
+    pub fn build<StC: StateChooser>(
+        generator: &mut QueryGenerator<StC>, ident_expr: &mut Expr
     ) -> SubgraphType {
         generator.expect_state("column_spec");
         let column_types = unwrap_variant_or_else!(
