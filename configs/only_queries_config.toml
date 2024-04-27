@@ -13,7 +13,7 @@ assert_parcing_equivalence=false
 # (TODO): check the queries run without errors on the schema
 assert_runs_on_schema=false
 # Pring how many queries were already generated
-print_progress=true
+print_progress=false
 
 [model]
 # which model to use. Can be: "subgraph", "full_function_context"
@@ -72,4 +72,6 @@ graph_file_path="graph.dot"
 
 [anticall_sub_model]
 # anticall dynamic model settings
-stir_level=6
+stir_level=9
+# p_select_one_smaller=0.09818215031911126
+p_select_one_smaller=0.0

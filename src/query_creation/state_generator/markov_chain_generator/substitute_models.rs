@@ -1,3 +1,5 @@
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 
 use crate::{config::TomlReadable, training::ast_to_path::PathNode};
@@ -168,7 +170,8 @@ impl QueryStats {
 
 #[derive(Clone)]
 pub struct AntiCallModelConfig {
-    stir_level: usize,
+    pub stir_level: usize,
+    p_select_one_smaller: f64,
 }
 
 impl TomlReadable for AntiCallModelConfig {
@@ -176,6 +179,7 @@ impl TomlReadable for AntiCallModelConfig {
         let section = &toml_config["anticall_sub_model"];
         Self {
             stir_level: section["stir_level"].as_integer().unwrap() as usize,
+            p_select_one_smaller: section["p_select_one_smaller"].as_float().unwrap(),
         }
     }
 }
@@ -187,21 +191,27 @@ pub struct AntiCallModel {
     /// used to store running query statistics, such as
     /// the current level of nesting
     stats: QueryStats,
-    sub_models_config: AntiCallModelConfig,
+    config: AntiCallModelConfig,
+    rng: ChaCha8Rng,
+    actual_stir_level: usize
 }
 
 impl AntiCallModel {
     pub fn new(sub_models_config: AntiCallModelConfig) -> Self {
-        Self {
+        let mut _self = Self {
             stats: QueryStats::new(),
-            sub_models_config
-        }
+            rng: ChaCha8Rng::seed_from_u64(0),
+            actual_stir_level: sub_models_config.stir_level,
+            config: sub_models_config,
+        };
+        _self.reset();
+        _self
     }
 }
 
 impl SubstituteModel for AntiCallModel {
     fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError> {
-        let prob_multiplier = if self.stats.current_stack_length > self.sub_models_config.stir_level { 100f64 } else { 0f64 };
+        let prob_multiplier = if self.stats.current_stack_length > self.actual_stir_level { 100f64 } else { 0f64 };
         Ok(node_outgoing.into_iter().map(|(l_p, node)| (
             l_p - (node.min_calls_until_function_exit as f64) * prob_multiplier,
             node
@@ -226,5 +236,10 @@ impl SubstituteModel for AntiCallModel {
     
     fn reset(&mut self) {
         self.stats = QueryStats::new();
+        self.actual_stir_level = if self.rng.gen_bool(self.config.p_select_one_smaller) {
+            self.config.stir_level - 1
+        } else {
+            self.config.stir_level
+        }
     }
 }

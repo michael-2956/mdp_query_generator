@@ -17,6 +17,9 @@ pub struct ProgramArgs {
     /// Print generated queries, overriding config file settings
     #[structopt(short = "p", long = "print")]
     pub print: bool,
+    /// Anticall model setting
+    #[structopt(short = "asl", long = "anticall_stir_level")]
+    pub anticall_stir_level: Option<usize>,
 }
 
 pub trait TomlReadable {
@@ -82,6 +85,9 @@ impl Config {
         if let Some(num_queries) = program_args.num_queries {
             self.main_config.num_generate = num_queries;
             self.ast2path_testing_config.n_tests = num_queries;
+        }
+        if let Some(anticall_stir_level) = program_args.anticall_stir_level {
+            self.anticall_model_config.stir_level = anticall_stir_level;
         }
         if program_args.print {
             self.generator_config.print_queries = true;

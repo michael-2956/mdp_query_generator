@@ -12,3 +12,5 @@ weights/
 weights_in_dot/
 parser_bugs.sql
 t.sql
+experiment_artifacts/
+experiment_results/
