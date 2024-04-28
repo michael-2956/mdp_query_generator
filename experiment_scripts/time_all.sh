@@ -47,10 +47,10 @@ n_queries=10000
 
 echo "Minimum Times for Each i:" > experiment_results/anticall_min_time_per_setting_10K.txt
 
-for i in {5..12}
+for i in {1..12}
 do
    min_time=999999
-   for j in {1..2}
+   for j in {1..3}
    do
       echo n: $n_queries --anticall_stir_level $i j: $j
       current_time=$( {\time -p ./target/release/equivalence_testing configs/only_queries_config.toml -n $n_queries --anticall_stir_level $i > /dev/null} 2>&1 | grep real | awk '{print $2}' )
