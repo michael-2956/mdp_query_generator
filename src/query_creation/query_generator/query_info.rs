@@ -843,7 +843,9 @@ impl QueryProps {
                             DataType::Date, DataType::Interval, DataType::Timestamp(None, TimezoneInfo::None)
                         ].contains(data_type)
                     ) || matches!(
-                        else_expr.unnested(), Expr::Cast { expr, data_type: _ } if matches!(**expr, Expr::Value(..))
+                        else_expr.unnested(), Expr::Cast { expr, data_type: _ } if matches!(**expr, Expr::Value(..)) || matches!(
+                            &**expr, Expr::UnaryOp { op, expr: inner_expr } if *op == UnaryOperator::Minus && matches!(**inner_expr, Expr::Value(..))
+                        )
                     ) || matches!(
                         else_expr.unnested(), Expr::Interval { .. }
                     ) { None } else {
