@@ -1,32 +1,12 @@
-subgraph def_Query {
-        Query [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[single column, single row]", label="Query\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[single column, single row]", shape=octagon, style=filled, color=green]
-        EXIT_Query [label="EXIT Query", shape=rectangle]
-
-        call0_FROM [label="FROM", shape=rectangle, color=cornflowerblue, style=filled]
-        Query -> call0_FROM
-
-        call0_WHERE [label="WHERE", shape=rectangle, style=filled, color=darkgoldenrod1]
-        call0_FROM -> call0_WHERE
-
-        WHERE_done [label="WHERE done"]
-        call0_FROM -> WHERE_done
-        call0_WHERE -> WHERE_done
-
-        call0_SELECT [label="SELECT\nTYPES: [...types]\nMODS: [?single column]", TYPES="[...]", MODS="[?single column]", shape=rectangle, style=filled, color=bisque]
-        WHERE_done -> call0_SELECT
+subgraph def_set_item {
+        set_item [label="Set item (GROUP BY)", shape=rectangle, style=filled, color=peachpuff]
+        EXIT_set_item [label="EXIT Set list item", shape=rectangle]
         
-        call0_GROUP_BY [label="GROUP BY", shape=rectangle, style=filled, color=gray]
-        WHERE_done -> call0_GROUP_BY
-        call0_GROUP_BY -> call0_SELECT
+        call2_column_spec [TYPES="[any]", MODS="[]", label="column specifier\nTYPE: [any]", shape=rectangle, style=filled, color=gold]
+        set_item -> call2_column_spec
+        call2_column_spec -> EXIT_set_item
 
-        call0_HAVING [label="HAVING", shape=rectangle, style=filled, color=mediumvioletred]
-        call0_GROUP_BY -> call0_HAVING
-        call0_HAVING -> call0_SELECT
-
-        call0_ORDER_BY [label="ORDER BY", shape=rectangle, style=filled, color=deepskyblue]
-        call0_SELECT -> call0_ORDER_BY
-
-        call0_LIMIT [label="LIMIT\nMODS: [?single row]", MODS="[?single row]", shape=rectangle, style=filled, color=brown]
-        call0_ORDER_BY -> call0_LIMIT
-        call0_LIMIT -> EXIT_Query
+        call0_set_item [label="Set item (GROUP BY)", shape=rectangle, style=filled, color=peachpuff]
+        call2_column_spec -> call0_set_item
+        call0_set_item -> EXIT_set_item
     }

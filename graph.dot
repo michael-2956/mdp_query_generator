@@ -266,14 +266,24 @@ digraph G {
         special_grouping -> grouping_set
         grouping_set -> set_list
 
+        call1_set_item [label="Set item (GROUP BY)", shape=rectangle, style=filled, color=peachpuff]
+        set_list -> call1_set_item
+        call1_set_item -> set_list
+        call1_set_item -> EXIT_GROUP_BY
+        call1_set_item -> grouping_column_list
+    }
+
+    subgraph def_set_item {
+        set_item [label="Set item (GROUP BY)", shape=rectangle, style=filled, color=peachpuff]
+        EXIT_set_item [label="EXIT Set list item", shape=rectangle]
+        
         call2_column_spec [TYPES="[any]", MODS="[]", label="column specifier\nTYPE: [any]", shape=rectangle, style=filled, color=gold]
-        set_list -> call2_column_spec
-        call2_column_spec -> set_list
-        set_multiple [label="multiple cols in set"]
-        call2_column_spec -> set_multiple
-        set_multiple -> call2_column_spec
-        set_multiple -> EXIT_GROUP_BY
-        set_multiple -> grouping_column_list
+        set_item -> call2_column_spec
+        call2_column_spec -> EXIT_set_item
+
+        call0_set_item [label="Set item (GROUP BY)", shape=rectangle, style=filled, color=peachpuff]
+        call2_column_spec -> call0_set_item
+        call0_set_item -> EXIT_set_item
     }
 
     subgraph def_aggregate_function {
@@ -1243,7 +1253,8 @@ digraph G {
         EXIT_FROM_item -> WHERE [color=none, weight=10]
         EXIT_WHERE -> SELECT [color=none, weight=10]
         EXIT_SELECT -> GROUP_BY [color=none]
-        EXIT_GROUP_BY -> aggregate_function [color=none]
+        EXIT_GROUP_BY -> set_item [color=none]
+        EXIT_set_item -> aggregate_function [color=none]
         EXIT_aggregate_function -> HAVING [color=none]
         EXIT_HAVING -> ORDER_BY [color=none]
         EXIT_ORDER_BY -> LIMIT [color=none]

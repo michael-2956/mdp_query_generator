@@ -1,6 +1,6 @@
 use sqlparser::ast::Expr;
 
-use crate::{query_creation::{query_generator::{ast_builders::{column_spec::ColumnSpecBuilder, types::TypesBuilder}, match_next_state, query_info::ColumnRetrievalOptions, QueryGenerator}, state_generator::state_choosers::StateChooser}, unwrap_variant};
+use crate::{query_creation::{query_generator::{ast_builders::{column_spec::ColumnSpecBuilder, set_item::SetItemBuilder, types::TypesBuilder}, match_next_state, query_info::ColumnRetrievalOptions, QueryGenerator}, state_generator::state_choosers::StateChooser}, unwrap_variant};
 
 pub struct GroupByBuilder { }
 
@@ -70,40 +70,26 @@ impl GroupByBuilder {
                     });
                     generator.expect_state("set_list");
                     loop {
-                        set_list.push(vec![]);
+                        set_list.push(SetItemBuilder::highlight());
                         let current_set = set_list.last_mut().unwrap();
-                        let mut finish_grouping_sets = false;
 
-                        loop {
-                            match_next_state!(generator, {
-                                "call2_column_spec" => {
-                                    current_set.push(TypesBuilder::highlight());
-                                    let column_expr = current_set.last_mut().unwrap();
-                                    let column_type = ColumnSpecBuilder::build(generator, column_expr);
+                        match_next_state!(generator, {
+                            "call1_set_item" => {
+                                SetItemBuilder::build(generator, current_set);
+                            },
+                            "set_list_empty_allowed" => {
+                                *current_set = vec![];
+                            },
+                        });
 
-                                    let column_name = generator.clause_context.retrieve_column_by_column_expr(
-                                        &column_expr, ColumnRetrievalOptions::new(false, false, false)
-                                    ).unwrap().1;
-                                    generator.clause_context.top_group_by_mut().append_column(column_name, column_type);
-                                }, // either set_list or set_multiple in the next iteration
-                                "set_list_empty_allowed" => { },  // one of the following breaks in the next iteration
-                                "set_list" => break,
-                                "set_multiple" => { },  // either call2_column_spec or one of the following breaks in the next iteration
-                                "grouping_column_list" => {
-                                    finish_grouping_sets = true;
-                                    break;
-                                },
-                                "EXIT_GROUP_BY" => {
-                                    finish_grouping_sets = true;
-                                    return_result = true;
-                                    break;
-                                },
-                            });
-                        }
-
-                        if finish_grouping_sets {
-                            break
-                        }
+                        match_next_state!(generator, {
+                            "set_list" => { },
+                            "grouping_column_list" => { break; },
+                            "EXIT_GROUP_BY" => {
+                                return_result = true;
+                                break;
+                            },
+                        });
                     }
                 },
             });

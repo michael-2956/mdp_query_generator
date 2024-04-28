@@ -392,13 +392,17 @@ impl ClauseContext {
         } else { HashSet::new() };
         self.get_clause_hierarchy_iter().enumerate().filter_map(
             |(i, v_opt)| v_opt.map(|v| (i, v))
-        ).filter(move |(i, (.., query_props))|
-            if column_retrieval_options.only_columns_that_can_be_aggregated {
+        ).filter(move |(i, (.., query_props))| {
+            let mut pass = if column_retrieval_options.only_columns_that_can_be_aggregated {
                 // either we are in a caller query, where all aggregate-able columns,
                 // or we are in a parent query that did not forbid aggregation
                 *i == 0 || !query_props.get_current_subquery_call_options().no_aggregate
-            } else { true }
-        ).map(move |(
+            } else { true };
+            pass = pass && (
+                *i == 0 || !query_props.get_current_subquery_call_options().no_column_spec
+            );
+            pass
+        }).map(move |(
             i, (from_contents, group_by_contents, query_props)
         )| {
             let only_group_by_columns = if i == 0 { column_retrieval_options.only_group_by_columns } else {
@@ -729,6 +733,7 @@ impl AllAccessibleFroms {
 struct SubqueryCallOptions {
     only_group_by_columns: bool,
     no_aggregate: bool,
+    no_column_spec: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -758,12 +763,14 @@ impl QueryProps {
             self.current_subquery_call_options = Some(SubqueryCallOptions {
                 only_group_by_columns: false,
                 no_aggregate: false,
+                no_column_spec: false,
             });
         } else {
             let mods = unwrap_variant!(subquery_call_mods, CallModifiers::StaticList);
             self.current_subquery_call_options = Some(SubqueryCallOptions {
                 only_group_by_columns: mods.contains(&SmolStr::new("group by columns")),
                 no_aggregate: mods.contains(&SmolStr::new("no aggregate")),
+                no_column_spec: mods.contains(&SmolStr::new("no column spec")),
             })
         }
     }

@@ -80,10 +80,10 @@ Here, C1 is the selected column name.
 """
 [transitions.set_list.options]
 1="Add the empty set: ()"
-2="Add a column name to the set"
+2="Add a set of columns: ([column], ...) or [column]"
 [transitions.set_list.option_nodes]
 1="set_list_empty_allowed"
-2="call2_column_spec"
+2="call1_set_item"
 
 
 [transitions.set_list_empty_allowed]
@@ -104,37 +104,32 @@ an another set to it.
 3="EXIT_GROUP_BY"
 
 
-[transitions.call2_column_spec]
-task="""
-Select whether you would like to end the generation of the \
-current set and start generating an another one. For example, \
-if you have:
-SELECT FROM T1 GROUP BY GROUPING SETS((C1, C2))
-This will do:
-SELECT FROM T1 GROUP BY GROUPING SETS((C1, C2), ())
-and you would have to decide what will go into ().
-"""
-[transitions.call2_column_spec.options]
-1="Finish generating the current set and add the next set"
-2="Add an another item to the current set or finish the set generation"
-[transitions.call2_column_spec.option_nodes]
-1="set_list"
-2="set_multiple"
-
-
-[transitions.set_multiple]
+[transitions.call1_set_item]
 task="""
 Select whether you would like to add an another item to the \
-current set, finish the set generation and add an another item \
-to the GROUP BY clause, or finish the GROUP BY clause generation 
-altogether.
+current list, add an another item to the GROUP BY clause, or \
+finish the GROUP BY clause generation altogether.
+
+1) If you have:
+SELECT FROM T1 GROUP BY GROUPING SETS((C1, C2))
+But you want:
+SELECT FROM T1 GROUP BY GROUPING SETS((C1, C2), [column(s)])
+Then select "Add an another item to the current list".
+
+2) If you have:
+SELECT FROM T1 GROUP BY GROUPING SETS((C1, C2))
+But you want:
+SELECT FROM T1 GROUP BY GROUPING SETS((C1, C2)), [column(s)]
+Then select "Add an another item to the GROUP BY clause".
+
+3) Otherwise, select "Finish the GROUP BY clause generation"
 """
-[transitions.set_multiple.options]
-1="Add an another item to the current set"
+[transitions.call1_set_item.options]
+1="Add an another item to the current list"
 2="Finish the GROUP BY clause generation"
-3="Finish generating the sets, and add an another item to the GROUP BY clause"
-[transitions.set_multiple.option_nodes]
-1="call2_column_spec"
+3="Add an another item to the GROUP BY clause"
+[transitions.call1_set_item.option_nodes]
+1="set_list"
 2="EXIT_GROUP_BY"
 3="grouping_column_list"
 

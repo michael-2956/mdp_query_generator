@@ -1802,22 +1802,9 @@ impl PathGenerator {
                         if current_set.len() == 0 {
                             self.try_push_state("set_list_empty_allowed")?;
                         } else {
-                            for (expr_i, column_expr) in current_set.iter().enumerate() {
-                                if expr_i > 0 {
-                                    self.try_push_state("set_multiple")?;
-                                }
-                                self.try_push_state("call2_column_spec")?;
-                                let column_type = self.handle_column_spec(column_expr)?;
-                                let column_name = self.clause_context.retrieve_column_by_column_expr(
-                                    &column_expr, ColumnRetrievalOptions::new(false, false, false)
-                                ).unwrap().1;
-                                self.clause_context.top_group_by_mut().append_column(column_name, column_type);
-                            }
+                            self.try_push_state("call1_set_item")?;
+                            self.handle_set_item(current_set, 0)?;
                         }
-                    }
-                    if set_list.last().unwrap().len() > 0 {
-                        // exit though set_multiple for non-empty sets
-                        self.try_push_state("set_multiple")?;
                     }
                 },
                 column_expr @ (
@@ -1852,4 +1839,23 @@ impl PathGenerator {
         Ok(())
     }
 
+    /// subgraph def_set_item
+    fn handle_set_item(&mut self, current_set: &Vec<Expr>, i: usize) ->  Result<(), ConvertionError>{
+        self.try_push_states(&["set_item", "call2_column_spec"])?;
+
+        let column_expr = &current_set[i];
+        let column_type = self.handle_column_spec(column_expr)?;
+        let column_name = self.clause_context.retrieve_column_by_column_expr(
+            &column_expr, ColumnRetrievalOptions::new(false, false, false)
+        ).unwrap().1;
+        self.clause_context.top_group_by_mut().append_column(column_name, column_type);
+
+        if (i + 1) < current_set.len() {
+            self.try_push_state("call0_set_item")?;
+            self.handle_set_item(current_set, i + 1)?;
+        }
+
+        self.try_push_state("EXIT_set_item")?;
+        Ok(())
+    }
 }

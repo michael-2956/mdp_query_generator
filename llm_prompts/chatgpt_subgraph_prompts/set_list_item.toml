@@ -1,0 +1,27 @@
+[transitions]
+
+
+[transitions.call2_column_spec]
+task="""
+Select whether you would like to end the generation of the \
+current set in the set list of the current grouping. For example, \
+if you have:
+SELECT FROM T1 GROUP BY GROUPING SETS((C1, C2))
+and you want:
+SELECT FROM T1 GROUP BY GROUPING SETS((C1, C2, [column]))
+Select "Add another column". In any other case, select "Finish set"
+"""
+[transitions.call2_column_spec.options]
+1="Finish set"
+2="Add another column"
+[transitions.call2_column_spec.option_nodes]
+1="EXIT_set_item"
+2="call0_set_item"
+
+
+[call_node_context]
+# call2_column_spec=""
+# call0_set_item=""
+
+
+[value_chooser_tasks]

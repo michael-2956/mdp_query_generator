@@ -42,4 +42,4 @@ save_weights_to="weights/DepthwiseFunctionNameContext/tpch_default_queries.mw"
 [anticall_sub_model]
 # anticall dynamic model settings
 stir_level=6
-p_select_one_smaller=0
+p_select_one_smaller=0.0
