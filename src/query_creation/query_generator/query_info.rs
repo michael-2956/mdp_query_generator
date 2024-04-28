@@ -3,7 +3,7 @@ use std::{collections::{BTreeMap, BTreeSet, HashMap, HashSet}, error::Error, fmt
 use smol_str::SmolStr;
 use crate::{query_creation::state_generator::{markov_chain_generator::markov_chain::CallModifiers, subgraph_type::{ContainsSubgraphType, SubgraphType}}, unwrap_variant};
 
-use sqlparser::{ast::{ColumnDef, DataType, Expr, FileFormat, HiveDistributionStyle, HiveFormat, Ident, ObjectName, OnCommit, Query, SelectItem, SetExpr, SqlOption, Statement, TableAlias, TableConstraint}, dialect::PostgreSqlDialect, parser::Parser};
+use sqlparser::{ast::{ColumnDef, DataType, Expr, FileFormat, HiveDistributionStyle, HiveFormat, Ident, ObjectName, OnCommit, Query, SelectItem, SetExpr, SqlOption, Statement, TableAlias, TableConstraint, TimezoneInfo, UnaryOperator}, dialect::PostgreSqlDialect, parser::Parser};
 
 use super::Unnested;
 
@@ -812,6 +812,24 @@ impl QueryProps {
 
     pub fn extract_alias(expr: &Expr) -> Option<IdentName> {
         match &expr.unnested() {
+            Expr::Cast { expr, data_type } if matches!(**expr, Expr::Value(..)) || matches!(
+                &**expr, Expr::UnaryOp { op, expr: inner_expr } if *op == UnaryOperator::Minus && matches!(**inner_expr, Expr::Value(..))
+            ) => {
+                Some(Ident {
+                    value: match data_type {
+                        DataType::Timestamp(_, tz) if *tz == TimezoneInfo::None => "timestamp",
+                        DataType::Numeric(_) => "numeric",
+                        DataType::Integer(_) => "int4",
+                        DataType::Interval => "interval",
+                        DataType::BigInt(_) => "int8",
+                        DataType::Boolean => "bool",
+                        DataType::Text => "text",
+                        DataType::Date => "date",
+                        _ => unimplemented!(),
+                    }.to_string(),
+                    quote_style: Some('"')
+                })
+            },
             Expr::Identifier(ident) => Some(ident.clone()),
             Expr::CompoundIdentifier(idents) => Some(idents.last().unwrap().clone()),
             // unnnamed aggregation can be referred to by function name in postgres
@@ -822,8 +840,12 @@ impl QueryProps {
                         else_expr.unnested(), Expr::Value(sqlparser::ast::Value::Boolean(_))
                     ) || matches!(
                         else_expr.unnested(), Expr::TypedString { data_type, value: _ } if [
-                            DataType::Date, DataType::Interval
+                            DataType::Date, DataType::Interval, DataType::Timestamp(None, TimezoneInfo::None)
                         ].contains(data_type)
+                    ) || matches!(
+                        else_expr.unnested(), Expr::Cast { expr, data_type: _ } if matches!(**expr, Expr::Value(..))
+                    ) || matches!(
+                        else_expr.unnested(), Expr::Interval { .. }
                     ) { None } else {
                         Self::extract_alias(else_expr).map(IdentName::into)
                     })
@@ -836,7 +858,7 @@ impl QueryProps {
                             Some(Ident { value: "case".to_string(), quote_style: Some('"') })
                         }
                     )
-            }
+            },
             Expr::Value(value) => {
                 let value = match value {
                     sqlparser::ast::Value::Boolean(_) => Some("bool".to_string()),
@@ -849,9 +871,21 @@ impl QueryProps {
             },
             Expr::TypedString {
                 data_type, value: _,
-            } if [DataType::Date, DataType::Interval].contains(data_type) => {
-                let s = if *data_type == DataType::Date { "date" } else { "interval" };
+            } if [
+                DataType::Date,
+                DataType::Interval,
+                DataType::Timestamp(None, TimezoneInfo::None),
+            ].contains(data_type) => {
+                let s = match *data_type {
+                    DataType::Date => "date",
+                    DataType::Interval => "interval",
+                    DataType::Timestamp(..) => "timestamp",
+                    _ => unreachable!(),
+                };
                 Some(Ident { value: s.to_string(), quote_style: Some('"') })
+            },
+            Expr::Interval { .. } => {
+                Some(Ident { value: "interval".to_string(), quote_style: Some('"') })
             },
             Expr::Subquery(query) => {
                 let select_body = unwrap_variant!(&*query.body, SetExpr::Select);

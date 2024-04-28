@@ -1,5 +1,5 @@
-# filename = "experiment_results/our_100K_balanced.txt"
-filename = "generated_queries.sql"
+filename = "experiment_results/our_100K_balanced.txt"
+# filename = "generated_queries.sql"
 filename_pr, filaname_post = filename[:-4], filename[-4:]
 
 inp = open(filename, "r").read()
