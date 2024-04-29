@@ -855,9 +855,11 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
                 if (prob_sum - 1f64).abs() > std::f64::EPSILON {
                     panic!("Model predicted probabilities with a sum of {}, should have been close to 1.", prob_sum)
                 }
-                predictions.into_iter().map(|(w, node)| (
+                let preds = predictions.into_iter().map(|(w, node)| (
                     w.ln(), node
-                )).collect()
+                )).collect();
+                // substitute_model.trasform_log_probabilities(preds)?
+                preds
             },
             ModelPredictionResult::None(outgoing_nodes) => {
                 let fill_with = - (outgoing_nodes.len() as f64).ln();

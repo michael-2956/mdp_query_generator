@@ -4,7 +4,7 @@ use sqlparser::ast::Query;
 
 use crate::{config::TomlReadable, query_creation::{query_generator::value_choosers::QueryValueChooser, state_generator::markov_chain_generator::{markov_chain::NodeParams, ChainStateCheckpoint, StackFrame}}};
 
-use self::{llm_prompting_models::{chatgpt_model::ChatGPTPromptingModel, prompt_testing_model::PromptTestingModel}, markov_models::{DepthwiseFullFunctionContext, DepthwiseFunctionNameContext, FullFunctionContext, FunctionNameContext, ModelWithMarkovWeights, StackedFullFunctionContext, StackedFunctionNamesContext}};
+use self::{llm_prompting_models::{chatgpt_model::ChatGPTPromptingModel, prompt_testing_model::PromptTestingModel}, markov_models::{DepthwiseFullFunctionContext, DepthwiseFunctionNameContext, FullFunctionContext, FunctionNameContext, ModelWithMarkovWeights, PathwiseContext, StackedFullFunctionContext, StackedFunctionNamesContext}};
 
 use super::ast_to_path::PathNode;
 
@@ -55,6 +55,7 @@ impl ModelConfig {
             ("full_function_context", false) => Box::new(ModelWithMarkovWeights::<FullFunctionContext>::new()),
             ("full_function_context", true) => Box::new(ModelWithMarkovWeights::<StackedFullFunctionContext>::new()),
             ("depthwize_full_function_context", false) => Box::new(ModelWithMarkovWeights::<DepthwiseFullFunctionContext>::new()),
+            ("pathwise_context", _) => Box::new(ModelWithMarkovWeights::<PathwiseContext>::new()),
             (any, st) => panic!("\nModel is not supported:\nModel name: {any}\nStacked: {st}\n"),
         };
         if self.load_weights {

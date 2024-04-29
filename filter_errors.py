@@ -35,6 +35,7 @@ while True:
             total_errs += 1
             # print(f"{total_errs}", end="    \r", flush=True)
         else:
+            # print(line.replace("ERROR", colored("ERROR", 'red', attrs=['bold'])))
             ignored.setdefault(found_err, 0)
             ignored[found_err] += 1
 

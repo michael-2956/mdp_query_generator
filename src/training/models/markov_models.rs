@@ -1,5 +1,6 @@
 use std::{collections::{BTreeMap, HashMap}, fmt::Display, io, path::PathBuf};
 
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 use sqlparser::ast::Query;
@@ -343,5 +344,25 @@ impl ModelFunctionContext for DepthwiseFullFunctionContext {
 impl std::fmt::Display for DepthwiseFullFunctionContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "D_{}_{}", self.depth, self.context)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, std::hash::Hash, Clone, Serialize, Deserialize, PartialOrd, Ord)]
+pub struct PathwiseContext {
+    path: Vec<SmolStr>
+}
+
+impl ModelFunctionContext for PathwiseContext {
+    fn from_call_stack_and_exit_frame(
+        _call_stack: &Vec<StackFrame>,
+        _exit_stack_frame_opt: Option<&StackFrame>
+    ) -> Self {
+        todo!()
+    }
+}
+
+impl std::fmt::Display for PathwiseContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.path.iter().cloned().collect_vec().join("_"))
     }
 }
