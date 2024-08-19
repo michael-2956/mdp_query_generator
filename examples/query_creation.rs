@@ -1,6 +1,5 @@
 use sqlparser::ast::{
-    BinaryOperator, Expr, SelectItem, Ident, ObjectName, Query,
-    Select, SetExpr, TableAlias, TableFactor, TableWithJoins,
+    BinaryOperator, Distinct, Expr, GroupByExpr, Ident, ObjectName, Query, Select, SelectItem, SetExpr, TableAlias, TableFactor, TableWithJoins
 };
 
 pub fn create_table(name: &str, alias_name: Option<&str>) -> TableWithJoins {
@@ -17,7 +16,8 @@ pub fn create_table(name: &str, alias_name: Option<&str>) -> TableWithJoins {
             }),
             args: None,
             with_hints: Vec::<_>::new(),
-            columns_definition: None,
+            version: None,
+            partitions: vec![],
         },
         joins: Vec::<_>::new(),
     }
@@ -49,30 +49,33 @@ pub fn create_select(
     projection: Vec<SelectItem>,
     from: Vec<TableWithJoins>,
     selection: Option<Expr>,
-    distinct: bool,
+    distinct: Option<Distinct>,
 ) -> Query {
     Query {
         with: None,
         body: Box::new(SetExpr::Select(Box::new(Select {
-            distinct: distinct,
+            distinct,
             top: None,
             projection: projection,
             into: None,
             from: from,
             lateral_views: Vec::<_>::new(),
             selection: selection,
-            group_by: Vec::<_>::new(),
+            group_by: GroupByExpr::Expressions(vec![]),
             cluster_by: Vec::<_>::new(),
             distribute_by: Vec::<_>::new(),
             sort_by: Vec::<_>::new(),
             having: None,
             qualify: None,
+            named_window: vec![],
         }))),
         order_by: Vec::<_>::new(),
         limit: None,
         offset: None,
         fetch: None,
         locks: vec![],
+        limit_by: vec![],
+        for_clause: None,
     }
 }
 
@@ -87,11 +90,11 @@ fn main() {
                 vec![SelectItem::UnnamedExpr(create_compound_identifier("S.A"))],
                 vec![create_table("S", None)],
                 None,
-                false,
+                None,
             )),
             negated: true,
         }),
-        false,
+        None,
     );
     println!("Query 1: {:#?}", q1.to_string());
 
@@ -108,11 +111,11 @@ fn main() {
                     op: BinaryOperator::Eq,
                     right: Box::new(create_compound_identifier("R.A")),
                 }),
-                false,
+                None,
             )),
             negated: true,
         }),
-        false,
+        None,
     );
     println!("Query 2: {:#?}", q2.to_string());
 
@@ -125,7 +128,7 @@ fn main() {
             op: BinaryOperator::Eq,
             right: Box::new(create_compound_identifier("Y.A")),
         }),
-        true,
+        Some(Distinct::Distinct),
     );
     println!("Query 3: {:#?}", q3.to_string());
 
@@ -134,7 +137,7 @@ fn main() {
         vec![SelectItem::UnnamedExpr(create_compound_identifier("R.A"))],
         vec![create_table("R", None)],
         None,
-        true,
+        Some(Distinct::Distinct),
     );
     println!("Query 4: {:#?}", q4.to_string());
 }

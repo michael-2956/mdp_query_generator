@@ -4,10 +4,11 @@ pub mod tester;
 mod continue_after;
 
 
+use itertools::Itertools;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
-use sqlparser::ast::{self, BinaryOperator, DataType, DateTimeField, Expr, FunctionArg, FunctionArgExpr, Ident, ObjectName, OrderByExpr, Query, Select, SelectItem, SetExpr, TableFactor, TableWithJoins, TimezoneInfo, TrimWhereField, UnaryOperator, Value};
+use sqlparser::ast::{self, BinaryOperator, DataType, DateTimeField, Distinct, Expr, FunctionArg, FunctionArgExpr, GroupByExpr, Ident, Interval, ObjectName, OrderByExpr, Query, Select, SelectItem, SetExpr, TableFactor, TableWithJoins, TimezoneInfo, TrimWhereField, UnaryOperator, Value};
 
 use crate::{
     config::TomlReadable, query_creation::{
@@ -263,7 +264,7 @@ impl PathGenerator {
 
         self.try_push_state("WHERE_done")?;
 
-        if select_body.group_by.len() != 0 {
+        if select_body.group_by != GroupByExpr::Expressions(vec![]) {
             self.handle_query_after_group_by(select_body, true)?;
         } else {
             let implicit_group_by_checkpoint = self.get_checkpoint();
@@ -320,7 +321,7 @@ impl PathGenerator {
         }
 
         self.try_push_state("call0_SELECT")?;
-        self.handle_select(select_body.distinct, &select_body.projection)?;
+        self.handle_select(&select_body.distinct, &select_body.projection)?;
 
         Ok(())
     }
@@ -462,9 +463,9 @@ impl PathGenerator {
     }
 
     /// subgraph def_SELECT
-    fn handle_select(&mut self, distinct: bool, projection: &Vec<SelectItem>) -> Result<(), ConvertionError> {
+    fn handle_select(&mut self, distinct: &Option<Distinct>, projection: &Vec<SelectItem>) -> Result<(), ConvertionError> {
         self.try_push_state("SELECT")?;
-        if distinct {
+        if distinct.is_some() {
             self.try_push_state("SELECT_DISTINCT")?;
             self.clause_context.query_mut().set_distinct();
         }
@@ -656,6 +657,43 @@ impl PathGenerator {
                     Ok(())
                 })?;
             },
+            Expr::AnyOp { left, compare_op, right } |
+            Expr::AllOp { left, compare_op, right } => {
+                self.try_push_states(&["AnyAll", "AnyAllSelectOp"])?;
+                self.try_push_state(match compare_op {
+                    BinaryOperator::Eq => "AnyAllEqual",
+                    BinaryOperator::NotEq => "AnyAllUnEqual",
+                    BinaryOperator::Lt => "AnyAllLess",
+                    BinaryOperator::LtEq => "AnyAllLessEqual",
+                    BinaryOperator::Gt => "AnyAllGreater",
+                    BinaryOperator::GtEq => "AnyAllGreaterEqual",
+                    any => unexpected_expr!(any),
+                })?;
+                self.try_push_state("call2_types_type")?;
+                self.handle_types_type_and_try(TypeAssertion::None, |_self, returned_type| {
+                    _self.state_generator.set_compatible_list(returned_type.get_compat_types());
+                    _self.try_push_state("call61_types")?;
+                    _self.handle_types(left, TypeAssertion::CompatibleWith(returned_type))?;
+
+                    _self.try_push_state("AnyAllAnyAll")?;
+                    _self.try_push_state(match expr {
+                        Expr::AllOp { .. } => "AnyAllAnyAllAll",
+                        Expr::AnyOp { .. } => "AnyAllAnyAllAny",
+                        any => unexpected_expr!(any),
+                    })?;
+                    
+                    _self.try_push_state("AnyAllSelectIter")?;
+                    match &**right {
+                        Expr::Subquery(query) => {
+                            _self.try_push_state("call4_Query")?;
+                            _self.handle_query(query)?;
+                        },
+                        any => unexpected_expr!(any),
+                    }
+                    
+                    Ok(())
+                })?;
+            }
             Expr::BinaryOp { left, op, right } => {
                 match op {
                     BinaryOperator::And |
@@ -679,65 +717,25 @@ impl PathGenerator {
                     BinaryOperator::LtEq |
                     BinaryOperator::Gt |
                     BinaryOperator::GtEq => {
-                        match &**right {
-                            Expr::AnyOp(right_inner) | Expr::AllOp(right_inner) => {
-                                self.try_push_states(&["AnyAll", "AnyAllSelectOp"])?;
-                                self.try_push_state(match op {
-                                    BinaryOperator::Eq => "AnyAllEqual",
-                                    BinaryOperator::NotEq => "AnyAllUnEqual",
-                                    BinaryOperator::Lt => "AnyAllLess",
-                                    BinaryOperator::LtEq => "AnyAllLessEqual",
-                                    BinaryOperator::Gt => "AnyAllGreater",
-                                    BinaryOperator::GtEq => "AnyAllGreaterEqual",
-                                    any => unexpected_expr!(any),
-                                })?;
-                                self.try_push_state("call2_types_type")?;
-                                self.handle_types_type_and_try(TypeAssertion::None, |_self, returned_type| {
-                                    _self.state_generator.set_compatible_list(returned_type.get_compat_types());
-                                    _self.try_push_state("call61_types")?;
-                                    _self.handle_types(left, TypeAssertion::CompatibleWith(returned_type))?;
-
-                                    _self.try_push_state("AnyAllAnyAll")?;
-                                    _self.try_push_state(match &**right {
-                                        Expr::AllOp(..) => "AnyAllAnyAllAll",
-                                        Expr::AnyOp(..) => "AnyAllAnyAllAny",
-                                        any => unexpected_expr!(any),
-                                    })?;
-                                    
-                                    _self.try_push_state("AnyAllSelectIter")?;
-                                    match &**right_inner {
-                                        Expr::Subquery(query) => {
-                                            _self.try_push_state("call4_Query")?;
-                                            _self.handle_query(query)?;
-                                        },
-                                        any => unexpected_expr!(any),
-                                    }
-                                    
-                                    Ok(())
-                                })?;
-                            },
-                            _ => {
-                                self.try_push_state("BinaryComp")?;
-                                self.try_push_state(match op {
-                                    BinaryOperator::Eq => "BinaryCompEqual",
-                                    BinaryOperator::NotEq => "BinaryCompUnEqual",
-                                    BinaryOperator::Lt => "BinaryCompLess",
-                                    BinaryOperator::LtEq => "BinaryCompLessEqual",
-                                    BinaryOperator::Gt => "BinaryCompGreater",
-                                    BinaryOperator::GtEq => "BinaryCompGreaterEqual",
-                                    any => unexpected_expr!(any),
-                                })?;
-                                self.try_push_state("call1_types_type")?;
-                                self.handle_types_type_and_try(TypeAssertion::None, |_self, returned_type| {
-                                    _self.state_generator.set_compatible_list(returned_type.get_compat_types());
-                                    _self.try_push_state("call60_types")?;
-                                    _self.handle_types(left, TypeAssertion::CompatibleWith(returned_type.clone()))?;
-                                    _self.try_push_state("call24_types")?;
-                                    _self.handle_types(right, TypeAssertion::CompatibleWith(returned_type))?;
-                                    Ok(())
-                                })?;
-                            }
-                        }
+                        self.try_push_state("BinaryComp")?;
+                        self.try_push_state(match op {
+                            BinaryOperator::Eq => "BinaryCompEqual",
+                            BinaryOperator::NotEq => "BinaryCompUnEqual",
+                            BinaryOperator::Lt => "BinaryCompLess",
+                            BinaryOperator::LtEq => "BinaryCompLessEqual",
+                            BinaryOperator::Gt => "BinaryCompGreater",
+                            BinaryOperator::GtEq => "BinaryCompGreaterEqual",
+                            any => unexpected_expr!(any),
+                        })?;
+                        self.try_push_state("call1_types_type")?;
+                        self.handle_types_type_and_try(TypeAssertion::None, |_self, returned_type| {
+                            _self.state_generator.set_compatible_list(returned_type.get_compat_types());
+                            _self.try_push_state("call60_types")?;
+                            _self.handle_types(left, TypeAssertion::CompatibleWith(returned_type.clone()))?;
+                            _self.try_push_state("call24_types")?;
+                            _self.handle_types(right, TypeAssertion::CompatibleWith(returned_type))?;
+                            Ok(())
+                        })?;
                     },
                     any => unexpected_expr!(any),
                 }
@@ -838,7 +836,10 @@ impl PathGenerator {
         self.try_push_state("text")?;
         match expr {
             Expr::Value(Value::SingleQuotedString(_)) => self.try_push_state("text_literal")?,
-            Expr::Trim { expr, trim_where, trim_what } => {
+            Expr::Trim { expr, trim_where, trim_what , trim_characters } => {
+                if trim_characters.is_some() {
+                    return Err(ConvertionError::new(format!("trim_characters is not supppoted. Got: {expr}")));
+                }
                 self.try_push_states(&["text_trim", "call6_types"])?;
                 self.handle_types(expr, TypeAssertion::GeneratedBy(SubgraphType::Text))?;
 
@@ -864,7 +865,7 @@ impl PathGenerator {
                 self.try_push_states(&["text_concat_concat", "call8_types"])?;
                 self.handle_types(right, TypeAssertion::GeneratedBy(SubgraphType::Text))?;
             },
-            Expr::Substring { expr, substring_from, substring_for} => {
+            Expr::Substring { expr, substring_from, substring_for, special: _ } => {
                 self.try_push_states(&["text_substring", "call9_types"])?;
                 self.handle_types(expr, TypeAssertion::GeneratedBy(SubgraphType::Text))?;
                 if let Some(substring_from) = substring_from {
@@ -1264,7 +1265,10 @@ impl PathGenerator {
                 self.try_push_states(&["types_value_nested", "call1_types_value"])?;
                 (self.handle_types_value(expr), "nested")
             },
-            Expr::Cast { expr, data_type } if **expr == Expr::Value(Value::Null) => {
+            Expr::Cast { expr, data_type, format } if **expr == Expr::Value(Value::Null) => {
+                if format.is_some() {
+                    return Err(ConvertionError::new(format!("cast format is not supported. Got: {expr}")));
+                }
                 let null_type = SubgraphType::from_data_type(data_type);
                 (if selected_types.contains(&null_type) {
                     self.try_push_state("types_value_typed_null")?;
@@ -1396,7 +1400,7 @@ impl PathGenerator {
             Expr::Value(Value::Boolean(true)) => { self.try_push_states(&["bool_literal", "true"])?; SubgraphType::Val3 },
             Expr::Value(Value::Boolean(false)) => { self.try_push_states(&["bool_literal", "false"])?; SubgraphType::Val3 },
             expr @ Expr::Value(Value::Number(_, false)) => self.handle_literals_determine_number_type(expr)?,
-            expr @ Expr::Cast { expr: _, data_type } if *data_type == DataType::BigInt(None) => self.handle_literals_determine_number_type(expr)?,
+            expr @ Expr::Cast { expr: _, data_type, format } if *data_type == DataType::BigInt(None) && format.is_none() => self.handle_literals_determine_number_type(expr)?,
             expr @ Expr::UnaryOp { op, expr: _ } if *op == UnaryOperator::Minus => self.handle_literals_determine_number_type(expr)?,
             Expr::Value(Value::SingleQuotedString(v)) => {
                 self.try_push_state("text_literal")?;
@@ -1415,10 +1419,10 @@ impl PathGenerator {
                 self.push_node(PathNode::TimestampValue(value.clone()));
                 SubgraphType::Timestamp
             },
-            Expr::Interval {
+            Expr::Interval(Interval {
                 value, leading_field,
                 leading_precision: _, last_field: _, fractional_seconds_precision: _,
-            } => {
+            }) => {
                 self.try_push_state("interval_literal")?;
                 self.try_push_state(if leading_field.is_some() {
                     "interval_literal_with_field"
@@ -1439,7 +1443,7 @@ impl PathGenerator {
     
     fn handle_literals_determine_number_type(&mut self, expr: &Expr) -> Result<SubgraphType, ConvertionError> {
         let number_str = match expr {
-            Expr::Cast { expr, data_type } if *data_type == DataType::BigInt(None) => {
+            Expr::Cast { expr, data_type, format } if *data_type == DataType::BigInt(None) && format.is_none() => {
                 let tp = self.handle_literals_determine_number_type(expr)?;
                 self.try_push_state("literals_explicit_cast")?;
                 return Ok(tp)
@@ -1674,13 +1678,30 @@ impl PathGenerator {
             any => panic!("Aggregate function can only have one selected type. Got: {:?}", any),
         };
 
-        let ast::Function {
-            name: aggr_name,
-            args: aggr_arg_expr_v,
-            over: _,
-            distinct,
-            special: _,
-        } = function;
+        let (aggr_name, aggr_arg_expr_v, distinct) = {
+            let ast::Function {
+                name: aggr_name,
+                args: aggr_arg_expr_v,
+                over,
+                distinct,
+                special,
+                filter,
+                null_treatment,
+                order_by,
+            } = function;
+            let mut not_supported = vec![];
+            if over.is_some() { not_supported.push("over"); }
+            if *special { not_supported.push("special"); }
+            if filter.is_some() { not_supported.push("filter"); }
+            if null_treatment.is_some() { not_supported.push("null_treatment"); }
+            if !order_by.is_empty() { not_supported.push("order_by"); }
+            if !not_supported.is_empty() {
+                return Err(ConvertionError::new(format!(
+                    "Aggregate function fields: {} are not supported. Got: {function}", not_supported.into_iter().join(", ")
+                )))
+            }
+            (aggr_name, aggr_arg_expr_v, distinct)
+        };
 
         if *distinct {
             self.try_push_state("aggregate_distinct")?;
@@ -1771,8 +1792,9 @@ impl PathGenerator {
     }
 
     /// subgraph def_group_by
-    fn handle_group_by(&mut self, grouping_exprs: &Vec<Expr>) -> Result<(), ConvertionError> {
+    fn handle_group_by(&mut self, group_by: &GroupByExpr) -> Result<(), ConvertionError> {
         self.try_push_state("GROUP_BY")?;
+        let grouping_exprs = unwrap_variant!(group_by, GroupByExpr::Expressions);
         if grouping_exprs.len() == 0 || grouping_exprs == &[Expr::Value(Value::Boolean(true))] {
             self.clause_context.top_group_by_mut().set_single_group_grouping();
             self.clause_context.top_group_by_mut().set_single_row_grouping();

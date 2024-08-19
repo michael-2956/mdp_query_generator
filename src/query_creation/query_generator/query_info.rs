@@ -79,10 +79,14 @@ define_impersonation!(CreateTableSt, Statement, CreateTable, {
     like: Option<ObjectName>,
     clone: Option<ObjectName>,
     engine: Option<String>,
+    comment: Option<String>,
+    auto_increment_offset: Option<u32>,
     default_charset: Option<String>,
     collation: Option<String>,
     on_commit: Option<OnCommit>,
     on_cluster: Option<String>,
+    order_by: Option<Vec<Ident>>,
+    strict: bool,
 });
 
 #[derive(Debug)]
@@ -812,7 +816,7 @@ impl QueryProps {
 
     pub fn extract_alias(expr: &Expr) -> Option<IdentName> {
         match &expr.unnested() {
-            Expr::Cast { expr, data_type } if matches!(**expr, Expr::Value(..)) || matches!(
+            Expr::Cast { expr, data_type, format: _ } if matches!(**expr, Expr::Value(..)) || matches!(
                 &**expr, Expr::UnaryOp { op, expr: inner_expr } if *op == UnaryOperator::Minus && matches!(**inner_expr, Expr::Value(..))
             ) => {
                 Some(Ident {
@@ -843,7 +847,7 @@ impl QueryProps {
                             DataType::Date, DataType::Interval, DataType::Timestamp(None, TimezoneInfo::None)
                         ].contains(data_type)
                     ) || matches!(
-                        else_expr.unnested(), Expr::Cast { expr, data_type: _ } if matches!(**expr, Expr::Value(..)) || matches!(
+                        else_expr.unnested(), Expr::Cast { expr, data_type: _, format: _ } if matches!(**expr, Expr::Value(..)) || matches!(
                             &**expr, Expr::UnaryOp { op, expr: inner_expr } if *op == UnaryOperator::Minus && matches!(**inner_expr, Expr::Value(..))
                         )
                     ) || matches!(
@@ -897,7 +901,7 @@ impl QueryProps {
                     _ => None,
                 }
             },
-            Expr::Trim { expr: _, trim_where, trim_what: _ } => {
+            Expr::Trim { expr: _, trim_where, trim_what: _, trim_characters: _ } => {
                 let func_name = if let Some(trim_where) = trim_where {
                     match trim_where {
                         sqlparser::ast::TrimWhereField::Both => "btrim".to_string(),
@@ -910,7 +914,7 @@ impl QueryProps {
                 Some(Ident { value: func_name, quote_style: None })
             },
             Expr::Position { expr: _, r#in: _ } => Some(Ident { value: "position".to_string(), quote_style: Some('"') }),
-            Expr::Substring { expr: _, substring_from: _, substring_for: _ } => Some(Ident { value: "substring".to_string(), quote_style: Some('"') }),
+            Expr::Substring { expr: _, substring_from: _, substring_for: _, special: _ } => Some(Ident { value: "substring".to_string(), quote_style: Some('"') }),
             Expr::Extract { field: _, expr: _ } => Some(Ident { value: "extract".to_string(), quote_style: Some('"') }),
             Expr::Exists { subquery: _, negated } => {
                 if *negated { None } else {

@@ -13,8 +13,9 @@ impl FromItemBuilder {
             name: ObjectName(vec![highlight_ident()]),
             alias: None,
             args: None,
-            columns_definition: None,
-            with_hints: vec![]
+            with_hints: vec![],
+            version: None,
+            partitions: vec![],
         }
     }
 

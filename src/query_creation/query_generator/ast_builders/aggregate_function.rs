@@ -31,6 +31,9 @@ impl AggregateFunctionBuilder {
             over: None,
             distinct: false,
             special: false,
+            filter: None,
+            null_treatment: None,
+            order_by: vec![],
         });
 
         // if any aggregate function is present in query, aggregation was succesfully indicated.

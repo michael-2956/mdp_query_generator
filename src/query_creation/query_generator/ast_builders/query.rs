@@ -1,4 +1,4 @@
-use sqlparser::ast::{Expr, Query, Select, SetExpr, Value};
+use sqlparser::ast::{Expr, GroupByExpr, Query, Select, SetExpr, Value};
 
 use crate::{query_creation::{query_generator::{ast_builders::{from::FromBuilder, group_by::GroupByBuilder, having::HavingBuilder, limit::LimitBuilder, order_by::OrderByBuilder, select::SelectBuilder, where_clause::WhereBuilder}, match_next_state, query_info::IdentName, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}}, unwrap_pat};
 
@@ -20,12 +20,13 @@ fn query_with_select(nothing: bool) -> Query {
                 from: vec![],
                 lateral_views: vec![],
                 selection: None,
-                group_by: vec![],
+                group_by: GroupByExpr::Expressions(vec![]),
                 cluster_by: vec![],
                 distribute_by: vec![],
                 sort_by: vec![],
                 having: None,
                 qualify: None,
+                named_window: vec![],
             }
         ))),
         order_by: vec![],
@@ -33,6 +34,8 @@ fn query_with_select(nothing: bool) -> Query {
         offset: None,
         fetch: None,
         locks: vec![],
+        limit_by: vec![],
+        for_clause: None,
     }
 }
 
@@ -101,10 +104,10 @@ impl QueryBuilder {
         SelectBuilder::build(generator, &mut select_body.distinct, &mut select_body.projection);
 
         if generator.clause_context.top_group_by().is_grouping_active() && !generator.clause_context.query().is_aggregation_indicated() {
-            if select_body.group_by.is_empty() {
+            if select_body.group_by == GroupByExpr::Expressions(vec![]) {
                 // Grouping is active but wasn't indicated in any way. Add GROUP BY true
                 // instead of GROUP BY (), because unsupported by parser
-                select_body.group_by = vec![Expr::Value(Value::Boolean(true))]
+                select_body.group_by = GroupByExpr::Expressions(vec![Expr::Value(Value::Boolean(true))])
             }
         }
 

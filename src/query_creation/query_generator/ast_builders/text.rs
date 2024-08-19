@@ -19,7 +19,7 @@ impl TextBuilder {
         match_next_state!(generator, {
             "text_trim" => {
                 *text = Expr::Trim {
-                    expr: Box::new(TypesBuilder::highlight()), trim_where: None, trim_what: None
+                    expr: Box::new(TypesBuilder::highlight()), trim_where: None, trim_what: None, trim_characters: None
                 };
 
                 generator.expect_state("call6_types");
@@ -69,6 +69,7 @@ impl TextBuilder {
                     expr: Box::new(TypesBuilder::highlight()),
                     substring_from: None,
                     substring_for: None,
+                    special: false,
                 };
 
                 generator.expect_state("call9_types");

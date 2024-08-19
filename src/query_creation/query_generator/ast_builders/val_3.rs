@@ -217,15 +217,26 @@ impl Val3Builder {
                 let left = &mut **unwrap_pat!(val3, Expr::BinaryOp { left, .. }, left);
                 TypesBuilder::build(generator, left, TypeAssertion::CompatibleWith(tp));
 
-                let right = &mut **unwrap_pat!(val3, Expr::BinaryOp { right, .. }, right);
-                *right = TypesBuilder::highlight();
+                let (left, op) = unwrap_pat!(val3, Expr::BinaryOp { left, op, .. }, (left, op));
+
                 generator.expect_state("AnyAllAnyAll");
-                *right = match_next_state!(generator, {
-                    "AnyAllAnyAllAll" => Expr::AllOp(Box::new(TypesBuilder::highlight())),
-                    "AnyAllAnyAllAny" => Expr::AnyOp(Box::new(TypesBuilder::highlight())),
+                let right_inner = match_next_state!(generator, {
+                    "AnyAllAnyAllAll" => {
+                        *val3 = Expr::AllOp {
+                            left: left.clone(), compare_op: op.clone(),
+                            right: Box::new(TypesBuilder::highlight())
+                        };
+                        &mut **unwrap_pat!(val3, Expr::AllOp { right, .. }, right)
+                    },
+                    "AnyAllAnyAllAny" => {
+                        *val3 = Expr::AnyOp {
+                            left: left.clone(), compare_op: op.clone(),
+                            right: Box::new(TypesBuilder::highlight())
+                        };
+                        &mut **unwrap_pat!(val3, Expr::AnyOp { right, .. }, right)
+                    },
                 });
 
-                let right_inner = &mut **unwrap_pat!(right, Expr::AllOp(inner) | Expr::AnyOp(inner), inner);
                 generator.expect_state("AnyAllSelectIter");
                 match_next_state!(generator, {
                     "call4_Query" => {

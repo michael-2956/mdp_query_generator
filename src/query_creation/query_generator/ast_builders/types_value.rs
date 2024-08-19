@@ -78,6 +78,7 @@ impl TypesValueBuilder {
                 *types_value = Expr::Cast {
                     expr: Box::new(Expr::Value(Value::Null)),
                     data_type: null_type.clone().to_data_type(),
+                    format: None
                 };
                 null_type
             },

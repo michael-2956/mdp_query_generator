@@ -1,4 +1,4 @@
-use sqlparser::ast::{DataType, Expr, TimezoneInfo, UnaryOperator, Value};
+use sqlparser::ast::{DataType, Expr, Interval, TimezoneInfo, UnaryOperator, Value};
 
 use crate::{query_creation::{query_generator::{highlight_str, match_next_state, value_chooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}}, unwrap_pat};
 
@@ -75,22 +75,22 @@ impl LiteralsBuilder {
                     "interval_literal_with_field" => true,
                 });
 
-                *expr = Expr::Interval {
+                *expr = Expr::Interval(Interval {
                     value: Box::new(Expr::Value(Value::SingleQuotedString(highlight_str()))),
                     leading_field: None,
                     leading_precision: None,
                     last_field: None,
                     fractional_seconds_precision: None
-                };
+                });
 
                 let value = unwrap_pat!(&mut **unwrap_pat!(
-                    expr, Expr::Interval { value, .. }, value
+                    expr, Expr::Interval(Interval { value, .. }), value
                 ), Expr::Value(Value::SingleQuotedString(s)), s);
 
                 let leading_field;
                 (*value, leading_field) = value_chooser!(generator).choose_interval(with_field);
 
-                *unwrap_pat!(expr, Expr::Interval { leading_field, .. }, leading_field) = leading_field;
+                *unwrap_pat!(expr, Expr::Interval(Interval { leading_field, .. }), leading_field) = leading_field;
 
                 SubgraphType::Interval
             },
@@ -98,7 +98,7 @@ impl LiteralsBuilder {
 
         match_next_state!(generator, {
             "literals_explicit_cast" => {
-                *expr = Expr::Cast { expr: Box::new(expr.clone()), data_type: tp.to_data_type() };
+                *expr = Expr::Cast { expr: Box::new(expr.clone()), data_type: tp.to_data_type(), format: None };
                 generator.expect_state("EXIT_literals");
             }, // then 
             "EXIT_literals" => { }

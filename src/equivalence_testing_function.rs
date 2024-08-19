@@ -115,9 +115,9 @@ fn check_expr(expr: Expr) -> bool {
             left, op: _, right,
         } => check_expr(*left) && check_expr(*right),
         // Any operation e.g. `1 ANY (1)` or `foo > ANY(bar)`, It will be wrapped in the right side of BinaryExpr
-        Expr::AnyOp(expr) => check_expr(*expr),
+        Expr::AnyOp { left, compare_op: _, right } => check_expr(*left) && check_expr(*right),
         // ALL operation e.g. `1 ALL (1)` or `foo > ALL(bar)`, It will be wrapped in the right side of BinaryExpr
-        Expr::AllOp(expr) => check_expr(*expr),
+        Expr::AllOp { left, compare_op: _, right } => check_expr(*left) && check_expr(*right),
         // Unary operation e.g. `NOT foo`
         Expr::UnaryOp { op, expr} => {
             if op == sqlparser::ast::UnaryOperator::Not {
@@ -126,7 +126,7 @@ fn check_expr(expr: Expr) -> bool {
         },
         // SUBSTRING(<expr> [FROM <expr>] [FOR <expr>])
         Expr::Substring {
-            expr, substring_from, substring_for
+            expr, substring_from, substring_for, special: _
         } => {
             let condition_1 = check_expr(*expr);
 

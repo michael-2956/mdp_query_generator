@@ -1,22 +1,24 @@
-use sqlparser::ast::Expr;
+use sqlparser::ast::{Expr, GroupByExpr};
 
 use crate::{query_creation::{query_generator::{ast_builders::{column_spec::ColumnSpecBuilder, set_item::SetItemBuilder, types::TypesBuilder}, match_next_state, query_info::ColumnRetrievalOptions, QueryGenerator}, state_generator::state_choosers::StateChooser}, unwrap_variant};
 
 pub struct GroupByBuilder { }
 
 impl GroupByBuilder {
-    pub fn highlight() -> Vec<Expr> {
-        vec![TypesBuilder::highlight()]
+    pub fn highlight() -> GroupByExpr {
+        GroupByExpr::Expressions(vec![TypesBuilder::highlight()])
     }
 
-    pub fn nothing() -> Vec<Expr> {
-        vec![]
+    pub fn nothing() -> GroupByExpr {
+        GroupByExpr::Expressions(vec![])
     }
 
     pub fn build<StC: StateChooser>(
-        generator: &mut QueryGenerator<StC>, group_by: &mut Vec<Expr>
+        generator: &mut QueryGenerator<StC>, group_by: &mut GroupByExpr
     ) {
         generator.expect_state("GROUP_BY");
+
+        let group_by_vec = unwrap_variant!(group_by, GroupByExpr::Expressions);
 
         match_next_state!(generator, {
             "group_by_single_group" => {
@@ -24,7 +26,7 @@ impl GroupByBuilder {
                 generator.clause_context.top_group_by_mut().set_single_group_grouping();
                 generator.clause_context.top_group_by_mut().set_single_row_grouping();
                 generator.expect_state("EXIT_GROUP_BY");
-                *group_by = vec![];
+                *group_by_vec = vec![];
                 return
             },
             "has_accessible_columns" => {
@@ -32,11 +34,11 @@ impl GroupByBuilder {
             },
         });
 
-        *group_by = vec![];
+        *group_by_vec = vec![];
 
         loop {
-            group_by.push(TypesBuilder::highlight());
-            let group_by_entry = group_by.last_mut().unwrap();
+            group_by_vec.push(TypesBuilder::highlight());
+            let group_by_entry = group_by_vec.last_mut().unwrap();
             let mut return_result = false;
 
             match_next_state!(generator, {
@@ -103,7 +105,7 @@ impl GroupByBuilder {
         if !generator.clause_context.top_group_by().contains_columns() {
             generator.clause_context.top_group_by_mut().set_single_group_grouping();
             // For GROUPING SETS ( () ), set single row
-            if let &[Expr::GroupingSets(ref set_list)] = group_by.as_slice() {
+            if let &[Expr::GroupingSets(ref set_list)] = group_by_vec.as_slice() {
                 if set_list.len() == 1 {  // set is guaranteed to be empty (since no columns)
                     generator.clause_context.top_group_by_mut().set_single_row_grouping();
                 }

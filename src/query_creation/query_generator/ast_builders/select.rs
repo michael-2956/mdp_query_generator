@@ -1,4 +1,4 @@
-use sqlparser::ast::{ObjectName, SelectItem, WildcardAdditionalOptions};
+use sqlparser::ast::{Distinct, ObjectName, SelectItem, WildcardAdditionalOptions};
 
 use crate::{query_creation::{query_generator::{ast_builders::{types::TypesBuilder, types_value::TypeAssertion}, call_modifiers::{ValueSetterValue, WildcardRelationsValue}, highlight_ident, match_next_state, query_info::{IdentName, QueryProps}, value_chooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}}, unwrap_pat, unwrap_variant};
 
@@ -6,21 +6,21 @@ use crate::{query_creation::{query_generator::{ast_builders::{types::TypesBuilde
 pub struct SelectBuilder { }
 
 impl SelectBuilder {
-    pub fn nothing() -> (bool, Vec<SelectItem>) {
-        (false, vec![])
+    pub fn nothing() -> (Option<Distinct>, Vec<SelectItem>) {
+        (None, vec![])
     }
 
-    pub fn highlight() -> (bool, Vec<SelectItem>) {
-        (false, vec![SelectItem::UnnamedExpr(TypesBuilder::highlight())])
+    pub fn highlight() -> (Option<Distinct>, Vec<SelectItem>) {
+        (None, vec![SelectItem::UnnamedExpr(TypesBuilder::highlight())])
     }
 
     pub fn build<StC: StateChooser>(
-        generator: &mut QueryGenerator<StC>, distinct: &mut bool, projection: &mut Vec<SelectItem>
+        generator: &mut QueryGenerator<StC>, distinct: &mut Option<Distinct>, projection: &mut Vec<SelectItem>
     ) {
         generator.expect_state("SELECT");
         match_next_state!(generator, {
             "SELECT_DISTINCT" => {
-                *distinct = true;
+                *distinct = Some(Distinct::Distinct);
                 generator.clause_context.query_mut().set_distinct();
                 generator.expect_state("SELECT_list");
             },
@@ -41,7 +41,7 @@ impl SelectBuilder {
                                 generator.clause_context.top_active_from().get_wildcard_columns_iter()
                             );
                             *select_item = SelectItem::Wildcard(WildcardAdditionalOptions {
-                                opt_exclude: None, opt_except: None, opt_rename: None,
+                                opt_exclude: None, opt_except: None, opt_rename: None, opt_replace: None
                             });
                         },
                         "SELECT_qualified_wildcard" => {
@@ -53,7 +53,7 @@ impl SelectBuilder {
                             *select_item = SelectItem::QualifiedWildcard(
                                 ObjectName(vec![alias]),
                                 WildcardAdditionalOptions {
-                                    opt_exclude: None, opt_except: None, opt_rename: None,
+                                    opt_exclude: None, opt_except: None, opt_rename: None, opt_replace: None
                                 }
                             );
                         }

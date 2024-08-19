@@ -1,4 +1,4 @@
-use sqlparser::ast::{Expr, UnaryOperator, BinaryOperator};
+use sqlparser::ast::{BinaryOperator, Expr, Interval, UnaryOperator};
 
 pub(crate) trait ExpressionNesting {
     /// nest l-value if needed
@@ -100,8 +100,8 @@ impl ExpressionPriority for Expr {
             Expr::Nested(..) => -1,
             Expr::Value(..) => -1,
             Expr::Identifier(..) => -1,
-            Expr::AnyOp(..) => -1,
-            Expr::AllOp(..) => -1,
+            Expr::AnyOp { .. } => -1,
+            Expr::AllOp { .. } => -1,
             Expr::Extract { .. } => -1,
             Expr::Position { .. } => -1,
             Expr::Substring { .. } => -1,
@@ -165,6 +165,8 @@ impl ExpressionPriority for Expr {
                     BinaryOperator::PGRegexNotMatch => 7,
                     BinaryOperator::PGRegexNotIMatch => 7,
                     BinaryOperator::PGCustomBinaryOperator(..) => 7,
+                    BinaryOperator::PGOverlap => 7,
+                    BinaryOperator::PGStartsWith => 7,
                     BinaryOperator::Gt => 9, // all of those have p_nest_r on the left! (because double comparison not possible)
                     BinaryOperator::Lt => 9,  // ...
                     BinaryOperator::GtEq => 9,  // ...
@@ -173,6 +175,9 @@ impl ExpressionPriority for Expr {
                     BinaryOperator::NotEq => 9, // all of those have p_nest_r on the left! (because double comparison not possible)
                     BinaryOperator::And => 12,
                     BinaryOperator::Or => 13,
+                    BinaryOperator::DuckIntegerDivide |
+                    BinaryOperator::MyIntegerDivide |
+                    BinaryOperator::Custom(_) => panic!("Unknown precedence for postgresql: {op}"),
                 }
             },
             Expr::Like { .. } => 8,
@@ -200,6 +205,10 @@ impl ExpressionPriority for Expr {
             Expr::AtTimeZone { .. } => 7,
             Expr::IntroducedString { .. } => 7,
             Expr::Interval { .. } => 7,
+            Expr::Convert { .. } |
+            Expr::Struct { .. } |
+            Expr::Named { .. } |
+            Expr::RLike { .. } => panic!("Unknown precedence for postgresql: {self}"),
         }
     }
 
@@ -212,7 +221,7 @@ impl ExpressionPriority for Expr {
         match self {
             Expr::CompoundIdentifier(ident_vec) => Expr::CompoundIdentifier(ident_vec),
             Expr::CompositeAccess { expr, key } => Expr::CompositeAccess { expr: expr.p_nest_l(parent_priority), key },
-            Expr::Cast { expr, data_type} => Expr::Cast { expr: expr.p_nest_l(parent_priority), data_type},
+            Expr::Cast { expr, data_type, format} => Expr::Cast { expr: expr.p_nest_l(parent_priority), data_type, format },
             Expr::ArrayIndex { obj, indexes } => Expr::ArrayIndex { obj: obj.p_nest_l(parent_priority), indexes },
             Expr::MapAccess { column, keys } => Expr::MapAccess { column: column.p_nest_l(parent_priority), keys },
             Expr::UnaryOp { op, expr } => {
@@ -277,7 +286,7 @@ impl ExpressionPriority for Expr {
             Expr::TypedString { data_type, value } => Expr::TypedString { data_type, value },
             Expr::AtTimeZone { timestamp, time_zone } => Expr::AtTimeZone { timestamp: nest_rightwards_if_is_a_text_binary_op(timestamp, parent_priority), time_zone },
             Expr::IntroducedString { introducer, value } => Expr::IntroducedString { introducer, value },
-            Expr::Interval { value, leading_field, leading_precision, last_field, fractional_seconds_precision } => Expr::Interval { value: value.p_nest_l(parent_priority), leading_field, leading_precision, last_field, fractional_seconds_precision },
+            Expr::Interval(Interval { value, leading_field, leading_precision, last_field, fractional_seconds_precision } ) => Expr::Interval(Interval { value: value.p_nest_l(parent_priority), leading_field, leading_precision, last_field, fractional_seconds_precision }),
             any => any
         }
     }
