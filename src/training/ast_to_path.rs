@@ -403,7 +403,9 @@ impl PathGenerator {
                     ast::JoinOperator::FullOuter(join_on) => ("FROM_full_join", join_on),
                     any => unexpected_expr!(any),
                 };
-                let join_on = unwrap_variant!(join_on, ast::JoinConstraint::On);
+                let ast::JoinConstraint::On(join_on) = join_on else {
+                    return Err(ConvertionError::new(format!("Only JoinConstraint::On is accepted. Got: {:?}", join_on)))
+                };
                 self.try_push_state(join_type)?;
                 self.try_push_states(&["FROM_join_to", "call1_FROM_item"])?;
                 self.handle_from_item(&join.relation)?;

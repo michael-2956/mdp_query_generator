@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use structopt::StructOpt;
 use toml::Value;
 
-use crate::{query_creation::{query_generator::QueryGeneratorConfig, state_generator::{markov_chain_generator::StateGeneratorConfig, substitute_models::AntiCallModelConfig}}, training::{ast_to_path::AST2PathTestingConfig, models::ModelConfig, trainer::TrainingConfig}};
+use crate::{programs::syntax_coverage::SyntaxCoverageConfig, query_creation::{query_generator::QueryGeneratorConfig, state_generator::{markov_chain_generator::StateGeneratorConfig, substitute_models::AntiCallModelConfig}}, training::{ast_to_path::AST2PathTestingConfig, models::ModelConfig, trainer::TrainingConfig}};
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "basic")]
@@ -54,6 +54,7 @@ impl TomlReadable for MainConfig {
 
 pub struct Config {
     pub main_config: MainConfig,
+    pub syntax_coverage_config: SyntaxCoverageConfig,
     pub generator_config: QueryGeneratorConfig,
     pub chain_config: StateGeneratorConfig,
     pub training_config: TrainingConfig,
@@ -72,6 +73,7 @@ impl Config {
         let toml_config = read_toml_config(config_path)?;
         Ok(Self {
             main_config: MainConfig::from_toml(&toml_config),
+            syntax_coverage_config: SyntaxCoverageConfig::from_toml(&toml_config),
             generator_config: QueryGeneratorConfig::from_toml(&toml_config),
             chain_config: StateGeneratorConfig::from_toml(&toml_config),
             training_config: TrainingConfig::from_toml(&toml_config),

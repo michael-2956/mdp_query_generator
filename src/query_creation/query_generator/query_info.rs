@@ -1,7 +1,8 @@
 use std::{collections::{BTreeMap, BTreeSet, HashMap, HashSet}, error::Error, fmt, hash::Hash, path::Path};
 
+use itertools::Itertools;
 use smol_str::SmolStr;
-use crate::{query_creation::state_generator::{markov_chain_generator::markov_chain::CallModifiers, subgraph_type::{ContainsSubgraphType, SubgraphType}}, unwrap_variant};
+use crate::{programs::syntax_coverage::ProccessedSpiderTable, query_creation::state_generator::{markov_chain_generator::markov_chain::CallModifiers, subgraph_type::{ContainsSubgraphType, SubgraphType}}, unwrap_variant};
 
 use sqlparser::{ast::{ColumnDef, DataType, Expr, FileFormat, HiveDistributionStyle, HiveFormat, Ident, ObjectName, OnCommit, Query, SelectItem, SetExpr, SqlOption, Statement, TableAlias, TableConstraint, TimezoneInfo, UnaryOperator}, dialect::PostgreSqlDialect, parser::Parser};
 
@@ -89,6 +90,28 @@ define_impersonation!(CreateTableSt, Statement, CreateTable, {
     strict: bool,
 });
 
+impl CreateTableSt {
+    pub fn from_spider(spider_table: ProccessedSpiderTable) -> Self {
+        Parser::parse_sql(
+            &PostgreSqlDialect {}, format!(
+                "CREATE TABLE {} ({});", spider_table.table_name,
+                spider_table.column_types_str.into_iter().map(
+                    |(col_name, col_tp)| format!("\"{col_name}\" {}", match col_tp.as_str() {
+                        "number" => "integer",
+                        "text" => "text",
+                        "time" => "timestamp",
+                        "boolean" => "boolean",
+                        "others" => "boolean",
+                        // TODO: we'll have to parse schema instead and
+                        // dbs with unimplemented types are rejected.
+                        _ => unimplemented!("Unknown type: {col_tp}")
+                    })
+                ).join(", ")
+            ).as_str()
+        ).unwrap().into_iter().next().unwrap().try_into().unwrap()
+    }
+}
+
 #[derive(Debug)]
 pub struct ColumnRetrievalError {
     reason: String,
@@ -135,6 +158,10 @@ impl DatabaseSchema {
         Self {
             table_defs: ast.into_iter().map(|x| x.try_into().unwrap()).collect()
         }
+    }
+
+    pub fn with_tables(table_defs: Vec<CreateTableSt>) -> Self {
+        Self { table_defs }
     }
 
     pub fn get_schema_string(&self) -> String {
