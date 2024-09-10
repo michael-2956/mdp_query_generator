@@ -7,11 +7,12 @@ use sqlparser::dialect::PostgreSqlDialect;
 use sqlparser::parser::Parser;
 
 use crate::config::{Config, TomlReadable};
-use crate::query_creation::query_generator::query_info::{CreateTableSt, DatabaseSchema};
+use crate::query_creation::query_generator::query_info::DatabaseSchema;
 use crate::training::ast_to_path::PathGenerator;
 use crate::unwrap_variant;
 
 pub struct SyntaxCoverageConfig {
+    spider_schemas_folder: PathBuf,
     spider_tables_json_path: PathBuf,
     spider_queries_json_path: PathBuf,
 }
@@ -20,6 +21,7 @@ impl TomlReadable for SyntaxCoverageConfig {
     fn from_toml(toml_config: &toml::Value) -> Self {
         let section = &toml_config["syntax_coverage"];
         Self {
+            spider_schemas_folder: PathBuf::from(section["spider_schemas_folder"].as_str().unwrap()),
             spider_tables_json_path: PathBuf::from(section["spider_tables_json_path"].as_str().unwrap()),
             spider_queries_json_path: PathBuf::from(section["spider_queries_json_path"].as_str().unwrap()),
         }
@@ -44,7 +46,7 @@ pub struct ProccessedSpiderTable {
 }
 
 impl ProccessedSpiderTable {
-    fn from_json(json_table: SpiderDatabase) -> (String, Vec<Self>) {
+    pub fn from_json(json_table: SpiderDatabase) -> (String, Vec<Self>) {
         (json_table.db_id, json_table.table_names_original.into_iter().enumerate()
             .map(|(i, table_name)| {
                 Self {
@@ -77,16 +79,36 @@ pub fn test_syntax_coverage(config: Config) {
     let dbs: Vec<SpiderDatabase> = serde_json::from_str(fs::read_to_string(
         config.syntax_coverage_config.spider_tables_json_path
     ).unwrap().as_str()).unwrap();
+
+    // let schema_path = config.syntax_coverage_config.spider_schemas_folder.join(format!("{}.sql", "perpetrator"));
+    // let schema_str = fs::read_to_string(schema_path).unwrap().replace("PRAGMA", "-- PRAGMA");
+    // let database = DatabaseSchema::parse_schema_string(schema_str);
+
+    // println!("{:#?}", database.table_defs.iter().map(
+    //     |x| x.name.to_string().to_uppercase()
+    // ).collect_vec());
+
+    // return;
+
+    // let dbs = dbs.into_iter().map(
+    //     ProccessedSpiderTable::from_json
+    // ).map(|(db_id, tables)| {
+    //     (db_id, DatabaseSchema::with_tables(
+    //         tables.into_iter().map(CreateTableSt::from_spider).collect_vec()
+    //     ))
+    // }).collect_vec();
+
+    let dbs = dbs.into_iter().map(|db| {
+        let schema_path = config.syntax_coverage_config.spider_schemas_folder.join(format!("{}.sql", db.db_id));
+        let schema_str = fs::read_to_string(schema_path).unwrap().replace("PRAGMA", "-- PRAGMA");
+        let database = DatabaseSchema::parse_schema_string(schema_str);
+        (db.db_id, database)
+    }).collect_vec();
+
     let queries: Vec<SpiderQuery> = serde_json::from_str(fs::read_to_string(
         config.syntax_coverage_config.spider_queries_json_path
     ).unwrap().as_str()).unwrap();
-    let dbs = dbs.into_iter().map(
-        ProccessedSpiderTable::from_json
-    ).map(|(db_id, tables)| {
-        (db_id, DatabaseSchema::with_tables(
-            tables.into_iter().map(CreateTableSt::from_spider).collect_vec()
-        ))
-    }).collect_vec();
+
     let mut n_ok = 0usize;
     let mut n_total = 0usize;
     for (db_id, db) in dbs.into_iter() {

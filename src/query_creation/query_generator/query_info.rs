@@ -147,6 +147,10 @@ impl std::fmt::Display for DatabaseSchema {
 impl DatabaseSchema {
     pub fn parse_schema<P: AsRef<Path>>(source_path: P) -> Self {
         let source = std::fs::read_to_string(source_path).unwrap();
+        Self::parse_schema_string(source)
+    }
+
+    pub fn parse_schema_string(source: String) -> Self {
         let dialect = PostgreSqlDialect {};
         let ast = match Parser::parse_sql(&dialect, source.as_str()) {
             Ok(ast) => ast,
@@ -156,7 +160,19 @@ impl DatabaseSchema {
             },
         };
         Self {
-            table_defs: ast.into_iter().map(|x| x.try_into().unwrap()).collect()
+            table_defs: ast.into_iter()
+                .filter_map(|x| x.try_into().ok())
+                .map(|mut tb: CreateTableSt| {
+                    tb.name.0 = tb.name.0.into_iter().map(|mut id: Ident| {
+                        id.quote_style = None;
+                        id
+                    }).collect_vec();
+                    tb.columns = tb.columns.into_iter().map(|mut col: ColumnDef| {
+                        col.name.quote_style = None;
+                        col
+                    }).collect();
+                    tb
+                }).collect()
         }
     }
 
@@ -180,7 +196,7 @@ impl DatabaseSchema {
         self.table_defs.iter().map(|td| &td.name).collect()
     }
 
-    fn get_table_def_by_name(&self, name: &ObjectName) -> &CreateTableSt {
+    pub fn get_table_def_by_name(&self, name: &ObjectName) -> &CreateTableSt {
         match self.table_defs.iter().find(
             |x| x.name.to_string().to_uppercase() == name.to_string().to_uppercase()
         ) {

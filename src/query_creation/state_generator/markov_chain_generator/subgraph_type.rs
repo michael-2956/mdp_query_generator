@@ -54,18 +54,28 @@ impl SubgraphType {
 
     pub fn from_data_type(data_type: &DataType) -> Self {
         match data_type {
+            DataType::Datetime(_) => Self::Timestamp,
             DataType::Timestamp(_, tz) if *tz == TimezoneInfo::None => Self::Timestamp,
-            DataType::CharVarying(_) => Self::Text,
-            DataType::Numeric(_) => Self::Numeric,
-            DataType::Integer(_) => Self::Integer,
+            DataType::Numeric(_) |
+            DataType::Decimal(_) |
+            DataType::Real |
+            DataType::Double |
+            DataType::Float(_) => Self::Numeric,
+            DataType::Custom(id, _) if format!("{}", id).to_lowercase().as_str() == "number" => Self::Numeric,
+            DataType::UnsignedSmallInt(_) |
+            DataType::Integer(_) |
+            DataType::Int(_) => Self::Integer,
             DataType::Interval => Self::Interval,
             DataType::BigInt(_) => Self::BigInt,
-            DataType::Varchar(_) => Self::Text,
+            DataType::Bool |
             DataType::Boolean => Self::Val3,
-            DataType::Char(_) => Self::Text,
+            DataType::CharVarying(_) |
+            DataType::Varchar(_) |
+            DataType::Char(_) |
             DataType::Text => Self::Text,
+            DataType::Custom(id, _) if format!("{}", id).to_lowercase().as_str() == "varchar2" => Self::Text,
             DataType::Date => Self::Date,
-            any => panic!("DataType not implemented: {any}"),
+            any => panic!("DataType not implemented: {any} ({:?})", any),
         }
     }
 
