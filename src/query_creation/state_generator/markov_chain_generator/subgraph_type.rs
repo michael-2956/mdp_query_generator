@@ -17,6 +17,7 @@ pub enum SubgraphType {
     Numeric,
     Integer,
     BigInt,
+    ByteA,
     Val3,
     Text,
     Date,
@@ -32,6 +33,7 @@ impl SubgraphType {
             "list expr" => Ok(Self::ListExpr(Box::new(Self::Undetermined))),
             "text" => Ok(Self::Text),
             "date" => Ok(Self::Date),
+            "bytea" => Ok(Self::ByteA),
             "interval" => Ok(Self::Interval),
             "timestamp" => Ok(Self::Timestamp),
             any => Err(SyntaxError::new(format!("Type {any} does not exist!")))
@@ -62,7 +64,9 @@ impl SubgraphType {
             DataType::Double |
             DataType::Float(_) => Self::Numeric,
             DataType::Custom(id, _) if format!("{}", id).to_lowercase().as_str() == "number" => Self::Numeric,
+            DataType::UnsignedMediumInt(_) |
             DataType::UnsignedSmallInt(_) |
+            DataType::UnsignedTinyInt(_) |
             DataType::Integer(_) |
             DataType::Int(_) => Self::Integer,
             DataType::Interval => Self::Interval,
@@ -73,8 +77,10 @@ impl SubgraphType {
             DataType::Varchar(_) |
             DataType::Char(_) |
             DataType::Text => Self::Text,
+            DataType::Custom(id, _) if format!("{}", id).to_lowercase().as_str() == "year" => Self::Text,
             DataType::Custom(id, _) if format!("{}", id).to_lowercase().as_str() == "varchar2" => Self::Text,
             DataType::Date => Self::Date,
+            DataType::Blob(_) => Self::ByteA,
             any => panic!("DataType not implemented: {any} ({:?})", any),
         }
     }
@@ -114,6 +120,7 @@ impl Display for SubgraphType {
             Self::Val3 => "3VL Value".to_string(),
             Self::Text => "text".to_string(),
             Self::Date => "date".to_string(),
+            Self::ByteA => "bytea".to_string(),
             Self::Interval => "interval".to_string(),
             Self::Timestamp => "timestamp".to_string(),
         };
@@ -133,6 +140,7 @@ impl SubgraphType {
             Self::Val3 => "bool".to_string(),
             Self::Text => "text".to_string(),
             Self::Date => "date".to_string(),
+            Self::ByteA => "bytea".to_string(),
             Self::Interval => "interval".to_string(),
             Self::Timestamp => "timestamp".to_string(),
         }

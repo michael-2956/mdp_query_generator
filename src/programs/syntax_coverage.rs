@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::{fs, path::PathBuf};
 
 use itertools::Itertools;
@@ -109,32 +110,73 @@ pub fn test_syntax_coverage(config: Config) {
         config.syntax_coverage_config.spider_queries_json_path
     ).unwrap().as_str()).unwrap();
 
+    let mut n_duplicates = 0usize;
     let mut n_ok = 0usize;
     let mut n_total = 0usize;
+    let mut n_parse_err = 0usize;
+    let mut n_other_set_op = 0usize;
+    let mut n_absent_table = 0usize;
+    let mut n_no_subquery_alias = 0usize;
     for (db_id, db) in dbs.into_iter() {
-        eprint!("Testing: {n_total} / {} ({n_ok} OK)   \r", queries.len());
+        // eprintln!("\n\nDB: {db_id}\n");
+        eprint!("Testing: {} / {} ({n_ok} OK)   \r", n_duplicates + n_total, queries.len());
+        
         let db_queries = queries.iter().filter_map(
             |sq| if sq.db_id == db_id {
                 Some(sq.query.clone())
             } else { None }
-        ).collect_vec();
+        ).collect::<BTreeSet::<_>>();
+        n_duplicates += queries.iter().filter(|sq| sq.db_id == db_id).count() - db_queries.len();
+        n_total += db_queries.len();
+        
         let mut path_generator = PathGenerator::new(
             db, &config.chain_config,
             config.generator_config.aggregate_functions_distribution.clone(),
         ).unwrap();
-        n_total += db_queries.len();
+        
         for query_str in db_queries {
-            // println!("Query: {query_str}");
             let Ok(statements) = Parser::parse_sql(
                 &PostgreSqlDialect {}, query_str.as_str()
-            ) else { continue; };
+            ) else {
+                n_parse_err += 1;
+                // println!("Parse error in {db_id}.\nQuery: {query_str}");
+                continue;
+            };
+
             let query = unwrap_variant!(statements.into_iter().next().unwrap(), Statement::Query);
             if !matches!(*query.body, SetExpr::Select(..)) {
+                n_other_set_op += 1;
                 continue;
             }
-            n_ok += path_generator.get_query_path(&query).is_ok() as usize;
-            // todo: test that path results in the same query
+
+            // eprintln!("Query: {query_str}");
+
+            match path_generator.get_query_path(&query) {
+                Ok(_) => n_ok += 1, // todo: test that path results in the same query
+                Err(err) => {
+                    if format!("{err}").contains("Table retrieval error: Couldn't find table") {
+                        n_absent_table += 1;
+                    }
+                    if format!("{err}").contains("Expected SetExpr::Select, got") {
+                        n_other_set_op += 1;
+                    }
+                    if format!("{err}").contains("No alias for subquery") {
+                        n_no_subquery_alias += 1;
+                    }
+                },
+            }
         }
     }
+    println!("\nError summary:");
+    
     println!("{n_ok} / {n_total} converted succesfully ({:.2}%)", 100f64 * n_ok as f64 / n_total as f64);
+    println!("{n_parse_err} / {n_total} parse errors ({:.2}%)", 100f64 * n_parse_err as f64 / n_total as f64);
+    println!("{n_other_set_op} / {n_total} unimplemented set expressions ({:.2}%)", 100f64 * n_other_set_op as f64 / n_total as f64);
+    println!("{n_absent_table} / {n_total} absent tables ({:.2}%)", 100f64 * n_absent_table as f64 / n_total as f64);
+    println!("{n_no_subquery_alias} / {n_total} no subquery alias ({:.2}%)", 100f64 * n_no_subquery_alias as f64 / n_total as f64);
+    
+    let n_rest = n_total - n_ok - n_parse_err - n_other_set_op - n_absent_table - n_no_subquery_alias;
+    println!("{n_rest} / {n_total} other convertion errors ({:.2}%)", 100f64 * n_rest as f64 / n_total as f64);
+    
+    println!("\nIn total, {n_duplicates} / {} ({:.2}%) of queries were duplicates", queries.len(), 100f64 * n_duplicates as f64 / queries.len() as f64);
 }

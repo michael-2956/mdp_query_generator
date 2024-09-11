@@ -131,6 +131,25 @@ impl ColumnRetrievalError {
     }
 }
 
+#[derive(Debug)]
+pub struct TableRetrievalError {
+    reason: String,
+}
+
+impl Error for TableRetrievalError { }
+
+impl fmt::Display for TableRetrievalError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Table retrieval error: {}", self.reason)
+    }
+}
+
+impl TableRetrievalError {
+    pub fn new(reason: String) -> Self {
+        Self { reason }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct DatabaseSchema {
     pub table_defs: Vec<CreateTableSt>
@@ -189,19 +208,19 @@ impl DatabaseSchema {
     }
 
     pub fn num_columns_in_table(&self, name: &ObjectName) -> usize {
-        self.get_table_def_by_name(name).columns.len()
+        self.get_table_def_by_name(name).unwrap().columns.len()
     }
 
     pub fn get_all_table_names(&self) -> Vec<&ObjectName> {
         self.table_defs.iter().map(|td| &td.name).collect()
     }
 
-    pub fn get_table_def_by_name(&self, name: &ObjectName) -> &CreateTableSt {
+    pub fn get_table_def_by_name(&self, name: &ObjectName) -> Result<&CreateTableSt, TableRetrievalError> {
         match self.table_defs.iter().find(
             |x| x.name.to_string().to_uppercase() == name.to_string().to_uppercase()
         ) {
-            Some(create_table_st) => create_table_st,
-            None => panic!("Couldn't find table {name} in the schema!"),
+            Some(create_table_st) => Ok(create_table_st),
+            None => Err(TableRetrievalError::new(format!("Couldn't find table {name} in the schema!"))),
         }
     }
 }
@@ -618,11 +637,12 @@ impl ClauseContext {
         self.retrieve_column_by_ident_components(&ident_components, column_retrieval_options)
     }
 
-    pub fn add_from_table_by_name(&mut self, name: &ObjectName, alias: Option<TableAlias>) {
+    pub fn add_from_table_by_name(&mut self, name: &ObjectName, alias: Option<TableAlias>) -> Result<(), TableRetrievalError> {
         self.all_accessible_froms.append_table(
-            self.schema_ref().get_table_def_by_name(name).clone(),
+            self.schema_ref().get_table_def_by_name(name)?.clone(),
             alias
         );
+        Ok(())
     }
 
     pub fn get_unused_table_names(&self) -> Vec<ObjectName> {

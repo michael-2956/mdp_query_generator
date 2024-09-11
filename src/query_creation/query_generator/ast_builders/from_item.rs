@@ -51,7 +51,7 @@ impl FromItemBuilder {
                     table_alias.columns = value_chooser!(generator).choose_from_column_renames(n_columns);
                 }
 
-                generator.clause_context.add_from_table_by_name(&name, alias.clone());
+                generator.clause_context.add_from_table_by_name(&name, alias.clone()).unwrap();
             },
             "call0_Query" => {
                 *from_item = TableFactor::Derived {

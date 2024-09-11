@@ -113,6 +113,8 @@ pub struct PathGenerator {
     state_selector: DeterministicModel,
     clause_context: ClauseContext,
     aggregate_functions_distribution: AggregateFunctionDistribution,
+    /// checkpoint to restore to initial state in case of a convertion error
+    zero_checkpoint: Option<Checkpoint>,
     rng: ChaCha8Rng,
 }
 
@@ -122,18 +124,28 @@ impl PathGenerator {
         chain_config: &StateGeneratorConfig,
         aggregate_functions_distribution: AggregateFunctionDistribution,
     ) -> Result<Self, SyntaxError> {
-        Ok(Self {
+        let mut _self = Self {
             current_path: vec![],
             state_generator: MarkovChainGenerator::<MaxProbStateChooser>::with_config(chain_config)?,
             state_selector: DeterministicModel::empty(),
             clause_context: ClauseContext::new(database_schema),
             aggregate_functions_distribution,
             rng: ChaCha8Rng::seed_from_u64(0),
-        })
+            zero_checkpoint: None,
+        };
+        _self.zero_checkpoint = Some(_self.get_checkpoint(false));
+        Ok(_self)
     }
 
     fn process_query(&mut self, query: &Box<Query>) -> Result<(), ConvertionError> {
-        self.handle_query(query)?;
+        match self.handle_query(query) {
+            Ok(..) => { },
+            Err(err) => {
+                // reset the generator (in case of an error)
+                self.restore_checkpoint_consume(self.zero_checkpoint.as_ref().unwrap().dyn_clone());
+                return Err(err)
+            }
+        }
         // reset the generator
         if let Some(state) = self.next_state_opt().unwrap() {
             panic!("Couldn't reset state generator: Received {state}");
@@ -170,10 +182,42 @@ macro_rules! unexpected_subgraph_type {
     }};
 }
 
-struct Checkpoint {
-    clause_context_checkpoint: ClauseContextCheckpoint,
-    chain_state_checkpoint: ChainStateCheckpoint,
-    path_cutoff_length: usize,
+enum Checkpoint {
+    CutOff {
+        clause_context_checkpoint: ClauseContextCheckpoint,
+        chain_state_checkpoint: ChainStateCheckpoint,
+        path_cutoff_length: usize,
+    },
+    Full {
+        clause_context_checkpoint: ClauseContextCheckpoint,
+        chain_state_checkpoint: ChainStateCheckpoint,
+        path: Vec<PathNode>,
+    },
+}
+
+impl DynClone for Checkpoint {
+    fn dyn_clone(&self) -> Self {
+        match self {
+            Checkpoint::CutOff {
+                clause_context_checkpoint,
+                chain_state_checkpoint,
+                path_cutoff_length
+            } => Checkpoint::CutOff {
+                clause_context_checkpoint: clause_context_checkpoint.clone(),
+                chain_state_checkpoint: chain_state_checkpoint.dyn_clone(),
+                path_cutoff_length: *path_cutoff_length,
+            },
+            Checkpoint::Full {
+                clause_context_checkpoint,
+                chain_state_checkpoint,
+                path
+            } => Checkpoint::Full {
+                clause_context_checkpoint: clause_context_checkpoint.clone(),
+                chain_state_checkpoint: chain_state_checkpoint.dyn_clone(),
+                path: path.clone(),
+            }
+        }
+    }
 }
 
 impl PathGenerator {
@@ -227,24 +271,47 @@ impl PathGenerator {
         self.current_path.push(path_node);
     }
 
-    fn get_checkpoint(&mut self) -> Checkpoint {
-        Checkpoint {
-            clause_context_checkpoint: self.clause_context.get_checkpoint(true),
-            chain_state_checkpoint: self.state_generator.get_chain_state_checkpoint(true),
-            path_cutoff_length: self.current_path.len(),
+    fn get_checkpoint(&self, cutoff: bool) -> Checkpoint {
+        if cutoff {
+            Checkpoint::CutOff {
+                clause_context_checkpoint: self.clause_context.get_checkpoint(cutoff),
+                chain_state_checkpoint: self.state_generator.get_chain_state_checkpoint(cutoff),
+                path_cutoff_length: self.current_path.len(),
+            }
+        } else {
+            Checkpoint::Full {
+                clause_context_checkpoint: self.clause_context.get_checkpoint(cutoff),
+                chain_state_checkpoint: self.state_generator.get_chain_state_checkpoint(cutoff),
+                path: self.current_path.clone(),
+            }
         }
     }
 
     fn restore_checkpoint(&mut self, checkpoint: &Checkpoint) {
-        self.clause_context.restore_checkpoint(checkpoint.clause_context_checkpoint.clone());
-        self.state_generator.restore_chain_state(checkpoint.chain_state_checkpoint.dyn_clone());
-        self.current_path.truncate(checkpoint.path_cutoff_length);
+        self.restore_checkpoint_consume(checkpoint.dyn_clone());
     }
 
     fn restore_checkpoint_consume(&mut self, checkpoint: Checkpoint) {
-        self.clause_context.restore_checkpoint(checkpoint.clause_context_checkpoint);
-        self.state_generator.restore_chain_state(checkpoint.chain_state_checkpoint);
-        self.current_path.truncate(checkpoint.path_cutoff_length);
+        match checkpoint {
+            Checkpoint::CutOff {
+                clause_context_checkpoint,
+                chain_state_checkpoint,
+                path_cutoff_length
+            } => {
+                self.clause_context.restore_checkpoint(clause_context_checkpoint);
+                self.state_generator.restore_chain_state(chain_state_checkpoint);
+                self.current_path.truncate(path_cutoff_length);
+            },
+            Checkpoint::Full {
+                clause_context_checkpoint,
+                chain_state_checkpoint,
+                path
+            } => {
+                self.clause_context.restore_checkpoint(clause_context_checkpoint);
+                self.state_generator.restore_chain_state(chain_state_checkpoint);
+                self.current_path = path;
+            },
+        }
     }
 
     /// subgraph def_Query
@@ -252,7 +319,10 @@ impl PathGenerator {
         self.clause_context.on_query_begin(self.state_generator.get_fn_modifiers_opt());
         self.try_push_state("Query")?;
 
-        let select_body = unwrap_variant!(&*query.body, SetExpr::Select);
+        let select_body = match &*query.body {
+            SetExpr::Select(select_body) => select_body,
+            any => return Err(ConvertionError::new(format!("Expected SetExpr::Select, got {any}")))
+        };
         
         self.try_push_state("call0_FROM")?;
         self.handle_from(&select_body.from)?;
@@ -267,7 +337,7 @@ impl PathGenerator {
         if select_body.group_by != GroupByExpr::Expressions(vec![]) {
             self.handle_query_after_group_by(select_body, true)?;
         } else {
-            let implicit_group_by_checkpoint = self.get_checkpoint();
+            let implicit_group_by_checkpoint = self.get_checkpoint(true);
             match self.handle_query_after_group_by(select_body, false) {
                 Ok(..) => { },
                 Err(err_no_grouping) => {
@@ -338,7 +408,7 @@ impl PathGenerator {
             self.try_push_state("order_by_list")?;
             match &order_by_expr.expr {
                 Expr::Identifier(ident) if {
-                    let checkpoint = self.get_checkpoint();
+                    let checkpoint = self.get_checkpoint(true);
                     match self.handle_order_by_select_reference(ident) {
                         Ok(..) => true,
                         // TODO: this error is not indicated anywhere
@@ -436,10 +506,15 @@ impl PathGenerator {
                 self.try_push_state("FROM_item_table")?;
                 self.push_node(PathNode::SelectedTableName(name.clone()));
                 if let Some(renames) = renames { self.push_node(PathNode::FromColumnRenames(renames)); }
-                self.clause_context.add_from_table_by_name(name, alias.clone());
+                if let Err(err) = self.clause_context.add_from_table_by_name(name, alias.clone()) {
+                    return Err(ConvertionError::new(format!("{err}")))
+                }
             },
             TableFactor::Derived { subquery, alias, .. } => {
-                let alias = alias.as_ref().unwrap();
+                let alias = match alias.as_ref() {
+                    Some(alias) => alias,
+                    None => return Err(ConvertionError::new(format!("No alias for subquery: {subquery}"))),
+                };
                 self.try_push_state("FROM_item_alias")?;
                 self.push_node(PathNode::FromAlias(alias.name.clone()));
                 self.try_push_state("call0_Query")?;
@@ -900,7 +975,7 @@ impl PathGenerator {
                 })?;
 
                 let mut err_str: String = "".to_string();
-                let checkpoint = self.get_checkpoint();
+                let checkpoint = self.get_checkpoint(true);
                 for swap_arguments in [false, true] {
                     if swap_arguments {
                         self.try_push_state("date_swap_arguments")?;
@@ -963,7 +1038,7 @@ impl PathGenerator {
                 })?;
 
                 let mut err_str: String = "".to_string();
-                let checkpoint = self.get_checkpoint();
+                let checkpoint = self.get_checkpoint(true);
                 for swap_arguments in [false, true] {
                     if swap_arguments {
                         self.try_push_state("timestamp_swap_arguments")?;
@@ -1084,7 +1159,7 @@ impl PathGenerator {
         // })?;
         let mut continue_after = TypesContinueAfter::None;
         let mut err_msg = "".to_string();
-        let checkpoint = self.get_checkpoint();
+        let checkpoint = self.get_checkpoint(true);
         loop {
             let tp = match self.handle_types_continue_after(expr, type_assertion.clone(), continue_after) {
                 Ok(tp) => tp,
@@ -1112,7 +1187,7 @@ impl PathGenerator {
 
     fn handle_types_expr(&mut self, selected_types: Vec<SubgraphType>, expr: &Expr, continue_after: TypesContinueAfter) -> Result<SubgraphType, ConvertionError> {
         let mut err_str = "".to_string();
-        let types_before_state_selection = self.get_checkpoint();
+        let types_before_state_selection = self.get_checkpoint(true);
         let selected_types = SubgraphType::sort_by_compatibility(selected_types);
         let mut selected_types_iter = selected_types.iter();
 
@@ -1189,7 +1264,7 @@ impl PathGenerator {
         // })?;
         let mut continue_after = TypesContinueAfter::None;
         let mut err_msg = "".to_string();
-        let checkpoint = self.get_checkpoint();
+        let checkpoint = self.get_checkpoint(true);
         loop {
             let tp = match self.handle_types_type_continue_after(continue_after) {
                 Ok(tp) => tp,
@@ -1256,7 +1331,7 @@ impl PathGenerator {
 
         let mut err_str = "".to_string();
 
-        let checkpoint = self.get_checkpoint();
+        let checkpoint = self.get_checkpoint(true);
 
         let (tp_res, subgraph_key) = match expr {
             Expr::Value(Value::Null) => {
@@ -1459,7 +1534,7 @@ impl PathGenerator {
         };
         // assume that literals are the smallest type that they fit into
         // (this is now postgres determines them)
-        let checkpoint = self.get_checkpoint();
+        let checkpoint = self.get_checkpoint(true);
         let err_int_str = match number_str.parse::<i32>() {
             Ok(..) => {
                 match self.try_push_state("number_literal_integer") {
