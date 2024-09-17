@@ -21,7 +21,7 @@ fn run_generation<StC: StateChooser>(
 
     let print_queries = config.generator_config.print_queries;
 
-    let mut generator = QueryGenerator::<StC>::from_state_generator_and_schema(markov_generator, config.generator_config, sub_model);
+    let mut generator = QueryGenerator::<StC>::from_state_generator_and_config(markov_generator, config.generator_config, sub_model);
 
     let mut accumulated_time_ns = 0;
     let mut num_equivalent = 0;

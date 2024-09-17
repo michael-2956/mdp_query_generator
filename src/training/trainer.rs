@@ -46,7 +46,7 @@ impl SQLTrainer {
                 &config.chain_config,
                 config.generator_config.aggregate_functions_distribution.clone(),
             )?,
-            path_query_generator: QueryGenerator::from_state_generator_and_schema(
+            path_query_generator: QueryGenerator::from_state_generator_and_config(
                 MarkovChainGenerator::with_config(&config.chain_config).unwrap(),
                 config.generator_config.clone(),
                 Box::new(PathModel::empty()),

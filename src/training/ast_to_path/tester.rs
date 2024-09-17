@@ -22,12 +22,12 @@ impl TestAST2Path {
             )?,
             config: config.ast2path_testing_config,
             main_config: config.main_config,
-            random_query_generator: QueryGenerator::from_state_generator_and_schema(
+            random_query_generator: QueryGenerator::from_state_generator_and_config(
                 MarkovChainGenerator::with_config(&config.chain_config).unwrap(),
                 config.generator_config.clone(),
                 Box::new(AntiCallModel::new(config.anticall_model_config)),
             ),
-            path_query_generator: QueryGenerator::from_state_generator_and_schema(
+            path_query_generator: QueryGenerator::from_state_generator_and_config(
                 MarkovChainGenerator::with_config(&config.chain_config).unwrap(),
                 config.generator_config,
                 Box::new(PathModel::empty())

@@ -180,18 +180,9 @@ impl DatabaseSchema {
         };
         Self {
             table_defs: ast.into_iter()
+                // keep only create table
                 .filter_map(|x| x.try_into().ok())
-                .map(|mut tb: CreateTableSt| {
-                    tb.name.0 = tb.name.0.into_iter().map(|mut id: Ident| {
-                        id.quote_style = None;
-                        id
-                    }).collect_vec();
-                    tb.columns = tb.columns.into_iter().map(|mut col: ColumnDef| {
-                        col.name.quote_style = None;
-                        col
-                    }).collect();
-                    tb
-                }).collect()
+                .collect()
         }
     }
 
@@ -200,11 +191,9 @@ impl DatabaseSchema {
     }
 
     pub fn get_schema_string(&self) -> String {
-        let mut output_str = "".to_string();
-        for table_def in self.table_defs.iter() {
-            output_str = format!("{output_str}\n{table_def}")
-        }
-        output_str
+        self.table_defs.iter().map(
+            |table_def| format!("{table_def};")
+        ).join("\n")
     }
 
     pub fn num_columns_in_table(&self, name: &ObjectName) -> usize {
@@ -217,7 +206,7 @@ impl DatabaseSchema {
 
     pub fn get_table_def_by_name(&self, name: &ObjectName) -> Result<&CreateTableSt, TableRetrievalError> {
         match self.table_defs.iter().find(
-            |x| x.name.to_string().to_uppercase() == name.to_string().to_uppercase()
+            |x| <IdentName>::from(x.name.0.first().unwrap().clone()) == <IdentName>::from(name.0.first().unwrap().clone())
         ) {
             Some(create_table_st) => Ok(create_table_st),
             None => Err(TableRetrievalError::new(format!("Couldn't find table {name} in the schema!"))),
@@ -270,6 +259,13 @@ pub struct ColumnRetrievalOptions {
     /// If this is true, the caller wants the column to be able to be aggregated
     /// (put into an aggregate function)
     pub only_columns_that_can_be_aggregated: bool,
+    /// In Spider SQLLite queries, some queries would\
+    /// not have double quotes even though they should\
+    /// have them under postgres syntax. This is set to\
+    /// true when we should try to artificially add them\
+    /// while column searching.\
+    /// FALSE by default. Use try_with_quotes to set this.
+    pub try_with_quotes: bool,
 }
 
 impl ColumnRetrievalOptions {
@@ -278,6 +274,7 @@ impl ColumnRetrievalOptions {
             only_group_by_columns,
             shade_by_select_aliases,
             only_columns_that_can_be_aggregated,
+            try_with_quotes: false,
         }
     }
 
@@ -286,6 +283,16 @@ impl ColumnRetrievalOptions {
             only_group_by_columns: mods.contains(&SmolStr::new("group by columns")),
             shade_by_select_aliases: mods.contains(&SmolStr::new("shade by select aliases")),
             only_columns_that_can_be_aggregated: mods.contains(&SmolStr::new("aggregate-able columns")),
+            try_with_quotes: false,
+        }
+    }
+
+    pub fn try_with_quotes(self, try_with_quotes: bool) -> Self {
+        Self {
+            only_group_by_columns: self.only_group_by_columns,
+            shade_by_select_aliases: self.shade_by_select_aliases,
+            only_columns_that_can_be_aggregated: self.only_columns_that_can_be_aggregated,
+            try_with_quotes: try_with_quotes,
         }
     }
 }
@@ -402,11 +409,11 @@ impl ClauseContext {
 
     pub fn get_relation_levels_selectable_by_qualified_wildcard(&self, allowed_types: Vec<SubgraphType>, single_column: bool) -> Vec<Vec<IdentName>> {
         // first level is always present because we're in SELECT
-        self.get_filtered_from_clause_hierarchy_with_allowed_columns(ColumnRetrievalOptions {
-            only_group_by_columns: self.top_group_by().is_grouping_active(),
-            shade_by_select_aliases: false, // we are in SELECT
-            only_columns_that_can_be_aggregated: false,  // we are definitely non in aggregation
-        }).map(|(from_contents, shaded_rel_names, _, allowed_rel_col_names_opt)| {
+        self.get_filtered_from_clause_hierarchy_with_allowed_columns(ColumnRetrievalOptions::new(
+            self.top_group_by().is_grouping_active(),
+            false, // we are in SELECT
+            false,  // we are definitely not an aggregate function argument
+        )).map(|(from_contents, shaded_rel_names, _, allowed_rel_col_names_opt)| {
             from_contents.relations_iter().filter(|(rel_name, relation)| {
                 !shaded_rel_names.contains(rel_name) && {
                     let all_columns: Vec<_> = relation.get_all_columns_iter().collect();
@@ -608,7 +615,12 @@ impl ClauseContext {
         ).find_map(
             |cols_and_types| cols_and_types.into_iter()
                 .find_map(|(tp, [rel_name, col_name])|
-                    if *col_name == searched_col && searched_rel.as_ref().map(
+                    if (
+                        *col_name == searched_col || (
+                            column_retrieval_options.try_with_quotes &&
+                            *col_name == searched_col.clone().with_double_quotes()
+                        )
+                    ) && searched_rel.as_ref().map(
                         |s_rel| s_rel == rel_name
                     ).unwrap_or(true) {
                         Some((tp.clone(), [rel_name.clone(), col_name.clone()]))
@@ -1083,23 +1095,31 @@ impl GroupByContents {
 }
 
 /// An Ident wrapper that only compares/hashes
-/// the uppercase string.
+/// the lowercase string, unless the quote style
+/// is ", then it compares/hashes original value
+/// in quotes (Abc for "Abc"), without quotes
+/// themselves
 #[derive(Clone, Debug, Eq)]
 pub struct IdentName {
     ident: Ident
 }
 
-impl fmt::Display for IdentName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.ident.value.to_uppercase())
+impl IdentName {
+    pub fn with_double_quotes(mut self) -> Self {
+        self.ident.quote_style = Some('"');
+        self
     }
 }
 
-// impl ToString for IdentName {
-//     fn to_string(&self) -> String {
-//         self.ident.value.to_uppercase()
-//     }
-// }
+impl fmt::Display for IdentName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.ident.quote_style != Some('"') {
+            write!(f, "{}", self.ident.value.to_lowercase())
+        } else {
+            write!(f, "{}", self.ident.value)
+        }
+    }
+}
 
 impl PartialEq for IdentName {
     fn eq(&self, other: &Self) -> bool {

@@ -116,6 +116,7 @@ pub struct PathGenerator {
     /// checkpoint to restore to initial state in case of a convertion error
     zero_checkpoint: Option<Checkpoint>,
     rng: ChaCha8Rng,
+    try_with_quotes: bool,
 }
 
 impl PathGenerator {
@@ -132,6 +133,7 @@ impl PathGenerator {
             aggregate_functions_distribution,
             rng: ChaCha8Rng::seed_from_u64(0),
             zero_checkpoint: None,
+            try_with_quotes: false,
         };
         _self.zero_checkpoint = Some(_self.get_checkpoint(false));
         Ok(_self)
@@ -151,6 +153,10 @@ impl PathGenerator {
             panic!("Couldn't reset state generator: Received {state}");
         }
         Ok(())
+    }
+
+    pub fn set_try_with_quotes(&mut self, try_with_quotes: bool) {
+        self.try_with_quotes = try_with_quotes;
     }
 
     pub fn get_query_path(&mut self, query: &Box<Query>) -> Result<Vec<PathNode>, ConvertionError> {
@@ -1634,7 +1640,7 @@ impl PathGenerator {
         };
 
         let (selected_type, qualified_column_name) = match self.clause_context.retrieve_column_by_ident_components(
-            &ident_components, column_retrieval_options
+            &ident_components, column_retrieval_options.try_with_quotes(self.try_with_quotes)
         ) {
             Ok(selected_type) => selected_type,
             Err(err) => return Err(ConvertionError::new(format!("{err}"))),
@@ -1913,7 +1919,7 @@ impl PathGenerator {
                     self.try_push_state("call1_column_spec")?;
                     let column_type = self.handle_column_spec(column_expr)?;
                     let column_name = self.clause_context.retrieve_column_by_column_expr(
-                        &column_expr, ColumnRetrievalOptions::new(false, false, false)
+                        &column_expr, ColumnRetrievalOptions::new(false, false, false).try_with_quotes(self.try_with_quotes)
                     ).unwrap().1;
                     self.clause_context.top_group_by_mut().append_column(column_name, column_type);
                 },
@@ -1945,7 +1951,7 @@ impl PathGenerator {
         let column_expr = &current_set[i];
         let column_type = self.handle_column_spec(column_expr)?;
         let column_name = self.clause_context.retrieve_column_by_column_expr(
-            &column_expr, ColumnRetrievalOptions::new(false, false, false)
+            &column_expr, ColumnRetrievalOptions::new(false, false, false).try_with_quotes(self.try_with_quotes)
         ).unwrap().1;
         self.clause_context.top_group_by_mut().append_column(column_name, column_type);
 

@@ -139,13 +139,22 @@ pub fn highlight_ident() -> Ident {
 }
 
 impl<StC: StateChooser> QueryGenerator<StC> {
-    pub fn from_state_generator_and_schema(state_generator: MarkovChainGenerator<StC>, config: QueryGeneratorConfig, substitute_model: Box<dyn SubstituteModel>) -> Self {
+    pub fn from_state_generator_and_config(state_generator: MarkovChainGenerator<StC>, config: QueryGeneratorConfig, substitute_model: Box<dyn SubstituteModel>) -> Self {
+        Self::from_state_generator_and_config_with_schema(
+            state_generator,
+            DatabaseSchema::parse_schema(&config.table_schema_path),
+            config,
+            substitute_model
+        )
+    }
+
+    pub fn from_state_generator_and_config_with_schema(state_generator: MarkovChainGenerator<StC>, schema: DatabaseSchema, config: QueryGeneratorConfig, substitute_model: Box<dyn SubstituteModel>) -> Self {
         let mut _self = QueryGenerator::<StC> {
             state_generator,
             predictor_model: None,
             substitute_model,
             value_chooser: Box::new(RandomValueChooser::new()),
-            clause_context: ClauseContext::new(DatabaseSchema::parse_schema(&config.table_schema_path)),
+            clause_context: ClauseContext::new(schema),
             config,
             train_model: None,
             rng: ChaCha8Rng::seed_from_u64(0),

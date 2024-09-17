@@ -67,8 +67,12 @@ impl SubgraphType {
             DataType::UnsignedMediumInt(_) |
             DataType::UnsignedSmallInt(_) |
             DataType::UnsignedTinyInt(_) |
+            DataType::MediumInt(_) |
+            DataType::SmallInt(_) |
+            DataType::TinyInt(_) |
             DataType::Integer(_) |
             DataType::Int(_) => Self::Integer,
+            DataType::Custom(id, _) if format!("{}", id).to_lowercase().as_str() == "year" => Self::Integer,
             DataType::Interval => Self::Interval,
             DataType::BigInt(_) => Self::BigInt,
             DataType::Bool |
@@ -77,10 +81,10 @@ impl SubgraphType {
             DataType::Varchar(_) |
             DataType::Char(_) |
             DataType::Text => Self::Text,
-            DataType::Custom(id, _) if format!("{}", id).to_lowercase().as_str() == "year" => Self::Text,
             DataType::Custom(id, _) if format!("{}", id).to_lowercase().as_str() == "varchar2" => Self::Text,
             DataType::Date => Self::Date,
-            DataType::Blob(_) => Self::ByteA,
+            DataType::Blob(_) |
+            DataType::Bytea => Self::ByteA,
             any => panic!("DataType not implemented: {any} ({:?})", any),
         }
     }
