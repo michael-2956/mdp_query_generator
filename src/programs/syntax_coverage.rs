@@ -397,8 +397,6 @@ pub fn test_syntax_coverage(config: Config) {
     let mut n_total = 0usize;
     let mut n_parse_err = 0usize;
     let mut n_other_set_op = 0usize;
-    let mut n_absent_table = 0usize;
-    let mut n_no_subquery_alias = 0usize;
     let mut psql_query_errors = PostgreSQLErrors::with_filters(vec![
         PostgreSQLErrorFilter::starts_ends("db error: ERROR: column ", " does not exist"),
         PostgreSQLErrorFilter::starts_ends("db error: ERROR: column ", " must appear in the GROUP BY clause or be used in an aggregate function"),
@@ -528,12 +526,8 @@ pub fn test_syntax_coverage(config: Config) {
                 Ok(_) => n_ok += 1, // todo: test that path results in the same query
                 Err(err) => {
                     let err_str = format!("{err}");
-                    if err_str.contains("Table retrieval error: Couldn't find table") {
-                        n_absent_table += 1;
-                    } else if err_str.contains("Expected SetExpr::Select, got") {
+                    if err_str.contains("Expected SetExpr::Select, got") {
                         n_other_set_op += 1;
-                    } else if err_str.contains("No alias for subquery") {
-                        n_no_subquery_alias += 1;
                     } else {
                         // eprintln!("\n\nDB: {db_id}");
                         // eprintln!("Query: {query_str}");
@@ -557,10 +551,8 @@ pub fn test_syntax_coverage(config: Config) {
     println!("{n_ok} / {n_total} converted succesfully ({:.2}%)", 100f64 * n_ok as f64 / n_total as f64);
     println!("{n_parse_err} / {n_total} parse errors ({:.2}%)", 100f64 * n_parse_err as f64 / n_total as f64);
     println!("{n_other_set_op} / {n_total} unimplemented set expressions ({:.2}%)", 100f64 * n_other_set_op as f64 / n_total as f64);
-    println!("{n_absent_table} / {n_total} absent tables ({:.2}%)", 100f64 * n_absent_table as f64 / n_total as f64);
     println!("{n_incorrect_schema} / {n_total} incorrect schemas ({:.2}%)", 100f64 * n_incorrect_schema as f64 / n_total as f64);
-    println!("{n_no_subquery_alias} / {n_total} no subquery alias ({:.2}%)", 100f64 * n_no_subquery_alias as f64 / n_total as f64);
-    
+
     println!("\nOther Postgres Errors:");
     psql_query_errors.print_stats(n_total);
     
@@ -568,9 +560,7 @@ pub fn test_syntax_coverage(config: Config) {
         - n_ok
         - n_parse_err
         - n_other_set_op
-        - n_absent_table
         - n_incorrect_schema
-        - n_no_subquery_alias
         - psql_query_errors.total_errors();
     println!("\nOther convertion errors: {n_rest} / {n_total} ({:.2}%)", 100f64 * n_rest as f64 / n_total as f64);
 
