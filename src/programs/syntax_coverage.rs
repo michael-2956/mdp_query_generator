@@ -39,36 +39,13 @@ impl TomlReadable for SyntaxCoverageConfig {
 #[derive(Debug, Deserialize)]
 pub struct SpiderDatabase {
     // column_names: Vec<(i64, String)>,
-    column_names_original: Vec<(i64, String)>,
-    column_types: Vec<String>,
+    // column_names_original: Vec<(i64, String)>,
+    // column_types: Vec<String>,
     db_id: String,
     // foreign_keys: Vec<Vec<i64>>,
     // primary_keys: Vec<i64>,
     // table_names: Vec<String>,
-    table_names_original: Vec<String>,
-}
-
-pub struct ProccessedSpiderTable {
-    pub table_name: String,
-    pub column_types_str: Vec<(String, String)>,
-}
-
-impl ProccessedSpiderTable {
-    pub fn from_json(json_table: SpiderDatabase) -> (String, Vec<Self>) {
-        (json_table.db_id, json_table.table_names_original.into_iter().enumerate()
-            .map(|(i, table_name)| {
-                Self {
-                    table_name,
-                    column_types_str: json_table.column_names_original.iter().zip(json_table.column_types.iter()).filter_map(
-                        |((table_i, name), tp)| {
-                            if *table_i as usize == i {
-                                Some((name.clone(), tp.clone()))
-                            } else { None }
-                        }
-                    ).collect_vec(),
-                }
-            }).collect())
-    }
+    // table_names_original: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -480,7 +457,7 @@ pub fn test_syntax_coverage(config: Config) {
                 eprintln!("\n\nDB: {db_id}");
                 eprintln!("Schema:\n{}", db.get_schema_string());
                 eprintln!("PostgreSQL error: {err_str}");
-                // eprintln!("AST:\n{}", db.table_defs.into_iter().map(|td| format!("{:#?}", td)).join("\n\n"));
+                // eprintln!("AST:\n{}", db.table_defs.iter().map(|td| format!("{:#?}", td)).join("\n\n"));
                 client.close().unwrap();
                 drop_database_if_exists(&db_name).unwrap();
                 break;
@@ -532,6 +509,8 @@ pub fn test_syntax_coverage(config: Config) {
                         // eprintln!("\n\nDB: {db_id}");
                         // eprintln!("Query: {query_str}");
                         // eprintln!("Error: {err_str}");
+                        // // eprintln!("Schema:\n{}", db.get_schema_string());
+                        // // eprintln!("Schema AST:\n{}", db.table_defs.iter().map(|td| format!("{:#?}", td)).join("\n\n"));
                         // do_break = true;
                         // break;
                     }

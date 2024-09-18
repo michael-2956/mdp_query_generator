@@ -2,7 +2,7 @@ use std::{collections::{BTreeMap, BTreeSet, HashMap, HashSet}, error::Error, fmt
 
 use itertools::Itertools;
 use smol_str::SmolStr;
-use crate::{programs::syntax_coverage::ProccessedSpiderTable, query_creation::state_generator::{markov_chain_generator::markov_chain::CallModifiers, subgraph_type::{ContainsSubgraphType, SubgraphType}}, unwrap_variant};
+use crate::{query_creation::state_generator::{markov_chain_generator::markov_chain::CallModifiers, subgraph_type::{ContainsSubgraphType, SubgraphType}}, unwrap_variant};
 
 use sqlparser::{ast::{ColumnDef, DataType, Expr, FileFormat, HiveDistributionStyle, HiveFormat, Ident, ObjectName, OnCommit, Query, SelectItem, SetExpr, SqlOption, Statement, TableAlias, TableConstraint, TimezoneInfo, UnaryOperator}, dialect::PostgreSqlDialect, parser::Parser};
 
@@ -91,24 +91,23 @@ define_impersonation!(CreateTableSt, Statement, CreateTable, {
 });
 
 impl CreateTableSt {
-    pub fn from_spider(spider_table: ProccessedSpiderTable) -> Self {
-        Parser::parse_sql(
-            &PostgreSqlDialect {}, format!(
-                "CREATE TABLE {} ({});", spider_table.table_name,
-                spider_table.column_types_str.into_iter().map(
-                    |(col_name, col_tp)| format!("\"{col_name}\" {}", match col_tp.as_str() {
-                        "number" => "integer",
-                        "text" => "text",
-                        "time" => "timestamp",
-                        "boolean" => "boolean",
-                        "others" => "boolean",
-                        // TODO: we'll have to parse schema instead and
-                        // dbs with unimplemented types are rejected.
-                        _ => unimplemented!("Unknown type: {col_tp}")
-                    })
-                ).join(", ")
-            ).as_str()
-        ).unwrap().into_iter().next().unwrap().try_into().unwrap()
+    /// currently returns all table columns only if to_column is a primary key
+    /// otherwise, returns only to_column itself
+    pub fn get_functionally_connected_columns(&self, to_column: &IdentName) -> Vec<IdentName> {
+        if self.constraints.iter().find(|constraint| {
+            match *constraint {
+                TableConstraint::Unique { name: _, columns, is_primary } => {
+                    *is_primary && columns.iter().find(|col_name| {
+                        *to_column == <IdentName>::from((**col_name).clone())
+                    }).is_some()
+                },
+                _ => false,
+            }
+        }).is_some() {
+            self.columns.iter().map(|column_def| {
+                <IdentName>::from(column_def.name.clone())
+            }).collect()
+        } else { vec![to_column.clone()] }
     }
 }
 
@@ -448,7 +447,7 @@ impl ClauseContext {
             .map(|((a, b), c)| a.map(|a| (a, b, c)))
     }
 
-    /// Get FROM clauses hierarchy that adhere to column_retrieval_options.\
+    /// Get FROM clause hierarchy that adheres to column_retrieval_options.\
     /// Iterator produces:\
     /// - FROM clause
     /// - a list of shaded relation names
@@ -482,7 +481,7 @@ impl ClauseContext {
                 query_props.get_current_subquery_call_options().only_group_by_columns
             };
             let allowed_rel_col_names_opt = if only_group_by_columns {
-                Some(group_by_contents.get_column_name_set())
+                Some(from_contents.add_functionally_bound_columns(group_by_contents.get_column_name_set()))
             } else { None };
             let ret_srn = shaded_rel_names.clone();
             for rel_name in from_contents.get_all_rel_names_iter() {
@@ -1199,6 +1198,14 @@ impl FromContents {
             .collect()
     }
 
+    fn add_functionally_bound_columns(&self, columns: HashSet<[IdentName; 2]>) -> HashSet<[IdentName; 2]> {
+        columns.into_iter().flat_map(|rel_col| {
+            self.relations.get(&rel_col[0]).unwrap()
+                .get_functionally_connected_columns(&rel_col[1])
+                .into_iter().map(move |col| [rel_col[0].clone(), col])
+        }).collect()
+    }
+
     /// returns an accessible columns iterator\
     /// - if allowed_col_names_opt is not None, checks that the columns name is in the set
     /// - if only_unique is true, only columns with unique names for this FROM clause are returned
@@ -1252,7 +1259,7 @@ impl FromContents {
     }
 
     fn get_relation_by_name(&self, name: &IdentName) -> Option<&Relation> {
-        self.relations.iter().find(
+        self.relations.iter().find( // why is this not .get ? todo: change to .get
             |(rl_name, _)| *rl_name == name
         ).map(|(.., r)| r)
     }
@@ -1285,7 +1292,11 @@ pub struct Relation {
     /// as they can be referenced with wildcards
     ambiguous_columns: Vec<(IdentName, SubgraphType)>,
     /// this is what is returned by get_wildcard_columns
-    wildcard_columns: Vec<(Option<IdentName>, SubgraphType)>
+    /// includes unnamed, ambiguous, and standard columns
+    wildcard_columns: Vec<(Option<IdentName>, SubgraphType)>,
+    /// optionally, a create table command used for this
+    /// relation (only for tables)
+    create_table: Option<CreateTableSt>,
 }
 
 impl Relation {
@@ -1296,20 +1307,26 @@ impl Relation {
             unnamed_columns: vec![],
             ambiguous_columns: vec![],
             wildcard_columns: vec![],
+            create_table: None,
         }
     }
 
     fn from_table(alias: String, create_table: CreateTableSt, column_renames: Vec<Ident>) -> Self {
         let mut _self = Relation::with_alias(alias);
         let mut column_renames = column_renames.into_iter();
-        for column in create_table.columns {
+        for column in create_table.columns.iter() {
             let graph_type = SubgraphType::from_data_type(&column.data_type);
             let column_rename = column_renames.next();
-            let column_name: IdentName = column_rename.unwrap_or(column.name).into();
+            let column_name: IdentName = column_rename.unwrap_or(column.name.clone()).into();
             _self.wildcard_columns.push((Some(column_name.clone()), graph_type.clone()));
             _self.accessible_columns.append_column(column_name, graph_type);
         }
+        _self.create_table = Some(create_table);
         _self
+    }
+
+    fn get_functionally_connected_columns(&self, to_column: &IdentName) -> Vec<IdentName> {
+        self.create_table.as_ref().unwrap().get_functionally_connected_columns(to_column)
     }
 
     fn from_query(alias: String, column_idents_and_graph_types: Vec<(Option<IdentName>, SubgraphType)>, column_renames: Vec<Ident>) -> Self {
