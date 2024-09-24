@@ -465,7 +465,7 @@ pub fn test_syntax_coverage(config: Config) {
         }
 
         let mut path_generator = PathGenerator::new(
-            db, &config.chain_config,
+            db.clone(), &config.chain_config,
             config.generator_config.aggregate_functions_distribution.clone(),
         ).unwrap();
         // path_generator.set_try_with_quotes(true);
@@ -509,7 +509,7 @@ pub fn test_syntax_coverage(config: Config) {
                         // eprintln!("\n\nDB: {db_id}");
                         // eprintln!("Query: {query_str}");
                         // eprintln!("Error: {err_str}");
-                        // // eprintln!("Schema:\n{}", db.get_schema_string());
+                        // eprintln!("Schema:\n{}", db.get_schema_string());
                         // // eprintln!("Schema AST:\n{}", db.table_defs.iter().map(|td| format!("{:#?}", td)).join("\n\n"));
                         // do_break = true;
                         // break;

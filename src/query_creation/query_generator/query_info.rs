@@ -103,6 +103,13 @@ impl CreateTableSt {
                 },
                 _ => false,
             }
+        }).is_some() || self.columns.iter().find(|col| {
+            <IdentName>::from((**col).name.clone()) == *to_column
+        }).unwrap().options.iter().find(|option| {
+            match &option.option {
+                sqlparser::ast::ColumnOption::Unique { is_primary } => *is_primary,
+                _ => false
+            }
         }).is_some() {
             self.columns.iter().map(|column_def| {
                 <IdentName>::from(column_def.name.clone())

@@ -1134,10 +1134,10 @@ impl PathGenerator {
                 })?;
 
                 self.try_push_state("call91_types")?;
-                self.handle_types(left, TypeAssertion::GeneratedBy(SubgraphType::Interval))?; 
+                self.handle_types(left, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Interval, SubgraphType::Timestamp]))?; 
                 
                 self.try_push_state("call92_types")?;
-                self.handle_types(right, TypeAssertion::GeneratedBy(SubgraphType::Interval))?;
+                self.handle_types(right, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Interval, SubgraphType::Timestamp]))?;
             },
             Expr::UnaryOp {
                 op, expr: interval

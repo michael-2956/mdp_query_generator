@@ -32,12 +32,12 @@ impl IntervalBuilder {
 
                 generator.expect_state("call91_types");
                 let left = &mut **unwrap_pat!(interval, Expr::BinaryOp { left, .. }, left);
-                TypesBuilder::build(generator, left, TypeAssertion::GeneratedBy(SubgraphType::Interval));
+                TypesBuilder::build(generator, left, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Interval, SubgraphType::Timestamp]));
 
                 generator.expect_state("call92_types");
                 let right = &mut **unwrap_pat!(interval, Expr::BinaryOp { right, .. }, right);
                 *right = TypesBuilder::highlight();
-                TypesBuilder::build(generator, right, TypeAssertion::GeneratedBy(SubgraphType::Interval));
+                TypesBuilder::build(generator, right, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Interval, SubgraphType::Timestamp]));
             },
             "interval_unary_minus" => {
                 *interval = Expr::UnaryOp {
