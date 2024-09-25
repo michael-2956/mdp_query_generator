@@ -2,7 +2,7 @@ use std::{io::Write, time::Instant};
 
 use equivalence_testing::{config::{Config, ProgramArgs}, equivalence_testing_function::{
     check_query, string_to_query
-}, programs::syntax_coverage::test_syntax_coverage, query_creation::{
+}, programs::{semantic_correctness::test_semantic_correctness, syntax_coverage::test_syntax_coverage}, query_creation::{
     query_generator::QueryGenerator,
     state_generator::{
         state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser, StateChooser},
@@ -129,6 +129,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         test_ast_to_path(config);
     } else if config.main_config.mode == "syntax_coverage" {
         test_syntax_coverage(config);
+    } else if config.main_config.mode == "semantic_correctness" {
+        test_semantic_correctness(config);
     }
     Ok(())
 }

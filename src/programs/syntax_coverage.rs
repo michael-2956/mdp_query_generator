@@ -226,14 +226,14 @@ fn create_or_ensure_user_exists() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn create_database(db_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn create_database(db_id: &str) -> Result<(), Box<dyn std::error::Error>> {
     let create_db_command = format!("CREATE DATABASE {};", db_id);
     let mut client = Client::connect("host=localhost user=query_test_user", NoTls)?;
     client.batch_execute(&create_db_command)?;
     Ok(())
 }
 
-fn drop_database_if_exists(db_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn drop_database_if_exists(db_name: &str) -> Result<(), Box<dyn std::error::Error>> {
     let drop_db_command = format!("DROP DATABASE IF EXISTS {};", db_name);
     let mut client = Client::connect("host=localhost user=query_test_user", NoTls)?;
     client.batch_execute(&drop_db_command)?;

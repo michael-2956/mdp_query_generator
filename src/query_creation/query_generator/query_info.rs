@@ -105,12 +105,12 @@ impl CreateTableSt {
             }
         }).is_some() || self.columns.iter().find(|col| {
             <IdentName>::from((**col).name.clone()) == *to_column
-        }).unwrap().options.iter().find(|option| {
+        }).map(|x| x.options.iter().find(|option| {
             match &option.option {
                 sqlparser::ast::ColumnOption::Unique { is_primary } => *is_primary,
                 _ => false
             }
-        }).is_some() {
+        }).is_some()) == Some(true) {
             self.columns.iter().map(|column_def| {
                 <IdentName>::from(column_def.name.clone())
             }).collect()
@@ -1205,11 +1205,17 @@ impl FromContents {
             .collect()
     }
 
+    // does not add functionally related columns from relations that are higher up
     fn add_functionally_bound_columns(&self, columns: HashSet<[IdentName; 2]>) -> HashSet<[IdentName; 2]> {
         columns.into_iter().flat_map(|rel_col| {
-            self.relations.get(&rel_col[0]).unwrap()
-                .get_functionally_connected_columns(&rel_col[1])
-                .into_iter().map(move |col| [rel_col[0].clone(), col])
+            let it: Box<dyn Iterator<Item = [IdentName; 2]>> = match self.relations.get(&rel_col[0]) {
+                Some(relation) => Box::new(
+                    relation.get_functionally_connected_columns(&rel_col[1])
+                    .into_iter().map(move |col| [rel_col[0].clone(), col])
+                ),
+                None => Box::new([rel_col].into_iter()),
+            };
+            it
         }).collect()
     }
 
@@ -1332,8 +1338,12 @@ impl Relation {
         _self
     }
 
+    /// always returns at least to_column itself
     fn get_functionally_connected_columns(&self, to_column: &IdentName) -> Vec<IdentName> {
-        self.create_table.as_ref().unwrap().get_functionally_connected_columns(to_column)
+        match self.create_table.as_ref() {
+            Some(create_table) => create_table.get_functionally_connected_columns(to_column),
+            None => vec![to_column.clone()],
+        }
     }
 
     fn from_query(alias: String, column_idents_and_graph_types: Vec<(Option<IdentName>, SubgraphType)>, column_renames: Vec<Ident>) -> Self {
