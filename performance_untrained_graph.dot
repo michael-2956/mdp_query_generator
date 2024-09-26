@@ -85,13 +85,15 @@ digraph G {
         call0_WHERE [label="WHERE", shape=rectangle, style=filled, color=darkgoldenrod1]
         call0_FROM -> call0_WHERE
 
+        WHERE_done [label="WHERE done"]
+        call0_FROM -> WHERE_done
+        call0_WHERE -> WHERE_done
+
         call0_SELECT [label="SELECT\nTYPES: [...types]\nMODS: [?single column]", TYPES="[...]", MODS="[?single column]", shape=rectangle, style=filled, color=bisque]
-        call0_WHERE -> call0_SELECT
-        call0_FROM -> call0_SELECT
+        WHERE_done -> call0_SELECT
         
         call0_GROUP_BY [label="GROUP BY", shape=rectangle, style=filled, color=gray]
-        call0_WHERE -> call0_GROUP_BY
-        call0_FROM -> call0_GROUP_BY
+        WHERE_done -> call0_GROUP_BY
         call0_GROUP_BY -> call0_SELECT
 
         call0_HAVING [label="HAVING", shape=rectangle, style=filled, color=mediumvioletred]
@@ -264,14 +266,24 @@ digraph G {
         special_grouping -> grouping_set
         grouping_set -> set_list
 
+        call1_set_item [label="Set item (GROUP BY)", shape=rectangle, style=filled, color=peachpuff]
+        set_list -> call1_set_item
+        call1_set_item -> set_list
+        call1_set_item -> EXIT_GROUP_BY
+        call1_set_item -> grouping_column_list
+    }
+
+    subgraph def_set_item {
+        set_item [label="Set item (GROUP BY)", shape=rectangle, style=filled, color=peachpuff]
+        EXIT_set_item [label="EXIT Set list item", shape=rectangle]
+        
         call2_column_spec [TYPES="[any]", MODS="[]", label="column specifier\nTYPE: [any]", shape=rectangle, style=filled, color=gold]
-        set_list -> call2_column_spec
-        // call2_column_spec -> set_list
-        set_multiple [label="multiple cols in set"]
-        call2_column_spec -> set_multiple
-        set_multiple -> call2_column_spec
-        set_multiple -> EXIT_GROUP_BY
-        set_multiple -> grouping_column_list
+        set_item -> call2_column_spec
+        call2_column_spec -> EXIT_set_item
+
+        call0_set_item [label="Set item (GROUP BY)", shape=rectangle, style=filled, color=peachpuff]
+        call2_column_spec -> call0_set_item
+        call0_set_item -> EXIT_set_item
     }
 
     subgraph def_aggregate_function {
@@ -562,7 +574,7 @@ digraph G {
         types_value -> types_value_null
         types_value_null -> EXIT_types_value
 
-        // types_value_typed_null [label="Typed null\n// mod.: 'no typed nulls' -> OFF", modifier="no typed nulls", modifier_mode="off"]
+        // types_value_typed_null [label="Typed null\nmod.: 'no typed nulls' -> OFF", modifier="no typed nulls", modifier_mode="off"]
         // types_value -> types_value_typed_null
         // types_value_typed_null -> EXIT_types_value
 
@@ -1226,6 +1238,12 @@ digraph G {
         call91_types -> call92_types
         call92_types -> EXIT_interval
 
+        call98_types [TYPES="[timestamp]", MODS="[...]", label="TYPES: timestamp\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        interval_add_subtract_minus -> call98_types
+        call99_types [TYPES="[timestamp]", MODS="[...]", label="TYPES: timestamp\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
+        call98_types -> call99_types
+        call99_types -> EXIT_interval
+
         interval_unary_minus [label="-interval"]
         interval -> interval_unary_minus
         call93_types [TYPES="[interval]", MODS="[...]", label="TYPES: interval\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]
@@ -1241,7 +1259,8 @@ digraph G {
         EXIT_FROM_item -> WHERE [color=none, weight=10]
         EXIT_WHERE -> SELECT [color=none, weight=10]
         EXIT_SELECT -> GROUP_BY [color=none]
-        EXIT_GROUP_BY -> aggregate_function [color=none]
+        EXIT_GROUP_BY -> set_item [color=none]
+        EXIT_set_item -> aggregate_function [color=none]
         EXIT_aggregate_function -> HAVING [color=none]
         EXIT_HAVING -> ORDER_BY [color=none]
         EXIT_ORDER_BY -> LIMIT [color=none]
