@@ -1133,11 +1133,24 @@ impl PathGenerator {
                     any => unexpected_expr!(any),
                 })?;
 
+                let checkpoint = self.get_checkpoint(true);
                 self.try_push_state("call91_types")?;
-                self.handle_types(left, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Interval, SubgraphType::Timestamp]))?; 
-                
-                self.try_push_state("call92_types")?;
-                self.handle_types(right, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Interval, SubgraphType::Timestamp]))?;
+                match self.handle_types(left, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Interval])) {
+                    Ok(_) => {
+                        self.try_push_state("call92_types")?;
+                        self.handle_types(right, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Interval]))?;
+                    },
+                    Err(err) => {
+                        self.restore_checkpoint_consume(checkpoint);
+                        if *op == BinaryOperator::Plus {
+                            return Err(err)  // only timestamp - timestamp
+                        }
+                        self.try_push_state("call98_types")?;
+                        self.handle_types(left, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Timestamp]))?;
+                        self.try_push_state("call99_types")?;
+                        self.handle_types(right, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Timestamp]))?;
+                    },
+                }
             },
             Expr::UnaryOp {
                 op, expr: interval

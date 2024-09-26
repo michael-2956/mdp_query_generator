@@ -30,14 +30,26 @@ impl IntervalBuilder {
                     right: Box::new(TypesBuilder::nothing())
                 };
 
-                generator.expect_state("call91_types");
                 let left = &mut **unwrap_pat!(interval, Expr::BinaryOp { left, .. }, left);
-                TypesBuilder::build(generator, left, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Interval, SubgraphType::Timestamp]));
+                match_next_state!(generator, {
+                    "call98_types" => { // only timestamp - timestamp
+                        TypesBuilder::build(generator, left, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Timestamp]));
+                    },
+                    "call91_types" => {
+                        TypesBuilder::build(generator, left, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Interval]));
+                    },
+                });
 
-                generator.expect_state("call92_types");
                 let right = &mut **unwrap_pat!(interval, Expr::BinaryOp { right, .. }, right);
                 *right = TypesBuilder::highlight();
-                TypesBuilder::build(generator, right, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Interval, SubgraphType::Timestamp]));
+                match_next_state!(generator, {
+                    "call99_types" => { // only timestamp - timestamp
+                        TypesBuilder::build(generator, right, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Timestamp]));
+                    },
+                    "call92_types" => {
+                        TypesBuilder::build(generator, right, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Interval]));
+                    },
+                });
             },
             "interval_unary_minus" => {
                 *interval = Expr::UnaryOp {

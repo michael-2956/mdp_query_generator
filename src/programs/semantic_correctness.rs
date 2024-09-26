@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::{collections::HashMap, fs, path::PathBuf};
 
 use postgres::{Client, NoTls};
 
@@ -45,25 +45,46 @@ pub fn test_semantic_correctness(config: Config) {
         return
     }
 
-    let mut n_ok = 0usize;
+    let ignored_errs = [
+        "db error: ERROR: division by zero",
+        "db error: ERROR: a negative number raised to a non-integer power yields a complex result",
+        "db error: ERROR: negative substring length not allowed",
+        "db error: ERROR: LIMIT must not be negative",
+    ];
+
+    let mut n_ignored = 0usize;
+    let mut n_ok: usize = 0usize;
+    let mut errs = vec![];
     let n_tests = config.semantic_correctness_config.n_tests;
     for i in 0..n_tests {
-        if i % 10 == 0 {
-            eprint!("Testing: {} / {} ({n_ok} OK)   \r", i+1, n_tests);
+        if i % 100 == 0 {
+            eprint!("Testing: {} / {} ({} OK)   \r", i, n_tests, n_ok + n_ignored);
         }
 
         let query = path_query_generator.generate();
 
         match client.batch_execute(format!("{query};").as_str()) {
             Ok(_) => n_ok += 1,
-            // Err(err) => {
-            //     eprintln!("Query: {query}");
-            //     eprintln!("Error: {err}");
-            //     break;
-            // },
-            Err(_) => { }
+            Err(err) => {
+                let err_str = format!("{err}");
+                if ignored_errs.contains(&(err_str.as_str())) {
+                    n_ignored += 1;
+                } else {
+                    errs.push(err_str);
+                    // eprintln!("Query: {query}");
+                    // eprintln!("Error: {err}");
+                    // break;
+                }
+            }
         }
     }
 
     println!("\n\nTotal semantically correct: {n_ok}/{n_tests} ({:.2}%)", 100f64 * n_ok as f64 / n_tests as f64);
+    println!("\n\nWithout ignored errors: {n_ok}/{} ({:.2}%)", n_tests - n_ignored, 100f64 * n_ok as f64 / (n_tests - n_ignored) as f64);
+
+    let errs = errs.into_iter().fold(HashMap::new(), |mut map, s| {
+        *map.entry(s).or_insert(0) += 1;
+        map
+    });
+    println!("\n\n{:#?}", errs);
 }

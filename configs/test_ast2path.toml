@@ -1,6 +1,6 @@
 [main]
 # Running mode. Either "test_ast_to_path", "generate", "train", "syntax_coverage", "semantic_correctness"
-mode="semantic_correctness"
+mode="test_ast_to_path"
 # number of queries to generate
 num_generate=1000
 # count the 2vl-3vl equivalent queries
@@ -48,7 +48,7 @@ print_weights_after_training=false
 # schema for the testing queries generation
 testing_schema="schema/tpc-h_tables.sql"
 # number of tests
-n_tests=10
+n_tests=1000
 
 [training]
 # path to a file with all the training queries separated by ";\n"
