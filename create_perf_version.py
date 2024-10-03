@@ -12,13 +12,13 @@ call52_types -> EXIT_LIMIT
 SELECT_wildcard -> SELECT_list_multiple_values
 SELECT_qualified_wildcard -> SELECT_list_multiple_values
 
-types_value_typed_null [label="Typed null\nmod.: 'no typed nulls' -> OFF", modifier="no typed nulls", modifier_mode="off"]
+types_value_typed_null [label="Typed null\\nmod.: 'no typed nulls' -> OFF", modifier="no typed nulls", modifier_mode="off"]
 types_value -> types_value_typed_null
 types_value_typed_null -> EXIT_types_value
 
 set_list_empty_allowed -> set_list
 
-call2_column_spec -> set_list
+call1_set_item -> set_list
 """
 
 graph = open("graph.dot", 'r').read()

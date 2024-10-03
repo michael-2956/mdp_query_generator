@@ -1244,19 +1244,6 @@ digraph G {
         call98_types -> call99_types
         call99_types -> EXIT_interval
 
-        // TIMESTAMP + TIMESTAMP
-        // INTERVAL - TIMESTAMP
-        // are not allowed
-
-        // TIMESTAMP - INTERVAL
-        // INTERVAL + TIMESTAMP
-        // TIMESTAMP + INTERVAL
-        // are a timestamp, not interval
-
-        // ONLY
-        // TIMESTAMP - TIMESTAMP
-        // is an interval
-
         interval_unary_minus [label="-interval"]
         interval -> interval_unary_minus
         call93_types [TYPES="[interval]", MODS="[...]", label="TYPES: interval\nMODS: [...mods]", shape=rectangle, style=filled, color=lightblue]

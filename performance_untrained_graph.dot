@@ -268,7 +268,7 @@ digraph G {
 
         call1_set_item [label="Set item (GROUP BY)", shape=rectangle, style=filled, color=peachpuff]
         set_list -> call1_set_item
-        call1_set_item -> set_list
+        // call1_set_item -> set_list
         call1_set_item -> EXIT_GROUP_BY
         call1_set_item -> grouping_column_list
     }

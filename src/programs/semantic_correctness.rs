@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use postgres::{Client, NoTls};
 
@@ -46,15 +46,18 @@ pub fn test_semantic_correctness(config: Config) {
     }
 
     let ignored_errs = [
-        "db error: ERROR: division by zero",
         "db error: ERROR: a negative number raised to a non-integer power yields a complex result",
+        "db error: ERROR: too many grouping sets present (maximum 4096)",
+        "db error: ERROR: zero raised to a negative power is undefined",
         "db error: ERROR: negative substring length not allowed",
         "db error: ERROR: LIMIT must not be negative",
+        "db error: ERROR: division by zero",
     ];
 
     let mut n_ignored = 0usize;
     let mut n_ok: usize = 0usize;
-    let mut errs = vec![];
+    let mut errs = BTreeMap::<String, Vec<String>>::new();
+    let mut ignored_err_count = BTreeMap::<String, usize>::new();
     let n_tests = config.semantic_correctness_config.n_tests;
     for i in 0..n_tests {
         if i % 100 == 0 {
@@ -68,9 +71,10 @@ pub fn test_semantic_correctness(config: Config) {
             Err(err) => {
                 let err_str = format!("{err}");
                 if ignored_errs.contains(&(err_str.as_str())) {
+                    *ignored_err_count.entry(err_str).or_insert(0) += 1;
                     n_ignored += 1;
                 } else {
-                    errs.push(err_str);
+                    errs.entry(err_str).or_insert(vec![]).push(format!("{query}"));
                     // eprintln!("Query: {query}");
                     // eprintln!("Error: {err}");
                     // break;
@@ -79,12 +83,9 @@ pub fn test_semantic_correctness(config: Config) {
         }
     }
 
-    println!("\n\nTotal semantically correct: {n_ok}/{n_tests} ({:.2}%)", 100f64 * n_ok as f64 / n_tests as f64);
-    println!("\n\nWithout ignored errors: {n_ok}/{} ({:.2}%)", n_tests - n_ignored, 100f64 * n_ok as f64 / (n_tests - n_ignored) as f64);
+    println!("\n\nTotal semantically correct: {n_ok}/{n_tests} ({:.3}%)", 100f64 * n_ok as f64 / n_tests as f64);
+    println!("\n\nWithout ignored errors: {n_ok}/{} ({:.3}%)", n_tests - n_ignored, 100f64 * n_ok as f64 / (n_tests - n_ignored) as f64);
 
-    let errs = errs.into_iter().fold(HashMap::new(), |mut map, s| {
-        *map.entry(s).or_insert(0) += 1;
-        map
-    });
-    println!("\n\n{:#?}", errs);
+    println!("Error counts (ignored): \n\n{:#?}", ignored_err_count);
+    println!("Errors (not ignored): \n\n{:#?}", errs);
 }
