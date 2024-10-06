@@ -8,6 +8,7 @@ mod dot_parser;
 use std::{path::PathBuf, collections::{HashMap, HashSet, VecDeque, BTreeMap}, sync::{Arc, Mutex}, error::Error, fmt};
 
 use core::fmt::Debug;
+use markov_chain::QueryTypes;
 use rand::seq::SliceRandom;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
@@ -94,9 +95,17 @@ pub struct StackFrame {
     /// this contains information about the known type name list
     /// inferred when [known] is used in TYPES
     known_type_list: Option<Vec<SubgraphType>>,
+    /// this contains information about the known type list
+    /// inferred when Q[known] is used in TYPES. This one
+    /// specifies a types list for every query column
+    known_query_types: Option<QueryTypes>,
     /// this contains information about the compatible type name list
-    /// inferred when [compatible] is used in [TYPES]
+    /// inferred when [compatible] is used in TYPES
     compatible_type_list: Option<Vec<SubgraphType>>,
+    /// this contains information about the compatible type list
+    /// inferred when Q[compatible] is used in TYPES. This one
+    /// specifies a types list for every query column
+    compatible_query_types: Option<QueryTypes>,
 }
 
 impl StackFrame {
@@ -110,7 +119,9 @@ impl StackFrame {
             call_modifier_info,
             dead_end_info,
             known_type_list: None,
+            known_query_types: None,
             compatible_type_list: None,
+            compatible_query_types: None,
         }
     }
 }
@@ -453,7 +464,9 @@ impl DynClone for StackFrame {
             call_modifier_info: self.call_modifier_info.dyn_clone(),
             dead_end_info: self.dead_end_info.clone(),
             known_type_list: self.known_type_list.clone(),
+            known_query_types: self.known_query_types.clone(),
             compatible_type_list: self.compatible_type_list.clone(),
+            compatible_query_types: self.compatible_query_types.clone(),
         }
     }
 }
@@ -672,8 +685,11 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
         self.pending_call = Some(CallParams {
             func_name: SmolStr::new("Query"),
-            selected_types: CallTypes::TypeList(accepted_types),
-            modifiers: CallModifiers::None
+            selected_types: CallTypes::QueryTypes(QueryTypes::TypeList {
+                type_list: accepted_types,
+            }),
+            types_have_columns: true,
+            modifiers: CallModifiers::None,
         });
     }
 
@@ -711,14 +727,27 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     fn fill_call_params_fields(&self, mut call_params: CallParams) -> CallParams {
         let called_function = self.markov_chain.functions.get(&call_params.func_name).unwrap();
 
-        call_params.selected_types = match call_params.selected_types {
-            CallTypes::KnownList => CallTypes::TypeList(self.get_known_list()),
-            CallTypes::Compatible => CallTypes::TypeList(self.get_compatible_list()),
-            CallTypes::PassThrough => self.get_fn_selected_types_unwrapped().clone(),
-            CallTypes::TypeListWithFields(type_list) => CallTypes::TypeList({
-                type_list.into_iter().map(|TypeWithFields::Type(tp)| tp).collect()
-            }),
-            any @ (CallTypes::None | CallTypes::TypeList(..)) => any,
+        call_params.selected_types = if call_params.types_have_columns {
+            match call_params.selected_types {
+                CallTypes::PassThrough => self.get_fn_selected_types_unwrapped().clone(),
+                CallTypes::Compatible => CallTypes::QueryTypes(self.get_compatible_query_type_list()),
+                CallTypes::KnownList => CallTypes::QueryTypes(self.get_known_query_type_list()),
+                // this can be a list of types for every of the columns, but for now unspecified
+                CallTypes::TypeListWithFields(..) => unimplemented!(),
+                CallTypes::TypeList(_) => panic!("Not allowed: call_params.types_have_columns is true"),
+                any @ (CallTypes::None | CallTypes::QueryTypes(..)) => any,
+            }
+        } else {
+            match call_params.selected_types {
+                CallTypes::PassThrough => self.get_fn_selected_types_unwrapped().clone(),
+                CallTypes::Compatible => CallTypes::TypeList(self.get_compatible_list()),
+                CallTypes::KnownList => CallTypes::TypeList(self.get_known_list()),
+                CallTypes::TypeListWithFields(type_list) => CallTypes::TypeList(
+                    type_list.into_iter().map(|TypeWithFields::Type(tp)| tp).collect()
+                ),
+                CallTypes::QueryTypes(_) => panic!("Not allowed: call_params.types_have_columns is false"),
+                any @ (CallTypes::None | CallTypes::TypeList(..)) => any,
+            }
         };
 
         // if Undetermined is in the parameter list, replace the list with all acceptable arguments.
@@ -911,19 +940,29 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         self.markov_chain.functions.get(&self.pending_call.as_ref().unwrap().func_name).unwrap().accepted_modifiers.clone()
     }
 
-    /// push the known type list for the next node that will use the types=[known]
+    /// set the known type list for the next node that will use the TYPES="[known]"
     /// these will be wrapped automatically if uses_wrapped_types=true
     pub fn set_known_list(&mut self, type_list: Vec<SubgraphType>) {
         self.call_stack.last_mut().unwrap().known_type_list = Some(type_list);
     }
 
-    /// push the compatible type list for the next node that will use the type=[compatible]
+    /// set the compatible type list for the next node that will use the TYPES="[compatible]"
     /// these will be wrapped automatically if uses_wrapped_types=true
     pub fn set_compatible_list(&mut self, type_list: Vec<SubgraphType>) {
         self.call_stack.last_mut().unwrap().compatible_type_list = Some(type_list);
     }
+    
+    /// set the compatible column type list for the next node that will use the TYPES="Q[compatible]"
+    pub fn set_compatible_query_type_list(&mut self, column_type_list: QueryTypes) {
+        self.call_stack.last_mut().unwrap().compatible_query_types = Some(column_type_list);
+    }
 
-    /// pop the known types for the current node which will uses type=[known]
+    /// set the known column type list for the next node that will use the TYPES="Q[known]"
+    pub fn set_known_query_type_list(&mut self, column_type_list: QueryTypes) {
+        self.call_stack.last_mut().unwrap().known_query_types = Some(column_type_list);
+    }
+
+    /// pop the known types for the current node which will uses TYPES="[known]"
     fn get_known_list(&self) -> Vec<SubgraphType> {
         self.call_stack.last().unwrap().known_type_list.clone().unwrap_or_else(|| {
             self.print_stack();
@@ -931,11 +970,27 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         })
     }
 
-    /// pop the compatible types for the current node which will uses type=[compatible]
+    /// pop the compatible types for the current node which will uses TYPES="[compatible]"
     fn get_compatible_list(&self) -> Vec<SubgraphType> {
         self.call_stack.last().unwrap().compatible_type_list.clone().unwrap_or_else(|| {
             self.print_stack();
             panic!("No compatible type list found!")
+        })
+    }
+
+    /// pop the compatible types for the current node which will uses TYPES="Q[compatible]"
+    fn get_compatible_query_type_list(&self) -> QueryTypes {
+        self.call_stack.last().unwrap().compatible_query_types.clone().unwrap_or_else(|| {
+            self.print_stack();
+            panic!("No compatible query type list found!")
+        })
+    }
+
+    /// pop the knoen types for the current node which will uses TYPES="Q[known]"
+    fn get_known_query_type_list(&self) -> QueryTypes {
+        self.call_stack.last().unwrap().known_query_types.clone().unwrap_or_else(|| {
+            self.print_stack();
+            panic!("No compatible query type list found!")
         })
     }
 }

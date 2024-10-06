@@ -108,6 +108,20 @@ digraph G {
         call0_LIMIT -> EXIT_Query
     }
 
+    // subgraph def_SELECT_query {
+    //     SELECT_query [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[single column, single row]", label="SELEC query\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[single column, single row]", shape=rectangle, style=filled, color=green]
+    //     EXIT_SELECT_query [label="EXIT SELECT Query", shape=rectangle]
+
+    //     This should accept the type set for each column or ANY(type set)
+    //     TYPES="Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]"
+    //     If Any(type set), any of the type set
+    //     If Columns(vec[type set]), every column is any of the type set. Number of columns is fixed
+
+    //     When passing arguments, TYPES="Q[any]" or TYPES="Q[known]", TYPES="Q[compatible]", TYPES="Q[...]"
+
+    //     SELECT_query -> EXIT_SELECT_query
+    // }
+
     subgraph def_FROM {
         FROM [shape=rectangle, color=cornflowerblue, style=filled]
         EXIT_FROM [label="EXIT FROM", shape=rectangle]

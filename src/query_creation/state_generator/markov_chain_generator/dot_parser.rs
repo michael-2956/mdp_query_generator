@@ -32,6 +32,9 @@ enum DotToken {
     #[regex(r#""\[[^"]*\]""#, quoted_identifier_with_brackets)]
     QuotedIdentifiersWithBrackets(SmolStr),
 
+    #[regex(r#""Q\[[^"]*\]""#, quoted_identifier_with_brackets)]
+    QuotedQueryIdentifiersWithBrackets(SmolStr),
+
     #[regex(r"\{")]
     OpenDeclaration,
 
@@ -66,6 +69,7 @@ fn quoted_identifier(lex: &mut Lexer<'_, DotToken>) -> SmolStr {
 }
 
 /// extracts value from an identifier with quotes and square brackets
+/// Such as: "[...]" or "Q[...]"
 fn quoted_identifier_with_brackets(lex: &mut Lexer<'_, DotToken>) -> SmolStr {
     let quoted_ident = lex.slice();
     let opening_bracket_pos = quoted_ident.find('[').unwrap();
@@ -193,6 +197,7 @@ pub enum CodeUnit {
         node_common: NodeCommon,
         func_name: SmolStr,
         inputs: FunctionInputsType,
+        types_have_columns: bool,
         modifiers: Option<Vec<SmolStr>>,
     },
     Edge {
@@ -209,6 +214,7 @@ pub struct FunctionDeclaration {
     pub source_node_name: SmolStr,
     pub exit_node_name: SmolStr,
     pub input_type: FunctionInputsType,
+    pub types_have_columns: bool,
     pub modifiers: Option<Vec<SmolStr>>,
 }
 
@@ -382,9 +388,9 @@ impl<'a> Iterator for DotTokenizer<'a> {
                             };
 
                             if self.call_ident_regex.is_match(&node_name) {
-                                let (
-                                    input_type, modifiers, _,
-                                ) = return_some_err!(
+                                let FunctionalOptions {
+                                    input_type, types_have_columns, modifiers, output_types: _
+                                } = return_some_err!(
                                     parse_function_options(&node_name, node_spec, true)
                                 );
                                 if literal {
@@ -397,6 +403,7 @@ impl<'a> Iterator for DotTokenizer<'a> {
                                     node_common,
                                     func_name,
                                     inputs: input_type,
+                                    types_have_columns,
                                     modifiers,
                                 }));
                             } else {
@@ -482,9 +489,9 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<Functi
                                     )
                                 ))
                         } else {
-                            let (
-                                input_type, modifiers, _,
-                            ) = parse_function_options(
+                            let FunctionalOptions {
+                                input_type, types_have_columns, modifiers, output_types: _
+                            } = parse_function_options(
                                 &node_name,
                                 read_node_specification(lex, &node_name)?,
                                 false,
@@ -492,6 +499,7 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<Functi
                             let exit_node_name = parse_function_exit_node_name(lex, &node_name)?;
                             Ok(Some(FunctionDeclaration {
                                 source_node_name: node_name,
+                                types_have_columns,
                                 exit_node_name,
                                 input_type,
                                 modifiers,
@@ -510,28 +518,49 @@ fn try_parse_function_def(lex: &mut Lexer<'_, DotToken>) -> Result<Option<Functi
     }
 }
 
+struct FunctionalOptions {
+    input_type: FunctionInputsType,
+    modifiers: Option<Vec<SmolStr>>,
+    output_types: Option<Vec<SubgraphType>>,
+    types_have_columns: bool,
+}
+
+impl Default for FunctionalOptions {
+    fn default() -> Self {
+        Self {
+            input_type: FunctionInputsType::None,
+            modifiers: Option::<Vec<SmolStr>>::None,
+            output_types: Option::<Vec<SubgraphType>>::None,
+            types_have_columns: false
+        }
+    }
+}
+
 /// parse function options, either in function declaration or in function call
 fn parse_function_options(
     node_name: &SmolStr,
     mut node_spec: HashMap<SmolStr, DotToken>,
     is_call_node: bool,
-) -> Result<(FunctionInputsType, Option<Vec<SmolStr>>, Option<Vec<SubgraphType>>), SyntaxError> {
-    let mut input_type = FunctionInputsType::None;
-    let mut modifiers = Option::<Vec<SmolStr>>::None;
-    let mut output_types = Option::<Vec<SubgraphType>>::None;
+) -> Result<FunctionalOptions, SyntaxError> {
+    let mut options = FunctionalOptions::default();
     if let Some(token) = node_spec.remove("TYPES") {
-        if let DotToken::QuotedIdentifiersWithBrackets(idents) = token {
-            if let Some(special_type) = FunctionInputsType::try_extract_special_type(&idents) {
-                input_type = special_type;
-            } else {
-                input_type = FunctionInputsType::TypeListWithFields(
-                    FunctionInputsType::parse_types(idents)?,
-                );
+        options.types_have_columns = matches!(token, DotToken::QuotedQueryIdentifiersWithBrackets(..));
+        match token {
+            DotToken::QuotedIdentifiersWithBrackets(idents) |
+            DotToken::QuotedQueryIdentifiersWithBrackets(idents) => {
+                if let Some(special_type) = FunctionInputsType::try_extract_special_type(&idents) {
+                    options.input_type = special_type;
+                } else {
+                    options.input_type = FunctionInputsType::TypeListWithFields(
+                        FunctionInputsType::parse_types(idents)?,
+                    );
+                }
+            },
+            _ => {
+                return Err(SyntaxError::new(format!(
+                    "{node_name}[TYPES=... should take bracketed form: TYPES=\"[.., ]\""
+                )));
             }
-        } else {
-            return Err(SyntaxError::new(format!(
-                "{node_name}[TYPES=... should take bracketed form: TYPES=\"[.., ]\""
-            )));
         }
     }
     if let Some(token) = node_spec.remove("MODS") {
@@ -540,7 +569,7 @@ fn parse_function_options(
                 .filter(|el| el.len() > 0)
                 .collect::<Vec<_>>();
 
-            modifiers = Some(mods);
+            options.modifiers = Some(mods);
         } else {
             return Err(SyntaxError::new(format!(
                 "{node_name}[MODS=.. should take bracketed form: MODS=\"[.., ]\""
@@ -555,7 +584,7 @@ fn parse_function_options(
                 .collect::<Result<Vec<_>, _>>()?;
 
             if out_types.len() > 0 {
-                output_types = Some(out_types);
+                options.output_types = Some(out_types);
             }
         } else {
             return Err(SyntaxError::new(format!(
@@ -564,13 +593,13 @@ fn parse_function_options(
         }
     }
     if is_call_node {
-        if output_types.is_some() {
+        if options.output_types.is_some() {
             return Err(SyntaxError::new(format!(
                 "call nodes can't have a OUT_TYPES option, which is reserved for function definitions (node {node_name})"
             )));
         }
     }
-    Ok((input_type, modifiers, output_types))
+    Ok(options)
 }
 
 /// expects and parses an exit node name after function declaration

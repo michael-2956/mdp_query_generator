@@ -108,19 +108,40 @@ pub enum CallTypes {
     Compatible,
     /// Used when we want to pass the function's type constraints further
     PassThrough,
+    /// Query specific type selection. Allows to specify
+    /// types for each column
+    QueryTypes(QueryTypes),
     /// Select multiple types among possible type variants.
     TypeList(Vec<SubgraphType>),
     /// Select multiple types among possible type variants.
     TypeListWithFields(Vec<TypeWithFields>),
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
+pub enum QueryTypes {
+    /// the number of columns is fixed, set of types for each one is fixed
+    ColumnTypeLists {
+        column_type_lists: Vec<Vec<SubgraphType>>,
+    },
+    /// applies to all columns and any number of acolumns is allowed
+    TypeList {
+        type_list: Vec<SubgraphType>,
+    }
+}
+
 impl CallTypes {
-    fn from_function_inputs_type(node_name: &SmolStr, accepted_types: &FunctionTypes, input: FunctionInputsType) -> CallTypes {
+    fn from_function_inputs_type(node_name: &SmolStr, accepted_types: &FunctionTypes, input: FunctionInputsType, types_have_columns: bool) -> CallTypes {
         match input {
             FunctionInputsType::Any => {
                 match accepted_types {
                     FunctionTypes::None => panic!("Incorrect input type for node {node_name}: Any. Function does not accept arguments."),
-                    FunctionTypes::TypeList(list) => CallTypes::TypeList(list.clone()),
+                    FunctionTypes::TypeList(list) => {
+                        if types_have_columns {
+                            CallTypes::QueryTypes(QueryTypes::TypeList { type_list: list.clone() })
+                        } else {
+                            CallTypes::TypeList(list.clone())
+                        }
+                    },
                 }
             },
             FunctionInputsType::None => CallTypes::None,
@@ -141,6 +162,11 @@ pub struct CallParams {
     /// the output types the called function
     /// should be restricted to generate
     pub selected_types: CallTypes,
+    /// whether types can have multiple columns
+    /// Indicates that FunctionInputsType is either
+    /// None or QueryTypes in its final form,
+    /// instead of None and TypeList by default
+    pub types_have_columns: bool,
     /// the special modifiers passed to the
     /// function called, which affect function
     /// behaviour
@@ -152,6 +178,7 @@ pub enum FunctionTypes {
     /// Indicate that no types are accepted.
     None,
     /// Specify the allowed type list, of which multiple can be selected.
+    /// In case of queries, these apply to all columns
     TypeList(Vec<SubgraphType>),
 }
 
@@ -181,6 +208,9 @@ pub struct Function {
     /// be restricted to generate, affecting optional
     /// nodes
     pub accepted_types: FunctionTypes,
+    /// whether the function can be restricted to
+    /// output multiple columns
+    pub types_have_columns: bool,
     /// a vector of special function modifiers. Affects
     /// the function behaviour, but not the nodes
     pub accepted_modifiers: Option<Vec<SmolStr>>,
@@ -200,6 +230,7 @@ impl Function {
     fn new(declaration: FunctionDeclaration) -> Self {
         Function {
             accepted_types: FunctionTypes::from_function_inputs_type(&declaration.source_node_name, declaration.input_type),
+            types_have_columns: declaration.types_have_columns,
             accepted_modifiers: declaration.modifiers,
             source_node_name: declaration.source_node_name,
             exit_node_name: declaration.exit_node_name,
@@ -295,6 +326,7 @@ impl MarkovChain {
                     node_common,
                     func_name,
                     inputs,
+                    types_have_columns,
                     modifiers,
                 } => {
                     let modifiers = match modifiers {
@@ -325,11 +357,11 @@ impl MarkovChain {
                             )));
                         };
                         CallTypes::from_function_inputs_type(
-                            &node_common.name, accepted_types, inputs
+                            &node_common.name, accepted_types, inputs, types_have_columns
                         )
                     };
                     define_node(&mut current_function, &mut node_params, node_common, Some(
-                        CallParams { func_name, selected_types, modifiers }
+                        CallParams { func_name, selected_types, types_have_columns, modifiers }
                     ), false)?;
                 }
                 dot_parser::CodeUnit::Edge {
@@ -379,6 +411,14 @@ impl MarkovChain {
                             function.source_node_name
                         )
                     };
+
+                    if call_params.types_have_columns != function.types_have_columns {
+                        return Err(SyntaxError::new(gen_type_error(format!(
+                            "Call node indicated a {} type, but the function type is {}.",
+                            if call_params.types_have_columns { "multi-column" } else { "single column" },
+                            if function.types_have_columns { "multi-column" } else { "single column" }
+                        ))))
+                    }
 
                     match (&call_params.selected_types, &function.accepted_types) {
                         (

@@ -39,6 +39,10 @@ fn query_with_select(nothing: bool) -> Query {
     }
 }
 
+// left can be a set operation
+// right is ALWAYS select
+// number of columns and column types must match
+
 /// subgraph def_Query
 impl QueryBuilder {
     pub fn nothing() -> Query {
@@ -49,7 +53,7 @@ impl QueryBuilder {
     /// have the usual "highlight" function. Instead,\
     /// use "nothing" before generation.
     /// 
-    /// This functiton s only needed to highlight that \
+    /// This function is only needed to highlight that \
     /// some decision will be affecting the single \
     /// output column of the query.
     pub fn highlight_type() -> Query {
