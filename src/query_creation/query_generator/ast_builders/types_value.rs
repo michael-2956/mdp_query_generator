@@ -1,6 +1,6 @@
 use sqlparser::ast::{Expr, Value};
 
-use crate::{query_creation::{query_generator::{expr_precedence::ExpressionPriority, match_next_state, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::{ContainsSubgraphType, SubgraphType}, CallTypes}}, unwrap_variant};
+use crate::{query_creation::{query_generator::{expr_precedence::ExpressionPriority, match_next_state, QueryGenerator}, state_generator::{markov_chain_generator::markov_chain::QueryTypes, state_choosers::StateChooser, subgraph_type::{ContainsSubgraphType, SubgraphType}, CallTypes}}, unwrap_variant};
 
 use super::{aggregate_function::AggregateFunctionBuilder, case::CaseBuilder, column_spec::ColumnSpecBuilder, formulas::FormulasBuilder, literals::LiteralsBuilder, query::QueryBuilder, types::TypesBuilder};
 
@@ -91,6 +91,10 @@ impl TypesValueBuilder {
                 ColumnSpecBuilder::build(generator, types_value)
             },
             "call1_Query" => {
+                // known list is also set at this point but we ignore that
+                generator.state_generator.set_known_query_type_list(QueryTypes::ColumnTypeLists {
+                    column_type_lists: vec![selected_types.clone()]  // single column
+                });
                 *types_value = Expr::Subquery(Box::new(QueryBuilder::nothing()));
                 let subquery = &mut **unwrap_variant!(types_value, Expr::Subquery);
                 let column_types = QueryBuilder::build(generator, subquery);

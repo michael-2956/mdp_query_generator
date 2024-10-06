@@ -1,6 +1,6 @@
 use sqlparser::ast::{BinaryOperator, Expr, UnaryOperator};
 
-use crate::{query_creation::{query_generator::{ast_builders::{list_expr::ListExprBuilder, query::QueryBuilder, types::TypesBuilder, types_type::TypesTypeBuilder}, match_next_state, QueryGenerator, ast_builders::types_value::TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}}, unwrap_pat, unwrap_variant};
+use crate::{query_creation::{query_generator::{ast_builders::{list_expr::ListExprBuilder, query::QueryBuilder, types::TypesBuilder, types_type::TypesTypeBuilder, types_value::TypeAssertion}, match_next_state, QueryGenerator}, state_generator::{markov_chain_generator::markov_chain::QueryTypes, state_choosers::StateChooser, subgraph_type::SubgraphType}}, unwrap_pat, unwrap_variant};
 
 /// subgraph def_VAL_3
 pub struct Val3Builder { }
@@ -119,7 +119,9 @@ impl Val3Builder {
                 };
 
                 let tp = TypesTypeBuilder::build(generator);
-                generator.state_generator.set_compatible_list(tp.get_compat_types());
+                generator.state_generator.set_compatible_query_type_list(QueryTypes::ColumnTypeLists {
+                    column_type_lists: vec![tp.get_compat_types()]  // single column
+                });
 
                 **unwrap_pat!(val3, Expr::InSubquery { subquery, .. }, subquery) = QueryBuilder::nothing();
 
@@ -215,7 +217,7 @@ impl Val3Builder {
 
                 generator.expect_state("call61_types");
                 let left = &mut **unwrap_pat!(val3, Expr::BinaryOp { left, .. }, left);
-                TypesBuilder::build(generator, left, TypeAssertion::CompatibleWith(tp));
+                TypesBuilder::build(generator, left, TypeAssertion::CompatibleWith(tp.clone()));
 
                 let (left, op) = unwrap_pat!(val3, Expr::BinaryOp { left, op, .. }, (left, op));
 
@@ -240,6 +242,9 @@ impl Val3Builder {
                 generator.expect_state("AnyAllSelectIter");
                 match_next_state!(generator, {
                     "call4_Query" => {
+                        generator.state_generator.set_compatible_query_type_list(QueryTypes::ColumnTypeLists {
+                            column_type_lists: vec![tp.get_compat_types()]  // single column
+                        });
                         *right_inner = Expr::Subquery(Box::new(QueryBuilder::nothing()));
                         let subquery = &mut **unwrap_variant!(right_inner, Expr::Subquery);
                         QueryBuilder::build(generator, subquery);

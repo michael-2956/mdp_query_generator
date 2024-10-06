@@ -4,7 +4,7 @@ use sqlparser::ast::ObjectName;
 use core::fmt::Debug;
 use std::collections::BTreeMap;
 
-use crate::{query_creation::state_generator::{markov_chain_generator::{subgraph_type::SubgraphType, FunctionContext}, CallTypes}, unwrap_variant};
+use crate::{query_creation::state_generator::{markov_chain_generator::{markov_chain::QueryTypes, subgraph_type::SubgraphType, FunctionContext}, CallTypes}, unwrap_variant};
 
 use super::query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, IdentName};
 
@@ -17,6 +17,7 @@ pub enum ValueSetterValue {
     CanSkipLimit(CanSkipLimitValue),
     IsGroupingSets(IsGroupingSetsValue),
     GroupingEnabled(GroupingEnabledValue),
+    CanAddMoreColumns(CanAddMoreColumnsValue),
     WildcardRelations(WildcardRelationsValue),
     AvailableTableNames(AvailableTableNamesValue),
     DistinctAggregation(DistinctAggregationValue),
@@ -227,7 +228,10 @@ impl ValueSetter for WildcardRelationsValueSetter {
             panic!("{} can only be set at SELECT_tables_eligible_for_wildcard", WildcardRelationsValue::name())
         }
         let single_column = function_context.call_params.modifiers.contains(&SmolStr::new("single column"));
-        let allowed_types = unwrap_variant!(function_context.call_params.selected_types.clone(), CallTypes::TypeList);
+        let allowed_types = match unwrap_variant!(&function_context.call_params.selected_types, CallTypes::QueryTypes) {
+            QueryTypes::ColumnTypeLists { column_type_lists } => column_type_lists.first().unwrap().clone(),
+            QueryTypes::TypeList { type_list } => type_list.clone(),
+        };
         ValueSetterValue::WildcardRelations(WildcardRelationsValue {
             relation_levels_selectable_by_qualified_wildcard: clause_context.get_relation_levels_selectable_by_qualified_wildcard(
                 allowed_types, single_column
@@ -340,6 +344,60 @@ impl StatelessCallModifier for GroupingModeSwitchModifier {
             "call84_types" => grouping_enabled,
             "call85_types" => !grouping_enabled,
             any => panic!("grouping mode switch cannot be called at {any}")
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CanAddMoreColumnsValue {
+    /// should add more columns?
+    /// None is not enforced
+    pub should_add: Option<bool>,
+}
+
+impl NamedValue for CanAddMoreColumnsValue {
+    fn name() -> SmolStr {
+        SmolStr::new("CanAddMoreColumnsValue")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CanAddMoreColumnsValueSetter { }
+
+impl ValueSetter for CanAddMoreColumnsValueSetter {
+    fn get_value_name(&self) -> SmolStr {
+        CanAddMoreColumnsValue::name()
+    }
+
+    fn get_value(&self, _clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
+        ValueSetterValue::CanAddMoreColumns(CanAddMoreColumnsValue {
+            should_add: match unwrap_variant!(&function_context.call_params.selected_types, CallTypes::QueryTypes) {
+                QueryTypes::ColumnTypeLists { column_type_lists } => Some(column_type_lists.len() > 1),
+                // not enforced
+                QueryTypes::TypeList { .. } => None,
+            },
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CanAddMoreColumnsModifier {}
+
+impl StatelessCallModifier for CanAddMoreColumnsModifier {
+    fn get_name(&self) -> SmolStr {
+        SmolStr::new("CanAddMoreColumnsModifier")
+    }
+
+    fn get_associated_value_name(&self) -> Option<SmolStr> {
+        Some(CanAddMoreColumnsValue::name())
+    }
+
+    fn run(&self, function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
+        let should_add = unwrap_variant!(associated_value.unwrap(), ValueSetterValue::CanAddMoreColumns).should_add;
+        match function_context.current_node.node_common.name.as_str() {
+            "call1_SELECT_item" => should_add.unwrap_or(true),
+            "SELECT_item_can_finish" => should_add.map(|x| !x).unwrap_or(true),
+            any => panic!("CanAddMoreColumnsModifier value cannot be evalueted at {any}"),
         }
     }
 }

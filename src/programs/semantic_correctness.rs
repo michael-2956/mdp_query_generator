@@ -7,7 +7,7 @@ use crate::{config::{Config, TomlReadable}, query_creation::{query_generator::{q
 use super::syntax_coverage::{create_database, drop_database_if_exists};
 
 pub struct SemanticCorrectnessConfig {
-    n_tests: usize,
+    pub n_tests: usize,
     schema_path: PathBuf,
 }
 
@@ -59,8 +59,9 @@ pub fn test_semantic_correctness(config: Config) {
     let mut errs = BTreeMap::<String, Vec<String>>::new();
     let mut ignored_err_count = BTreeMap::<String, usize>::new();
     let n_tests = config.semantic_correctness_config.n_tests;
+    let print_interval = f64::min((n_tests as f64)/100f64, 100f64) as usize;
     for i in 0..n_tests {
-        if i % 100 == 0 {
+        if i % print_interval == 0usize {
             eprint!("Testing: {} / {} ({} OK)   \r", i, n_tests, n_ok + n_ignored);
         }
 
@@ -84,8 +85,8 @@ pub fn test_semantic_correctness(config: Config) {
     }
 
     println!("\n\nTotal semantically correct: {n_ok}/{n_tests} ({:.3}%)", 100f64 * n_ok as f64 / n_tests as f64);
-    println!("\n\nWithout ignored errors: {n_ok}/{} ({:.3}%)", n_tests - n_ignored, 100f64 * n_ok as f64 / (n_tests - n_ignored) as f64);
+    println!("\nWithout ignored errors: {n_ok}/{} ({:.3}%)", n_tests - n_ignored, 100f64 * n_ok as f64 / (n_tests - n_ignored) as f64);
 
-    println!("Error counts (ignored): \n\n{:#?}", ignored_err_count);
-    println!("Errors (not ignored): \n\n{:#?}", errs);
+    println!("\nError counts (ignored): \n{:#?}", ignored_err_count);
+    println!("\nErrors (not ignored): \n{:#?}", errs);
 }

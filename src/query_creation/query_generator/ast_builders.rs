@@ -19,6 +19,7 @@ pub mod list_expr;
 pub mod from_item;
 pub mod timestamp;
 pub mod types_type;
+pub mod select_item;
 pub mod column_spec;
 pub mod types_value;
 pub mod where_clause;

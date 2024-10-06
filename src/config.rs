@@ -89,6 +89,7 @@ impl Config {
         if let Some(num_queries) = program_args.num_queries {
             self.main_config.num_generate = num_queries;
             self.ast2path_testing_config.n_tests = num_queries;
+            self.semantic_correctness_config.n_tests = num_queries;
         }
         if let Some(anticall_stir_level) = program_args.anticall_stir_level {
             self.anticall_model_config.stir_level = anticall_stir_level;

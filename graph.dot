@@ -76,7 +76,7 @@
 
 digraph G {
     subgraph def_Query {
-        Query [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[single column, single row]", label="Query\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[single column, single row]", shape=octagon, style=filled, color=green]
+        Query [TYPES="Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[single column, single row]", label="Query\ntypes=Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[single column, single row]", shape=octagon, style=filled, color=green]
         EXIT_Query [label="EXIT Query", shape=rectangle]
 
         call0_FROM [label="FROM", shape=rectangle, color=cornflowerblue, style=filled]
@@ -89,7 +89,7 @@ digraph G {
         call0_FROM -> WHERE_done
         call0_WHERE -> WHERE_done
 
-        call0_SELECT [label="SELECT\nTYPES: [...types]\nMODS: [?single column]", TYPES="[...]", MODS="[?single column]", shape=rectangle, style=filled, color=bisque]
+        call0_SELECT [label="SELECT\nTYPES: Q[...types]\nMODS: [?single column]", TYPES="Q[...]", MODS="[?single column]", shape=rectangle, style=filled, color=bisque]
         WHERE_done -> call0_SELECT
         
         call0_GROUP_BY [label="GROUP BY", shape=rectangle, style=filled, color=gray]
@@ -182,7 +182,7 @@ digraph G {
         FROM_item_alias -> FROM_item_table
         FROM_item_table -> EXIT_FROM_item
 
-        call0_Query [label="Query", shape=rectangle, TYPES="[any]", MODS="[]", style=filled, color=green]
+        call0_Query [label="Query", shape=rectangle, TYPES="Q[any]", MODS="[]", style=filled, color=green]
         FROM_item_alias -> call0_Query
         call0_Query -> EXIT_FROM_item
     }
@@ -197,48 +197,62 @@ digraph G {
     }
 
     subgraph def_SELECT {
-        SELECT [TYPES="[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[single column]", label="SELECT\ntypes=[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[single column]", shape=rectangle, style=filled, color=bisque]
+        SELECT [TYPES="Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[single column]", label="SELECT\ntypes=Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[single column]", shape=rectangle, style=filled, color=bisque]
         EXIT_SELECT [label="EXIT SELECT", shape=rectangle]
 
         SELECT_DISTINCT [label="DISTINCT"]
         SELECT -> SELECT_DISTINCT
 
-        SELECT_list [label="SELECT list\nset value: 'grouping_enabled'", set_value="grouping_enabled"]
-        SELECT_DISTINCT -> SELECT_list
-        SELECT -> SELECT_list
-        SELECT_list_multiple_values [label="Multiple values\nmod.: 'single column' -> OFF", modifier="single column", modifier_mode="off"]
-        SELECT_list_multiple_values -> SELECT_list
+        call0_SELECT_item [TYPES="Q[...]", label="SELECT item\nTYPES=Q[...]", shape=rectangle, style=filled, color=tomato]
+
+        SELECT_DISTINCT -> call0_SELECT_item
+        SELECT -> call0_SELECT_item
+
+        call0_SELECT_item -> EXIT_SELECT
+    }
+
+    subgraph def_SELECT_item {
+        SELECT_item [TYPES="Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[single column]", label="SELECT item (recursive)\ntypes=Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[single column]", shape=rectangle, style=filled, color=tomato]
+        EXIT_SELECT_item [label="EXIT SELECT item", shape=rectangle]
+
+        SELECT_item -> SELECT_item_grouping_enabled
+        SELECT_item_grouping_enabled [label="Determine if grouped\nset value: 'grouping_enabled'", set_value="grouping_enabled"]
+
+        SELECT_item_can_add_more_columns [label="Can add more columns?\n[set value]", set_value="CanAddMoreColumnsValue"]
+        SELECT_item_can_finish [label="Finish SELECT\n[call mod]", call_modifier="CanAddMoreColumnsModifier"]
+        SELECT_item_can_add_more_columns -> SELECT_item_can_finish
+        SELECT_item_can_finish -> EXIT_SELECT_item
+        call1_SELECT_item [TYPES="Q[known]", label="SELECT item\nTYPES=Q[args[1:]]\n[call mod]", shape=rectangle, style=filled, color=tomato, call_modifier="CanAddMoreColumnsModifier"]
+        SELECT_item_can_add_more_columns -> call1_SELECT_item
+        call1_SELECT_item -> EXIT_SELECT_item
 
         SELECT_unnamed_expr [label="Unnamed"]
         SELECT_expr_with_alias [label="With alias"]
-        SELECT_list -> SELECT_unnamed_expr
-        SELECT_list -> SELECT_expr_with_alias
+        SELECT_item_grouping_enabled -> SELECT_unnamed_expr
+        SELECT_item_grouping_enabled -> SELECT_expr_with_alias
 
         select_expr [label="Expression"]
         SELECT_unnamed_expr -> select_expr
         SELECT_expr_with_alias -> select_expr
         select_expr_done [label="Expression done"]
-        select_expr_done -> SELECT_list_multiple_values
-        select_expr_done -> EXIT_SELECT
-        call73_types [label="TYPES: [...types]\nMODS: [group by columns]\ncall mod.: 'grouping mode switch'", TYPES="[...]", MODS="[group by columns]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
+        select_expr_done -> SELECT_item_can_add_more_columns
+        call73_types [label="TYPES: [args[0]]\nMODS: [group by columns]\ncall mod.: 'grouping mode switch'", TYPES="[known]", MODS="[group by columns]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
         select_expr -> call73_types
         call73_types -> select_expr_done
-        call54_types [label="TYPES: [...types]\nMODS: [no aggregate]\ncall mod.: 'grouping mode switch'", TYPES="[...]", MODS="[no aggregate]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
+        call54_types [label="TYPES: [args[0]]\nMODS: [no aggregate]\ncall mod.: 'grouping mode switch'", TYPES="[known]", MODS="[no aggregate]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
         select_expr -> call54_types
         call54_types -> select_expr_done
 
         SELECT_tables_eligible_for_wildcard [label="Set Relations for wildcards\nset_value='wildcard_relations'", set_value="wildcard_relations"]
-        SELECT_list -> SELECT_tables_eligible_for_wildcard
+        SELECT_item_grouping_enabled -> SELECT_tables_eligible_for_wildcard
 
         SELECT_wildcard [label="wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
         SELECT_tables_eligible_for_wildcard -> SELECT_wildcard
-        SELECT_wildcard -> SELECT_list_multiple_values
-        SELECT_wildcard -> EXIT_SELECT
+        SELECT_wildcard -> SELECT_item_can_add_more_columns
 
         SELECT_qualified_wildcard [label="qualified wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
         SELECT_tables_eligible_for_wildcard -> SELECT_qualified_wildcard
-        SELECT_qualified_wildcard -> SELECT_list_multiple_values
-        SELECT_qualified_wildcard -> EXIT_SELECT
+        SELECT_qualified_wildcard -> SELECT_item_can_add_more_columns
     }
 
     subgraph def_GROUP_BY {
@@ -598,7 +612,7 @@ digraph G {
         column_type_available -> call0_column_spec
         call0_column_spec -> EXIT_types_value
 
-        call1_Query [TYPES="[known]", MODS="[single row, single column]", label="Query\nMODS: [single row, single column]\nTYPE: known\nmod.: 'no subquery' -> OFF", modifier="no subquery", modifier_mode="off", shape=rectangle, style=filled, color=green]
+        call1_Query [TYPES="Q[known]", MODS="[single row, single column]", label="Query\nMODS: [single row, single column]\nTYPE: known\nmod.: 'no subquery' -> OFF", modifier="no subquery", modifier_mode="off", shape=rectangle, style=filled, color=green]
         types_value -> call1_Query
         call1_Query -> EXIT_types_value
 
@@ -848,7 +862,7 @@ digraph G {
 
         Exists_not [label="NOT"]
         Exists [label="EXISTS"]
-        call2_Query [TYPES="[any]", MODS="[]", label="Query\nTYPES: ANY", shape=rectangle, style=filled, color=green]
+        call2_Query [TYPES="Q[any]", MODS="[]", label="Query\nTYPES: ANY", shape=rectangle, style=filled, color=green]
         VAL_3 -> Exists
         Exists -> call2_Query
         call2_Query -> EXIT_VAL_3
@@ -877,7 +891,7 @@ digraph G {
         InSubqueryNot -> call4_types_type
         call58_types [TYPES="[compatible]", MODS="[...]", label="TYPES: [compatible(TP1)]\nMODS: [...mods]", shape=rectangle, color=lightblue, style=filled]
         call4_types_type -> call58_types
-        call3_Query [TYPES="[compatible]", MODS="[single column]", label="Query\nTYPE: [compatible(TP1)]\nMODS: [single column]", shape=rectangle, style=filled, color=green]
+        call3_Query [TYPES="Q[compatible]", MODS="[single column]", label="Query\nTYPE: Q[compatible(TP1)]\nMODS: [single column]", shape=rectangle, style=filled, color=green]
         call58_types -> call3_Query
         call3_Query -> EXIT_VAL_3
 
@@ -961,7 +975,7 @@ digraph G {
         AnyAllSelectIter[label="select iterable"]
         AnyAllAnyAllAny -> AnyAllSelectIter
         AnyAllAnyAllAll -> AnyAllSelectIter
-        call4_Query [TYPES="[compatible]", MODS="[single column]", label="Query\nTYPE: [compatible(TP1)]\nMODS: [single column]", shape=rectangle, style=filled, color=green]
+        call4_Query [TYPES="Q[compatible]", MODS="[single column]", label="Query\nTYPE: Q[compatible(TP1)]\nMODS: [single column]", shape=rectangle, style=filled, color=green]
         AnyAllSelectIter -> call4_Query
         call4_Query -> EXIT_VAL_3
 
@@ -1272,7 +1286,8 @@ digraph G {
         EXIT_FROM -> FROM_item [color=none, weight=10]
         EXIT_FROM_item -> WHERE [color=none, weight=10]
         EXIT_WHERE -> SELECT [color=none, weight=10]
-        EXIT_SELECT -> GROUP_BY [color=none]
+        EXIT_SELECT -> SELECT_item [color=none]
+        EXIT_SELECT_item -> GROUP_BY [color=none]
         EXIT_GROUP_BY -> set_item [color=none]
         EXIT_set_item -> aggregate_function [color=none]
         EXIT_aggregate_function -> HAVING [color=none]
