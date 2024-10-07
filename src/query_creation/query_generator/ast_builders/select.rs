@@ -49,7 +49,7 @@ impl SelectBuilder {
                             let (alias, relation) = value_chooser!(generator).choose_qualified_wildcard_relation(
                                 &generator.clause_context, wildcard_relations
                             );
-                            column_idents_and_graph_types.extend(relation.get_wildcard_columns());
+                            column_idents_and_graph_types.extend(relation.get_wildcard_columns_iter());
                             *select_item = SelectItem::QualifiedWildcard(
                                 ObjectName(vec![alias]),
                                 WildcardAdditionalOptions {

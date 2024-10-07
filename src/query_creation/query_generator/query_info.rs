@@ -2,7 +2,7 @@ use std::{collections::{BTreeMap, BTreeSet, HashMap, HashSet}, error::Error, fmt
 
 use itertools::Itertools;
 use smol_str::SmolStr;
-use crate::{query_creation::state_generator::{markov_chain_generator::markov_chain::CallModifiers, subgraph_type::{ContainsSubgraphType, SubgraphType}}, unwrap_variant};
+use crate::{query_creation::state_generator::{markov_chain_generator::markov_chain::{CallModifiers, QueryTypes}, subgraph_type::{ContainsSubgraphType, SubgraphType}}, unwrap_variant};
 
 use sqlparser::{ast::{ColumnDef, DataType, Expr, FileFormat, HiveDistributionStyle, HiveFormat, Ident, ObjectName, OnCommit, Query, SelectItem, SetExpr, SqlOption, Statement, TableAlias, TableConstraint, TimezoneInfo, UnaryOperator}, dialect::PostgreSqlDialect, parser::Parser};
 
@@ -413,7 +413,7 @@ impl ClauseContext {
         eprintln!("Clause hierarchy: {:#?}", self.get_clause_hierarchy_iter().collect::<Vec<_>>());
     }
 
-    pub fn get_relation_levels_selectable_by_qualified_wildcard(&self, allowed_types: Vec<SubgraphType>, single_column: bool) -> Vec<Vec<IdentName>> {
+    pub fn get_relation_levels_selectable_by_qualified_wildcard_old(&self, allowed_types: Vec<SubgraphType>, single_column: bool) -> Vec<Vec<IdentName>> {
         // first level is always present because we're in SELECT
         self.get_filtered_from_clause_hierarchy_with_allowed_columns(ColumnRetrievalOptions::new(
             self.top_group_by().is_grouping_active(),
@@ -437,6 +437,82 @@ impl ClauseContext {
                             } else { true }
                         })
                     }
+                }
+            }).map(|(rel_name, ..)| rel_name.clone()).collect()
+        }).collect()
+    }
+
+    fn all_columns_match_types_and_names(
+        columns: Vec<(IdentName, Option<IdentName>, SubgraphType)>,
+        query_types: &QueryTypes,
+        allowed_rel_col_names_opt: &Option<HashSet<[IdentName; 2]>>
+    ) -> bool {
+        match query_types {
+            QueryTypes::ColumnTypeLists { column_type_lists } => {
+                column_type_lists.len() == columns.len() && columns.into_iter()
+                    .zip(column_type_lists.iter()).all(
+                        |((rel_name, col_name, col_type), allowed_tps)| {
+                            allowed_tps.contains_generator_of(&col_type) && if let Some(
+                                allowed_rel_col_names
+                            ) = allowed_rel_col_names_opt {  // if the R.C restriction is present, check for it
+                                if let Some(col_name) = col_name {
+                                    allowed_rel_col_names.contains(&[rel_name, col_name])
+                                } else { false }
+                            } else { true }
+                        }
+                    )
+            },
+            QueryTypes::TypeList { type_list } => {
+                columns.into_iter().all(|(rel_name, col_name, col_type)| {
+                    type_list.contains_generator_of(&col_type) && if let Some(
+                        allowed_rel_col_names
+                    ) = allowed_rel_col_names_opt {  // if the R.C restriction is present, check for it
+                        if let Some(col_name) = col_name {
+                            allowed_rel_col_names.contains(&[rel_name, col_name])
+                        } else { false }
+                    } else { true }
+                })
+            },
+        }
+    }
+
+    /// only works correctly if called after FROM is constructed
+    pub fn can_use_wildcard(&self, query_types: &QueryTypes) -> bool {
+        // first level is always present because we're in SELECT
+        let (
+            from_contents,
+            shaded_rel_names,
+            _,
+            allowed_rel_col_names_opt
+        ) = self.get_filtered_from_clause_hierarchy_with_allowed_columns(
+            ColumnRetrievalOptions::new(
+                self.top_group_by().is_grouping_active(),
+                false, // we are in SELECT
+                false,  // we are definitely not an aggregate function argument
+            )
+        ).next().unwrap();
+        assert!(shaded_rel_names.len() == 0); // must be empty since first level
+        let columns = from_contents.ordered_relations_iter().flat_map(|(rel_name, relation)| {
+            relation.get_wildcard_columns_iter().map(
+                |(col, tp)| ((*rel_name).clone(), col, tp)
+            )
+        }).collect_vec();
+        Self::all_columns_match_types_and_names(columns, query_types, &allowed_rel_col_names_opt)
+    }
+
+    pub fn get_relation_levels_selectable_by_qualified_wildcard(&self, query_types: &QueryTypes) -> Vec<Vec<IdentName>> {
+        // first level is always present because we're in SELECT (important bc this function's first level is used to check if wildcard is possible)
+        self.get_filtered_from_clause_hierarchy_with_allowed_columns(ColumnRetrievalOptions::new(
+            self.top_group_by().is_grouping_active(),
+            false, // we are in SELECT
+            false,  // we are definitely not an aggregate function argument
+        )).map(|(from_contents, shaded_rel_names, _, allowed_rel_col_names_opt)| {
+            from_contents.relations_iter().filter(|(rel_name, relation)| {
+                !shaded_rel_names.contains(rel_name) && {
+                    let columns = relation.get_wildcard_columns_iter().map(
+                        |(col, tp)| ((**rel_name).clone(), col, tp)
+                    ).collect_vec();
+                    Self::all_columns_match_types_and_names(columns, query_types, &allowed_rel_col_names_opt)
                 }
             }).map(|(rel_name, ..)| rel_name.clone()).collect()
         }).collect()
@@ -876,6 +952,14 @@ impl QueryProps {
         self.column_idents_and_graph_types = Some(column_idents_and_graph_types);
     }
 
+    pub fn create_select_type(&mut self) {
+        self.column_idents_and_graph_types = Some(vec![]);
+    }
+
+    pub fn select_type_mut(&mut self) -> &mut Vec<(Option<IdentName>, SubgraphType)> {
+        self.column_idents_and_graph_types.as_mut().unwrap()
+    }
+
     pub fn select_type(&self) -> &Vec<(Option<IdentName>, SubgraphType)> {
         &self.column_idents_and_graph_types.as_ref().unwrap()
     }
@@ -1169,24 +1253,24 @@ pub struct FromContents {
     /// This is ordered because we need consistent
     /// same-seed runs
     relations: BTreeMap<IdentName, Relation>,
-    /// order of relation names for get_wildcard_columns_iter()
-    wildcard_relation_names: Vec<IdentName>,
+    /// order of relations (relevant for wildcard)
+    relation_name_order: Vec<IdentName>,
 }
 
 impl FromContents {
     pub fn new() -> Self {
-        Self { relations: BTreeMap::new(), wildcard_relation_names: vec![] }
+        Self { relations: BTreeMap::new(), relation_name_order: vec![] }
     }
 
     fn append_table(&mut self, create_table_st: CreateTableSt, alias: String, column_renames: Vec<Ident>) {
         let relation = Relation::from_table(alias, create_table_st, column_renames);
-        self.wildcard_relation_names.push(relation.alias.clone());
+        self.relation_name_order.push(relation.alias.clone());
         self.relations.insert(relation.alias.clone(), relation);
     }
 
     fn append_query(&mut self, column_idents_and_graph_types: Vec<(Option<IdentName>, SubgraphType)>, alias: String, column_renames: Vec<Ident>) {
         let relation = Relation::from_query(alias, column_idents_and_graph_types, column_renames);
-        self.wildcard_relation_names.push(relation.alias.clone());
+        self.relation_name_order.push(relation.alias.clone());
         self.relations.insert(relation.alias.clone(), relation);
     }
 
@@ -1277,10 +1361,18 @@ impl FromContents {
         ).map(|(.., r)| r)
     }
 
+    /// returns column names in the order that their respective relations are listed
     pub fn get_wildcard_columns_iter(&self) -> impl Iterator<Item = (Option<IdentName>, SubgraphType)> + '_ {
-        self.wildcard_relation_names.iter().flat_map(
-            |rel_name| self.relations.get(rel_name).unwrap().get_wildcard_columns()
-        )
+        self.ordered_relations_iter().flat_map(|(_, relation)| {
+            relation.get_wildcard_columns_iter()
+        })
+    }
+
+    /// returns relations in the order that they were listed (used for wildcard)
+    fn ordered_relations_iter(&self) -> impl Iterator<Item = (&IdentName, &Relation)> {
+        self.relation_name_order.iter().map(|rel_name| {
+            self.relations.get_key_value(rel_name).unwrap()
+        })
     }
 
     pub fn num_relations(&self) -> usize {
@@ -1399,7 +1491,7 @@ impl Relation {
     }
 
     /// get all columns with their types, including the unnamed ones and ambiguous ones
-    pub fn get_wildcard_columns(&self) -> impl Iterator<Item = (Option<IdentName>, SubgraphType)> + '_ {
+    pub fn get_wildcard_columns_iter(&self) -> impl Iterator<Item = (Option<IdentName>, SubgraphType)> + '_ {
         self.wildcard_columns.iter().cloned()
     }
 }

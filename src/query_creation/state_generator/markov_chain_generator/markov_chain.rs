@@ -129,6 +129,25 @@ pub enum QueryTypes {
     }
 }
 
+impl QueryTypes {
+    /// splits itself into the first type and remaining types
+    pub fn split_first(self) -> (Vec<SubgraphType>, Self) {
+        match self {
+            QueryTypes::ColumnTypeLists {
+                mut column_type_lists
+            } => {
+                let first = column_type_lists.remove(0);
+                (first, QueryTypes::ColumnTypeLists {
+                    column_type_lists
+                })
+            },
+            QueryTypes::TypeList { type_list } => {
+                (type_list.clone(), QueryTypes::TypeList { type_list })
+            },
+        }
+    }
+}
+
 impl CallTypes {
     fn from_function_inputs_type(node_name: &SmolStr, accepted_types: &FunctionTypes, input: FunctionInputsType, types_have_columns: bool) -> CallTypes {
         match input {

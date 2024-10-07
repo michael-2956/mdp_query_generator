@@ -205,8 +205,8 @@ pub struct WildcardRelationsValue {
     /// relations eligible to be selected by qualified wildcard, from the
     /// current FROM to the upmost parent FROM
     pub relation_levels_selectable_by_qualified_wildcard: Vec<Vec<IdentName>>,
-    /// total number of relations
-    pub num_relations_in_top_from: usize,
+    /// wildcard can be used
+    pub can_use_wildcard: bool,
 }
 
 impl NamedValue for WildcardRelationsValue {
@@ -227,16 +227,10 @@ impl ValueSetter for WildcardRelationsValueSetter {
         if function_context.current_node.node_common.name != "SELECT_tables_eligible_for_wildcard" {
             panic!("{} can only be set at SELECT_tables_eligible_for_wildcard", WildcardRelationsValue::name())
         }
-        let single_column = function_context.call_params.modifiers.contains(&SmolStr::new("single column"));
-        let allowed_types = match unwrap_variant!(&function_context.call_params.selected_types, CallTypes::QueryTypes) {
-            QueryTypes::ColumnTypeLists { column_type_lists } => column_type_lists.first().unwrap().clone(),
-            QueryTypes::TypeList { type_list } => type_list.clone(),
-        };
+        let query_types = unwrap_variant!(&function_context.call_params.selected_types, CallTypes::QueryTypes);
         ValueSetterValue::WildcardRelations(WildcardRelationsValue {
-            relation_levels_selectable_by_qualified_wildcard: clause_context.get_relation_levels_selectable_by_qualified_wildcard(
-                allowed_types, single_column
-            ),
-            num_relations_in_top_from: clause_context.top_active_from().num_relations(),
+            can_use_wildcard: clause_context.can_use_wildcard(query_types),
+            relation_levels_selectable_by_qualified_wildcard: clause_context.get_relation_levels_selectable_by_qualified_wildcard(query_types),
         })
     }
 }
@@ -255,17 +249,8 @@ impl StatelessCallModifier for IsWildcardAvailableModifier {
 
     fn run(&self, function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
         let wildcard_relations = unwrap_variant!(associated_value.unwrap(), ValueSetterValue::WildcardRelations);
-        let single_column = function_context.call_params.modifiers.contains(&SmolStr::new("single column"));
-        // 3. if no relations are available at all, the wildcards should be off.
-        // 4. if multiple relations are present but single_column is ON, the SELECT_wildcard is OFF
         match function_context.current_node.node_common.name.as_str() {
-            "SELECT_wildcard" => {
-                let all_relations_allowed = wildcard_relations.relation_levels_selectable_by_qualified_wildcard[0].len() ==
-                                                  wildcard_relations.num_relations_in_top_from;
-                if single_column {
-                    all_relations_allowed && wildcard_relations.num_relations_in_top_from == 1
-                } else { all_relations_allowed }
-            },
+            "SELECT_wildcard" => wildcard_relations.can_use_wildcard,
             "SELECT_qualified_wildcard" => {
                 wildcard_relations.relation_levels_selectable_by_qualified_wildcard.iter().any(
                     |level| level.len() > 0

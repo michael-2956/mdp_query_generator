@@ -627,7 +627,7 @@ impl PathGenerator {
                         },
                         any => panic!("schema.table alias is not supported: {}", ObjectName(any.to_vec())),
                     };
-                    column_idents_and_graph_types.extend(relation.get_wildcard_columns());
+                    column_idents_and_graph_types.extend(relation.get_wildcard_columns_iter());
                     self.push_node(PathNode::QualifiedWildcardSelectedRelation(alias.0.last().unwrap().clone()));
                 },
                 SelectItem::Wildcard(..) => {
