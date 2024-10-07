@@ -13,13 +13,11 @@ use sqlparser::ast::{self, BinaryOperator, DataType, DateTimeField, Distinct, Ex
 use crate::{
     config::TomlReadable, query_creation::{
         query_generator::{
-            aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution},
-            call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue},
-            query_info::{ClauseContext, ClauseContextCheckpoint, ColumnRetrievalOptions, DatabaseSchema, IdentName, QueryProps}, ast_builders::types_value::TypeAssertion
+            aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, ast_builders::types_value::TypeAssertion, call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue}, query_info::{ClauseContext, ClauseContextCheckpoint, ColumnRetrievalOptions, DatabaseSchema, IdentName, QueryProps}
         },
         state_generator::{
             markov_chain_generator::{
-                error::SyntaxError, markov_chain::{CallModifiers, MarkovChain}, ChainStateCheckpoint, DynClone, StateGeneratorConfig
+                error::SyntaxError, markov_chain::{CallModifiers, MarkovChain, QueryTypes}, ChainStateCheckpoint, DynClone, StateGeneratorConfig
             },
             state_choosers::MaxProbStateChooser,
             subgraph_type::{ContainsSubgraphType, SubgraphType}, substitute_models::DeterministicModel, CallTypes, MarkovChainGenerator
@@ -552,22 +550,7 @@ impl PathGenerator {
             self.try_push_state("SELECT_DISTINCT")?;
             self.clause_context.query_mut().set_distinct();
         }
-
-        /// TODO: remove
-        let single_column_mod = match self.state_generator.get_fn_modifiers() {
-            CallModifiers::StaticList(list) if list.contains(&SmolStr::new("single column")) => true,
-            _ => false,
-        };
-
-        /// TODO: remove
-        if single_column_mod && projection.len() != 1 {
-            return Err(ConvertionError::new(format!(
-                "single column modifier is ON but the projection contains multiple columns: {:#?}",
-                projection
-            )))
-        }
-
-        /// TODO: update for new select item
+        self.try_push_state("call0_SELECT_item")?;
         
         let select_item_state = if self.clause_context.top_group_by().is_grouping_active() {
             "call73_types"
@@ -575,72 +558,88 @@ impl PathGenerator {
             "call54_types"
         };
 
-        let column_idents_and_graph_types = self.handle_select_projection(
-            projection, select_item_state
-        )?;
+        self.clause_context.query_mut().create_select_type();  // before the first item is called
+        self.handle_select_item(projection.as_slice(), select_item_state)?;
 
         self.try_push_state("EXIT_SELECT")?;
-
-        self.clause_context.query_mut().set_select_type(column_idents_and_graph_types);
 
         Ok(())
     }
 
-    fn handle_select_projection(
-        &mut self, projection: &Vec<SelectItem>, select_item_state: &str
-    ) -> Result<Vec<(Option<IdentName>, SubgraphType)>, ConvertionError> {
-        let mut column_idents_and_graph_types: Vec<(Option<IdentName>, SubgraphType)> = vec![];
+    /// subgraph def_SELECT_item
+    fn handle_select_item(
+        &mut self, projection: &[SelectItem], select_item_state: &str
+    ) -> Result<(), ConvertionError> {
 
-        for (i, select_item) in projection.iter().enumerate() {
-            if i > 0 {
-                self.try_push_state("SELECT_list_multiple_values")?;
-            }
-            self.try_push_state("SELECT_list")?;
-            match select_item {
-                SelectItem::UnnamedExpr(expr) => {
-                    self.try_push_states(&["SELECT_unnamed_expr", "select_expr", select_item_state])?;
-                    let alias = QueryProps::extract_alias(&expr);
-                    let tp = self.handle_types(expr, TypeAssertion::None)?;
-                    self.try_push_state("select_expr_done")?;
-                    column_idents_and_graph_types.push((alias, tp));
-                },
-                SelectItem::ExprWithAlias { expr, alias } => {
-                    self.try_push_state("SELECT_expr_with_alias")?;
-                    self.push_node(PathNode::SelectAlias(alias.clone()));  // the order is important
-                    self.try_push_states(&["select_expr", select_item_state])?;
-                    let tp = self.handle_types(expr, TypeAssertion::None)?;
-                    self.try_push_state("select_expr_done")?;
-                    column_idents_and_graph_types.push((Some(alias.clone().into()), tp));
-                },
-                SelectItem::QualifiedWildcard(alias, ..) => {
-                    self.try_push_states(&["SELECT_tables_eligible_for_wildcard", "SELECT_qualified_wildcard"])?;
-                    let relation = match alias.0.as_slice() {
-                        [ident] => {
-                            let identname: IdentName = ident.clone().into();
-                            let wildcard_relations = unwrap_variant!(self.state_generator.get_named_value::<WildcardRelationsValue>().unwrap(), ValueSetterValue::WildcardRelations);
-                            if !wildcard_relations.relation_levels_selectable_by_qualified_wildcard.iter().any(
-                                |level| level.contains(&identname)
-                            ) {
-                                return Err(ConvertionError::new(format!(
-                                    "{ident}.* is not available: wildcard_selectable_relations = {:?}",
-                                    wildcard_relations.relation_levels_selectable_by_qualified_wildcard
-                                )))
-                            }
-                            self.clause_context.get_relation_by_name(&identname)
-                        },
-                        any => panic!("schema.table alias is not supported: {}", ObjectName(any.to_vec())),
-                    };
-                    column_idents_and_graph_types.extend(relation.get_wildcard_columns_iter());
-                    self.push_node(PathNode::QualifiedWildcardSelectedRelation(alias.0.last().unwrap().clone()));
-                },
-                SelectItem::Wildcard(..) => {
-                    self.try_push_states(&["SELECT_tables_eligible_for_wildcard", "SELECT_wildcard"])?;
-                    column_idents_and_graph_types.extend(self.clause_context.top_active_from().get_wildcard_columns_iter());
-                },
-            }
+        self.try_push_states(&["SELECT_item", "SELECT_item_grouping_enabled"])?;
+
+        let (select_item, remaining_projection) = projection.split_first().unwrap();
+        let (
+            first_column_list, remaining_column_types
+        ) = unwrap_variant!(
+            self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::QueryTypes
+        ).split_first();
+
+        match select_item {
+            SelectItem::UnnamedExpr(expr) => {
+                self.try_push_states(&["SELECT_unnamed_expr", "select_expr", select_item_state])?;
+                self.state_generator.set_known_list(first_column_list);
+                let tp = self.handle_types(expr, TypeAssertion::None)?;
+                self.try_push_state("select_expr_done")?;
+                let alias = QueryProps::extract_alias(&expr);
+                self.clause_context.query_mut().select_type_mut().push((alias, tp));
+            },
+            SelectItem::ExprWithAlias { expr, alias } => {
+                self.try_push_state("SELECT_expr_with_alias")?;
+                self.push_node(PathNode::SelectAlias(alias.clone()));  // the order is important
+                self.try_push_states(&["select_expr", select_item_state])?;
+                self.state_generator.set_known_list(first_column_list);
+                let tp = self.handle_types(expr, TypeAssertion::None)?;
+                self.try_push_state("select_expr_done")?;
+                self.clause_context.query_mut().select_type_mut().push((Some(alias.clone().into()), tp));
+            },
+            SelectItem::QualifiedWildcard(alias, ..) => {
+                self.try_push_states(&["SELECT_tables_eligible_for_wildcard", "SELECT_qualified_wildcard"])?;
+                let relation = match alias.0.as_slice() {
+                    [ident] => {
+                        let identname: IdentName = ident.clone().into();
+                        let wildcard_relations = unwrap_variant!(self.state_generator.get_named_value::<WildcardRelationsValue>().unwrap(), ValueSetterValue::WildcardRelations);
+                        if !wildcard_relations.relation_levels_selectable_by_qualified_wildcard.iter().any(
+                            |level| level.contains(&identname)
+                        ) {
+                            return Err(ConvertionError::new(format!(
+                                "{ident}.* is not available: wildcard_selectable_relations = {:?}",
+                                wildcard_relations.relation_levels_selectable_by_qualified_wildcard
+                            )))
+                        }
+                        self.clause_context.get_relation_by_name(&identname)
+                    },
+                    any => panic!("schema.table alias is not supported: {}", ObjectName(any.to_vec())),
+                };
+
+                let new_types = relation.get_wildcard_columns_iter().collect_vec();
+                self.clause_context.query_mut().select_type_mut().extend(new_types.into_iter());
+                self.push_node(PathNode::QualifiedWildcardSelectedRelation(alias.0.last().unwrap().clone()));
+            },
+            SelectItem::Wildcard(..) => {
+                self.try_push_states(&["SELECT_tables_eligible_for_wildcard", "SELECT_wildcard"])?;
+                let new_types = self.clause_context.top_active_from().get_wildcard_columns_iter().collect_vec();
+                self.clause_context.query_mut().select_type_mut().extend(new_types.into_iter());
+            },
         }
 
-        Ok(column_idents_and_graph_types)
+        // projection.push(SelectItem::UnnamedExpr(TypesBuilder::highlight()));
+        self.try_push_state("SELECT_item_can_add_more_columns")?;
+        if remaining_projection.len() == 0 {
+            self.try_push_state("SELECT_item_can_finish")?;
+        } else {
+            self.try_push_state("call1_SELECT_item")?;
+            self.state_generator.set_known_query_type_list(remaining_column_types);
+            self.handle_select_item(remaining_projection, select_item_state)?;
+        }
+        self.try_push_state("EXIT_SELECT_item")?;
+
+        Ok(())
     }
 
     /// subgraph def_LIMIT
@@ -724,6 +723,9 @@ impl PathGenerator {
                     _self.state_generator.set_compatible_list(returned_type.get_compat_types());
                     _self.try_push_state("call58_types")?;
                     _self.handle_types(expr, TypeAssertion::CompatibleWith(returned_type.clone()))?;
+                    _self.state_generator.set_compatible_query_type_list(QueryTypes::ColumnTypeLists {
+                        column_type_lists: vec![returned_type.get_compat_types()]  // single column
+                    });
                     _self.try_push_state("call3_Query")?;
                     _self.handle_query(subquery)?;
                     Ok(())
@@ -759,7 +761,7 @@ impl PathGenerator {
                 self.handle_types_type_and_try(TypeAssertion::None, |_self, returned_type| {
                     _self.state_generator.set_compatible_list(returned_type.get_compat_types());
                     _self.try_push_state("call61_types")?;
-                    _self.handle_types(left, TypeAssertion::CompatibleWith(returned_type))?;
+                    _self.handle_types(left, TypeAssertion::CompatibleWith(returned_type.clone()))?;
 
                     _self.try_push_state("AnyAllAnyAll")?;
                     _self.try_push_state(match expr {
@@ -772,6 +774,9 @@ impl PathGenerator {
                     match &**right {
                         Expr::Subquery(query) => {
                             _self.try_push_state("call4_Query")?;
+                            _self.state_generator.set_compatible_query_type_list(QueryTypes::ColumnTypeLists {
+                                column_type_lists: vec![returned_type.get_compat_types()]  // single column
+                            });
                             _self.handle_query(query)?;
                         },
                         any => unexpected_expr!(any),
@@ -1378,7 +1383,7 @@ impl PathGenerator {
             },
             Expr::Case { .. } => (self.handle_types_value_expr_case(expr), "CASE"),
             Expr::Function(function) => (self.handle_types_value_expr_aggr_function(function), "Aggregate function"),
-            Expr::Subquery(subquery) => (self.handle_types_value_subquery(subquery), "Subquery"),
+            Expr::Subquery(subquery) => (self.handle_types_value_subquery(subquery, &selected_types), "Subquery"),
             expr => {
                 let handlers: Vec<(Box<dyn FnMut(&mut PathGenerator) -> Result<SubgraphType, ConvertionError>>, &str)> = vec![
                     (Box::new(|_self| _self.handle_types_value_column_expr(expr)), "column identifier"),
@@ -1419,8 +1424,11 @@ impl PathGenerator {
         self.handle_aggregate_function(function)
     }
 
-    fn handle_types_value_subquery(&mut self, subquery: &Box<Query>) -> Result<SubgraphType, ConvertionError> {
+    fn handle_types_value_subquery(&mut self, subquery: &Box<Query>, selected_types: &Vec<SubgraphType>) -> Result<SubgraphType, ConvertionError> {
         self.try_push_state("call1_Query")?;
+        self.state_generator.set_known_query_type_list(QueryTypes::ColumnTypeLists {
+            column_type_lists: vec![selected_types.clone()]  // single column
+        });
         let col_type_list = self.handle_query(subquery)?;
         if let [(.., query_subgraph_type)] = col_type_list.as_slice() {
             // change to explorable if we use this feature
