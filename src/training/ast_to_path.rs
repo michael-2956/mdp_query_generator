@@ -323,7 +323,30 @@ impl PathGenerator {
         self.clause_context.on_query_begin(self.state_generator.get_fn_modifiers_opt());
         self.try_push_state("Query")?;
 
-        let select_body = match &*query.body {
+        self.try_push_state("call0_SELECT_query")?;
+        self.handle_select_query(&*query.body)?;
+
+        self.try_push_state("call0_ORDER_BY")?;
+        self.handle_order_by(&query.order_by)?;
+
+        self.try_push_state("call0_LIMIT")?;
+        self.handle_limit(&query.limit)?;
+
+        self.try_push_state("EXIT_Query")?;
+        let output_type = self.clause_context.query_mut().pop_output_type();
+        // if output_type.iter().filter_map(|(o, _)| o.as_ref()).any(|o| o.value == "C12") {
+        //     eprintln!("output: {:?}", output_type);
+        // }
+        self.clause_context.on_query_end();
+
+        return Ok(output_type)
+    }
+
+    /// subgraph def_SELECT_query
+    fn handle_select_query(&mut self, query_body: &SetExpr) -> Result<(), ConvertionError> {
+        self.try_push_state("SELECT_query")?;
+
+        let select_body = match query_body {
             SetExpr::Select(select_body) => select_body,
             any => return Err(ConvertionError::new(format!("Expected SetExpr::Select, got {any}")))
         };
@@ -351,7 +374,7 @@ impl PathGenerator {
                         Err(err_grouping) => {
                             self.restore_checkpoint_consume(implicit_group_by_checkpoint);
                             return Err(ConvertionError::new(format!(
-                                "Error converting query: {query}\n\
+                                "Error converting query: {query_body}\n\
                                 Tried without implicit groping, got an error: {err_no_grouping}\n\
                                 Tried with implicit groping, got an error: {err_grouping}"
                             )))
@@ -361,20 +384,9 @@ impl PathGenerator {
             }
         };
 
-        self.try_push_state("call0_ORDER_BY")?;
-        self.handle_order_by(&query.order_by)?;
+        self.try_push_state("EXIT_SELECT_query")?;
 
-        self.try_push_state("call0_LIMIT")?;
-        self.handle_limit(&query.limit)?;
-
-        self.try_push_state("EXIT_Query")?;
-        let output_type = self.clause_context.query_mut().pop_output_type();
-        // if output_type.iter().filter_map(|(o, _)| o.as_ref()).any(|o| o.value == "C12") {
-        //     eprintln!("output: {:?}", output_type);
-        // }
-        self.clause_context.on_query_end();
-
-        return Ok(output_type)
+        Ok(())
     }
 
     fn handle_query_after_group_by(&mut self, select_body: &Box<Select>, with_group_by: bool) -> Result<(), ConvertionError> {

@@ -1,34 +1,15 @@
-use sqlparser::ast::{Expr, GroupByExpr, Query, Select, SetExpr, Value};
+use sqlparser::ast::{Query, SetExpr};
 
-use crate::{query_creation::{query_generator::{ast_builders::{from::FromBuilder, group_by::GroupByBuilder, having::HavingBuilder, limit::LimitBuilder, order_by::OrderByBuilder, select::SelectBuilder, where_clause::WhereBuilder}, match_next_state, query_info::IdentName, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}}, unwrap_pat};
+use crate::query_creation::{query_generator::{ast_builders::{limit::LimitBuilder, order_by::OrderByBuilder}, query_info::IdentName, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}};
+
+use super::select_query::SelectQueryBuilder;
 
 pub struct QueryBuilder { }
 
-fn query_with_select(nothing: bool) -> Query {
-    let (distinct, projection) = if nothing {
-        SelectBuilder::nothing()
-    } else { SelectBuilder::highlight() };
-
+fn query_with_setexpr(setexpr: SetExpr) -> Query {
     Query {
         with: None,
-        body: Box::new(SetExpr::Select(Box::new(
-            Select {
-                distinct,
-                top: None,
-                projection,
-                into: None,
-                from: vec![],
-                lateral_views: vec![],
-                selection: None,
-                group_by: GroupByExpr::Expressions(vec![]),
-                cluster_by: vec![],
-                distribute_by: vec![],
-                sort_by: vec![],
-                having: None,
-                qualify: None,
-                named_window: vec![],
-            }
-        ))),
+        body: Box::new(setexpr),
         order_by: vec![],
         limit: None,
         offset: None,
@@ -43,10 +24,42 @@ fn query_with_select(nothing: bool) -> Query {
 // right is ALWAYS select
 // number of columns and column types must match
 
+// basically we create a set operation query
+// if agent selects intersect/union/except,
+// we make it into a set operation
+// we place existing query on the left and new one on the right
+// if even more additions are required we place the set operation on the left
+// and place new query on the right.
+
+// task 1: separate into query and select query
+// task 2: add union operaitons but order by is OFF when they are used. Update ast2path
+// task 3: study order by behavior
+// task 4: add order by
+// task 5: test & fix bugs
+// task 6: update ast 2 path
+// task 7: test syntactic coverage on spider
+// task 8: study & add with
+// task 9: update ast 2 path
+// task 10: test & fix bugs
+// task 11: test syntaxtic coverage on TPC-DS (adapt queries beforehand) and spider
+// task 12: find if anything is uncovered in tpc ds, cover it
+// task 13: modify all the queries as required for spider
+// task 14: describe experiment setup fully for syntax in paper
+// task 15: describe experiment setup fully for semantics in paper
+// task 16: polish other paper sections
+// + ADDITIONAL TASKS:
+// [
+//    task 17: discover how learnedsqlgen agent works and see how it can be implemented
+//    task 18: implement it and try to conduct experiment
+//    task 19: describe experiments in the paper and compare results
+// ]
+// task 20: final polish
+// task 21: submit
+
 /// subgraph def_Query
 impl QueryBuilder {
     pub fn nothing() -> Query {
-        query_with_select(true)
+        query_with_setexpr(SelectQueryBuilder::nothing())
     }
 
     /// highlights the output type. Query does not\
@@ -57,7 +70,7 @@ impl QueryBuilder {
     /// some decision will be affecting the single \
     /// output column of the query.
     pub fn highlight_type() -> Query {
-        query_with_select(false)
+        query_with_setexpr(SelectQueryBuilder::highlight_type())
     }
 
     pub fn build<StC: StateChooser>(
@@ -67,53 +80,8 @@ impl QueryBuilder {
         generator.clause_context.on_query_begin(generator.state_generator.get_fn_modifiers_opt());
         generator.expect_state("Query");
 
-        let select_body = &mut *unwrap_pat!(*query.body, SetExpr::Select(ref mut b), b);
-
-        generator.expect_state("call0_FROM");
-        select_body.from = FromBuilder::highlight();
-        FromBuilder::build(generator, &mut select_body.from);
-
-        select_body.selection = Some(WhereBuilder::highlight());
-        match_next_state!(generator, {
-            "call0_WHERE" => {
-                let where_val3 = select_body.selection.as_mut().unwrap();
-                WhereBuilder::build(generator, where_val3);
-                generator.expect_state("WHERE_done");
-            },
-            "WHERE_done" => { select_body.selection = None; },
-        });
-
-        select_body.group_by = GroupByBuilder::highlight();
-        match_next_state!(generator, {
-            "call0_GROUP_BY" => {
-                GroupByBuilder::build(generator, &mut select_body.group_by);
-
-                select_body.having = Some(HavingBuilder::highlight());
-                match_next_state!(generator, {
-                    "call0_HAVING" => {
-                        HavingBuilder::build(generator, select_body.having.as_mut().unwrap());
-                        generator.expect_state("call0_SELECT");
-                    },
-                    "call0_SELECT" => {
-                        select_body.having = None;
-                    },
-                });
-            },
-            "call0_SELECT" => {
-                select_body.group_by = GroupByBuilder::nothing();
-            },
-        });
-
-        (select_body.distinct, select_body.projection) = SelectBuilder::nothing();
-        SelectBuilder::build(generator, &mut select_body.distinct, &mut select_body.projection);
-
-        if generator.clause_context.top_group_by().is_grouping_active() && !generator.clause_context.query().is_aggregation_indicated() {
-            if select_body.group_by == GroupByExpr::Expressions(vec![]) {
-                // Grouping is active but wasn't indicated in any way. Add GROUP BY true
-                // instead of GROUP BY (), because unsupported by parser
-                select_body.group_by = GroupByExpr::Expressions(vec![Expr::Value(Value::Boolean(true))])
-            }
-        }
+        generator.expect_state("call0_SELECT_query");
+        SelectQueryBuilder::build(generator, &mut query.body);
 
         generator.expect_state("call0_ORDER_BY");
         query.order_by = OrderByBuilder::highlight();

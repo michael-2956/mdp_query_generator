@@ -79,8 +79,23 @@ digraph G {
         Query [TYPES="Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[single row]", label="Query\ntypes=Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[single row]", shape=octagon, style=filled, color=green]
         EXIT_Query [label="EXIT Query", shape=rectangle]
 
+        call0_SELECT_query [TYPES="Q[...]", label="SELECT query\nTYPES=Q[...]", shape=rectangle, color=dodgerblue, style=filled]
+        Query -> call0_SELECT_query
+
+        call0_ORDER_BY [label="ORDER BY", shape=rectangle, style=filled, color=deepskyblue]
+        call0_SELECT_query -> call0_ORDER_BY
+
+        call0_LIMIT [label="LIMIT\nMODS: [?single row]", MODS="[?single row]", shape=rectangle, style=filled, color=brown]
+        call0_ORDER_BY -> call0_LIMIT
+        call0_LIMIT -> EXIT_Query
+    }
+
+    subgraph def_SELECT_query {
+        SELECT_query [TYPES="Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[single row]", label="SELECT query\ntypes=Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[single row]", shape=rectangle, style=filled, color=dodgerblue]
+        EXIT_SELECT_query [label="EXIT SELECT Query", shape=rectangle]
+
         call0_FROM [label="FROM", shape=rectangle, color=cornflowerblue, style=filled]
-        Query -> call0_FROM
+        SELECT_query -> call0_FROM
 
         call0_WHERE [label="WHERE", shape=rectangle, style=filled, color=darkgoldenrod1]
         call0_FROM -> call0_WHERE
@@ -91,6 +106,7 @@ digraph G {
 
         call0_SELECT [label="SELECT\nTYPES: Q[...types]", TYPES="Q[...]", shape=rectangle, style=filled, color=bisque]
         WHERE_done -> call0_SELECT
+        call0_SELECT -> EXIT_SELECT_query
         
         call0_GROUP_BY [label="GROUP BY", shape=rectangle, style=filled, color=gray]
         WHERE_done -> call0_GROUP_BY
@@ -99,28 +115,7 @@ digraph G {
         call0_HAVING [label="HAVING", shape=rectangle, style=filled, color=mediumvioletred]
         call0_GROUP_BY -> call0_HAVING
         call0_HAVING -> call0_SELECT
-
-        call0_ORDER_BY [label="ORDER BY", shape=rectangle, style=filled, color=deepskyblue]
-        call0_SELECT -> call0_ORDER_BY
-
-        call0_LIMIT [label="LIMIT\nMODS: [?single row]", MODS="[?single row]", shape=rectangle, style=filled, color=brown]
-        call0_ORDER_BY -> call0_LIMIT
-        call0_LIMIT -> EXIT_Query
     }
-
-    // subgraph def_SELECT_query {
-    //     SELECT_query [TYPES="Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[single row]", label="SELECT query\ntypes=Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[single row]", shape=rectangle, style=filled, color=green]
-    //     EXIT_SELECT_query [label="EXIT SELECT Query", shape=rectangle]
-
-    //     This should accept the type set for each column or ANY(type set)
-    //     TYPES="Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]"
-    //     If Any(type set), any of the type set
-    //     If Columns(vec[type set]), every column is any of the type set. Number of columns is fixed
-
-    //     When passing arguments, TYPES="Q[any]" or TYPES="Q[known]", TYPES="Q[compatible]", TYPES="Q[...]"
-
-    //     SELECT_query -> EXIT_SELECT_query
-    // }
 
     subgraph def_FROM {
         FROM [shape=rectangle, color=cornflowerblue, style=filled]
@@ -1282,6 +1277,8 @@ digraph G {
     # cosmetic
     subgraph ignore {
         { rank = same; "call0_Query"; "FROM_item_table"; }
+
+        EXIT_Query -> SELECT_query [color=none]
 
         EXIT_FROM -> FROM_item [color=none, weight=10]
         EXIT_FROM_item -> WHERE [color=none, weight=10]

@@ -22,6 +22,7 @@ pub mod types_type;
 pub mod select_item;
 pub mod column_spec;
 pub mod types_value;
+pub mod select_query;
 pub mod where_clause;
 pub mod aggregate_function;
 pub mod select_datetime_field;
