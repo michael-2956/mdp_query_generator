@@ -85,7 +85,7 @@ impl SelectItemBuilder {
         });
 
         projection.push(SelectItem::UnnamedExpr(TypesBuilder::highlight()));
-        generator.expect_state("SELECT_item_can_more_columns");
+        generator.expect_state("SELECT_item_can_add_more_columns");
         match_next_state!(generator, {
             "SELECT_item_can_finish" => { projection.pop(); },
             "call1_SELECT_item" => {

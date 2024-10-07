@@ -553,18 +553,21 @@ impl PathGenerator {
             self.clause_context.query_mut().set_distinct();
         }
 
-        
+        /// TODO: remove
         let single_column_mod = match self.state_generator.get_fn_modifiers() {
             CallModifiers::StaticList(list) if list.contains(&SmolStr::new("single column")) => true,
             _ => false,
         };
-        
+
+        /// TODO: remove
         if single_column_mod && projection.len() != 1 {
             return Err(ConvertionError::new(format!(
                 "single column modifier is ON but the projection contains multiple columns: {:#?}",
                 projection
             )))
         }
+
+        /// TODO: update for new select item
         
         let select_item_state = if self.clause_context.top_group_by().is_grouping_active() {
             "call73_types"

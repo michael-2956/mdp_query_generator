@@ -683,7 +683,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
     pub fn reset(&mut self) {
         let accepted_types = unwrap_variant!(self.markov_chain.functions.get("Query").expect(
             "Graph should have an entry function named Query, with TYPES=[...]"
-        ).accepted_types.clone(), FunctionTypes::TypeList);
+        ).accepted_types.clone(), FunctionTypes::QueryTypeList);
 
         self.pending_call = Some(CallParams {
             func_name: SmolStr::new("Query"),

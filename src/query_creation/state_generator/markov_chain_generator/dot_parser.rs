@@ -645,30 +645,31 @@ fn read_opened_node_specification(
     node_name: &SmolStr,
 ) -> Result<HashMap<SmolStr, DotToken>, SyntaxError> {
     let mut props = HashMap::<_, _>::new();
-    let gen_props_error = || {
+    let gen_props_error = |x: Option<DotToken>| {
         SyntaxError::new(format!(
-            "expected source node property value: {}[PROP=\"VAL\", ...] or empty brackets: {}[]",
-            node_name, node_name
+            "expected source node property value: {}[PROP=\"VAL\", ...] or empty brackets: {}[]. Got: {:#?}",
+            node_name, node_name, x
         ))
     };
     loop {
         match lex.next() {
             Some(DotToken::Identifier(prop_name)) => match lex.next() {
                 Some(DotToken::Equals) => match lex.next() {
-                    Some(token @ DotToken::QuotedIdentifiersWithBrackets(_)) => {
+                    Some(token @ (
+                        DotToken::QuotedQueryIdentifiersWithBrackets(_) |
+                        DotToken::QuotedIdentifiersWithBrackets(_) |
+                        DotToken::QuotedIdentifiers(_)
+                    )) => {
                         props.insert(SmolStr::new(prop_name.to_uppercase()), token);
-                    }
-                    Some(token @ DotToken::QuotedIdentifiers(_)) => {
-                        props.insert(SmolStr::new(prop_name.to_uppercase()), token);
-                    }
+                    },
                     Some(DotToken::Identifier(_)) => continue,
-                    _ => break Err(gen_props_error()),
+                    any => break Err(gen_props_error(any)),
                 },
-                _ => break Err(gen_props_error()),
+                any => break Err(gen_props_error(any)),
             },
             Some(DotToken::CloseSpecification) => break Ok(props),
             Some(DotToken::Comma) => continue,
-            _ => break Err(gen_props_error()),
+            any => break Err(gen_props_error(any)),
         }
     }
 }

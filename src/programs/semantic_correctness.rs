@@ -27,7 +27,7 @@ pub fn test_semantic_correctness(config: Config) {
     let db = DatabaseSchema::parse_schema_string(schema_str);
 
     let mut path_query_generator = QueryGenerator::<ProbabilisticStateChooser>::from_state_generator_and_config_with_schema(
-        MarkovChainGenerator::with_config(&config.chain_config).unwrap(),
+        MarkovChainGenerator::with_config(&config.chain_config).unwrap_or_else(|err| { panic!("{err}") }),
         db.clone(),
         config.generator_config,
         Box::new(AntiCallModel::new(config.anticall_model_config.clone()))

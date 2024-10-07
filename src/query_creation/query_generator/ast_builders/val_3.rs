@@ -119,16 +119,17 @@ impl Val3Builder {
                 };
 
                 let tp = TypesTypeBuilder::build(generator);
-                generator.state_generator.set_compatible_query_type_list(QueryTypes::ColumnTypeLists {
-                    column_type_lists: vec![tp.get_compat_types()]  // single column
-                });
 
                 **unwrap_pat!(val3, Expr::InSubquery { subquery, .. }, subquery) = QueryBuilder::nothing();
 
+                generator.state_generator.set_compatible_list(tp.get_compat_types());
                 generator.expect_state("call58_types");
                 let expr = &mut **unwrap_pat!(val3, Expr::InSubquery { expr, .. }, expr);
                 TypesBuilder::build(generator, expr, TypeAssertion::CompatibleWith(tp.clone()));
 
+                generator.state_generator.set_compatible_query_type_list(QueryTypes::ColumnTypeLists {
+                    column_type_lists: vec![tp.get_compat_types()]  // single column
+                });
                 generator.expect_state("call3_Query");
                 let subquery = &mut **unwrap_pat!(val3, Expr::InSubquery { subquery, .. }, subquery);
                 QueryBuilder::build(generator, subquery);

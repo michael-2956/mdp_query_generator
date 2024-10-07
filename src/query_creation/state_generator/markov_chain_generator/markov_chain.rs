@@ -149,18 +149,13 @@ impl QueryTypes {
 }
 
 impl CallTypes {
-    fn from_function_inputs_type(node_name: &SmolStr, accepted_types: &FunctionTypes, input: FunctionInputsType, types_have_columns: bool) -> CallTypes {
+    fn from_function_inputs_type(node_name: &SmolStr, accepted_types: &FunctionTypes, input: FunctionInputsType) -> CallTypes {
         match input {
             FunctionInputsType::Any => {
                 match accepted_types {
                     FunctionTypes::None => panic!("Incorrect input type for node {node_name}: Any. Function does not accept arguments."),
-                    FunctionTypes::TypeList(list) => {
-                        if types_have_columns {
-                            CallTypes::QueryTypes(QueryTypes::TypeList { type_list: list.clone() })
-                        } else {
-                            CallTypes::TypeList(list.clone())
-                        }
-                    },
+                    FunctionTypes::QueryTypeList(list) => CallTypes::QueryTypes(QueryTypes::TypeList { type_list: list.clone() }),
+                    FunctionTypes::TypeList(list) => CallTypes::TypeList(list.clone()),
                 }
             },
             FunctionInputsType::None => CallTypes::None,
@@ -197,16 +192,23 @@ pub enum FunctionTypes {
     /// Indicate that no types are accepted.
     None,
     /// Specify the allowed type list, of which multiple can be selected.
-    /// In case of queries, these apply to all columns
     TypeList(Vec<SubgraphType>),
+    /// Specify the allowed type list, of which multiple can be selected.
+    /// This one is for functions that generate multiple columns, such as queries
+    QueryTypeList(Vec<SubgraphType>),
 }
 
 impl FunctionTypes {
-    fn from_function_inputs_type(source_node_name: &SmolStr, input: FunctionInputsType) -> FunctionTypes {
+    fn from_function_inputs_type(source_node_name: &SmolStr, input: FunctionInputsType, types_have_columns: bool) -> FunctionTypes {
         match input {
             FunctionInputsType::None => FunctionTypes::None,
             FunctionInputsType::TypeListWithFields(list) => {
-                FunctionTypes::TypeList(list.into_iter().map(|TypeWithFields::Type(x)| x).collect())
+                let tp_list = list.into_iter().map(|TypeWithFields::Type(x)| x).collect();
+                if types_have_columns {
+                    FunctionTypes::QueryTypeList(tp_list)
+                } else {
+                    FunctionTypes::TypeList(tp_list)
+                }
             },
             any => panic!("Incorrect input type for function {}: {:?}", source_node_name, any),
         }
@@ -227,9 +229,6 @@ pub struct Function {
     /// be restricted to generate, affecting optional
     /// nodes
     pub accepted_types: FunctionTypes,
-    /// whether the function can be restricted to
-    /// output multiple columns
-    pub types_have_columns: bool,
     /// a vector of special function modifiers. Affects
     /// the function behaviour, but not the nodes
     pub accepted_modifiers: Option<Vec<SmolStr>>,
@@ -248,8 +247,7 @@ impl Function {
     /// create Function struct from its parsed parameters
     fn new(declaration: FunctionDeclaration) -> Self {
         Function {
-            accepted_types: FunctionTypes::from_function_inputs_type(&declaration.source_node_name, declaration.input_type),
-            types_have_columns: declaration.types_have_columns,
+            accepted_types: FunctionTypes::from_function_inputs_type(&declaration.source_node_name, declaration.input_type, declaration.types_have_columns),
             accepted_modifiers: declaration.modifiers,
             source_node_name: declaration.source_node_name,
             exit_node_name: declaration.exit_node_name,
@@ -376,7 +374,7 @@ impl MarkovChain {
                             )));
                         };
                         CallTypes::from_function_inputs_type(
-                            &node_common.name, accepted_types, inputs, types_have_columns
+                            &node_common.name, accepted_types, inputs
                         )
                     };
                     define_node(&mut current_function, &mut node_params, node_common, Some(
@@ -431,15 +429,11 @@ impl MarkovChain {
                         )
                     };
 
-                    if call_params.types_have_columns != function.types_have_columns {
-                        return Err(SyntaxError::new(gen_type_error(format!(
-                            "Call node indicated a {} type, but the function type is {}.",
-                            if call_params.types_have_columns { "multi-column" } else { "single column" },
-                            if function.types_have_columns { "multi-column" } else { "single column" }
-                        ))))
-                    }
-
                     match (&call_params.selected_types, &function.accepted_types) {
+                        (
+                            CallTypes::QueryTypes(QueryTypes::TypeList { type_list }),
+                            FunctionTypes::QueryTypeList(func_type_list)
+                        ) if type_list.iter().all(|t| func_type_list.contains(t)) => {},
                         (
                             CallTypes::TypeList(types_list),
                             FunctionTypes::TypeList(func_types_list)
@@ -448,12 +442,14 @@ impl MarkovChain {
                             CallTypes::TypeListWithFields(types_list),
                             FunctionTypes::TypeList(func_types_list)
                         ) if types_list.iter().all(|t| func_types_list.contains(t.inner_ref())) => {},
-                        (CallTypes::None, FunctionTypes::TypeList(..) | FunctionTypes::None) => {},
                         (
-                            CallTypes::PassThrough, FunctionTypes::TypeList(..)
+                            CallTypes::None,
+                            FunctionTypes::None | FunctionTypes::TypeList(..) | FunctionTypes::QueryTypeList(..)
                         ) => {},
-                        (CallTypes::Compatible, FunctionTypes::TypeList(..)) => {},
-                        (CallTypes::KnownList, FunctionTypes::TypeList(..)) => {},
+                        (
+                            CallTypes::PassThrough | CallTypes::Compatible | CallTypes::KnownList,
+                            FunctionTypes::TypeList(..) | FunctionTypes::QueryTypeList(..)
+                        ) => {},
                         _ => return Err(SyntaxError::new(gen_type_error(format!(
                             "Got {:?}, but the function type is {:?}", call_params.selected_types, function.accepted_types,
                         ))))
