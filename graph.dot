@@ -79,15 +79,77 @@ digraph G {
         Query [TYPES="Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[single row]", label="Query\ntypes=Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[single row]", shape=octagon, style=filled, color=green]
         EXIT_Query [label="EXIT Query", shape=rectangle]
 
-        call0_SELECT_query [TYPES="Q[...]", label="SELECT query\nTYPES=Q[...]", shape=rectangle, color=dodgerblue, style=filled]
-        Query -> call0_SELECT_query
+        call1_set_expression_determine_type [TYPES="Q[...]", label="Set expression (determine type)\nTYPES=Q[...]", shape=rectangle, color=orchid, style=filled]
+        Query -> call1_set_expression_determine_type
+
+        call0_set_expression [TYPES="Q[known]", label="Set expression\nTYPES=Q[known]", shape=rectangle, color=indianred, style=filled]
+        call1_set_expression_determine_type -> call0_set_expression
 
         call0_ORDER_BY [label="ORDER BY", shape=rectangle, style=filled, color=deepskyblue]
-        call0_SELECT_query -> call0_ORDER_BY
+        call0_set_expression -> call0_ORDER_BY
 
         call0_LIMIT [label="LIMIT\nMODS: [?single row]", MODS="[?single row]", shape=rectangle, style=filled, color=brown]
         call0_ORDER_BY -> call0_LIMIT
         call0_LIMIT -> EXIT_Query
+    }
+
+    subgraph def_set_expression_determine_type {
+        set_expression_determine_type [TYPES="Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[single row]", label="Set expression (determine type)\ntypes=Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[single row]", shape=rectangle, style=filled, color=orchid]
+        EXIT_set_expression_determine_type [label="EXIT set expression (determine type)"]
+
+        call9_types_type [TYPES="[known]", label="Types type: [args[0]]\n[set value]", shape=rectangle, color=yellowgreen, style=filled, set_value="QueryTypeNotExhaustedValue"]
+        set_expression_determine_type -> call9_types_type
+
+        set_expression_determine_type_can_finish [label="can finish\n[call mod]", call_modifier="QueryTypeNotExhaustedModifier"]
+        call9_types_type -> set_expression_determine_type_can_finish
+        set_expression_determine_type_can_finish -> EXIT_set_expression_determine_type
+
+        call0_set_expression_determine_type [TYPES="Q[known]", label="Set expression (determine type)\nTYPES=Q[args[1:]]]\n[call mod]", call_modifier="QueryTypeNotExhaustedModifier", shape=rectangle, style=filled, color=orchid]
+        call9_types_type -> call0_set_expression_determine_type
+        call0_set_expression_determine_type -> EXIT_set_expression_determine_type
+    }
+
+    subgraph def_set_expression {
+        set_expression [TYPES="Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[single row]", label="Set expression\ntypes=Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nmods=[single row]", shape=rectangle, style=filled, color=indianred]
+        EXIT_set_expression [label="EXIT set operation", shape=rectangle]
+
+        call0_SELECT_query [TYPES="Q[...]", MODS="[?single row]", label="SELECT query\nTYPES=Q[...]\nMODS: [?single row]", shape=rectangle, color=dodgerblue, style=filled]
+        set_expression -> call0_SELECT_query
+        call0_SELECT_query -> EXIT_set_expression
+
+        // TODO: determine  type first
+
+        // manage operation precedence entirely in graph:
+        // if we have union or except, we forbid [union, except] on the right.
+        // Only intersect is stronger and can be placed on the right, but left can have anything
+        // if we have intersect, none are stronger, so we forbid [union, except, intersect] on the right
+        // and [union, except] on the left, since intersect can still be placed on the left.
+
+        // allow subqueries on either side. They can have everything
+
+        // leftmost query type is returned as a result.
+
+        // set_expression_set_operation [label="Set operation\nmod.: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
+        // set_expression -> set_expression_set_operation
+        // set_expression_set_operation_select_exprs [label="Select left/right"]
+        // query_set_op_intersect [label="intersect"]
+        // set_expression_set_operation -> query_set_op_intersect
+        // query_set_op_intersect -> set_expression_set_operation_select_exprs
+        // query_set_op_union [label="union"]
+        // set_expression_set_operation -> query_set_op_union
+        // query_set_op_union -> set_expression_set_operation_select_exprs
+        // query_set_op_except [label="except"]
+        // set_expression_set_operation -> query_set_op_except
+        // query_set_op_except -> set_expression_set_operation_select_exprs
+        
+        // call1_set_expression [TYPES="Q[...]", label="Set operation\nTYPES=Q[...]", shape=rectangle, color=indianred, style=filled]
+        // set_expression_set_operation_select_exprs -> call1_set_expression
+        // call2_set_expression [TYPES="Q[...]", label="Set operation\nTYPES=Q[...]", shape=rectangle, color=indianred, style=filled]
+        // call1_set_expression -> call2_set_expression
+        // call2_set_expression -> EXIT_set_expression
+
+        // call5_Query [TYPES="Q[...]", label="Query\nTYPES: [...types]", shape=rectangle, style=filled, color=green]
+        // call6_Query [TYPES="Q[...]", label="Query\nTYPES: [...types]", shape=rectangle, style=filled, color=green]
     }
 
     subgraph def_SELECT_query {
@@ -1278,7 +1340,9 @@ digraph G {
     subgraph ignore {
         { rank = same; "call0_Query"; "FROM_item_table"; }
 
-        EXIT_Query -> SELECT_query [color=none]
+        EXIT_Query -> set_expression_determine_type [color=none]
+        EXIT_set_expression_determine_type -> set_expression [color=none]
+        EXIT_set_expression -> SELECT_query [color=none]
 
         EXIT_FROM -> FROM_item [color=none, weight=10]
         EXIT_FROM_item -> WHERE [color=none, weight=10]

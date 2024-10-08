@@ -24,5 +24,7 @@ pub mod column_spec;
 pub mod types_value;
 pub mod select_query;
 pub mod where_clause;
+pub mod set_expression;
 pub mod aggregate_function;
 pub mod select_datetime_field;
+pub mod set_expression_determine_type;

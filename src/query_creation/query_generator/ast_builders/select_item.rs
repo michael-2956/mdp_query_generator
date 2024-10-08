@@ -74,8 +74,8 @@ impl SelectItemBuilder {
                     "call73_types" => { },
                     "call54_types" => { },
                 });
-                generator.state_generator.set_known_list(first_column_list);
-                let subgraph_type = TypesBuilder::build(generator, expr, TypeAssertion::None);
+                generator.state_generator.set_known_list(first_column_list.clone());
+                let subgraph_type = TypesBuilder::build(generator, expr, TypeAssertion::GeneratedByOneOf(&first_column_list));
                 generator.expect_state("select_expr_done");
                 if alias.is_none() {
                     alias = QueryProps::extract_alias(expr);

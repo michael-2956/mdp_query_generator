@@ -83,7 +83,7 @@ graph_file_path="graph.dot"
 
 [anticall_sub_model]
 # anticall dynamic model settings
-# stir_level=6
-# p_select_one_smaller=0.0
-stir_level=9
-p_select_one_smaller=0.09818215031911126
+stir_level=11
+p_select_one_smaller=0.0
+# stir_level=9
+# p_select_one_smaller=0.09818215031911126

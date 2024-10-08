@@ -24,6 +24,7 @@ pub enum ValueSetterValue {
     SelectIsNotDistinct(SelectIsNotDistinctValue),
     HasAccessibleColumns(HasAccessibleColumnsValue),
     IsColumnTypeAvailable(IsColumnTypeAvailableValue),
+    QueryTypeNotExhausted(QueryTypeNotExhaustedValue),
     SelectAccessibleColumns(SelectAccessibleColumnsValue),
     NameAccessibilityOfSelectedTypes(NameAccessibilityOfSelectedTypesValue),
 }
@@ -383,6 +384,57 @@ impl StatelessCallModifier for CanAddMoreColumnsModifier {
             "call1_SELECT_item" => should_add.unwrap_or(true),
             "SELECT_item_can_finish" => should_add.map(|x| !x).unwrap_or(true),
             any => panic!("CanAddMoreColumnsModifier value cannot be evalueted at {any}"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct QueryTypeNotExhaustedValue {
+    pub should_continue: Option<bool>,
+}
+
+impl NamedValue for QueryTypeNotExhaustedValue {
+    fn name() -> SmolStr {
+        SmolStr::new("QueryTypeNotExhaustedValue")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct QueryTypeNotExhaustedValueSetter { }
+
+impl ValueSetter for QueryTypeNotExhaustedValueSetter {
+    fn get_value_name(&self) -> SmolStr {
+        QueryTypeNotExhaustedValue::name()
+    }
+
+    fn get_value(&self, _clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
+        ValueSetterValue::QueryTypeNotExhausted(QueryTypeNotExhaustedValue {
+            should_continue: match unwrap_variant!(&function_context.call_params.selected_types, CallTypes::QueryTypes) {
+                QueryTypes::ColumnTypeLists { column_type_lists } => Some(column_type_lists.len() > 1),
+                QueryTypes::TypeList { .. } => None,
+            },
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct QueryTypeNotExhaustedModifier {}
+
+impl StatelessCallModifier for QueryTypeNotExhaustedModifier {
+    fn get_name(&self) -> SmolStr {
+        SmolStr::new("QueryTypeNotExhaustedModifier")
+    }
+
+    fn get_associated_value_name(&self) -> Option<SmolStr> {
+        Some(QueryTypeNotExhaustedValue::name())
+    }
+
+    fn run(&self, function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
+        let should_add = unwrap_variant!(associated_value.unwrap(), ValueSetterValue::QueryTypeNotExhausted).should_continue;
+        match function_context.current_node.node_common.name.as_str() {
+            "call0_set_expression_determine_type" => should_add.unwrap_or(true),
+            "set_expression_determine_type_can_finish" => should_add.map(|x| !x).unwrap_or(true),
+            any => panic!("QueryTypeNotExhaustedModifier value cannot be evalueted at {any}"),
         }
     }
 }

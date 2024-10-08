@@ -1,37 +1,35 @@
-use sqlparser::ast::{Expr, GroupByExpr, Select, SetExpr, Value};
+use sqlparser::ast::{Expr, GroupByExpr, Select, Value};
 
-use crate::{query_creation::{query_generator::{ast_builders::{from::FromBuilder, group_by::GroupByBuilder, having::HavingBuilder, select::SelectBuilder, where_clause::WhereBuilder}, match_next_state, QueryGenerator}, state_generator::state_choosers::StateChooser}, unwrap_pat};
+use crate::query_creation::{query_generator::{ast_builders::{from::FromBuilder, group_by::GroupByBuilder, having::HavingBuilder, select::SelectBuilder, where_clause::WhereBuilder}, match_next_state, QueryGenerator}, state_generator::state_choosers::StateChooser};
 
 pub struct SelectQueryBuilder { }
 
-fn select_set_expr(nothing: bool) -> SetExpr {
+fn select_set_expr(nothing: bool) -> Select {
     let (distinct, projection) = if nothing {
         SelectBuilder::nothing()
     } else { SelectBuilder::highlight() };
 
-    SetExpr::Select(Box::new(
-        Select {
-            distinct,
-            top: None,
-            projection,
-            into: None,
-            from: vec![],
-            lateral_views: vec![],
-            selection: None,
-            group_by: GroupByExpr::Expressions(vec![]),
-            cluster_by: vec![],
-            distribute_by: vec![],
-            sort_by: vec![],
-            having: None,
-            qualify: None,
-            named_window: vec![],
-        }
-    ))
+    Select {
+        distinct,
+        top: None,
+        projection,
+        into: None,
+        from: vec![],
+        lateral_views: vec![],
+        selection: None,
+        group_by: GroupByExpr::Expressions(vec![]),
+        cluster_by: vec![],
+        distribute_by: vec![],
+        sort_by: vec![],
+        having: None,
+        qualify: None,
+        named_window: vec![],
+    }
 }
 
 /// subgraph def_Query
 impl SelectQueryBuilder {
-    pub fn nothing() -> SetExpr {
+    pub fn nothing() -> Select {
         select_set_expr(true)
     }
 
@@ -42,17 +40,16 @@ impl SelectQueryBuilder {
     /// This function is only needed to highlight that \
     /// some decision will be affecting the single \
     /// output column of the query.
-    pub fn highlight_type() -> SetExpr {
+    pub fn highlight_type() -> Select {
         select_set_expr(false)
     }
 
     pub fn build<StC: StateChooser>(
-        generator: &mut QueryGenerator<StC>, body: &mut SetExpr
+        generator: &mut QueryGenerator<StC>, select_body: &mut Select
     ) {
         generator.expect_state("SELECT_query");
 
         generator.expect_state("call0_FROM");
-        let select_body = &mut *unwrap_pat!(body, SetExpr::Select(ref mut b), b);
         select_body.from = FromBuilder::highlight();
         FromBuilder::build(generator, &mut select_body.from);
 

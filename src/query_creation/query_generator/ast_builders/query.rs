@@ -1,8 +1,9 @@
+use itertools::Itertools;
 use sqlparser::ast::{Query, SetExpr};
 
-use crate::query_creation::{query_generator::{ast_builders::{limit::LimitBuilder, order_by::OrderByBuilder}, query_info::IdentName, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}};
+use crate::query_creation::{query_generator::{ast_builders::{limit::LimitBuilder, order_by::OrderByBuilder}, query_info::IdentName, QueryGenerator}, state_generator::{markov_chain_generator::markov_chain::QueryTypes, state_choosers::StateChooser, subgraph_type::SubgraphType}};
 
-use super::select_query::SelectQueryBuilder;
+use super::{set_expression::SetExpressionBuilder, set_expression_determine_type::SetExpressionDetermineTypeBuilder};
 
 pub struct QueryBuilder { }
 
@@ -30,9 +31,17 @@ fn query_with_setexpr(setexpr: SetExpr) -> Query {
 // we place existing query on the left and new one on the right
 // if even more additions are required we place the set operation on the left
 // and place new query on the right.
+// in case of intersect, the same happens but in reverse.
 
-// task 1: separate into query and select query
-// task 2: add union operaitons but order by is OFF when they are used. Update ast2path
+
+// So problems: single row is possible with intersect of multiple queries,
+// but actually we would have to know what's in the database to do that.
+// So if we have a single row any operations are forbidden.
+
+
+
+// + task 1: separate into query and select query
+// task 2: add union operations but order by is OFF when they are used. Update ast2path
 // task 3: study order by behavior
 // task 4: add order by
 // task 5: test & fix bugs
@@ -59,7 +68,7 @@ fn query_with_setexpr(setexpr: SetExpr) -> Query {
 /// subgraph def_Query
 impl QueryBuilder {
     pub fn nothing() -> Query {
-        query_with_setexpr(SelectQueryBuilder::nothing())
+        query_with_setexpr(SetExpressionBuilder::nothing())
     }
 
     /// highlights the output type. Query does not\
@@ -70,7 +79,7 @@ impl QueryBuilder {
     /// some decision will be affecting the single \
     /// output column of the query.
     pub fn highlight_type() -> Query {
-        query_with_setexpr(SelectQueryBuilder::highlight_type())
+        query_with_setexpr(SetExpressionBuilder::highlight_type())
     }
 
     pub fn build<StC: StateChooser>(
@@ -80,8 +89,17 @@ impl QueryBuilder {
         generator.clause_context.on_query_begin(generator.state_generator.get_fn_modifiers_opt());
         generator.expect_state("Query");
 
-        generator.expect_state("call0_SELECT_query");
-        SelectQueryBuilder::build(generator, &mut query.body);
+        generator.expect_state("call1_set_expression_determine_type");
+        let column_type_list = QueryTypes::ColumnTypeLists {
+            column_type_lists: SetExpressionDetermineTypeBuilder::build(
+                generator
+            ).into_iter().map(|x| vec![x]).collect_vec()
+        };
+
+        generator.expect_state("call0_set_expression");
+        generator.state_generator.set_known_query_type_list(column_type_list);
+        query.body = Box::new(SetExpressionBuilder::nothing());
+        SetExpressionBuilder::build(generator, &mut query.body);
 
         generator.expect_state("call0_ORDER_BY");
         query.order_by = OrderByBuilder::highlight();
