@@ -1,8 +1,6 @@
 use std::{error::Error, fmt, path::PathBuf, str::FromStr};
 
 pub mod tester;
-mod continue_after;
-
 
 use itertools::Itertools;
 use rand::SeedableRng;
@@ -25,8 +23,6 @@ use crate::{
     },
     unwrap_pat, unwrap_variant, unwrap_variant_or_else
 };
-
-use self::continue_after::TypesContinueAfter;
 
 pub struct AST2PathTestingConfig {
     pub schema: PathBuf,
@@ -1187,7 +1183,10 @@ impl PathGenerator {
 
     /// subgraph def_types
     fn handle_types(&mut self, expr: &Expr, type_assertion: TypeAssertion) -> Result<SubgraphType, ConvertionError> {
-        self.handle_types_continue_after(expr, type_assertion, TypesContinueAfter::None)
+        let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
+        let selected_types = SubgraphType::sort_by_compatibility(selected_types);
+        let mut selected_types_iter = selected_types.iter();
+        self.handle_types_continue_after(expr, type_assertion, &selected_types, &mut selected_types_iter)
     }
 
     fn _handle_types_and_try<F: Fn(&mut PathGenerator, SubgraphType) -> Result<(), ConvertionError>>(&mut self, expr: &Expr, type_assertion: TypeAssertion, and_try: F) -> Result<SubgraphType, ConvertionError> {
@@ -1196,11 +1195,13 @@ impl PathGenerator {
         //     _self.something(...);
         //     Ok(())
         // })?;
-        let mut continue_after = TypesContinueAfter::None;
+        let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
+        let selected_types = SubgraphType::sort_by_compatibility(selected_types);
+        let mut selected_types_iter = selected_types.iter();
         let mut err_msg = "".to_string();
         let checkpoint = self.get_checkpoint(true);
         loop {
-            let tp = match self.handle_types_continue_after(expr, type_assertion.clone(), continue_after) {
+            let tp = match self.handle_types_continue_after(expr, type_assertion.clone(), &selected_types, &mut selected_types_iter) {
                 Ok(tp) => tp,
                 Err(err) => break Err(ConvertionError::new(err_msg + format!("Finally: {err}\n").as_str())),
             };
@@ -1209,34 +1210,25 @@ impl PathGenerator {
                 Err(err) => {
                     err_msg += format!("Tried with {tp} returned by types, but got: {err}\n").as_str();
                     self.restore_checkpoint(&checkpoint);
-                    continue_after = TypesContinueAfter::ExprType(tp);
                 },
             };
         }
     }
 
-    fn handle_types_continue_after(&mut self, expr: &Expr, type_assertion: TypeAssertion, continue_after: TypesContinueAfter) -> Result<SubgraphType, ConvertionError> {
+    fn handle_types_continue_after<'a>(
+        &mut self, expr: &Expr, type_assertion: TypeAssertion,
+        selected_types: &Vec<SubgraphType>, selected_types_iter: &mut impl Iterator<Item = &'a SubgraphType>
+    ) -> Result<SubgraphType, ConvertionError> {
         self.try_push_state("types")?;
-        let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
-        let tp = self.handle_types_expr(selected_types, expr, continue_after)?;
+        let tp = self.handle_types_expr(expr, selected_types, selected_types_iter)?;
         self.try_push_state("EXIT_types")?;
         type_assertion.check(&tp, expr);
         return Ok(tp)
     }
 
-    fn handle_types_expr(&mut self, selected_types: Vec<SubgraphType>, expr: &Expr, continue_after: TypesContinueAfter) -> Result<SubgraphType, ConvertionError> {
+    fn handle_types_expr<'a>(&mut self, expr: &Expr, selected_types: &Vec<SubgraphType>, selected_types_iter: &mut impl Iterator<Item = &'a SubgraphType>) -> Result<SubgraphType, ConvertionError> {
         let mut err_str = "".to_string();
         let types_before_state_selection = self.get_checkpoint(true);
-        let selected_types = SubgraphType::sort_by_compatibility(selected_types);
-        let mut selected_types_iter = selected_types.iter();
-
-        if let TypesContinueAfter::ExprType(tp) = continue_after {
-            while let Some(subgraph_type) = selected_types_iter.next() {
-                if *subgraph_type == tp {
-                    break;
-                }
-            }
-        }
 
         // try out different allowed types to find the actual one (or not)
         let tp = loop {
@@ -1301,40 +1293,31 @@ impl PathGenerator {
         //     _self.something(...);
         //     Ok(())
         // })?;
-        let mut continue_after = TypesContinueAfter::None;
+        let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
+        let selected_types = SubgraphType::sort_by_compatibility(selected_types);
+        let mut selected_types_iter = selected_types.iter();
         let mut err_msg = "".to_string();
         let checkpoint = self.get_checkpoint(true);
         loop {
-            let tp = match self.handle_types_type_continue_after(continue_after) {
+            let tp = match self.handle_types_type_continue_after(&mut selected_types_iter, &selected_types) {
                 Ok(tp) => tp,
                 Err(err) => break Err(ConvertionError::new(format!("{err}\n{}", err_msg.get_indentated_string()))),
             };
             type_assertion.check_type(&tp);
             match and_try(self, tp.clone()) {
-                Ok(..) => break Ok(tp),
+                Ok(..) => break Ok(tp.clone()),
                 Err(err) => {
                     err_msg += format!("Tried with {tp}, but got: {}\n", err.get_indentated_string()).as_str();
                     self.restore_checkpoint(&checkpoint);
-                    continue_after = TypesContinueAfter::ExprType(tp);
                 },
             };
         }
     }
 
-    fn handle_types_type_continue_after(&mut self, continue_after: TypesContinueAfter) -> Result<SubgraphType, ConvertionError> {
+    fn handle_types_type_continue_after<'a>(
+        &mut self, selected_types_iter: &mut impl Iterator<Item = &'a SubgraphType>, selected_types: &Vec<SubgraphType>
+    ) -> Result<&'a SubgraphType, ConvertionError> {
         self.try_push_state("types_type")?;
-
-        let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
-        let selected_types = SubgraphType::sort_by_compatibility(selected_types);
-        let mut selected_types_iter = selected_types.iter();
-
-        if let TypesContinueAfter::ExprType(tp) = continue_after {
-            while let Some(subgraph_type) = selected_types_iter.next() {
-                if *subgraph_type == tp {
-                    break;
-                }
-            }
-        }
 
         let subgraph_type = match selected_types_iter.next() {
             Some(subgraph_type) => subgraph_type,
@@ -1357,7 +1340,7 @@ impl PathGenerator {
 
         self.try_push_state("EXIT_types_type")?;
 
-        Ok(subgraph_type.clone())
+        Ok(subgraph_type)
     }
 
     /// subgraph def_types_value
