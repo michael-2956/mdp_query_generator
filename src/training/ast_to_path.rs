@@ -1,4 +1,4 @@
-use std::{error::Error, fmt, path::PathBuf, str::FromStr};
+use std::{error::Error, fmt, path::PathBuf, str::FromStr, sync::{Arc, Mutex}};
 
 pub mod tester;
 
@@ -56,6 +56,44 @@ impl ConvertionError {
     pub fn new(reason: String) -> Self {
         Self {
             reason
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ConvertionErrorWithPartialSelectType {
+    select_type: Vec<SubgraphType>,
+    err: ConvertionError,
+}
+
+impl Error for ConvertionErrorWithPartialSelectType { }
+
+impl fmt::Display for ConvertionErrorWithPartialSelectType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Partial Select Type: {:?}\nError:\n{}", self.select_type, self.err)
+    }
+}
+
+macro_rules! add_pst {
+    ($result:expr) => {
+        $result.map_err(|err| ConvertionErrorWithPartialSelectType {
+            select_type: vec![], err
+        })
+    };
+}
+
+impl ConvertionErrorWithPartialSelectType {
+    fn with_reason(reason: String) -> Self {
+        Self {
+            select_type: vec![],
+            err: ConvertionError::new(reason),
+        }
+    }
+
+    fn with_reason_and_type(reason: String, select_type: Vec<SubgraphType>) -> Self {
+        Self {
+            select_type: select_type,
+            err: ConvertionError::new(reason),
         }
     }
 }
@@ -220,6 +258,15 @@ impl DynClone for Checkpoint {
     }
 }
 
+fn determine_n_cols(set_expr: &SetExpr) -> usize {
+    match set_expr {
+        SetExpr::Select(select) => select.projection.len(),
+        SetExpr::Query(query) => determine_n_cols(&query.body),
+        SetExpr::SetOperation { op: _, set_quantifier: _, left, right: _ } => determine_n_cols(&left),
+        any => unimplemented!("{any}"),
+    }
+}
+
 impl PathGenerator {
     fn next_state_opt(&mut self) -> Result<Option<SmolStr>, ConvertionError> {
         match self.state_generator.next_node_name(
@@ -241,6 +288,7 @@ impl PathGenerator {
                 panic!("State generator returned {actual_state}, expected {state}");
             }
         } else {
+            self.state_generator.print_stack();
             panic!("State generator stopped prematurely");
         }
         if is_new_function_initial_state {
@@ -319,8 +367,7 @@ impl PathGenerator {
         self.clause_context.on_query_begin(self.state_generator.get_fn_modifiers_opt());
         self.try_push_state("Query")?;
 
-        self.try_push_state("call0_SELECT_query")?;
-        self.handle_select_query(&*query.body)?;
+        self.handle_query_body(&query.body)?;
 
         self.try_push_state("call0_ORDER_BY")?;
         self.handle_order_by(&query.order_by)?;
@@ -338,24 +385,109 @@ impl PathGenerator {
         return Ok(output_type)
     }
 
-    /// subgraph def_SELECT_query
-    fn handle_select_query(&mut self, query_body: &SetExpr) -> Result<(), ConvertionError> {
-        self.try_push_state("SELECT_query")?;
+    fn handle_query_body(&mut self, query_body: &SetExpr) -> Result<(), ConvertionError> {
+        self.try_push_state("call1_set_expression_determine_type")?;
+        let n_cols = determine_n_cols(query_body);
+        self.handle_set_expression_determine_type_and_try(
+            n_cols, n_cols, vec![], |_self, column_types| {
+                let column_type_list = QueryTypes::ColumnTypeLists {
+                    column_type_lists: column_types.into_iter().map(|x| vec![x]).collect_vec()
+                };
+                add_pst!(_self.try_push_state("call0_set_expression"))?;
+                _self.state_generator.set_known_query_type_list(column_type_list);
+                _self.handle_set_expression(query_body)?;
+                Ok(())
+            }
+        )?;
+        Ok(())
+    }
 
-        let select_body = match query_body {
-            SetExpr::Select(select_body) => select_body,
-            any => return Err(ConvertionError::new(format!("Expected SetExpr::Select, got {any}")))
-        };
+    /// subgraph def_set_expression_determine_type
+    fn handle_set_expression_determine_type_and_try<F: Fn(&mut PathGenerator, Vec<SubgraphType>) -> Result<(), ConvertionErrorWithPartialSelectType> + Clone>(
+        &mut self, n_cols_remaining: usize, n_cols_total: usize, column_types: Vec<SubgraphType>, and_try: F
+    ) -> Result<Option<ConvertionErrorWithPartialSelectType>, ConvertionError> {
+        self.try_push_states(&["set_expression_determine_type", "call9_types_type"])?;
+        let column_type_lists = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::QueryTypes);
+        let (first_column_list, remaining_columns) = column_type_lists.split_first();
+        self.state_generator.set_known_list(first_column_list.clone());
+        let n_cols_completed = n_cols_total - n_cols_remaining;
+        let error_with_incomplete_type: Arc<Mutex<Option<ConvertionErrorWithPartialSelectType>>> = Arc::new(Mutex::new(None));
+        self.handle_types_type_and_try(TypeAssertion::GeneratedByOneOf(&first_column_list), |_self, tp: SubgraphType| {
+            let mut column_types = column_types.clone();
+            column_types.push(tp.clone());
+            if n_cols_remaining == 1 {  // we are the last remaining column
+                _self.try_push_state("set_expression_determine_type_can_finish")?;
+                for _ in 0..n_cols_total {  // so exit the set_expression_determine_type subgraph
+                    _self.try_push_state("EXIT_set_expression_determine_type")?;
+                }  // and try to proceed with the selected types
+                match and_try(_self, column_types.clone()) {
+                    Ok(()) => { },  // all worked ok. Finish without an error.
+                    Err(err) => {
+                        if n_cols_completed == err.select_type.len() {
+                            // we, the last link, are responsible for the error.
+                            return Err(ConvertionError::new(format!(
+                                "Having determined {n_cols_completed}/{n_cols_total} types: {:?},\nTried {tp} for the last column, but got an error:\n{}",
+                                err.select_type, err.err
+                            )))
+                        } else {
+                            // will make us, the last link in the chain, return Ok(err)
+                            // this will in turn allow to backtrack until we meet the problem causing type
+                            *error_with_incomplete_type.lock().unwrap() = Some(err);
+                        }
+                    },
+                }
+            } else {  // let others select initial types
+                _self.try_push_state("call0_set_expression_determine_type")?;
+                _self.state_generator.set_known_query_type_list(remaining_columns.clone());
+                let inner_error_opt = _self.handle_set_expression_determine_type_and_try(
+                    n_cols_remaining - 1, n_cols_total, column_types, and_try.clone()
+                )?;
+                if let Some(inner_error) = inner_error_opt {
+                    // inner handler finished because of an error
+                    if inner_error.select_type.len() == n_cols_completed {
+                        // we are the one responsible for the error, so try a new type:
+                        return Err(ConvertionError::new(format!(
+                            "Having determined {n_cols_completed}/{n_cols_total} types: {:?},\nTried {tp} for the next column, but got an error:\n{}",
+                            inner_error.select_type, inner_error.err
+                        )))
+                    } else {
+                        // we are not responsible for this error, so pass it up and return Ok(err)
+                        *error_with_incomplete_type.lock().unwrap() = Some(inner_error);
+                    }
+                }
+            }
+            Ok(())
+        })?;
+        let ans = error_with_incomplete_type.lock().unwrap().take();
+        Ok(ans)
+    }
+
+    /// subgraph def_set_expression
+    fn handle_set_expression(&mut self, query_body: &SetExpr) -> Result<(), ConvertionErrorWithPartialSelectType> {
+        add_pst!(self.try_push_state("set_expression"))?;
+
+        add_pst!(self.try_push_state("call0_SELECT_query"))?;
+        let select_body = &**unwrap_variant!(query_body, SetExpr::Select);
+        self.handle_select_query(select_body)?;
+
+        add_pst!(self.try_push_state("EXIT_set_expression"))?;
+
+        Ok(())
+    }
+
+    /// subgraph def_SELECT_query
+    fn handle_select_query(&mut self, select_body: &Select) -> Result<(), ConvertionErrorWithPartialSelectType> {
+        add_pst!(self.try_push_state("SELECT_query"))?;
         
-        self.try_push_state("call0_FROM")?;
-        self.handle_from(&select_body.from)?;
+        add_pst!(self.try_push_state("call0_FROM"))?;
+        add_pst!(self.handle_from(&select_body.from))?;
 
         if let Some(ref selection) = select_body.selection {
-            self.try_push_state("call0_WHERE")?;
-            self.handle_where(selection)?;
+            add_pst!(self.try_push_state("call0_WHERE"))?;
+            add_pst!(self.handle_where(selection))?;
         }
 
-        self.try_push_state("WHERE_done")?;
+        add_pst!(self.try_push_state("WHERE_done"))?;
 
         if select_body.group_by != GroupByExpr::Expressions(vec![]) {
             self.handle_query_after_group_by(select_body, true)?;
@@ -369,40 +501,47 @@ impl PathGenerator {
                         Ok(..) => { },
                         Err(err_grouping) => {
                             self.restore_checkpoint_consume(implicit_group_by_checkpoint);
-                            return Err(ConvertionError::new(format!(
-                                "Error converting query: {query_body}\n\
-                                Tried without implicit groping, got an error: {err_no_grouping}\n\
-                                Tried with implicit groping, got an error: {err_grouping}"
-                            )))
+                            return Err(ConvertionErrorWithPartialSelectType::with_reason_and_type(
+                                format!(
+                                    "Error converting query: {select_body}\n\
+                                    Tried without implicit groping, got an error: {err_no_grouping}\n\
+                                    Tried with implicit groping, got an error: {err_grouping}"
+                                ),
+                                if err_grouping.select_type.len() > err_no_grouping.select_type.len() {
+                                    err_grouping.select_type
+                                } else {
+                                    err_no_grouping.select_type
+                                }
+                            ))
                         }
                     }
                 }
             }
         };
 
-        self.try_push_state("EXIT_SELECT_query")?;
+        add_pst!(self.try_push_state("EXIT_SELECT_query"))?;
 
         Ok(())
     }
 
-    fn handle_query_after_group_by(&mut self, select_body: &Box<Select>, with_group_by: bool) -> Result<(), ConvertionError> {
+    fn handle_query_after_group_by(&mut self, select_body: &Select, with_group_by: bool) -> Result<(), ConvertionErrorWithPartialSelectType> {
         if with_group_by {
-            self.try_push_state("call0_GROUP_BY")?;
-            self.handle_group_by(&select_body.group_by)?;
+            add_pst!(self.try_push_state("call0_GROUP_BY"))?;
+            add_pst!(self.handle_group_by(&select_body.group_by))?;
         }
 
         if let Some(ref having) = select_body.having {
             if self.clause_context.top_group_by().is_grouping_active() {
-                self.try_push_state("call0_HAVING")?;
-                self.handle_having(having)?;
+                add_pst!(self.try_push_state("call0_HAVING"))?;
+                add_pst!(self.handle_having(having))?;
             } else {
-                return Err(ConvertionError::new(format!(
+                return Err(ConvertionErrorWithPartialSelectType::with_reason(format!(
                     "HAVING was used but with_grouping was set to false"
                 )))
             }
         }
 
-        self.try_push_state("call0_SELECT")?;
+        add_pst!(self.try_push_state("call0_SELECT"))?;
         self.handle_select(&select_body.distinct, &select_body.projection)?;
 
         Ok(())
@@ -552,13 +691,13 @@ impl PathGenerator {
     }
 
     /// subgraph def_SELECT
-    fn handle_select(&mut self, distinct: &Option<Distinct>, projection: &Vec<SelectItem>) -> Result<(), ConvertionError> {
-        self.try_push_state("SELECT")?;
+    fn handle_select(&mut self, distinct: &Option<Distinct>, projection: &Vec<SelectItem>) -> Result<Vec<SubgraphType>, ConvertionErrorWithPartialSelectType> {
+        add_pst!(self.try_push_state("SELECT"))?;
         if distinct.is_some() {
-            self.try_push_state("SELECT_DISTINCT")?;
+            add_pst!(self.try_push_state("SELECT_DISTINCT"))?;
             self.clause_context.query_mut().set_distinct();
         }
-        self.try_push_state("call0_SELECT_item")?;
+        add_pst!(self.try_push_state("call0_SELECT_item"))?;
         
         let select_item_state = if self.clause_context.top_group_by().is_grouping_active() {
             "call73_types"
@@ -567,11 +706,21 @@ impl PathGenerator {
         };
 
         self.clause_context.query_mut().create_select_type();  // before the first item is called
-        self.handle_select_item(projection.as_slice(), select_item_state)?;
+        let select_type = match self.handle_select_item(projection.as_slice(), select_item_state) {
+            Ok(..) => {
+                self.clause_context.query_mut().select_type().iter().map(|(_, tp)| tp.clone()).collect_vec()
+            },
+            Err(err) => {
+                return Err(ConvertionErrorWithPartialSelectType {
+                    select_type: self.clause_context.query_mut().select_type().iter().map(|(_, tp)| tp.clone()).collect_vec(),
+                    err,
+                })
+            },
+        };
 
-        self.try_push_state("EXIT_SELECT")?;
+        add_pst!(self.try_push_state("EXIT_SELECT"))?;
 
-        Ok(())
+        Ok(select_type)
     }
 
     /// subgraph def_SELECT_item
@@ -636,7 +785,6 @@ impl PathGenerator {
             },
         }
 
-        // projection.push(SelectItem::UnnamedExpr(TypesBuilder::highlight()));
         self.try_push_state("SELECT_item_can_add_more_columns")?;
         if remaining_projection.len() == 0 {
             self.try_push_state("SELECT_item_can_finish")?;
@@ -1183,6 +1331,7 @@ impl PathGenerator {
 
     /// subgraph def_types
     fn handle_types(&mut self, expr: &Expr, type_assertion: TypeAssertion) -> Result<SubgraphType, ConvertionError> {
+        self.try_push_state("types")?;
         let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
         let selected_types = SubgraphType::sort_by_compatibility(selected_types);
         let mut selected_types_iter = selected_types.iter();
@@ -1195,11 +1344,13 @@ impl PathGenerator {
         //     _self.something(...);
         //     Ok(())
         // })?;
+        self.try_push_state("types")?;
         let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
         let selected_types = SubgraphType::sort_by_compatibility(selected_types);
         let mut selected_types_iter = selected_types.iter();
         let mut err_msg = "".to_string();
-        let checkpoint = self.get_checkpoint(true);
+        // can't use cutoff because restoration may be on a level that's less deep
+        let checkpoint = self.get_checkpoint(false);
         loop {
             let tp = match self.handle_types_continue_after(expr, type_assertion.clone(), &selected_types, &mut selected_types_iter) {
                 Ok(tp) => tp,
@@ -1215,11 +1366,11 @@ impl PathGenerator {
         }
     }
 
+    /// only use in handle_types/handle_types_and_try
     fn handle_types_continue_after<'a>(
         &mut self, expr: &Expr, type_assertion: TypeAssertion,
         selected_types: &Vec<SubgraphType>, selected_types_iter: &mut impl Iterator<Item = &'a SubgraphType>
     ) -> Result<SubgraphType, ConvertionError> {
-        self.try_push_state("types")?;
         let tp = self.handle_types_expr(expr, selected_types, selected_types_iter)?;
         self.try_push_state("EXIT_types")?;
         type_assertion.check(&tp, expr);
@@ -1293,11 +1444,13 @@ impl PathGenerator {
         //     _self.something(...);
         //     Ok(())
         // })?;
+        self.try_push_state("types_type")?;
         let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
         let selected_types = SubgraphType::sort_by_compatibility(selected_types);
         let mut selected_types_iter = selected_types.iter();
         let mut err_msg = "".to_string();
-        let checkpoint = self.get_checkpoint(true);
+        // can't use cutoff because restoration may be on a level that's less deep
+        let checkpoint = self.get_checkpoint(false);
         loop {
             let tp = match self.handle_types_type_continue_after(&mut selected_types_iter, &selected_types) {
                 Ok(tp) => tp,
@@ -1314,11 +1467,10 @@ impl PathGenerator {
         }
     }
 
+    /// only for use in handle_types_type_and_try
     fn handle_types_type_continue_after<'a>(
         &mut self, selected_types_iter: &mut impl Iterator<Item = &'a SubgraphType>, selected_types: &Vec<SubgraphType>
     ) -> Result<&'a SubgraphType, ConvertionError> {
-        self.try_push_state("types_type")?;
-
         let subgraph_type = match selected_types_iter.next() {
             Some(subgraph_type) => subgraph_type,
             None => return Err(ConvertionError::new(format!(

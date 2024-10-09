@@ -843,7 +843,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         self.call_stack.last().unwrap().function_context.current_node.node_common.name.clone()
     }
 
-    /// choose a new node among the available destibation nodes with the fynamic model
+    /// choose a new node among the available destibation nodes with the dynamic model
     fn update_current_node(
             &mut self,
             rng: &mut ChaCha8Rng,

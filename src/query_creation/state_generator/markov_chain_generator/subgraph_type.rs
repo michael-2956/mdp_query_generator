@@ -177,7 +177,9 @@ impl SubgraphType {
     pub fn sort_by_compatibility(mut type_vec: Vec<SubgraphType>) -> Vec<SubgraphType> {
         type_vec.sort_unstable_by(
             |tp1, tp2| 
-            if tp1.get_compat_types().contains(tp2) {
+            if tp1.get_compat_types().contains(tp2) && tp2.get_compat_types().contains(tp1) {
+                Ordering::Equal
+            } else if tp1.get_compat_types().contains(tp2) {
                 Ordering::Greater
             } else if tp2.get_compat_types().contains(tp1) {
                 Ordering::Less
