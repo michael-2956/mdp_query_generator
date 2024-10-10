@@ -393,6 +393,7 @@ impl ClauseContext {
         self.query_props_stack.last_mut().unwrap()
     }
 
+    /// from is not active when it's not finished yet
     pub fn top_active_from(&self) -> &FromContents {
         self.all_accessible_froms.top_active_from()
     }
@@ -1368,6 +1369,12 @@ impl FromContents {
         })
     }
 
+    pub fn get_n_wildcard_columns(&self) -> usize {
+        self.relations.iter().map(|(_, rel)| {
+            rel.get_n_wildcard_columns()
+        }).sum()
+    }
+
     /// returns relations in the order that they were listed (used for wildcard)
     fn ordered_relations_iter(&self) -> impl Iterator<Item = (&IdentName, &Relation)> {
         self.relation_name_order.iter().map(|rel_name| {
@@ -1493,5 +1500,9 @@ impl Relation {
     /// get all columns with their types, including the unnamed ones and ambiguous ones
     pub fn get_wildcard_columns_iter(&self) -> impl Iterator<Item = (Option<IdentName>, SubgraphType)> + '_ {
         self.wildcard_columns.iter().cloned()
+    }
+
+    pub fn get_n_wildcard_columns(&self) -> usize {
+        self.wildcard_columns.len()
     }
 }
