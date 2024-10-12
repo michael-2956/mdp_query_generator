@@ -285,8 +285,6 @@ fn determine_n_cols_and_responsible_wildcard_with_clause_context(projection: &Ve
     let mut n_cols = 0usize;
     let mut responsible_wildcard_type = None;
     let mut was_set = false;
-    // let proj = projection.iter().map(|it| format!("{it}")).join(", ");
-    // eprintln!("Projection: {proj}");
     for item in projection.iter() {
         let (n_new_cols, wildcard_type) = if matches!(item, SelectItem::Wildcard(..) | SelectItem::QualifiedWildcard(..)) {
             match item {
@@ -315,10 +313,6 @@ fn determine_n_cols_and_responsible_wildcard_with_clause_context(projection: &Ve
             was_set = true;
         }
     }
-    // eprintln!("DEBUG determine_n_cols_and_responsible_wildcard_with_clause_context");
-    // eprintln!("n_cols = {n_cols}");
-    // eprintln!("n_select_types = {n_select_types}");
-    // eprintln!("responsible_wildcard_type = {:?}\n\n", responsible_wildcard_type);
     (n_cols, responsible_wildcard_type)
 }
 
@@ -538,7 +532,6 @@ impl PathGenerator {
         mut item_type_iter: Option<impl Iterator<Item = SubgraphType> + Clone>,
         and_try: F
     ) -> Result<Option<ConvertionErrorWithPartialSelectType>, ConvertionError> {
-        // eprintln!("{}", expr_str.clone().unwrap());
         let before_us_checkpoint = self.get_checkpoint(false);
         self.try_push_states(&["set_expression_determine_type", "call9_types_type"])?;
         let column_type_lists = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::QueryTypes);
@@ -604,25 +597,15 @@ impl PathGenerator {
 
         if let Some(tp) = tp_opt {
             // type is known: don't test it out
-            // eprintln!("Using type: {tp}");
             self.handle_types_type(&tp)?;
             continue_with_type(self, tp)?;
             if let Some(error_with_new_cols_type_info) = error_with_new_cols_type_info.lock().unwrap().take() {
-                if error_with_new_cols_type_info.responsible_wildcard_type.is_some() {
-                    // eprintln!("error_with_new_cols_type_info: ");
-                    // eprintln!("n_cols_total: {n_cols_total}");
-                    // eprintln!("select_type: {:?}", error_with_new_cols_type_info.select_type);
-                    // eprintln!("real_n_cols: {:?}", error_with_new_cols_type_info.real_n_cols);
-                    // eprintln!("responsible_wildcard_type: {:?}", error_with_new_cols_type_info.responsible_wildcard_type);
-                    // eprintln!("err: {}", error_with_new_cols_type_info.err);
-                }
                 return Err(ConvertionError::new(format!(
                     "Unexpected type information exit after type already determined.\nGot responsible_wildcard_type = {:?}\nGot err = {}",
                     error_with_new_cols_type_info.responsible_wildcard_type,
                     error_with_new_cols_type_info.err
                 )));
             }
-            // assert!(error_with_new_cols_type_info.lock().unwrap().take().is_none());
         } else {
             // type is not known: test it out
             self.handle_types_type_and_try(
@@ -634,7 +617,6 @@ impl PathGenerator {
                 |err| err.responsible_wildcard_type);
             // did we get any type info?
             if let Some(new_cols_type_info) = new_cols_type_info {
-                // eprintln!("Got a type: {:?}", new_cols_type_info);
                 // if yes, try again but with the known type
                 self.restore_checkpoint_consume(before_us_checkpoint);
                 self.handle_set_expression_determine_type_and_try(
@@ -908,7 +890,6 @@ impl PathGenerator {
                 self.clause_context.query_mut().select_type().iter().map(|(_, tp)| tp.clone()).collect_vec()
             },
             Err(err) => {
-                // eprintln!("\n\nFrom handle_select_item, got the error: {err}\n\n");
                 let select_type = self.clause_context.query_mut().select_type().iter().map(|(_, tp)| tp.clone()).collect_vec();
                 let (real_n_cols, responsible_wildcard_type) = determine_n_cols_and_responsible_wildcard_with_clause_context(
                     projection, &self.clause_context, select_type.len()
