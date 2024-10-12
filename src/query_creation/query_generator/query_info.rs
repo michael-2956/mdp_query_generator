@@ -443,14 +443,20 @@ impl ClauseContext {
         }).collect()
     }
 
+    /// allow_prefix allows columns to be a prefix of query_types
     fn all_columns_match_types_and_names(
         columns: Vec<(IdentName, Option<IdentName>, SubgraphType)>,
         query_types: &QueryTypes,
-        allowed_rel_col_names_opt: &Option<HashSet<[IdentName; 2]>>
+        allowed_rel_col_names_opt: &Option<HashSet<[IdentName; 2]>>,
+        allow_prefix: bool,
     ) -> bool {
         match query_types {
             QueryTypes::ColumnTypeLists { column_type_lists } => {
-                column_type_lists.len() == columns.len() && columns.into_iter()
+                (if allow_prefix {  // columns can be smaller
+                    column_type_lists.len() >= columns.len()
+                } else {  // columns must match exactly
+                    column_type_lists.len() == columns.len()
+                }) && columns.into_iter()
                     .zip(column_type_lists.iter()).all(
                         |((rel_name, col_name, col_type), allowed_tps)| {
                             allowed_tps.contains_generator_of(&col_type) && if let Some(
@@ -498,11 +504,10 @@ impl ClauseContext {
                 |(col, tp)| ((*rel_name).clone(), col, tp)
             )
         }).collect_vec();
-        Self::all_columns_match_types_and_names(columns, query_types, &allowed_rel_col_names_opt)
+        Self::all_columns_match_types_and_names(columns, query_types, &allowed_rel_col_names_opt, false)
     }
 
     pub fn get_relation_levels_selectable_by_qualified_wildcard(&self, query_types: &QueryTypes) -> Vec<Vec<IdentName>> {
-        // first level is always present because we're in SELECT (important bc this function's first level is used to check if wildcard is possible)
         self.get_filtered_from_clause_hierarchy_with_allowed_columns(ColumnRetrievalOptions::new(
             self.top_group_by().is_grouping_active(),
             false, // we are in SELECT
@@ -513,7 +518,7 @@ impl ClauseContext {
                     let columns = relation.get_wildcard_columns_iter().map(
                         |(col, tp)| ((**rel_name).clone(), col, tp)
                     ).collect_vec();
-                    Self::all_columns_match_types_and_names(columns, query_types, &allowed_rel_col_names_opt)
+                    Self::all_columns_match_types_and_names(columns, query_types, &allowed_rel_col_names_opt, true)
                 }
             }).map(|(rel_name, ..)| rel_name.clone()).collect()
         }).collect()
@@ -1369,6 +1374,12 @@ impl FromContents {
         })
     }
 
+    pub fn get_wildcard_type(&self) -> Vec<SubgraphType> {
+        self.ordered_relations_iter().flat_map(|(_, relation)| {
+            relation.get_wildcard_type().into_iter()
+        }).collect_vec()
+    }
+
     pub fn get_n_wildcard_columns(&self) -> usize {
         self.relations.iter().map(|(_, rel)| {
             rel.get_n_wildcard_columns()
@@ -1500,6 +1511,10 @@ impl Relation {
     /// get all columns with their types, including the unnamed ones and ambiguous ones
     pub fn get_wildcard_columns_iter(&self) -> impl Iterator<Item = (Option<IdentName>, SubgraphType)> + '_ {
         self.wildcard_columns.iter().cloned()
+    }
+
+    pub fn get_wildcard_type(&self) -> Vec<SubgraphType> {
+        self.wildcard_columns.iter().map(|(_, tp)| tp.clone()).collect_vec()
     }
 
     pub fn get_n_wildcard_columns(&self) -> usize {

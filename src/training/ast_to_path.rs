@@ -1,4 +1,4 @@
-use std::{error::Error, fmt, path::PathBuf, str::FromStr, sync::{Arc, Mutex}};
+use std::{error::Error, fmt, iter, path::PathBuf, str::FromStr, sync::{Arc, Mutex}};
 
 pub mod tester;
 
@@ -64,6 +64,7 @@ impl ConvertionError {
 pub struct ConvertionErrorWithPartialSelectType {
     select_type: Vec<SubgraphType>,
     real_n_cols: Option<usize>,
+    responsible_wildcard_type: Option<Vec<SubgraphType>>,
     err: ConvertionError,
 }
 
@@ -78,7 +79,7 @@ impl fmt::Display for ConvertionErrorWithPartialSelectType {
 macro_rules! add_pst {
     ($result:expr) => {
         $result.map_err(|err| ConvertionErrorWithPartialSelectType {
-            real_n_cols: None, select_type: vec![], err
+            real_n_cols: None, responsible_wildcard_type: None, select_type: vec![], err
         })
     };
 }
@@ -88,14 +89,16 @@ impl ConvertionErrorWithPartialSelectType {
         Self {
             real_n_cols: None,
             select_type: vec![],
+            responsible_wildcard_type: None,
             err: ConvertionError::new(reason),
         }
     }
 
-    fn new(reason: String, real_n_cols: Option<usize>, select_type: Vec<SubgraphType>) -> Self {
+    fn new(reason: String, real_n_cols: Option<usize>, responsible_wildcard_type: Option<Vec<SubgraphType>>, select_type: Vec<SubgraphType>) -> Self {
         Self {
             real_n_cols,
             select_type,
+            responsible_wildcard_type,
             err: ConvertionError::new(reason),
         }
     }
@@ -121,7 +124,7 @@ impl GetIndentated for String {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum PathNode {
     State(SmolStr),
     NewSubgraph(SmolStr),
@@ -150,7 +153,7 @@ pub struct PathGenerator {
     aggregate_functions_distribution: AggregateFunctionDistribution,
     /// checkpoint to restore to initial state in case of a convertion error
     zero_checkpoint: Option<Checkpoint>,
-    path_until_last_rewind: Vec<String>,
+    path_after_last_rewind: Vec<String>,
     rng: ChaCha8Rng,
     try_with_quotes: bool,
 }
@@ -167,7 +170,7 @@ impl PathGenerator {
             state_selector: DeterministicModel::empty(),
             clause_context: ClauseContext::new(database_schema),
             aggregate_functions_distribution,
-            path_until_last_rewind: vec![],
+            path_after_last_rewind: vec![],
             rng: ChaCha8Rng::seed_from_u64(0),
             zero_checkpoint: None,
             try_with_quotes: false,
@@ -263,6 +266,7 @@ impl DynClone for Checkpoint {
     }
 }
 
+/// fails if detects wildcards
 fn determine_n_cols(set_expr: &SetExpr) -> Option<usize> {
     match set_expr { // there's a problem when a wildcard is used. use error-based approach instead. Use this function in case there are no wildcards
                      // on error, we might use the FROM info to test how many columns there actually are and use the estimate instead
@@ -275,11 +279,21 @@ fn determine_n_cols(set_expr: &SetExpr) -> Option<usize> {
     }
 }
 
-fn determine_n_cols_with_clause_context(projection: &Vec<SelectItem>, clause_context: &ClauseContext) -> usize {
-    projection.iter().map(|item| {
-        if matches!(item, SelectItem::Wildcard(..) | SelectItem::QualifiedWildcard(..)) {
+/// Determines n_cols in select and responsible_wildcard the type of wildcard responsible for the error.\
+/// None for responsible_wildcard if all types were determined.
+fn determine_n_cols_and_responsible_wildcard_with_clause_context(projection: &Vec<SelectItem>, clause_context: &ClauseContext, n_select_types: usize) -> (usize, Option<Vec<SubgraphType>>) {
+    let mut n_cols = 0usize;
+    let mut responsible_wildcard_type = None;
+    let mut was_set = false;
+    // let proj = projection.iter().map(|it| format!("{it}")).join(", ");
+    // eprintln!("Projection: {proj}");
+    for item in projection.iter() {
+        let (n_new_cols, wildcard_type) = if matches!(item, SelectItem::Wildcard(..) | SelectItem::QualifiedWildcard(..)) {
             match item {
-                SelectItem::Wildcard(..) => clause_context.top_active_from().get_n_wildcard_columns(),
+                SelectItem::Wildcard(..) => {
+                    let from = clause_context.top_active_from();
+                    (from.get_n_wildcard_columns(), Some(from.get_wildcard_type()))
+                },
                 SelectItem::QualifiedWildcard(rel_name, _) => {
                     let relation = match rel_name.0.as_slice() {
                         [ident] => {
@@ -288,14 +302,49 @@ fn determine_n_cols_with_clause_context(projection: &Vec<SelectItem>, clause_con
                         },
                         any => panic!("schema.table alias is not supported: {}", ObjectName(any.to_vec())),
                     };
-                    relation.get_n_wildcard_columns()
-                }
+                    (relation.get_n_wildcard_columns(), Some(relation.get_wildcard_type()))
+                },
                 _ => unreachable!(),
             }
         } else {
-            1usize
+            (1usize, None)
+        };
+        n_cols += n_new_cols;
+        if n_cols > n_select_types && !was_set {
+            responsible_wildcard_type = wildcard_type;
+            was_set = true;
         }
-    }).sum()
+    }
+    // eprintln!("DEBUG determine_n_cols_and_responsible_wildcard_with_clause_context");
+    // eprintln!("n_cols = {n_cols}");
+    // eprintln!("n_select_types = {n_select_types}");
+    // eprintln!("responsible_wildcard_type = {:?}\n\n", responsible_wildcard_type);
+    (n_cols, responsible_wildcard_type)
+}
+
+/// - returns error if we are responsible\
+/// - if we are not, returns Ok(true) if we should utilize the new type info
+fn check_responsible(
+        column_count_can_cause_errors: bool,
+        n_cols_completed: usize,
+        n_cols_total: usize,
+        tp: SubgraphType,
+        err: &ConvertionErrorWithPartialSelectType
+    ) -> Result<bool, ConvertionError> {
+    let type_is_responsible = !column_count_can_cause_errors && n_cols_completed == err.select_type.len();
+    let type_info_present = err.responsible_wildcard_type.is_some();
+    if type_is_responsible && !type_info_present {
+        // we, the last link, are responsible for the error.
+        Err(ConvertionError::new(format!(
+            "Having determined {n_cols_completed}/{n_cols_total} types: {:?},\nTried {tp} for the last column, but got an error:\n{}",
+            err.select_type, err.err
+        )))
+    } else {
+        // will make us, the last link in the chain, return Ok(err)
+        // this will in turn allow to backtrack until we meet the problem causing type,
+        // since we are not responsible for the error
+        Ok(type_is_responsible)  // type_info_present is true
+    }
 }
 
 impl PathGenerator {
@@ -314,7 +363,7 @@ impl PathGenerator {
         let state = SmolStr::new(state);
         self.state_selector.set_state(state.clone());
         if let Some(actual_state) = self.next_state_opt().map_err(|err| {
-            ConvertionError::new(format!("{err}\nPath until last rewind: {:#?}", self.path_until_last_rewind))
+            ConvertionError::new(format!("{err}\nPath after last rewind: {:#?}", self.path_after_last_rewind))
         })? {
             if actual_state != state {
                 self.state_generator.print_stack();
@@ -324,7 +373,7 @@ impl PathGenerator {
             self.state_generator.print_stack();
             panic!("State generator stopped prematurely");
         }
-        self.path_until_last_rewind.push(format!("{state}"));
+        self.path_after_last_rewind.push(format!("{state}"));
         if is_new_function_initial_state {
             self.current_path.push(PathNode::NewSubgraph(state));
         } else {
@@ -374,7 +423,8 @@ impl PathGenerator {
     }
 
     fn restore_checkpoint_consume(&mut self, checkpoint: Checkpoint) {
-        self.path_until_last_rewind.clear();
+        // eprintln!("Path after last rewind: {:?}", self.path_after_last_rewind);
+        self.path_after_last_rewind.clear();
         match checkpoint {
             Checkpoint::CutOff {
                 clause_context_checkpoint,
@@ -422,17 +472,17 @@ impl PathGenerator {
 
     fn handle_query_body(&mut self, query_body: &SetExpr) -> Result<(), ConvertionError> {
         self.try_push_state("call1_set_expression_determine_type")?;
-        
+
         let mut n_cols = determine_n_cols(query_body);
         let expr_str = Some(format!("{query_body}"));
         loop {
-            let mut wildcards_can_cause_errors = false;
+            let mut column_count_can_cause_errors = false;
             let mut n_cols_arg = 1usize;
             match &n_cols {
                 Some(n_cols) => n_cols_arg = *n_cols,
-                None => wildcards_can_cause_errors = true,
+                None => column_count_can_cause_errors = true,
             }
-            let checkpoint_opt = if wildcards_can_cause_errors {
+            let checkpoint_opt = if column_count_can_cause_errors {
                 Some(self.get_checkpoint(true))
             } else { None };
             let select_err = self.handle_set_expression_determine_type_and_try(
@@ -440,7 +490,8 @@ impl PathGenerator {
                 n_cols_arg,
                 n_cols_arg,
                 vec![],
-                wildcards_can_cause_errors,
+                column_count_can_cause_errors,
+                None::<iter::Empty<SubgraphType>>,
                 |_self, column_types| {
                     let column_type_list = QueryTypes::ColumnTypeLists {
                         column_type_lists: column_types.into_iter().map(|x| vec![x]).collect_vec()
@@ -453,13 +504,19 @@ impl PathGenerator {
             )?;
             match select_err {
                 Some(err) => {
-                    if !wildcards_can_cause_errors {
+                    if !column_count_can_cause_errors {
                         return Err(ConvertionError::new(format!("Couldn't select SELECT type. Got the error:\n{}", err.err)))
                     } else {
                         self.restore_checkpoint_consume(checkpoint_opt.unwrap());
                         // wildcard caused an error, so try another time.
                         // the number of columns actually known now
-                        n_cols = err.real_n_cols;
+                        match err.real_n_cols {
+                            Some(real_n_cols) => n_cols = Some(real_n_cols),
+                            None => {
+                                // the problem is not us
+                                return Err(ConvertionError::new(format!("real_n_cols estimation is empty! Error:\n{}", err.err)))
+                            },
+                        }
                     }
                 },
                 None => break,
@@ -477,73 +534,121 @@ impl PathGenerator {
         n_cols_remaining: usize,
         n_cols_total: usize,
         column_types: Vec<SubgraphType>,
-        wildcards_can_cause_errors: bool,
+        column_count_can_cause_errors: bool,
+        mut item_type_iter: Option<impl Iterator<Item = SubgraphType> + Clone>,
         and_try: F
     ) -> Result<Option<ConvertionErrorWithPartialSelectType>, ConvertionError> {
+        // eprintln!("{}", expr_str.clone().unwrap());
+        let before_us_checkpoint = self.get_checkpoint(false);
         self.try_push_states(&["set_expression_determine_type", "call9_types_type"])?;
         let column_type_lists = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::QueryTypes);
         let (first_column_list, remaining_columns) = column_type_lists.split_first();
         self.state_generator.set_known_list(first_column_list.clone());
         let n_cols_completed = n_cols_total - n_cols_remaining;
+
         let error_with_incomplete_type: Arc<Mutex<Option<ConvertionErrorWithPartialSelectType>>> = Arc::new(Mutex::new(None));
-        self.handle_types_type_and_try(
-            expr_str.clone(),
-            TypeAssertion::GeneratedByOneOf(&first_column_list),
-            |_self, tp: SubgraphType| {
-                let mut column_types = column_types.clone();
-                column_types.push(tp.clone());
-                if n_cols_remaining == 1 {
-                    // last column: attempt to finalize and proceed
-                    _self.try_push_state("set_expression_determine_type_can_finish")?;
-                    for _ in 0..n_cols_total {  // so exit the set_expression_determine_type subgraph
-                        _self.try_push_state("EXIT_set_expression_determine_type")?;
-                    }  // and try to proceed with the selected types
-                    match and_try(_self, column_types.clone()) {
-                        Ok(()) => { },  // all worked ok. Finish without an error.
-                        Err(err) => {
-                            if !wildcards_can_cause_errors && n_cols_completed == err.select_type.len() {
-                                // we, the last link, are responsible for the error.
-                                return Err(ConvertionError::new(format!(
-                                    "Having determined {n_cols_completed}/{n_cols_total} types: {:?},\nTried {tp} for the last column, but got an error:\n{}",
-                                    err.select_type, err.err
-                                )))
-                            } else {
-                                // will make us, the last link in the chain, return Ok(err)
-                                // this will in turn allow to backtrack until we meet the problem causing type,
-                                // since we are not responsible for the error
-                                *error_with_incomplete_type.lock().unwrap() = Some(err);
-                            }
-                        },
-                    }
-                } else {
-                    // not the last column: proceed to the next column recursively
-                    _self.try_push_state("call0_set_expression_determine_type")?;
-                    _self.state_generator.set_known_query_type_list(remaining_columns.clone());
-                    let inner_error_opt = _self.handle_set_expression_determine_type_and_try(
-                        expr_str.clone(),
-                        n_cols_remaining - 1,
-                        n_cols_total,
-                        column_types,
-                        wildcards_can_cause_errors,
-                        and_try.clone()
-                    )?;
-                    if let Some(inner_error) = inner_error_opt {
-                        // inner handler finished because of an error
-                        if !wildcards_can_cause_errors && n_cols_completed == inner_error.select_type.len() {
-                            // we are the one responsible for the error, so try a new type:
-                            return Err(ConvertionError::new(format!(
-                                "Having determined {n_cols_completed}/{n_cols_total} types: {:?},\nTried {tp} for the next column, but got an error:\n{}",
-                                inner_error.select_type, inner_error.err
-                            )))
+        let error_with_new_cols_type_info: Arc<Mutex<Option<ConvertionErrorWithPartialSelectType>>> = Arc::new(Mutex::new(None));
+        
+        let tp_opt = item_type_iter.as_mut().and_then(|it| it.next());
+
+        let continue_with_type = |_self: &mut PathGenerator, tp: SubgraphType| {
+            let mut column_types = column_types.clone();
+            column_types.push(tp.clone());
+            if n_cols_remaining == 1 {
+                // last column: attempt to finalize and proceed
+                _self.try_push_state("set_expression_determine_type_can_finish")?;
+                for _ in 0..n_cols_total {  // so exit the set_expression_determine_type subgraph
+                    _self.try_push_state("EXIT_set_expression_determine_type")?;
+                }  // and try to proceed with the selected types
+                match and_try(_self, column_types.clone()) {
+                    Ok(()) => { },  // all worked ok. Finish without an error.
+                    Err(err) => {
+                        let use_new_type_info = check_responsible(column_count_can_cause_errors, n_cols_completed, n_cols_total, tp, &err)?;
+                        if use_new_type_info {
+                            // finish and simulate a bunch of selections with the now known types
+                            *error_with_new_cols_type_info.lock().unwrap() = Some(err);
                         } else {
-                            // we are not responsible for this error, so pass it up and return Ok(err)
-                            *error_with_incomplete_type.lock().unwrap() = Some(inner_error);
+                            // we are not responsible: finish and pass the error up
+                            *error_with_incomplete_type.lock().unwrap() = Some(err);
                         }
+                    },
+                }
+            } else {
+                // not the last column: proceed to the next column recursively
+                _self.try_push_state("call0_set_expression_determine_type")?;
+                _self.state_generator.set_known_query_type_list(remaining_columns.clone());
+                let inner_error_opt = _self.handle_set_expression_determine_type_and_try(
+                    expr_str.clone(),
+                    n_cols_remaining - 1,
+                    n_cols_total,
+                    column_types,
+                    column_count_can_cause_errors,
+                    item_type_iter.clone(),
+                    and_try.clone()
+                )?;
+                if let Some(inner_error) = inner_error_opt {
+                    let use_new_type_info = check_responsible(
+                        column_count_can_cause_errors, n_cols_completed, n_cols_total, tp, &inner_error
+                    )?;
+                    if use_new_type_info {
+                        // finish and simulate a bunch of selections with the now known types
+                        *error_with_new_cols_type_info.lock().unwrap() = Some(inner_error);
+                    } else {
+                        // we are not responsible: finish and pass the error up
+                        *error_with_incomplete_type.lock().unwrap() = Some(inner_error);
                     }
                 }
-                Ok(())
             }
-        )?;
+            Ok(())
+        };
+
+        if let Some(tp) = tp_opt {
+            // type is known: don't test it out
+            // eprintln!("Using type: {tp}");
+            self.handle_types_type(&tp)?;
+            continue_with_type(self, tp)?;
+            if let Some(error_with_new_cols_type_info) = error_with_new_cols_type_info.lock().unwrap().take() {
+                if error_with_new_cols_type_info.responsible_wildcard_type.is_some() {
+                    // eprintln!("error_with_new_cols_type_info: ");
+                    // eprintln!("n_cols_total: {n_cols_total}");
+                    // eprintln!("select_type: {:?}", error_with_new_cols_type_info.select_type);
+                    // eprintln!("real_n_cols: {:?}", error_with_new_cols_type_info.real_n_cols);
+                    // eprintln!("responsible_wildcard_type: {:?}", error_with_new_cols_type_info.responsible_wildcard_type);
+                    // eprintln!("err: {}", error_with_new_cols_type_info.err);
+                }
+                return Err(ConvertionError::new(format!(
+                    "Unexpected type information exit after type already determined.\nGot responsible_wildcard_type = {:?}\nGot err = {}",
+                    error_with_new_cols_type_info.responsible_wildcard_type,
+                    error_with_new_cols_type_info.err
+                )));
+            }
+            // assert!(error_with_new_cols_type_info.lock().unwrap().take().is_none());
+        } else {
+            // type is not known: test it out
+            self.handle_types_type_and_try(
+                expr_str.clone(),
+                TypeAssertion::GeneratedByOneOf(&first_column_list),
+                continue_with_type
+            )?;
+            let new_cols_type_info = error_with_new_cols_type_info.lock().unwrap().take().and_then(
+                |err| err.responsible_wildcard_type);
+            // did we get any type info?
+            if let Some(new_cols_type_info) = new_cols_type_info {
+                // eprintln!("Got a type: {:?}", new_cols_type_info);
+                // if yes, try again but with the known type
+                self.restore_checkpoint_consume(before_us_checkpoint);
+                self.handle_set_expression_determine_type_and_try(
+                    expr_str.clone(),
+                    n_cols_remaining,
+                    n_cols_total,
+                    column_types,
+                    column_count_can_cause_errors,
+                    Some(new_cols_type_info.into_iter()),
+                    and_try.clone()
+                )?;
+            }
+        }
+
         let ans = error_with_incomplete_type.lock().unwrap().take();
         Ok(ans)
     }
@@ -590,15 +695,20 @@ impl PathGenerator {
                             return Err(ConvertionErrorWithPartialSelectType::new(
                                 format!(
                                     "Error converting query: {select_body}\n\
-                                    Tried without implicit groping, got an error: {err_no_grouping}\n\
-                                    Tried with implicit groping, got an error: {err_grouping}"
+                                    Tried without implicit grouping, got an error: {err_no_grouping}\n\
+                                    Tried with implicit grouping, got an error: {err_grouping}"
                                 ),
-                                err_no_grouping.real_n_cols,  // shouldn't differ in both cases
+                                err_no_grouping.real_n_cols.or(err_grouping.real_n_cols),
+                                if err_grouping.select_type.len() > err_no_grouping.select_type.len() {
+                                    err_grouping.responsible_wildcard_type  // the bigger one is the one that has correct assumptions
+                                } else {
+                                    err_no_grouping.responsible_wildcard_type
+                                },
                                 if err_grouping.select_type.len() > err_no_grouping.select_type.len() {
                                     err_grouping.select_type
                                 } else {
                                     err_no_grouping.select_type
-                                },
+                                }
                             ))
                         }
                     }
@@ -798,9 +908,15 @@ impl PathGenerator {
                 self.clause_context.query_mut().select_type().iter().map(|(_, tp)| tp.clone()).collect_vec()
             },
             Err(err) => {
+                // eprintln!("\n\nFrom handle_select_item, got the error: {err}\n\n");
+                let select_type = self.clause_context.query_mut().select_type().iter().map(|(_, tp)| tp.clone()).collect_vec();
+                let (real_n_cols, responsible_wildcard_type) = determine_n_cols_and_responsible_wildcard_with_clause_context(
+                    projection, &self.clause_context, select_type.len()
+                );
                 return Err(ConvertionErrorWithPartialSelectType {
-                    real_n_cols: Some(determine_n_cols_with_clause_context(projection, &self.clause_context)),
-                    select_type: self.clause_context.query_mut().select_type().iter().map(|(_, tp)| tp.clone()).collect_vec(),
+                    real_n_cols: Some(real_n_cols),
+                    responsible_wildcard_type,
+                    select_type,
                     err,
                 })
             },
@@ -1532,7 +1648,7 @@ impl PathGenerator {
         //     _self.something(...);
         //     Ok(())
         // })?;
-        self.try_push_state("types_type")?;
+        self.handle_types_type_entry()?;
         let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
         let selected_types = SubgraphType::sort_by_compatibility(selected_types);
         let mut selected_types_iter = selected_types.iter();
@@ -1540,10 +1656,18 @@ impl PathGenerator {
         // can't use cutoff because restoration may be on a level that's less deep
         let checkpoint = self.get_checkpoint(false);
         loop {
-            let tp = match self.handle_types_type_continue_after(expr_str.clone(), &mut selected_types_iter, &selected_types) {
-                Ok(tp) => tp,
-                Err(err) => break Err(ConvertionError::new(format!("{err}\n{}", err_msg.get_indentated_string()))),
+            let tp = match selected_types_iter.next() {
+                Some(subgraph_type) => subgraph_type,
+                None => break Err(ConvertionError::new(format!(
+                    "Types type didn't find a suitable type for expression, among:\n{:#?}\nExpr: {}\n{}",
+                    selected_types,
+                    if let Some(expr_str) = expr_str { format!("{expr_str}") } else { format!("not provided by caller") },
+                    err_msg.get_indentated_string()
+                )))
             };
+            if let Err(err) = self.handle_types_type_type(tp) {
+                break Err(ConvertionError::new(format!("{err}\n{}", err_msg.get_indentated_string())))
+            }
             type_assertion.check_type(&tp);
             match and_try(self, tp.clone()) {
                 Ok(..) => break Ok(tp.clone()),
@@ -1555,19 +1679,22 @@ impl PathGenerator {
         }
     }
 
-    /// only for use in handle_types_type_and_try
-    fn handle_types_type_continue_after<'a>(
-        &mut self, expr_str: Option<String>, selected_types_iter: &mut impl Iterator<Item = &'a SubgraphType>, selected_types: &Vec<SubgraphType>
-    ) -> Result<&'a SubgraphType, ConvertionError> {
-        let subgraph_type = match selected_types_iter.next() {
-            Some(subgraph_type) => subgraph_type,
-            None => return Err(ConvertionError::new(format!(
-                "Types type didn't find a suitable type for expression, among:\n{:#?}{}", selected_types, if let Some(expr_str) = expr_str {
-                    format!("\nExpr: {expr_str}")
-                } else { format!("\nExpr: not provided by caller") }
-            ))),
-        };
+    /// subgraph types_type
+    fn handle_types_type(&mut self, subgraph_type: &SubgraphType) -> Result<(), ConvertionError> {
+        self.handle_types_type_entry()?;
+        self.handle_types_type_type(subgraph_type)
+    }
 
+    /// use handle_types_type_type afterwards
+    fn handle_types_type_entry(&mut self) -> Result<(), ConvertionError> {
+        self.try_push_state("types_type")?;
+        Ok(())
+    }
+
+    /// only for use after handle_types_type_entry
+    fn handle_types_type_type(
+        &mut self, subgraph_type: &SubgraphType
+    ) -> Result<(), ConvertionError> {
         self.try_push_state(match subgraph_type {
             SubgraphType::BigInt => "types_type_bigint",
             SubgraphType::Integer => "types_type_integer",
@@ -1582,7 +1709,7 @@ impl PathGenerator {
 
         self.try_push_state("EXIT_types_type")?;
 
-        Ok(subgraph_type)
+        Ok(())
     }
 
     /// subgraph def_types_value
