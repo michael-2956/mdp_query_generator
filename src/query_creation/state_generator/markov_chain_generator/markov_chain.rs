@@ -1,5 +1,6 @@
 use std::{collections::{HashMap, BinaryHeap}, path::Path, cmp::Ordering};
 
+use itertools::Itertools;
 use regex::Regex;
 use serde::{Serialize, Deserialize};
 use core::fmt::Debug;
@@ -144,6 +145,56 @@ impl QueryTypes {
             QueryTypes::TypeList { type_list } => {
                 (type_list.clone(), QueryTypes::TypeList { type_list })
             },
+        }
+    }
+
+    pub fn check_type<'a>(&self, mut query_type: impl Iterator<Item = &'a SubgraphType>) -> bool {
+        match self {
+            QueryTypes::ColumnTypeLists {
+                column_type_lists
+            } => {
+                let mut column_type_lists_iter = column_type_lists.into_iter();
+                let mut ok = true;
+                while let Some(type_list) = column_type_lists_iter.next() {
+                    match query_type.next() {
+                        Some(prefix_type) => if !type_list.contains(prefix_type) {
+                            ok = false;
+                            break;
+                        },
+                        None => break,
+                    }
+                }
+                // Ensure every type iterator is exhausted
+                ok && query_type.next().is_none() && column_type_lists_iter.next().is_none()
+            },
+            QueryTypes::TypeList { type_list } => query_type.all(|tp| type_list.contains(tp)),
+        }
+    }
+
+    /// checks prefix for compliance and returns what remains as a QueryType
+    pub fn after_prefix<'a>(self, mut prefix: impl Iterator<Item = &'a SubgraphType>) -> Self {
+        match self {
+            QueryTypes::ColumnTypeLists {
+                column_type_lists
+            } => {
+                let mut column_type_lists_iter = column_type_lists.into_iter();
+                let mut unused_type_list = None;
+                while let Some(type_list) = column_type_lists_iter.next() {
+                    match prefix.next() {
+                        Some(prefix_type) => assert!(type_list.contains(prefix_type)),
+                        None => {
+                            unused_type_list = Some(type_list);
+                            break;
+                        },
+                    }
+                }
+                // Ensure prefix iterator is exhausted
+                assert!(prefix.next().is_none());
+                QueryTypes::ColumnTypeLists {
+                    column_type_lists: unused_type_list.into_iter().chain(column_type_lists_iter).collect_vec()
+                }
+            },
+            QueryTypes::TypeList { .. } => self,
         }
     }
 }

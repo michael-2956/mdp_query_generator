@@ -1,4 +1,5 @@
 *generated_queries.sql
+ast2path_time_plot.py
 ast2path_time.txt
 openai_keys.sh
 weights_in_dot/

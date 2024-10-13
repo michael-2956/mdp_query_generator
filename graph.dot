@@ -260,7 +260,7 @@ digraph G {
         SELECT_DISTINCT [label="DISTINCT"]
         SELECT -> SELECT_DISTINCT
 
-        call0_SELECT_item [TYPES="Q[...]", label="SELECT item\nTYPES=Q[...]", shape=rectangle, style=filled, color=tomato]
+        call0_SELECT_item [TYPES="Q[...]", MODS="[first column]", label="SELECT item\nTYPES=Q[...]", shape=rectangle, style=filled, color=tomato]
 
         SELECT_DISTINCT -> call0_SELECT_item
         SELECT -> call0_SELECT_item
@@ -269,18 +269,18 @@ digraph G {
     }
 
     subgraph def_SELECT_item {
-        SELECT_item [TYPES="Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[]", label="SELECT item (recursive)\ntypes=Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", shape=rectangle, style=filled, color=tomato]
+        SELECT_item [TYPES="Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]", MODS="[first column]", label="SELECT item (recursive)\ntypes=Q[numeric, integer, bigint, 3VL Value, text, date, interval, timestamp]\nMODS=[first column]", shape=rectangle, style=filled, color=tomato]
         EXIT_SELECT_item [label="EXIT SELECT item", shape=rectangle]
 
-        SELECT_item_grouping_enabled [label="Determine if grouped\nset value: 'grouping_enabled'", set_value="grouping_enabled"]
+        SELECT_item_grouping_enabled [label="Determine if grouped\n[set value]\n[call mod]", set_value="grouping_enabled", call_modifier="CanAddMoreColumnsModifier"]
         SELECT_item -> SELECT_item_grouping_enabled
 
-        SELECT_item_can_add_more_columns [label="Can add more columns?\n[set value]", set_value="CanAddMoreColumnsValue"]
-        SELECT_item_can_finish [label="Finish SELECT\n[call mod]", call_modifier="CanAddMoreColumnsModifier"]
-        SELECT_item_can_add_more_columns -> SELECT_item_can_finish
+        SELECT_item_can_finish [label="Finish SELECT\n[call mod]\nmod. 'first column' -> OFF", call_modifier="CanAddMoreColumnsModifier", modifier="first column", modifier_mode="off"]
+        SELECT_item -> SELECT_item_can_finish
         SELECT_item_can_finish -> EXIT_SELECT_item
-        call1_SELECT_item [TYPES="Q[known]", label="SELECT item\nTYPES=Q[args[1:]]\n[call mod]", shape=rectangle, style=filled, color=tomato, call_modifier="CanAddMoreColumnsModifier"]
-        SELECT_item_can_add_more_columns -> call1_SELECT_item
+
+        // no longer the first column
+        call1_SELECT_item [TYPES="Q[known]", MODS="[]", label="SELECT item\nTYPES=Q[args[p:]]", shape=rectangle, style=filled, color=tomato]
         call1_SELECT_item -> EXIT_SELECT_item
 
         SELECT_unnamed_expr [label="Unnamed"]
@@ -292,7 +292,7 @@ digraph G {
         SELECT_unnamed_expr -> select_expr
         SELECT_expr_with_alias -> select_expr
         select_expr_done [label="Expression done"]
-        select_expr_done -> SELECT_item_can_add_more_columns
+        select_expr_done -> call1_SELECT_item
         call73_types [label="TYPES: [args[0]]\nMODS: [group by columns]\ncall mod.: 'grouping mode switch'", TYPES="[known]", MODS="[group by columns]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
         select_expr -> call73_types
         call73_types -> select_expr_done
@@ -305,11 +305,11 @@ digraph G {
 
         SELECT_wildcard [label="wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
         SELECT_tables_eligible_for_wildcard -> SELECT_wildcard
-        SELECT_wildcard -> SELECT_item_can_add_more_columns
+        SELECT_wildcard -> call1_SELECT_item
 
         SELECT_qualified_wildcard [label="qualified wildcard\ncall mod.: is_wildcard_available", call_modifier="is_wildcard_available"]
         SELECT_tables_eligible_for_wildcard -> SELECT_qualified_wildcard
-        SELECT_qualified_wildcard -> SELECT_item_can_add_more_columns
+        SELECT_qualified_wildcard -> call1_SELECT_item
     }
 
     subgraph def_GROUP_BY {

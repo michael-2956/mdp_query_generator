@@ -1,432 +1,254 @@
 SELECT
-    (
-        SELECT DISTINCT
-            T22.*
-        FROM
-            SUPPLIER AS T23 (R50, R51, R52, R53, R54),
-            CUSTOMER
-        WHERE
-            CAST(NULL AS BOOLEAN)
-        LIMIT
-            1
-    ) AS C10,
-    (CAST(NULL AS TIMESTAMP)) AS C11
+    CUSTOMER.C_PHONE
 FROM
+    CUSTOMER
+    LEFT JOIN CUSTOMER AS T1 (R1, R2) ON false,
     SUPPLIER
-    LEFT JOIN PARTSUPP ON (
-        (
-            CASE CAST(NULL AS DATE)
-                WHEN CASE
-                    WHEN true THEN DATE '2023-08-27'
-                END THEN NOT EXISTS (
-                    SELECT DISTINCT
-                        -2
-                    FROM
-                        SUPPLIER
-                )
-            END
-        )
-    )
-    JOIN PART ON DATE '2023-08-27' IS NOT DISTINCT FROM CASE PART.P_SIZE
-        WHEN CAST(-4 AS BIGINT) THEN CAST(NULL AS DATE)
-        ELSE CAST(NULL AS DATE)
-    END,
-    SUPPLIER AS T1 (R1, R2)
-    JOIN REGION ON CASE CAST(NULL AS BOOLEAN)
-        WHEN (
-            (
-                SELECT DISTINCT
-                    CAST(NULL AS BOOLEAN)
-                FROM
-                    PARTSUPP
-                LIMIT
-                    1
-            )
-        ) THEN true
-        WHEN (
-            SELECT DISTINCT
-                CAST(NULL AS BOOLEAN)
-            FROM
-                LINEITEM AS T2 (
-                    R3,
-                    R4,
-                    R5,
-                    R6,
-                    R7,
-                    R8,
-                    R9,
-                    R10,
-                    R11,
-                    R12,
-                    R13,
-                    R14
-                )
-            LIMIT
-                1
-        ) THEN CASE INTERVAL '1 day'
-            WHEN INTERVAL '1 day' THEN false
-            ELSE false
-        END
-        WHEN CASE DATE '2023-08-27'
-            WHEN DATE '2023-08-27' THEN false
-        END THEN true
-        ELSE CAST(1 AS BIGINT) IS NOT NULL
-    END
-    JOIN ORDERS ON (
-        SELECT
-            T3.*
-        FROM
-            (
-                SELECT DISTINCT
-                    false AS C1
-                FROM
-                    SUPPLIER
-                ORDER BY
-                    C1 DESC
-            ) AS T3
-        WHERE
-            T3.C1
-        ORDER BY
-            O_ORDERDATE
-        LIMIT
-            1
-    )
-    JOIN NATION ON CASE 'HJeihfbwei'
-        WHEN CAST(NULL AS TEXT) THEN CAST(NULL AS TIMESTAMP)
-        WHEN O_ORDERSTATUS THEN CAST(NULL AS DATE)
-        ELSE O_ORDERDATE
-    END IN (
+    LEFT JOIN (
         SELECT DISTINCT
+            CAST(NULL AS DATE) AS C1,
+            0 AS C2
+        FROM
+            PARTSUPP
+        WHERE
+            (CAST(NULL AS BOOLEAN))
+    ) AS T2 ON false
+    LEFT JOIN (
+        SELECT
+            DATE '2023-08-27',
             CAST(NULL AS DATE)
         FROM
-            ORDERS
-        GROUP BY
-            true
+            REGION AS T4
         ORDER BY
-            "date" DESC NULLS LAST,
-            "date" DESC NULLS FIRST,
-            "date" ASC,
-            "date" NULLS FIRST,
-            "date" ASC NULLS FIRST
-    )
-    LEFT JOIN LINEITEM ON (
-        (
-            (
-                (
-                    SELECT DISTINCT
-                        CAST(NULL AS BOOLEAN) AS C2
-                    FROM
-                        LINEITEM AS T4 (R15)
-                    ORDER BY
-                        C2
-                    LIMIT
-                        1
-                )
-            )
-        )
-    )
-    RIGHT JOIN (
-        SELECT DISTINCT
-            DATE '2023-08-27',
-            C_NAME AS C4
+            (CAST(NULL AS TEXT)) ASC NULLS FIRST
+    ) AS T3 ON false
+ORDER BY
+    C_PHONE NULLS LAST,
+    (
+        SELECT
+            CASE
+                WHEN CAST(NULL AS BOOLEAN) THEN DATE '2023-08-27'
+            END
         FROM
-            CUSTOMER AS T6
-            RIGHT JOIN NATION ON (
-                SELECT DISTINCT
-                    CAST(NULL AS BOOLEAN) AS C3
+            SUPPLIER,
+            NATION AS T5 (R3, R4, R5)
+            JOIN NATION AS T6 ON CAST(3 AS BIGINT) IS NOT NULL
+        HAVING
+            EVERY (true)
+    ) DESC,
+    (
+        SELECT DISTINCT
+            INTERVAL '1' DAY
+        FROM
+            (
+                SELECT
+                    CUSTOMER.C_PHONE AS C3
+                FROM
+                    ORDERS AS T8 (R6, R7)
+                ORDER BY
+                    CAST(NULL AS INTERVAL) ASC
+            ) AS T7
+            JOIN PARTSUPP ON 3.6378537098378647 IS NOT NULL
+            JOIN SUPPLIER ON true
+            JOIN PARTSUPP AS T9 (R8, R9, R10, R11) ON (CAST(NULL AS BOOLEAN))
+            JOIN ORDERS ON CASE
+                WHEN CAST(NULL AS BOOLEAN) THEN CAST(NULL AS BOOLEAN)
+            END
+            JOIN SUPPLIER AS T10 (R12, R13, R14, R15, R16, R17) ON (
+                SELECT
+                    false AS C4
                 FROM
                     ORDERS
                 LIMIT
                     1
-            )
-            LEFT JOIN SUPPLIER ON CASE
-                WHEN CAST(NULL AS BOOLEAN) THEN CAST(NULL AS BOOLEAN)
-            END
-        LIMIT
-            (
+            ),
+            PART
+            JOIN CUSTOMER ON CASE CAST(NULL AS DATE)
+                WHEN DATE '2023-08-27' THEN false
+                ELSE CAST(NULL AS BOOLEAN)
+            END,
+            REGION
+            JOIN (
                 SELECT
-                    CAST(-1 AS BIGINT) AS C5
+                    T2.*,
+                    CUSTOMER.C_CUSTKEY
                 FROM
                     REGION
                 ORDER BY
-                    C5 DESC
+                    CAST(NULL AS DATE) NULLS FIRST
                 LIMIT
-                    1
-            )
-    ) AS T5 ON (
-        SELECT
-            CAST(NULL AS BOOLEAN) AS C7
-        FROM
-            (
-                SELECT
-                    'HJeihfbwei'
-                FROM
-                    CUSTOMER AS T8 (R16, R17, R18, R19)
-            ) AS T7
-            LEFT JOIN (
-                SELECT
-                    CAST(NULL AS INTERVAL)
-                FROM
-                    NATION AS T10 (R20, R21)
-                ORDER BY
-                    "interval" ASC NULLS FIRST
-            ) AS T9 ON true,
-            ORDERS AS T11 (R22, R23, R24, R25, R26, R27)
-            LEFT JOIN REGION AS T12 (R28, R29) ON CAST(NULL AS BOOLEAN)
-            JOIN REGION ON true
+                    -0.5469951196215224
+            ) AS T11 (R18) ON CAST(NULL AS BOOLEAN)
+            LEFT JOIN NATION ON true
             RIGHT JOIN (
                 SELECT
-                    INTERVAL '1 day' AS C6
+                    CAST(NULL AS NUMERIC)
                 FROM
-                    ORDERS
-            ) AS T13 ON CAST(NULL AS BOOLEAN)
-            LEFT JOIN NATION ON CAST(NULL AS BOOLEAN)
-            RIGHT JOIN LINEITEM AS T14 (
-                R30,
-                R31,
-                R32,
-                R33,
-                R34,
-                R35,
-                R36,
-                R37,
-                R38,
-                R39,
-                R40,
-                R41,
-                R42,
-                R43,
-                R44
-            ) ON false
-        WHERE
-            CAST(NULL AS BOOLEAN)
-        GROUP BY
-            ROLLUP ((NATION.N_COMMENT, R37)),
-            LINEITEM.L_DISCOUNT,
-            GROUPING SETS (
-                (),
-                (L_ORDERKEY, L_SHIPINSTRUCT),
-                (L_DISCOUNT, L_DISCOUNT)
-            ),
-            R32,
-            N_NATIONKEY,
-            L_ORDERKEY,
-            T1.S_ACCTBAL,
-            S_NATIONKEY,
-            T14.R44,
-            LINEITEM.L_DISCOUNT
-        HAVING
-            true
-        ORDER BY
-            C7 ASC
-        LIMIT
-            1
-    )
-    RIGHT JOIN (
-        SELECT
-            CAST(NULL AS BIGINT)
-        FROM
-            PARTSUPP AS T16
-        WHERE
-            TIMESTAMP '2023-01-30 14:37:05' IS NULL
-        ORDER BY
-            "int8" ASC NULLS LAST
-        LIMIT
-            (
-                SELECT DISTINCT
-                    -4.909749735534105 AS C8
-                FROM
-                    NATION AS T17 (R45)
-                ORDER BY
-                    C8 ASC NULLS FIRST,
-                    C8 NULLS FIRST
-                LIMIT
-                    1
-            )
-    ) AS T15 ON (
-        SELECT DISTINCT
-            true
-        FROM
-            (
-                SELECT DISTINCT
-                    -3
-                FROM
-                    CUSTOMER
-            ) AS T18
-            RIGHT JOIN (
-                SELECT DISTINCT
-                    SUPPLIER.S_NAME AS C9
-                FROM
-                    SUPPLIER
-            ) AS T19 ON false
+                    PARTSUPP AS T13 (R19)
+            ) AS T12 ON CASE 'HJeihfbwei'
+                WHEN 'HJeihfbwei' THEN CAST(NULL AS BOOLEAN)
+                WHEN 'HJeihfbwei' THEN CAST(NULL AS BOOLEAN)
+                WHEN REGION.R_COMMENT THEN false
+            END
             JOIN (
-                SELECT DISTINCT
-                    O_TOTALPRICE
+                SELECT
+                    CAST(NULL AS DATE) AS C5
                 FROM
-                    ORDERS
+                    NATION AS T15 (R20, R21)
                 ORDER BY
-                    O_TOTALPRICE,
-                    O_TOTALPRICE ASC NULLS LAST
-            ) AS T20 ON CAST(NULL AS BOOLEAN)
-            RIGHT JOIN ORDERS ON CAST(NULL AS BOOLEAN)
-            LEFT JOIN PARTSUPP AS T21 (R46, R47, R48, R49) ON CAST(NULL AS BOOLEAN),
-            CUSTOMER
+                    C5
+                LIMIT
+                    CAST(NULL AS NUMERIC)
+            ) AS T14 ON (
+                SELECT
+                    false
+                FROM
+                    NATION
+                ORDER BY
+                    "bool" DESC,
+                    "bool" DESC NULLS FIRST,
+                    "bool"
+                LIMIT
+                    1
+            )
+            JOIN (
+                SELECT
+                    CAST(NULL AS INTEGER),
+                    CAST(NULL AS BIGINT)
+                FROM
+                    PARTSUPP AS T17 (R22, R23, R24)
+                ORDER BY
+                    "int8",
+                    "int8" NULLS FIRST
+                LIMIT
+                    -3
+            ) AS T16 (R25) ON CASE TIMESTAMP '2023-01-30 14:37:05'
+                WHEN DATE '2023-08-27' THEN CAST(NULL AS BOOLEAN)
+                WHEN TIMESTAMP '2023-01-30 14:37:05' THEN false
+                WHEN DATE '2023-08-27' THEN false
+                WHEN DATE '2023-08-27' THEN CAST(NULL AS BOOLEAN)
+            END
         GROUP BY
-            true
+            T1.C_NATIONKEY
+        HAVING
+            BOOL_AND (CAST(NULL AS BOOLEAN))
+        ORDER BY
+            "interval" NULLS FIRST
         LIMIT
             1
-    )
-    RIGHT JOIN (
-        SELECT DISTINCT
-            CAST(NULL AS INTERVAL)
+    ) DESC NULLS FIRST,
+    (SUPPLIER.S_ACCTBAL) NULLS FIRST
+LIMIT
+    EXTRACT(
+        YEAR
         FROM
-            PART
-        WHERE
-            false
+            TIMESTAMP '2023-01-30 14:37:05'
+    )
+
+
+
+
+
+
+
+
+
+-- inner
+
+
+
+SELECT DISTINCT
+    INTERVAL '1' DAY
+FROM
+    (
+        SELECT
+            CUSTOMER.C_PHONE AS C3
+        FROM
+            ORDERS AS T8 (R6, R7)
+        ORDER BY
+            CAST(NULL AS INTERVAL) ASC
+    ) AS T7
+    JOIN PARTSUPP ON 3.6378537098378647 IS NOT NULL
+    JOIN SUPPLIER ON true
+    JOIN PARTSUPP AS T9 (R8, R9, R10, R11) ON (CAST(NULL AS BOOLEAN))
+    JOIN ORDERS ON CASE
+        WHEN CAST(NULL AS BOOLEAN) THEN CAST(NULL AS BOOLEAN)
+    END
+    JOIN SUPPLIER AS T10 (R12, R13, R14, R15, R16, R17) ON (
+        SELECT
+            false AS C4
+        FROM
+            ORDERS
+        LIMIT
+            1
+    ),
+    PART
+    JOIN CUSTOMER ON CASE CAST(NULL AS DATE)
+        WHEN DATE '2023-08-27' THEN false
+        ELSE CAST(NULL AS BOOLEAN)
+    END,
+    REGION
+    JOIN (
+        SELECT
+            T2.*,
+            CUSTOMER.C_CUSTKEY
+        FROM
+            REGION
+        ORDER BY
+            CAST(NULL AS DATE) NULLS FIRST
+        LIMIT
+            -0.5469951196215224
+    ) AS T11 (R18) ON CAST(NULL AS BOOLEAN)
+    LEFT JOIN NATION ON true
+    RIGHT JOIN (
+        SELECT
+            CAST(NULL AS NUMERIC)
+        FROM
+            PARTSUPP AS T13 (R19)
+    ) AS T12 ON CASE 'HJeihfbwei'
+        WHEN 'HJeihfbwei' THEN CAST(NULL AS BOOLEAN)
+        WHEN 'HJeihfbwei' THEN CAST(NULL AS BOOLEAN)
+        WHEN REGION.R_COMMENT THEN false
+    END
+    JOIN (
+        SELECT
+            CAST(NULL AS DATE) AS C5
+        FROM
+            NATION AS T15 (R20, R21)
+        ORDER BY
+            C5
         LIMIT
             CAST(NULL AS NUMERIC)
-    ) AS T22 ON CAST(NULL AS BOOLEAN)
-ORDER BY
-    (
-        SELECT DISTINCT
-            CAST(NULL AS BIGINT)
+    ) AS T14 ON (
+        SELECT
+            false
         FROM
-            NATION AS T24 (R55, R56, R57),
-            LINEITEM,
-            REGION
-        WHERE
-            NOT EXISTS (
-                SELECT
-                    4.133035376045177
-                FROM
-                    PARTSUPP AS T25
-                ORDER BY
-                    "int8"
-            )
+            NATION
+        ORDER BY
+            "bool" DESC,
+            "bool" DESC NULLS FIRST,
+            "bool"
         LIMIT
             1
-    ) DESC NULLS LAST,
-    (CAST(NULL AS INTERVAL)) NULLS LAST,
-    (
-        (
-            SELECT DISTINCT
-                T22.*
-            FROM
-                PARTSUPP AS T26 (R58, R59, R60, R61)
-            ORDER BY
-                "interval" ASC
-            LIMIT
-                1
-        ) + CAST(NULL AS DATE)
-    ) NULLS FIRST
-LIMIT
-    CASE
-        WHEN CASE CASE
-                WHEN false THEN 4
-                WHEN true THEN CAST(NULL AS INTEGER)
-                ELSE CAST(NULL AS INTEGER)
-            END
-            WHEN CAST(0 AS BIGINT) THEN true
-            WHEN CASE 'HJeihfbwei'
-                WHEN 'HJeihfbwei' THEN CAST(NULL AS INTEGER)
-                WHEN CAST(NULL AS TEXT) THEN CAST(NULL AS INTEGER)
-                WHEN 'HJeihfbwei' THEN -1
-                ELSE 4
-            END THEN (
-                SELECT
-                    true AS C12
-                FROM
-                    ORDERS AS T27 (R62, R63)
-                ORDER BY
-                    C12 DESC,
-                    C12 DESC NULLS FIRST
-                LIMIT
-                    1
-            )
-            WHEN @CAST(-5 AS BIGINT) THEN false
-            WHEN + CAST(NULL AS INTEGER) THEN CAST(NULL AS BOOLEAN)
-            ELSE CASE CAST(NULL AS INTEGER)
-                WHEN -5 THEN true
-                ELSE CAST(NULL AS BOOLEAN)
-            END
-        END THEN 2
-        WHEN (
-            SELECT
-                CAST(NULL AS BOOLEAN) AS C13
-            FROM
-                ORDERS,
-                LINEITEM
-                JOIN PARTSUPP ON CAST(NULL AS BOOLEAN)
-                JOIN REGION ON CAST(NULL AS BOOLEAN)
-            GROUP BY
-                GROUPING SETS ((O_COMMENT)),
-                CUBE (REGION.R_REGIONKEY),
-                PARTSUPP.PS_SUPPKEY
-            HAVING
-                CAST(NULL AS BOOLEAN)
-            LIMIT
-                1
-        ) THEN + (
-            SELECT
-                CAST(NULL AS INTEGER)
-            FROM
-                LINEITEM
-            ORDER BY
-                "int4" DESC,
-                "int4" ASC NULLS LAST
-            LIMIT
-                1
-        )
-        WHEN CASE CAST(NULL AS TIMESTAMP)
-            WHEN DATE '2023-08-27' THEN NOT EXISTS (
-                SELECT
-                    DATE '2023-08-27' AS C14
-                FROM
-                    PART
-                ORDER BY
-                    C14 NULLS FIRST,
-                    C14 ASC NULLS FIRST
-            )
-        END THEN -1
-        WHEN (
-            SELECT DISTINCT
-                true AS C16
-            FROM
-                PARTSUPP AS T29 (R64, R65, R66)
-                JOIN CUSTOMER ON true
-            WHERE
-                false
-            HAVING
-                CAST(NULL AS BOOLEAN)
-            ORDER BY
-                C16 DESC NULLS LAST
-            LIMIT
-                1
-        ) THEN CASE CAST(NULL AS INTEGER)
-            WHEN (
-                SELECT DISTINCT
-                    2 AS C15
-                FROM
-                    NATION AS T28
-                ORDER BY
-                    C15 DESC NULLS LAST
-                LIMIT
-                    1
-            ) THEN 0
-            WHEN (0) THEN CAST(NULL AS INTEGER)
-            ELSE 5
-        END
-        ELSE CASE TIMESTAMP '2023-01-30 14:37:05'
-            WHEN CASE
-                WHEN CAST(NULL AS BOOLEAN) THEN CAST(NULL AS DATE)
-            END THEN -4
-            WHEN CAST(NULL AS DATE) THEN (
-                SELECT DISTINCT
-                    PS_AVAILQTY AS C17
-                FROM
-                    PARTSUPP
-                LIMIT
-                    1
-            )
-        END
+    )
+    JOIN (
+        SELECT
+            CAST(NULL AS INTEGER),
+            CAST(NULL AS BIGINT)
+        FROM
+            PARTSUPP AS T17 (R22, R23, R24)
+        ORDER BY
+            "int8",
+            "int8" NULLS FIRST
+        LIMIT
+            -3
+    ) AS T16 (R25) ON CASE TIMESTAMP '2023-01-30 14:37:05'
+        WHEN DATE '2023-08-27' THEN CAST(NULL AS BOOLEAN)
+        WHEN TIMESTAMP '2023-01-30 14:37:05' THEN false
+        WHEN DATE '2023-08-27' THEN false
+        WHEN DATE '2023-08-27' THEN CAST(NULL AS BOOLEAN)
     END
+GROUP BY
+    T1.C_NATIONKEY
+HAVING
+    BOOL_AND (CAST(NULL AS BOOLEAN))

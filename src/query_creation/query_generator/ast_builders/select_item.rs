@@ -17,16 +17,23 @@ impl SelectItemBuilder {
     pub fn build<StC: StateChooser>(
         generator: &mut QueryGenerator<StC>, projection: &mut Vec<SelectItem>
     ) {
-        generator.expect_states(&["SELECT_item", "SELECT_item_grouping_enabled"]);
-
-        let select_item = projection.last_mut().unwrap();
-        let (
-            first_column_list, remaining_columns
-        ) = unwrap_variant!(
-            generator.state_generator.get_fn_selected_types_unwrapped(), CallTypes::QueryTypes
-        ).split_first();
+        generator.expect_state("SELECT_item");
 
         match_next_state!(generator, {
+            "SELECT_item_grouping_enabled" => { },
+            "SELECT_item_can_finish" => {
+                projection.pop(); // last item is not used
+                generator.expect_state("EXIT_SELECT_item");
+                return
+            }
+        });
+
+        let select_item = projection.last_mut().unwrap();
+        let arg = unwrap_variant!(
+            generator.state_generator.get_fn_selected_types_unwrapped(), CallTypes::QueryTypes
+        );
+
+        let remaining_columns = match_next_state!(generator, {
             "SELECT_tables_eligible_for_wildcard" => {
                 let new_types = match_next_state!(generator, {
                     "SELECT_wildcard" => {
@@ -49,9 +56,12 @@ impl SelectItemBuilder {
                         Vec::from_iter(relation.get_wildcard_columns_iter())
                     }
                 });
+                let remaining_columns = arg.after_prefix(new_types.iter().map(|(_, tp)| tp));
                 generator.clause_context.query_mut().select_type_mut().extend(new_types.into_iter());
+                remaining_columns
             },
             alias_node @ ("SELECT_unnamed_expr" | "SELECT_expr_with_alias") => {
+                let (first_column_list, remaining_columns) = arg.split_first();
                 let (mut alias, expr) = match alias_node {
                     "SELECT_unnamed_expr" => (
                         None, unwrap_variant!(select_item, SelectItem::UnnamedExpr)
@@ -81,18 +91,15 @@ impl SelectItemBuilder {
                     alias = QueryProps::extract_alias(expr);
                 }
                 generator.clause_context.query_mut().select_type_mut().push((alias, subgraph_type));
+                remaining_columns
             }
         });
 
+        generator.expect_state("call1_SELECT_item");
+        generator.state_generator.set_known_query_type_list(remaining_columns);
         projection.push(SelectItem::UnnamedExpr(TypesBuilder::highlight()));
-        generator.expect_state("SELECT_item_can_add_more_columns");
-        match_next_state!(generator, {
-            "SELECT_item_can_finish" => { projection.pop(); },
-            "call1_SELECT_item" => {
-                generator.state_generator.set_known_query_type_list(remaining_columns);
-                SelectItemBuilder::build(generator, projection);
-            }
-        });
+        SelectItemBuilder::build(generator, projection);
+
         generator.expect_state("EXIT_SELECT_item");
     }
 }

@@ -97,9 +97,16 @@ impl QueryBuilder {
         };
 
         generator.expect_state("call0_set_expression");
-        generator.state_generator.set_known_query_type_list(column_type_list);
+        generator.state_generator.set_known_query_type_list(column_type_list.clone());
         query.body = Box::new(SetExpressionBuilder::nothing());
         SetExpressionBuilder::build(generator, &mut query.body);
+
+        if !column_type_list.check_type(generator.clause_context.query().select_type().iter().map(|(_, t)| t)) {
+            panic!(
+                "set_expression created query type: {:?}\nbut the requested type was: {:?}",
+                generator.clause_context.query().select_type(), column_type_list
+            )
+        }
 
         generator.expect_state("call0_ORDER_BY");
         query.order_by = OrderByBuilder::highlight();

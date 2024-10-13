@@ -47,7 +47,7 @@ impl TestAST2Path {
                 }
                 std::io::stdout().flush().unwrap();
             }
-            // if i < 6 { continue; }
+            // if i < 1511 { continue; }
             // eprintln!("\nTested query: {query}\n");
             let path_gen_start = Instant::now();
             let path = self.path_generator.get_query_path(&query)?;
@@ -64,7 +64,7 @@ impl TestAST2Path {
         fs::write("ast2path_time.txt", format!(
             "[\n{}\n]", path_length_time.into_iter().map(
                 |(l, t)| format!("({l}, {t})")
-            ).join("\n")
+            ).join(",\n")
         )).unwrap();
         Ok(())
     }

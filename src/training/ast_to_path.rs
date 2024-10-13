@@ -613,22 +613,29 @@ impl PathGenerator {
                 TypeAssertion::GeneratedByOneOf(&first_column_list),
                 continue_with_type
             )?;
-            let new_cols_type_info = error_with_new_cols_type_info.lock().unwrap().take().and_then(
-                |err| err.responsible_wildcard_type);
-            // did we get any type info?
-            if let Some(new_cols_type_info) = new_cols_type_info {
-                // if yes, try again but with the known type
-                self.restore_checkpoint_consume(before_us_checkpoint);
-                self.handle_set_expression_determine_type_and_try(
-                    expr_str.clone(),
-                    n_cols_remaining,
-                    n_cols_total,
-                    column_types,
-                    column_count_can_cause_errors,
-                    Some(new_cols_type_info.into_iter()),
-                    and_try.clone()
-                )?;
+            if let Some(err) = error_with_new_cols_type_info.lock().unwrap().take() {
+                // did we get any type info?
+                if let Some(new_cols_type_info) = err.responsible_wildcard_type {
+                    // if yes, try again but with the known type
+                    self.restore_checkpoint_consume(before_us_checkpoint);
+                    self.handle_set_expression_determine_type_and_try(
+                        expr_str.clone(),
+                        n_cols_remaining,
+                        n_cols_total,
+                        column_types,
+                        column_count_can_cause_errors,
+                        Some(new_cols_type_info.into_iter()),
+                        and_try.clone()
+                    )?;
+                } else {
+                    // if no, this is unexpected
+                    return Err(ConvertionError::new(format!(
+                        "Got an error about a wildcard column, but it does not have type info.\nselect_type: {:?}\nreal_n_cols: {:?}\nresponsible_wildcard_type: {:?}\nError:\n{err}",
+                        err.select_type, err.real_n_cols, err.responsible_wildcard_type
+                    )))
+                }
             }
+            
         }
 
         let ans = error_with_incomplete_type.lock().unwrap().take();
@@ -913,32 +920,47 @@ impl PathGenerator {
         &mut self, projection: &[SelectItem], select_item_state: &str
     ) -> Result<(), ConvertionError> {
 
-        self.try_push_states(&["SELECT_item", "SELECT_item_grouping_enabled"])?;
+        self.try_push_state("SELECT_item")?;
+
+        if projection.len() == 0 {
+            self.try_push_states(&["SELECT_item_can_finish", "EXIT_SELECT_item"])?;
+            return Ok(())
+        }
+
+        self.try_push_state("SELECT_item_grouping_enabled")?;
 
         let (select_item, remaining_projection) = projection.split_first().unwrap();
-        let (
-            first_column_list, remaining_column_types
-        ) = unwrap_variant!(
-            self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::QueryTypes
-        ).split_first();
 
-        match select_item {
-            SelectItem::UnnamedExpr(expr) => {
-                self.try_push_states(&["SELECT_unnamed_expr", "select_expr", select_item_state])?;
-                self.state_generator.set_known_list(first_column_list.clone());
-                let tp = self.handle_types(expr, TypeAssertion::GeneratedByOneOf(&first_column_list))?;
-                self.try_push_state("select_expr_done")?;
-                let alias = QueryProps::extract_alias(&expr);
-                self.clause_context.query_mut().select_type_mut().push((alias, tp));
-            },
-            SelectItem::ExprWithAlias { expr, alias } => {
-                self.try_push_state("SELECT_expr_with_alias")?;
-                self.push_node(PathNode::SelectAlias(alias.clone()));  // the order is important
-                self.try_push_states(&["select_expr", select_item_state])?;
-                self.state_generator.set_known_list(first_column_list.clone());
-                let tp = self.handle_types(expr, TypeAssertion::GeneratedByOneOf(&first_column_list))?;
-                self.try_push_state("select_expr_done")?;
-                self.clause_context.query_mut().select_type_mut().push((Some(alias.clone().into()), tp));
+        let arg = unwrap_variant!(
+            self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::QueryTypes
+        );
+
+        let remaining_column_types = match select_item {
+            select_item @ (SelectItem::UnnamedExpr(..) | SelectItem::ExprWithAlias { .. }) => {
+                let (
+                    first_column_list, remaining_column_types
+                ) = arg.split_first();
+                match select_item {
+                    SelectItem::UnnamedExpr(expr) => {
+                        self.try_push_states(&["SELECT_unnamed_expr", "select_expr", select_item_state])?;
+                        self.state_generator.set_known_list(first_column_list.clone());
+                        let tp = self.handle_types(expr, TypeAssertion::GeneratedByOneOf(&first_column_list))?;
+                        self.try_push_state("select_expr_done")?;
+                        let alias = QueryProps::extract_alias(&expr);
+                        self.clause_context.query_mut().select_type_mut().push((alias, tp));
+                    },
+                    SelectItem::ExprWithAlias { expr, alias } => {
+                        self.try_push_state("SELECT_expr_with_alias")?;
+                        self.push_node(PathNode::SelectAlias(alias.clone()));  // the order is important
+                        self.try_push_states(&["select_expr", select_item_state])?;
+                        self.state_generator.set_known_list(first_column_list.clone());
+                        let tp = self.handle_types(expr, TypeAssertion::GeneratedByOneOf(&first_column_list))?;
+                        self.try_push_state("select_expr_done")?;
+                        self.clause_context.query_mut().select_type_mut().push((Some(alias.clone().into()), tp));
+                    },
+                    _ => unreachable!(),
+                }
+                remaining_column_types
             },
             SelectItem::QualifiedWildcard(alias, ..) => {
                 self.try_push_states(&["SELECT_tables_eligible_for_wildcard", "SELECT_qualified_wildcard"])?;
@@ -959,25 +981,24 @@ impl PathGenerator {
                     any => panic!("schema.table alias is not supported: {}", ObjectName(any.to_vec())),
                 };
 
-                let new_types = relation.get_wildcard_columns_iter().collect_vec();
+                let new_types: Vec<(Option<IdentName>, SubgraphType)> = relation.get_wildcard_columns_iter().collect_vec();
+                let remaining_column_types = arg.after_prefix(new_types.iter().map(|(_, tp)| tp));
                 self.clause_context.query_mut().select_type_mut().extend(new_types.into_iter());
                 self.push_node(PathNode::QualifiedWildcardSelectedRelation(alias.0.last().unwrap().clone()));
+                remaining_column_types
             },
             SelectItem::Wildcard(..) => {
                 self.try_push_states(&["SELECT_tables_eligible_for_wildcard", "SELECT_wildcard"])?;
                 let new_types = self.clause_context.top_active_from().get_wildcard_columns_iter().collect_vec();
+                let remaining_column_types = arg.after_prefix(new_types.iter().map(|(_, tp)| tp));
                 self.clause_context.query_mut().select_type_mut().extend(new_types.into_iter());
+                remaining_column_types
             },
-        }
+        };
 
-        self.try_push_state("SELECT_item_can_add_more_columns")?;
-        if remaining_projection.len() == 0 {
-            self.try_push_state("SELECT_item_can_finish")?;
-        } else {
-            self.try_push_state("call1_SELECT_item")?;
-            self.state_generator.set_known_query_type_list(remaining_column_types);
-            self.handle_select_item(remaining_projection, select_item_state)?;
-        }
+        self.try_push_state("call1_SELECT_item")?;
+        self.state_generator.set_known_query_type_list(remaining_column_types);
+        self.handle_select_item(remaining_projection, select_item_state)?;
         self.try_push_state("EXIT_SELECT_item")?;
 
         Ok(())

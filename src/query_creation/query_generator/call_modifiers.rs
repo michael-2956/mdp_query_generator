@@ -17,7 +17,6 @@ pub enum ValueSetterValue {
     CanSkipLimit(CanSkipLimitValue),
     IsGroupingSets(IsGroupingSetsValue),
     GroupingEnabled(GroupingEnabledValue),
-    CanAddMoreColumns(CanAddMoreColumnsValue),
     WildcardRelations(WildcardRelationsValue),
     AvailableTableNames(AvailableTableNamesValue),
     DistinctAggregation(DistinctAggregationValue),
@@ -335,38 +334,6 @@ impl StatelessCallModifier for GroupingModeSwitchModifier {
 }
 
 #[derive(Debug, Clone)]
-pub struct CanAddMoreColumnsValue {
-    /// should add more columns?
-    /// None is not enforced
-    pub should_add: Option<bool>,
-}
-
-impl NamedValue for CanAddMoreColumnsValue {
-    fn name() -> SmolStr {
-        SmolStr::new("CanAddMoreColumnsValue")
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct CanAddMoreColumnsValueSetter { }
-
-impl ValueSetter for CanAddMoreColumnsValueSetter {
-    fn get_value_name(&self) -> SmolStr {
-        CanAddMoreColumnsValue::name()
-    }
-
-    fn get_value(&self, _clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
-        ValueSetterValue::CanAddMoreColumns(CanAddMoreColumnsValue {
-            should_add: match unwrap_variant!(&function_context.call_params.selected_types, CallTypes::QueryTypes) {
-                QueryTypes::ColumnTypeLists { column_type_lists } => Some(column_type_lists.len() > 1),
-                // not enforced
-                QueryTypes::TypeList { .. } => None,
-            },
-        })
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct CanAddMoreColumnsModifier {}
 
 impl StatelessCallModifier for CanAddMoreColumnsModifier {
@@ -375,13 +342,17 @@ impl StatelessCallModifier for CanAddMoreColumnsModifier {
     }
 
     fn get_associated_value_name(&self) -> Option<SmolStr> {
-        Some(CanAddMoreColumnsValue::name())
+        None
     }
 
-    fn run(&self, function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
-        let should_add = unwrap_variant!(associated_value.unwrap(), ValueSetterValue::CanAddMoreColumns).should_add;
+    fn run(&self, function_context: &FunctionContext, _associated_value: Option<&ValueSetterValue>) -> bool {
+        let should_add = match unwrap_variant!(&function_context.call_params.selected_types, CallTypes::QueryTypes) {
+            QueryTypes::ColumnTypeLists { column_type_lists } => Some(column_type_lists.len() > 0),
+            // not enforced
+            QueryTypes::TypeList { .. } => None,
+        };
         match function_context.current_node.node_common.name.as_str() {
-            "call1_SELECT_item" => should_add.unwrap_or(true),
+            "SELECT_item_grouping_enabled" => should_add.unwrap_or(true),
             "SELECT_item_can_finish" => should_add.map(|x| !x).unwrap_or(true),
             any => panic!("CanAddMoreColumnsModifier value cannot be evalueted at {any}"),
         }
