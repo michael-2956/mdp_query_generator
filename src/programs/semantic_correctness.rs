@@ -6,6 +6,7 @@ use crate::{config::{Config, TomlReadable}, query_creation::{query_generator::{q
 
 use super::syntax_coverage::{create_database, drop_database_if_exists};
 
+#[derive(Debug, Clone)]
 pub struct SemanticCorrectnessConfig {
     pub n_tests: usize,
     schema_path: PathBuf,

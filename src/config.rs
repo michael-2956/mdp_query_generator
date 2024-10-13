@@ -52,6 +52,7 @@ impl TomlReadable for MainConfig {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Config {
     pub main_config: MainConfig,
     pub syntax_coverage_config: SyntaxCoverageConfig,

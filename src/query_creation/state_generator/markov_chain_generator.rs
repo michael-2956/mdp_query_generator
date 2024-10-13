@@ -28,7 +28,7 @@ use substitute_models::SubstituteModel;
 
 pub use self::markov_chain::CallTypes;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct StateGeneratorConfig {
     pub graph_file_path: PathBuf,
 }

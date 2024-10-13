@@ -24,6 +24,7 @@ use crate::{
     unwrap_pat, unwrap_variant, unwrap_variant_or_else
 };
 
+#[derive(Debug, Clone)]
 pub struct AST2PathTestingConfig {
     pub schema: PathBuf,
     pub n_tests: usize,

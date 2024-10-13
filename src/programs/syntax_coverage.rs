@@ -19,6 +19,7 @@ use crate::query_creation::state_generator::MarkovChainGenerator;
 use crate::training::ast_to_path::PathGenerator;
 use crate::unwrap_variant;
 
+#[derive(Debug, Clone)]
 pub struct SyntaxCoverageConfig {
     spider_schemas_folder: PathBuf,
     spider_tables_json_path: PathBuf,

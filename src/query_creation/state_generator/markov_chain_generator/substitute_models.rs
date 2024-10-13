@@ -168,7 +168,7 @@ impl QueryStats {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct AntiCallModelConfig {
     pub stir_level: usize,
     p_select_one_smaller: f64,

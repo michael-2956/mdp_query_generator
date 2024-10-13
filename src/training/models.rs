@@ -11,6 +11,7 @@ use super::ast_to_path::PathNode;
 pub mod markov_models;
 pub mod llm_prompting_models;
 
+#[derive(Debug, Clone)]
 pub struct ModelConfig {
     /// Which model to use. Can be: "subgraph"
     pub model_name: String,
