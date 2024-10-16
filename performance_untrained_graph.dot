@@ -121,54 +121,48 @@ digraph G {
         set_expression -> call7_Query
         call7_Query -> EXIT_set_expression
 
-        // // manage operation precedence entirely in graph:
-        // // if we have union or except, we forbid [union, except] on the right.
-        // // Only intersect is stronger and can be placed on the right, but left can have anything
-        // // if we have intersect, none are stronger, so we forbid [union, except, intersect] on the right
-        // // and [union, except] on the left, since intersect can still be placed on the left.
+        // manage operation precedence entirely in graph:
+        // if we have union or except, we forbid [union, except] on the right.
+        // Only intersect is stronger and can be placed on the right, but left can have anything
+        // if we have intersect, none are stronger, so we forbid [union, except, intersect] on the right
+        // and [union, except] on the left, since intersect can still be placed on the left.
 
-        // // leftmost query type is returned as a result.
+        // leftmost query type is returned as a result.
 
-        // set_expression_set_operation [label="Set operation\nmod.: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
-        // set_expression -> set_expression_set_operation
+        set_expression_set_operation [label="Set operation\nmod.: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
+        set_expression -> set_expression_set_operation
 
-        // call5_Query [TYPES="Q[...]", label="Query\nTYPES=Q[...]", shape=rectangle, style=filled, color=green]
-        // call6_Query [TYPES="Q[...]", label="Query\nTYPES=Q[...]", shape=rectangle, style=filled, color=green]
-        // call5_Query -> call6_Query
-        // call6_Query -> EXIT_set_expression
+        call5_Query [TYPES="Q[...]", label="Query\nTYPES=Q[...]", shape=rectangle, style=filled, color=green]
+        call6_Query [TYPES="Q[...]", label="Query\nTYPES=Q[...]", shape=rectangle, style=filled, color=green]
+        call5_Query -> call6_Query
+        call6_Query -> EXIT_set_expression
 
-        // call3_set_expression [TYPES="Q[...]", MODS="[no union except]" label="Set operation\nTYPES=Q[...]\nMODS=[no union except]", shape=rectangle, color=indianred, style=filled]
-        // call3_set_expression -> call6_Query
-        // call4_set_expression [TYPES="Q[...]", MODS="[no union except, no intersect]", label="Set operation\nTYPES=Q[...]\nMODS=[no union except, no intersect]", shape=rectangle, color=indianred, style=filled]
-        // call3_set_expression -> call4_set_expression
-        // call4_set_expression -> EXIT_set_expression
+        call3_set_expression [TYPES="Q[...]", MODS="[no union except]" label="Set operation\nTYPES=Q[...]\nMODS=[no union except]", shape=rectangle, color=indianred, style=filled]
+        call3_set_expression -> call6_Query
+        call4_set_expression [TYPES="Q[...]", MODS="[no union except, no intersect]", label="Set operation\nTYPES=Q[...]\nMODS=[no union except, no intersect]", shape=rectangle, color=indianred, style=filled]
+        call3_set_expression -> call4_set_expression
+        call4_set_expression -> EXIT_set_expression
 
-        // query_set_op_intersect [label="intersect\nmod.: 'no intersect' -> OFF", modifier="no intersect", modifier_mode="off"]
-        // set_expression_set_operation -> query_set_op_intersect
-        // query_set_op_intersect -> call3_set_expression
-        // query_set_op_intersect -> call5_Query
+        query_set_op_intersect [label="intersect\nmod.: 'no intersect' -> OFF", modifier="no intersect", modifier_mode="off"]
+        set_expression_set_operation -> query_set_op_intersect
+        query_set_op_intersect -> call3_set_expression
+        query_set_op_intersect -> call5_Query
 
-        // call2_set_expression [TYPES="Q[...]", MODS="[]" label="Set operation\nTYPES=Q[...]\nMODS=[]", shape=rectangle, color=indianred, style=filled]
-        // call2_set_expression -> call6_Query
-        // call5_set_expression [TYPES="Q[...]", MODS="[no union except]", label="Set operation\nTYPES=Q[...]\nMODS=[no union except]", shape=rectangle, color=indianred, style=filled]
-        // call2_set_expression -> call5_set_expression
-        // call5_set_expression -> EXIT_set_expression
+        call2_set_expression [TYPES="Q[...]", MODS="[]" label="Set operation\nTYPES=Q[...]\nMODS=[]", shape=rectangle, color=indianred, style=filled]
+        call2_set_expression -> call6_Query
+        call5_set_expression [TYPES="Q[...]", MODS="[no union except]", label="Set operation\nTYPES=Q[...]\nMODS=[no union except]", shape=rectangle, color=indianred, style=filled]
+        call2_set_expression -> call5_set_expression
+        call5_set_expression -> EXIT_set_expression
 
-        // query_set_op_union [label="union\nmod.: 'no union except' -> OFF", modifier="no union except", modifier_mode="off"]
-        // set_expression_set_operation -> query_set_op_union
-        // query_set_op_union -> call2_set_expression
-        // query_set_op_union -> call5_Query
+        query_set_op_union [label="union\nmod.: 'no union except' -> OFF", modifier="no union except", modifier_mode="off"]
+        set_expression_set_operation -> query_set_op_union
+        query_set_op_union -> call2_set_expression
+        query_set_op_union -> call5_Query
 
-        // query_set_op_except [label="except\nmod.: 'no union except' -> OFF", modifier="no union except", modifier_mode="off"]
-        // set_expression_set_operation -> query_set_op_except
-        // query_set_op_except -> call2_set_expression
-        // query_set_op_except -> call5_Query
-
-        // query_set_op_intersect -> set_expression_set_operation_select_exprs
-        // set_expression_set_operation -> query_set_op_union
-        // query_set_op_union -> set_expression_set_operation_select_exprs
-        // set_expression_set_operation -> query_set_op_except
-        // query_set_op_except -> set_expression_set_operation_select_exprs
+        query_set_op_except [label="except\nmod.: 'no union except' -> OFF", modifier="no union except", modifier_mode="off"]
+        set_expression_set_operation -> query_set_op_except
+        query_set_op_except -> call2_set_expression
+        query_set_op_except -> call5_Query
     }
 
     subgraph def_SELECT_query {
@@ -531,7 +525,7 @@ digraph G {
         order_by_order_by_present [label="Order by present?\n[set value]", set_value="OrderByPresentValue"]
         ORDER_BY -> order_by_order_by_present
 
-        order_by_list [label="ORDER BY list\n[set value]\n[call mod]", set_value="select_is_not_distinct", call_modifier="OrderByPresentModifier"]
+        order_by_list [label="ORDER BY list\n[set value]\n[call mod]", set_value="OrderByExpressionAllowedValue", call_modifier="OrderByPresentModifier"]
         order_by_order_by_present -> order_by_list
         order_by_expr_done [label="Expression done"]
 
@@ -541,7 +535,7 @@ digraph G {
         order_by_select_reference -> order_by_select_reference_by_alias
         order_by_select_reference_by_alias -> order_by_expr_done
 
-        order_by_expr [label="Expression\n[call mod]\n[set value]", call_modifier="select_is_not_distinct_mod", set_value="grouping_enabled"]
+        order_by_expr [label="Expression\n[call mod]\n[set value]", call_modifier="OrderByExpressionAllowedModifier", set_value="grouping_enabled"]
         order_by_list -> order_by_expr
 
         call84_types [label="TYPES: any\nMODS: [group by columns, no literals, shade by select aliases]\ncall mod.: 'grouping mode switch'", TYPES="[any]", MODS="[group by columns, no literals, shade by select aliases]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]

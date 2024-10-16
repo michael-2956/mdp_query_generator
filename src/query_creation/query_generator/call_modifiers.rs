@@ -22,7 +22,7 @@ pub enum ValueSetterValue {
     LimitIsNotPresent(LimitIsNotPresentValue),
     AvailableTableNames(AvailableTableNamesValue),
     DistinctAggregation(DistinctAggregationValue),
-    SelectIsNotDistinct(SelectIsNotDistinctValue),
+    OrderByExpressionAllowed(OrderByExpressionAllowedValue),
     HasAccessibleColumns(HasAccessibleColumnsValue),
     IsColumnTypeAvailable(IsColumnTypeAvailableValue),
     QueryTypeNotExhausted(QueryTypeNotExhaustedValue),
@@ -726,49 +726,48 @@ impl StatelessCallModifier for SelectHasAccessibleColumnsModifier {
 }
 
 #[derive(Debug, Clone)]
-pub struct SelectIsNotDistinctValue {
-    /// is not distinct
-    pub is_not_distinct: bool,
+pub struct OrderByExpressionAllowedValue {
+    pub allowed: bool,
 }
 
-impl NamedValue for SelectIsNotDistinctValue {
+impl NamedValue for OrderByExpressionAllowedValue {
     fn name() -> SmolStr {
-        SmolStr::new("select_is_not_distinct")
+        SmolStr::new("OrderByExpressionAllowedValue")
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct SelectIsNotDistinctValueSetter { }
+pub struct OrderByExpressionAllowedValueSetter { }
 
-impl ValueSetter for SelectIsNotDistinctValueSetter {
+impl ValueSetter for OrderByExpressionAllowedValueSetter {
     fn get_value_name(&self) -> SmolStr {
-        SelectIsNotDistinctValue::name()
+        OrderByExpressionAllowedValue::name()
     }
 
     fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
-        ValueSetterValue::SelectIsNotDistinct(SelectIsNotDistinctValue {
-            is_not_distinct: match function_context.current_node.node_common.name.as_str() {
-                "order_by_list" => !clause_context.query().is_distinct(),
-                any => panic!("{any} unexpectedly triggered the select_is_not_distinct value setter"),
+        ValueSetterValue::OrderByExpressionAllowed(OrderByExpressionAllowedValue {
+            allowed: match function_context.current_node.node_common.name.as_str() {
+                "order_by_list" => !clause_context.query().is_distinct() && !clause_context.query().is_set_operation(),
+                any => panic!("{any} unexpectedly triggered the OrderByExpressionAllowedValue value setter"),
             },
         })
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct SelectIsNotDistinctModifier {}
+pub struct OrderByExpressionAllowedModifier {}
 
-impl StatelessCallModifier for SelectIsNotDistinctModifier {
+impl StatelessCallModifier for OrderByExpressionAllowedModifier {
     fn get_name(&self) -> SmolStr {
-        SmolStr::new("select_is_not_distinct_mod")
+        SmolStr::new("OrderByExpressionAllowedModifier")
     }
 
     fn get_associated_value_name(&self) -> Option<SmolStr> {
-        Some(SelectIsNotDistinctValue::name())
+        Some(OrderByExpressionAllowedValue::name())
     }
 
     fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
-        unwrap_variant!(associated_value.unwrap(), ValueSetterValue::SelectIsNotDistinct).is_not_distinct
+        unwrap_variant!(associated_value.unwrap(), ValueSetterValue::OrderByExpressionAllowed).allowed
     }
 }
 

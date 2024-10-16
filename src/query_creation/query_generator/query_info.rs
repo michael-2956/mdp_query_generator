@@ -425,6 +425,18 @@ impl ClauseContext {
         }
     }
 
+    /// merges the current frame (right) with the left frame,
+    /// creating a frame with the info nessesary for order by & limit of the parent query.\
+    /// this is for set operations, which is why current frame should be the right one and
+    /// left frame should be supplied
+    pub fn make_right_frame_into_setop_parent(&mut self, left_frame: ClauseContextFrame) {
+        self.query_props_stack.last_mut().unwrap().make_right_props_into_setop_parent(left_frame.query_props);
+        // from info should be empty, since none of those will be accessible anyway in ORDER BY or LIMIT
+        self.all_accessible_froms.clear_current_frame();
+        // group by contents should be empty too, since we only care about output columns in order by
+        *self.group_by_contents_stack.last_mut().unwrap() = GroupByContents::new();
+    }
+
     pub fn query(&self) -> &QueryProps {
         self.query_props_stack.last().unwrap()
     }
@@ -948,6 +960,13 @@ impl AllAccessibleFroms {
         }
     }
 
+    fn clear_current_frame(&mut self) {
+        *self.subfrom_opt_stack.last_mut().unwrap() = None;
+        *self.unactive_subfrom_opt_stack.last_mut().unwrap() = None;
+        *self.from_is_active_stack.last_mut().unwrap() = false;
+        *self.from_contents_stack.last_mut().unwrap() = FromContents::new();
+    }
+
     fn clone_frame(&self) -> AllAccessibleFromsFrame {
         AllAccessibleFromsFrame {
             subfrom_opt: self.subfrom_opt_stack.last().unwrap().clone(),
@@ -988,6 +1007,7 @@ pub struct QueryProps {
     distinct: bool,
     has_limit: bool,
     has_order_by: bool,
+    is_set_operation: bool,
     is_aggregation_indicated: bool,
     column_idents_and_graph_types: Option<Vec<(Option<IdentName>, SubgraphType)>>,
     current_subquery_call_options: Option<SubqueryCallOptions>,
@@ -999,6 +1019,7 @@ impl QueryProps {
             distinct: false,
             has_limit: false,
             has_order_by: false,
+            is_set_operation: false,
             is_aggregation_indicated: false,
             column_idents_and_graph_types: None,
             current_subquery_call_options: None,
@@ -1028,6 +1049,29 @@ impl QueryProps {
 
     fn unset_subquery_call_mods(&mut self) -> Option<SubqueryCallOptions> {
         self.current_subquery_call_options.take()
+    }
+
+    fn make_right_props_into_setop_parent(&mut self, left_frame_props: QueryProps) {
+        *self = Self {
+            // select distinct doesn't matter, since we can only use select expressions in ORDER BY anyway, so disregard it
+            distinct: false,
+            // the left or right being queries and already having limit doesn't impact the parent query
+            has_limit: false,
+            // the left or right being queries and already having order by doesn't impact the parent query
+            has_order_by: false,
+            // indicate that we are a set operation now
+            is_set_operation: true,
+            // this variable was used already
+            is_aggregation_indicated: false,
+            // the select body inherits names and types of the left frame.
+            column_idents_and_graph_types: left_frame_props.column_idents_and_graph_types,
+            // irrelevant since we exited subqueries of these frames already
+            current_subquery_call_options: None,
+        };
+    }
+
+    pub fn is_set_operation(&self) -> bool {
+        self.is_set_operation
     }
 
     pub fn is_distinct(&self) -> bool {
