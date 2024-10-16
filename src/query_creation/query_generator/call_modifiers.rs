@@ -16,8 +16,10 @@ pub trait NamedValue: Debug {
 pub enum ValueSetterValue {
     CanSkipLimit(CanSkipLimitValue),
     IsGroupingSets(IsGroupingSetsValue),
+    OrderByPresent(OrderByPresentValue),
     GroupingEnabled(GroupingEnabledValue),
     WildcardRelations(WildcardRelationsValue),
+    LimitIsNotPresent(LimitIsNotPresentValue),
     AvailableTableNames(AvailableTableNamesValue),
     DistinctAggregation(DistinctAggregationValue),
     SelectIsNotDistinct(SelectIsNotDistinctValue),
@@ -560,6 +562,9 @@ impl StatelessCallModifier for DistinctAggregationModifier {
 pub struct CanSkipLimitValue {
     /// LIMIT can be skipped
     pub can_skip: bool,
+    /// limit must be skipped because it is already present\
+    /// Important: if this is true, ignore can_skip
+    pub must_skip: bool,
 }
 
 impl NamedValue for CanSkipLimitValue {
@@ -577,17 +582,21 @@ impl ValueSetter for CanSkipLimitValueSetter {
     }
 
     fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
+        match function_context.current_node.node_common.name.as_str() {
+            "query_can_skip_limit_set_val" => { },
+            any => panic!("{any} unexpectedly triggered the can_skip_limit value setter"),
+        };
+        let limit_is_present = clause_context.query().limit_present();
+        let can_skip = {
+            !function_context.call_params.modifiers.contains(&SmolStr::new("single row")) ||
+            (
+                clause_context.top_group_by().is_single_group() &&
+                clause_context.top_group_by().is_single_row()
+            )
+        };
         ValueSetterValue::CanSkipLimit(CanSkipLimitValue {
-            can_skip: match function_context.current_node.node_common.name.as_str() {
-                "query_can_skip_limit_set_val" => {
-                    !function_context.call_params.modifiers.contains(&SmolStr::new("single row")) ||
-                    (
-                        clause_context.top_group_by().is_single_group() &&
-                        clause_context.top_group_by().is_single_row()
-                    )
-                },
-                any => panic!("{any} unexpectedly triggered the can_skip_limit value setter"),
-            },
+            can_skip,
+            must_skip: limit_is_present
         })
     }
 }
@@ -605,7 +614,57 @@ impl StatelessCallModifier for CanSkipLimitModifier {
     }
 
     fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
-        unwrap_variant!(associated_value.unwrap(), ValueSetterValue::CanSkipLimit).can_skip
+        let val = unwrap_variant!(associated_value.unwrap(), ValueSetterValue::CanSkipLimit);
+        if !val.must_skip {
+            val.can_skip
+        } else { true }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LimitIsNotPresentValue {
+    pub limit_is_not_present: bool,
+}
+
+impl NamedValue for LimitIsNotPresentValue {
+    fn name() -> SmolStr {
+        SmolStr::new("LimitIsNotPresentValue")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LimitIsNotPresentValueSetter { }
+
+impl ValueSetter for LimitIsNotPresentValueSetter {
+    fn get_value_name(&self) -> SmolStr {
+        LimitIsNotPresentValue::name()
+    }
+
+    fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
+        match function_context.current_node.node_common.name.as_str() {
+            "is_limit_present" => { },
+            any => panic!("{any} unexpectedly triggered the LimitIsNotPresentValue value setter"),
+        };
+        ValueSetterValue::LimitIsNotPresent(LimitIsNotPresentValue {
+            limit_is_not_present: !clause_context.query().limit_present(),
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LimitIsNotPresentModifier {}
+
+impl StatelessCallModifier for LimitIsNotPresentModifier {
+    fn get_name(&self) -> SmolStr {
+        SmolStr::new("LimitIsNotPresentModifier")
+    }
+
+    fn get_associated_value_name(&self) -> Option<SmolStr> {
+        Some(LimitIsNotPresentValue::name())
+    }
+
+    fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
+        unwrap_variant!(associated_value.unwrap(), ValueSetterValue::LimitIsNotPresent).limit_is_not_present
     }
 }
 
@@ -710,6 +769,56 @@ impl StatelessCallModifier for SelectIsNotDistinctModifier {
 
     fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
         unwrap_variant!(associated_value.unwrap(), ValueSetterValue::SelectIsNotDistinct).is_not_distinct
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct OrderByPresentValue {
+    pub order_by_already_present: bool,
+}
+
+impl NamedValue for OrderByPresentValue {
+    fn name() -> SmolStr {
+        SmolStr::new("OrderByPresentValue")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct OrderByPresentValueSetter { }
+
+impl ValueSetter for OrderByPresentValueSetter {
+    fn get_value_name(&self) -> SmolStr {
+        OrderByPresentValue::name()
+    }
+
+    fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
+        ValueSetterValue::OrderByPresent(OrderByPresentValue {
+            order_by_already_present: match function_context.current_node.node_common.name.as_str() {
+                "order_by_order_by_present" => clause_context.query().order_by_present(),
+                any => panic!("{any} unexpectedly triggered the OrderByPresentValue value setter"),
+            },
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct OrderByPresentModifier {}
+
+impl StatelessCallModifier for OrderByPresentModifier {
+    fn get_name(&self) -> SmolStr {
+        SmolStr::new("OrderByPresentModifier")
+    }
+
+    fn get_associated_value_name(&self) -> Option<SmolStr> {
+        Some(OrderByPresentValue::name())
+    }
+
+    fn run(&self, function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
+        let order_by_already_present = unwrap_variant!(associated_value.unwrap(), ValueSetterValue::OrderByPresent).order_by_already_present;
+        match function_context.current_node.node_common.name.as_str() {
+            "order_by_list" => !order_by_already_present,
+            any => panic!("{any} unexpectedly triggered the OrderByPresentModifier"),
+        }
     }
 }
 

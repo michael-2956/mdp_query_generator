@@ -4,7 +4,7 @@ use itertools::Itertools;
 use smol_str::SmolStr;
 use crate::{query_creation::state_generator::{markov_chain_generator::markov_chain::{CallModifiers, QueryTypes}, subgraph_type::{ContainsSubgraphType, SubgraphType}}, unwrap_variant};
 
-use sqlparser::{ast::{ColumnDef, DataType, Expr, FileFormat, HiveDistributionStyle, HiveFormat, Ident, ObjectName, OnCommit, Query, SelectItem, SetExpr, SqlOption, Statement, TableAlias, TableConstraint, TimezoneInfo, UnaryOperator}, dialect::PostgreSqlDialect, parser::Parser};
+use sqlparser::{ast::{ColumnDef, DataType, Expr, FileFormat, HiveDistributionStyle, HiveFormat, Ident, ObjectName, OnCommit, Query, Select, SelectItem, SetExpr, SqlOption, Statement, TableAlias, TableConstraint, TimezoneInfo, UnaryOperator}, dialect::PostgreSqlDialect, parser::Parser};
 
 use super::Unnested;
 
@@ -306,6 +306,18 @@ impl ColumnRetrievalOptions {
 trait TypeAndQualifiedColumnIter<'a>: Iterator<Item = (&'a SubgraphType, [&'a IdentName; 2])> {}
 impl<'a, T: Iterator<Item = (&'a SubgraphType, [&'a IdentName; 2])> + 'a> TypeAndQualifiedColumnIter<'a> for T {}
 
+pub struct ClauseContextFrame {
+    query_props: QueryProps,
+    group_by_contents: GroupByContents,
+    from_frame: AllAccessibleFromsFrame,
+}
+
+impl ClauseContextFrame {
+    pub fn into_query_props(self) -> QueryProps {
+        self.query_props
+    }
+}
+
 impl ClauseContext {
     pub fn new(database_schema: DatabaseSchema) -> Self {
         Self {
@@ -375,14 +387,42 @@ impl ClauseContext {
         self.group_by_contents_stack.push(GroupByContents::new());
     }
 
-    pub fn on_query_end(&mut self) {
-        self.query_props_stack.pop();
+    pub fn on_query_end(&mut self) -> ClauseContextFrame {
+        let query_props = self.query_props_stack.pop().unwrap();
         if let Some(query_props) = self.query_props_stack.last_mut() {
             query_props.unset_subquery_call_mods();
         }
+        let from_frame = self.all_accessible_froms.on_query_end();
+        let group_by_contents = self.group_by_contents_stack.pop().unwrap();
 
-        self.all_accessible_froms.on_query_end();
-        self.group_by_contents_stack.pop();
+        // subquery_call_mods are ignored, since they will not be reused by the upper query
+        ClauseContextFrame {
+            query_props,
+            from_frame,
+            group_by_contents,
+        }
+    }
+
+    pub fn clone_frame(&mut self) -> ClauseContextFrame {
+        ClauseContextFrame {
+            query_props: self.query_props_stack.last().unwrap().clone(),
+            group_by_contents: self.group_by_contents_stack.last().unwrap().clone(),
+            from_frame: self.all_accessible_froms.clone_frame(),
+        }
+    }
+
+    /// returns the old frame.
+    pub fn populate_with_frame(&mut self, frame: ClauseContextFrame) -> ClauseContextFrame {
+        let query_props = self.query_props_stack.pop().unwrap();
+        self.query_props_stack.push(frame.query_props);
+        let group_by_contents = self.group_by_contents_stack.pop().unwrap();
+        self.group_by_contents_stack.push(frame.group_by_contents);
+        let from_frame = self.all_accessible_froms.populate_with_frame(frame.from_frame);
+        ClauseContextFrame {
+            query_props,
+            group_by_contents,
+            from_frame,
+        }
     }
 
     pub fn query(&self) -> &QueryProps {
@@ -770,6 +810,13 @@ pub struct AllAccessibleFromsCutoffCheckpoint {
     unactive_subfrom_opt_last: Option<FromContents>,
 }
 
+pub struct AllAccessibleFromsFrame {
+    from_contents: FromContents,
+    subfrom_opt: Option<FromContents>,
+    unactive_subfrom_opt: Option<FromContents>,
+    from_is_active: bool,
+}
+
 impl AllAccessibleFroms {
     fn new() -> Self {
         Self {
@@ -888,11 +935,44 @@ impl AllAccessibleFroms {
         self.from_contents_stack.push(FromContents::new());
     }
 
-    fn on_query_end(&mut self) {
-        self.subfrom_opt_stack.pop();
-        self.unactive_subfrom_opt_stack.pop();
-        self.from_is_active_stack.pop();
-        self.from_contents_stack.pop();
+    fn on_query_end(&mut self) -> AllAccessibleFromsFrame {
+        let subfrom_opt = self.subfrom_opt_stack.pop().unwrap();
+        let unactive_subfrom_opt = self.unactive_subfrom_opt_stack.pop().unwrap();
+        let from_is_active = self.from_is_active_stack.pop().unwrap();
+        let from_contents = self.from_contents_stack.pop().unwrap();
+        AllAccessibleFromsFrame {
+            from_contents,
+            subfrom_opt,
+            unactive_subfrom_opt,
+            from_is_active,
+        }
+    }
+
+    fn clone_frame(&self) -> AllAccessibleFromsFrame {
+        AllAccessibleFromsFrame {
+            subfrom_opt: self.subfrom_opt_stack.last().unwrap().clone(),
+            unactive_subfrom_opt: self.unactive_subfrom_opt_stack.last().unwrap().clone(),
+            from_is_active: self.from_is_active_stack.last().unwrap().clone(),
+            from_contents: self.from_contents_stack.last().unwrap().clone(),
+        }
+    }
+
+    /// returns the old frame
+    fn populate_with_frame(&mut self, frame: AllAccessibleFromsFrame) -> AllAccessibleFromsFrame {
+        let subfrom_opt = self.subfrom_opt_stack.pop().unwrap();
+        self.subfrom_opt_stack.push(frame.subfrom_opt);
+        let unactive_subfrom_opt = self.unactive_subfrom_opt_stack.pop().unwrap();
+        self.unactive_subfrom_opt_stack.push(frame.unactive_subfrom_opt);
+        let from_is_active = self.from_is_active_stack.pop().unwrap();
+        self.from_is_active_stack.push(frame.from_is_active);
+        let from_contents = self.from_contents_stack.pop().unwrap();
+        self.from_contents_stack.push(frame.from_contents);
+        AllAccessibleFromsFrame {
+            from_contents,
+            subfrom_opt,
+            unactive_subfrom_opt,
+            from_is_active,
+        }
     }
 }
 
@@ -906,6 +986,8 @@ struct SubqueryCallOptions {
 #[derive(Debug, Clone)]
 pub struct QueryProps {
     distinct: bool,
+    has_limit: bool,
+    has_order_by: bool,
     is_aggregation_indicated: bool,
     column_idents_and_graph_types: Option<Vec<(Option<IdentName>, SubgraphType)>>,
     current_subquery_call_options: Option<SubqueryCallOptions>,
@@ -915,6 +997,8 @@ impl QueryProps {
     fn new() -> QueryProps {
         Self {
             distinct: false,
+            has_limit: false,
+            has_order_by: false,
             is_aggregation_indicated: false,
             column_idents_and_graph_types: None,
             current_subquery_call_options: None,
@@ -942,8 +1026,8 @@ impl QueryProps {
         }
     }
 
-    fn unset_subquery_call_mods(&mut self) {
-        self.current_subquery_call_options.take();
+    fn unset_subquery_call_mods(&mut self) -> Option<SubqueryCallOptions> {
+        self.current_subquery_call_options.take()
     }
 
     pub fn is_distinct(&self) -> bool {
@@ -952,6 +1036,22 @@ impl QueryProps {
 
     pub fn set_distinct(&mut self) {
         self.distinct = true;
+    }
+
+    pub fn order_by_present(&self) -> bool {
+        self.has_order_by
+    }
+
+    pub fn set_order_by_present(&mut self) {
+        self.has_order_by = true;
+    }
+
+    pub fn limit_present(&self) -> bool {
+        self.has_limit
+    }
+
+    pub fn set_limit_present(&mut self) {
+        self.has_limit = true;
     }
 
     pub fn set_select_type(&mut self, column_idents_and_graph_types: Vec<(Option<IdentName>, SubgraphType)>) {
@@ -970,11 +1070,15 @@ impl QueryProps {
         &self.column_idents_and_graph_types.as_ref().unwrap()
     }
 
+    pub fn into_select_type(self) -> Vec<(Option<IdentName>, SubgraphType)> {
+        self.column_idents_and_graph_types.unwrap()
+    }
+
     pub fn get_all_select_aliases_iter(&self) -> impl Iterator<Item = &IdentName> {
         self.select_type().iter().filter_map(|(alias, ..)| alias.as_ref())
     }
 
-    pub fn pop_output_type(&mut self) -> Vec<(Option<IdentName>, SubgraphType)> {
+    pub fn take_output_type(&mut self) -> Vec<(Option<IdentName>, SubgraphType)> {
         let mut column_idents_and_graph_types = self.column_idents_and_graph_types.take().unwrap();
         // select pg_typeof((select null)); -- returns text
         for (_, column_type) in column_idents_and_graph_types.iter_mut() {
@@ -983,6 +1087,17 @@ impl QueryProps {
             }
         }
         column_idents_and_graph_types
+    }
+
+    fn get_select_body<'a>(set_expr: &'a Box<SetExpr>) -> &'a Box<Select> {
+        match &**set_expr {
+            SetExpr::Select(body) => body,
+            SetExpr::Query(query) => Self::get_select_body(&query.body),
+            SetExpr::SetOperation { op: _, set_quantifier: _, left, right: _ } => {
+                Self::get_select_body(left)
+            },
+            _ => unimplemented!(),
+        }
     }
 
     pub fn extract_alias(expr: &Expr) -> Option<IdentName> {
@@ -1065,7 +1180,7 @@ impl QueryProps {
                 Some(Ident { value: "interval".to_string(), quote_style: Some('"') })
             },
             Expr::Subquery(query) => {
-                let select_body = unwrap_variant!(&*query.body, SetExpr::Select);
+                let select_body = Self::get_select_body(&query.body);
                 match select_body.projection.as_slice() {
                     &[SelectItem::UnnamedExpr(ref expr)] => Self::extract_alias(expr).map(IdentName::into),
                     &[SelectItem::ExprWithAlias { expr: _, ref alias }] => Some(alias.clone().into()),

@@ -97,7 +97,7 @@ impl TypesValueBuilder {
                 });
                 *types_value = Expr::Subquery(Box::new(QueryBuilder::nothing()));
                 let subquery = &mut **unwrap_variant!(types_value, Expr::Subquery);
-                let column_types = QueryBuilder::build(generator, subquery);
+                let column_types = QueryBuilder::build(generator, subquery).into_query_props().into_select_type();
                 let selected_type = match column_types.len() {
                     1 => column_types.into_iter().next().unwrap().1,
                     any => panic!(

@@ -121,48 +121,48 @@ digraph G {
         set_expression -> call7_Query
         call7_Query -> EXIT_set_expression
 
-        // manage operation precedence entirely in graph:
-        // if we have union or except, we forbid [union, except] on the right.
-        // Only intersect is stronger and can be placed on the right, but left can have anything
-        // if we have intersect, none are stronger, so we forbid [union, except, intersect] on the right
-        // and [union, except] on the left, since intersect can still be placed on the left.
+        // // manage operation precedence entirely in graph:
+        // // if we have union or except, we forbid [union, except] on the right.
+        // // Only intersect is stronger and can be placed on the right, but left can have anything
+        // // if we have intersect, none are stronger, so we forbid [union, except, intersect] on the right
+        // // and [union, except] on the left, since intersect can still be placed on the left.
 
-        // leftmost query type is returned as a result.
+        // // leftmost query type is returned as a result.
 
-        set_expression_set_operation [label="Set operation\nmod.: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
-        set_expression -> set_expression_set_operation
+        // set_expression_set_operation [label="Set operation\nmod.: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
+        // set_expression -> set_expression_set_operation
 
-        call5_Query [TYPES="Q[...]", label="Query\nTYPES=Q[...]", shape=rectangle, style=filled, color=green]
-        call6_Query [TYPES="Q[...]", label="Query\nTYPES=Q[...]", shape=rectangle, style=filled, color=green]
-        call5_Query -> call6_Query
-        call6_Query -> EXIT_set_expression
+        // call5_Query [TYPES="Q[...]", label="Query\nTYPES=Q[...]", shape=rectangle, style=filled, color=green]
+        // call6_Query [TYPES="Q[...]", label="Query\nTYPES=Q[...]", shape=rectangle, style=filled, color=green]
+        // call5_Query -> call6_Query
+        // call6_Query -> EXIT_set_expression
 
-        call3_set_expression [TYPES="Q[...]", MODS="[no union except]" label="Set operation\nTYPES=Q[...]\nMODS=[no union except]", shape=rectangle, color=indianred, style=filled]
-        call3_set_expression -> call6_Query
-        call4_set_expression [TYPES="Q[...]", MODS="[no union except, no intersect]", label="Set operation\nTYPES=Q[...]\nMODS=[no union except, no intersect]", shape=rectangle, color=indianred, style=filled]
-        call3_set_expression -> call4_set_expression
-        call4_set_expression -> EXIT_set_expression
+        // call3_set_expression [TYPES="Q[...]", MODS="[no union except]" label="Set operation\nTYPES=Q[...]\nMODS=[no union except]", shape=rectangle, color=indianred, style=filled]
+        // call3_set_expression -> call6_Query
+        // call4_set_expression [TYPES="Q[...]", MODS="[no union except, no intersect]", label="Set operation\nTYPES=Q[...]\nMODS=[no union except, no intersect]", shape=rectangle, color=indianred, style=filled]
+        // call3_set_expression -> call4_set_expression
+        // call4_set_expression -> EXIT_set_expression
 
-        query_set_op_intersect [label="intersect\nmod.: 'no intersect' -> OFF", modifier="no intersect", modifier_mode="off"]
-        set_expression_set_operation -> query_set_op_intersect
-        query_set_op_intersect -> call3_set_expression
-        query_set_op_intersect -> call5_Query
+        // query_set_op_intersect [label="intersect\nmod.: 'no intersect' -> OFF", modifier="no intersect", modifier_mode="off"]
+        // set_expression_set_operation -> query_set_op_intersect
+        // query_set_op_intersect -> call3_set_expression
+        // query_set_op_intersect -> call5_Query
 
-        call2_set_expression [TYPES="Q[...]", MODS="[]" label="Set operation\nTYPES=Q[...]\nMODS=[]", shape=rectangle, color=indianred, style=filled]
-        call2_set_expression -> call6_Query
-        call5_set_expression [TYPES="Q[...]", MODS="[no union except]", label="Set operation\nTYPES=Q[...]\nMODS=[no union except]", shape=rectangle, color=indianred, style=filled]
-        call2_set_expression -> call5_set_expression
-        call5_set_expression -> EXIT_set_expression
+        // call2_set_expression [TYPES="Q[...]", MODS="[]" label="Set operation\nTYPES=Q[...]\nMODS=[]", shape=rectangle, color=indianred, style=filled]
+        // call2_set_expression -> call6_Query
+        // call5_set_expression [TYPES="Q[...]", MODS="[no union except]", label="Set operation\nTYPES=Q[...]\nMODS=[no union except]", shape=rectangle, color=indianred, style=filled]
+        // call2_set_expression -> call5_set_expression
+        // call5_set_expression -> EXIT_set_expression
 
-        query_set_op_union [label="union\nmod.: 'no union except' -> OFF", modifier="no union except", modifier_mode="off"]
-        set_expression_set_operation -> query_set_op_union
-        query_set_op_union -> call2_set_expression
-        query_set_op_union -> call5_Query
+        // query_set_op_union [label="union\nmod.: 'no union except' -> OFF", modifier="no union except", modifier_mode="off"]
+        // set_expression_set_operation -> query_set_op_union
+        // query_set_op_union -> call2_set_expression
+        // query_set_op_union -> call5_Query
 
-        query_set_op_except [label="except\nmod.: 'no union except' -> OFF", modifier="no union except", modifier_mode="off"]
-        set_expression_set_operation -> query_set_op_except
-        query_set_op_except -> call2_set_expression
-        query_set_op_except -> call5_Query
+        // query_set_op_except [label="except\nmod.: 'no union except' -> OFF", modifier="no union except", modifier_mode="off"]
+        // set_expression_set_operation -> query_set_op_except
+        // query_set_op_except -> call2_set_expression
+        // query_set_op_except -> call5_Query
 
         // query_set_op_intersect -> set_expression_set_operation_select_exprs
         // set_expression_set_operation -> query_set_op_union
@@ -525,8 +525,14 @@ digraph G {
         // reference SELECT by aliases/numbers, and the priority
         // is on the SELECT, when ambiguous between select and from.
 
-        order_by_list [label="ORDER BY list\n[set value]", set_value="select_is_not_distinct"]
-        ORDER_BY -> order_by_list
+        // new state that set the value "OrderByPresentValue"
+        // order_by_list should have modifier "OrderByPresentModifier"
+
+        order_by_order_by_present [label="Order by present?\n[set value]", set_value="OrderByPresentValue"]
+        ORDER_BY -> order_by_order_by_present
+
+        order_by_list [label="ORDER BY list\n[set value]\n[call mod]", set_value="select_is_not_distinct", call_modifier="OrderByPresentModifier"]
+        order_by_order_by_present -> order_by_list
         order_by_expr_done [label="Expression done"]
 
         order_by_select_reference [label="SELECT reference\n[set value]", set_value="select_has_accessible_columns"]
@@ -573,15 +579,20 @@ digraph G {
         query_can_skip_limit_set_val [label="Can skip LIMIT?\n[set value]", set_value="can_skip_limit"]
         LIMIT -> query_can_skip_limit_set_val
         query_can_skip_limit [label="Skip LIMIT\n[call mod]", call_modifier="can_skip_limit_mod"]
-        query_can_skip_limit_set_val-> query_can_skip_limit
+        query_can_skip_limit_set_val -> query_can_skip_limit
         query_can_skip_limit -> EXIT_LIMIT
 
+        is_limit_present [label="Is limit present?\n[set value]", set_value="LimitIsNotPresentValue"]
+        LIMIT -> is_limit_present
+        limit_not_present [label="Limit is not present\n[call mod]", call_modifier="LimitIsNotPresentModifier"]
+        is_limit_present -> limit_not_present
+
         single_row_true [label="limit 1\nmod: 'single row' -> ON", modifier="single row", modifier_mode="on"]
-        LIMIT -> single_row_true
+        limit_not_present -> single_row_true
         single_row_true -> EXIT_LIMIT
 
         // limit_num [label="limit [num]\nmod: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
-        // LIMIT -> limit_num
+        // limit_not_present -> limit_num
         // call52_types [TYPES="[integer, numeric, bigint]", MODS="[no column spec, no aggregate]", label="TYPES: [integer, numeric, bigint]\nMODS: [no column spec, no aggregate]", shape=rectangle, style=filled, color=lightblue]
         // limit_num -> call52_types
         // call52_types -> EXIT_LIMIT

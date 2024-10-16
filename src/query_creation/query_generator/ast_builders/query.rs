@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use sqlparser::ast::{Query, SetExpr};
 
-use crate::query_creation::{query_generator::{ast_builders::{limit::LimitBuilder, order_by::OrderByBuilder}, query_info::IdentName, QueryGenerator}, state_generator::{markov_chain_generator::markov_chain::QueryTypes, state_choosers::StateChooser, subgraph_type::SubgraphType}};
+use crate::query_creation::{query_generator::{ast_builders::{limit::LimitBuilder, order_by::OrderByBuilder}, query_info::ClauseContextFrame, QueryGenerator}, state_generator::{markov_chain_generator::markov_chain::QueryTypes, state_choosers::StateChooser}};
 
 use super::{set_expression::SetExpressionBuilder, set_expression_determine_type::SetExpressionDetermineTypeBuilder};
 
@@ -84,7 +84,7 @@ impl QueryBuilder {
 
     pub fn build<StC: StateChooser>(
         generator: &mut QueryGenerator<StC>, query: &mut Query
-    ) -> Vec<(Option<IdentName>, SubgraphType)> {
+    ) -> ClauseContextFrame {
         generator.substitute_model.notify_subquery_creation_begin();
         generator.clause_context.on_query_begin(generator.state_generator.get_fn_modifiers_opt());
         generator.expect_state("Query");
@@ -101,10 +101,11 @@ impl QueryBuilder {
         query.body = Box::new(SetExpressionBuilder::nothing());
         SetExpressionBuilder::build(generator, &mut query.body);
 
-        if !column_type_list.check_type(generator.clause_context.query().select_type().iter().map(|(_, t)| t)) {
+        let query_type = generator.clause_context.query().select_type();
+        if !column_type_list.check_type(query_type.iter().map(|(_, t)| t)) {
             panic!(
                 "set_expression created query type: {:?}\nbut the requested type was: {:?}",
-                generator.clause_context.query().select_type(), column_type_list
+                query_type, column_type_list
             )
         }
 
@@ -117,13 +118,7 @@ impl QueryBuilder {
         LimitBuilder::build(generator, &mut query.limit);
 
         generator.expect_state("EXIT_Query");
-        let output_type = generator.clause_context.query_mut().pop_output_type();
-        // if output_type.iter().filter_map(|(o, _)| o.as_ref()).any(|o| o.value == "case") {
-        //     eprintln!("output: {:?}", output_type);
-        // }
         generator.substitute_model.notify_subquery_creation_end();
-        generator.clause_context.on_query_end();
-
-        output_type
+        generator.clause_context.on_query_end()
     }
 }

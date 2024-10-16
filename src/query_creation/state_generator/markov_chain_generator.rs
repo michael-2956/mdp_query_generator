@@ -15,7 +15,7 @@ use smol_str::SmolStr;
 use sqlparser::ast::Query;
 use take_until::TakeUntilExt;
 
-use crate::{config::TomlReadable, query_creation::{query_generator::{call_modifiers::{AvailableTableNamesValueSetter, CanAddMoreColumnsModifier, CanSkipLimitModifier, CanSkipLimitValueSetter, DistinctAggregationModifier, DistinctAggregationValueSetter, FromTableNamesAvailableModifier, GroupingEnabledValueSetter, GroupingModeSwitchModifier, HasAccessibleColumnsModifier, HasAccessibleColumnsValueSetter, IsColumnTypeAvailableModifier, IsColumnTypeAvailableValueSetter, IsEmptySetAllowedModifier, IsGroupingSetsValueSetter, IsWildcardAvailableModifier, NameAccessibilityOfSelectedTypesValueSetter, NamedValue, QueryTypeNotExhaustedModifier, QueryTypeNotExhaustedValueSetter, SelectAccessibleColumnsValueSetter, SelectHasAccessibleColumnsModifier, SelectIsNotDistinctModifier, SelectIsNotDistinctValueSetter, SelectedTypesAccessibleByNamingMethodModifier, StatefulCallModifier, StatelessCallModifier, ValueSetter, ValueSetterValue, WildcardRelationsValueSetter}, query_info::ClauseContext}, state_generator::markov_chain_generator::markov_chain::FunctionTypes}, training::models::{ModelPredictionResult, PathwayGraphModel}, unwrap_variant};
+use crate::{config::TomlReadable, query_creation::{query_generator::{call_modifiers::{AvailableTableNamesValueSetter, CanAddMoreColumnsModifier, CanSkipLimitModifier, CanSkipLimitValueSetter, DistinctAggregationModifier, DistinctAggregationValueSetter, FromTableNamesAvailableModifier, GroupingEnabledValueSetter, GroupingModeSwitchModifier, HasAccessibleColumnsModifier, HasAccessibleColumnsValueSetter, IsColumnTypeAvailableModifier, IsColumnTypeAvailableValueSetter, IsEmptySetAllowedModifier, IsGroupingSetsValueSetter, IsWildcardAvailableModifier, LimitIsNotPresentModifier, LimitIsNotPresentValueSetter, NameAccessibilityOfSelectedTypesValueSetter, NamedValue, OrderByPresentModifier, OrderByPresentValueSetter, QueryTypeNotExhaustedModifier, QueryTypeNotExhaustedValueSetter, SelectAccessibleColumnsValueSetter, SelectHasAccessibleColumnsModifier, SelectIsNotDistinctModifier, SelectIsNotDistinctValueSetter, SelectedTypesAccessibleByNamingMethodModifier, StatefulCallModifier, StatelessCallModifier, ValueSetter, ValueSetterValue, WildcardRelationsValueSetter}, query_info::ClauseContext}, state_generator::markov_chain_generator::markov_chain::FunctionTypes}, training::models::{ModelPredictionResult, PathwayGraphModel}, unwrap_variant};
 
 use self::{
     dot_parser::{NodeCommon, TypeWithFields}, error::SyntaxError, markov_chain::{
@@ -577,9 +577,13 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         };
 
         _self.register_stateless_call_modifier(CanAddMoreColumnsModifier {});
-
+        
         _self.register_value_setter(CanSkipLimitValueSetter {});
         _self.register_stateless_call_modifier(CanSkipLimitModifier {});
+        _self.register_value_setter(LimitIsNotPresentValueSetter {});
+        _self.register_stateless_call_modifier(LimitIsNotPresentModifier {});
+        _self.register_value_setter(OrderByPresentValueSetter {});
+        _self.register_stateless_call_modifier(OrderByPresentModifier {});
         _self.register_value_setter(IsGroupingSetsValueSetter {});
         _self.register_stateless_call_modifier(IsEmptySetAllowedModifier {});
         _self.register_value_setter(GroupingEnabledValueSetter {});

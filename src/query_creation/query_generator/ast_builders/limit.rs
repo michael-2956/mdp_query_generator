@@ -22,15 +22,22 @@ impl LimitBuilder {
                 generator.expect_state("query_can_skip_limit");
                 *limit = None;
             },
-            "single_row_true" => {
-                *limit = Some(Expr::Value(Value::Number("1".to_string(), false)));
-            },
-            "limit_num" => {
-                generator.expect_state("call52_types");
-                let limit_expr = limit.as_mut().unwrap();
-                TypesBuilder::build(generator, limit_expr, TypeAssertion::GeneratedByOneOf(
-                    &[SubgraphType::Numeric, SubgraphType::Integer, SubgraphType::BigInt]
-                ));
+            "is_limit_present" => {
+                generator.expect_state("limit_not_present");
+                match_next_state!(generator, {
+                    "single_row_true" => {
+                        *limit = Some(Expr::Value(Value::Number("1".to_string(), false)));
+                        generator.clause_context.query_mut().set_limit_present();
+                    },
+                    "limit_num" => {
+                        generator.expect_state("call52_types");
+                        let limit_expr = limit.as_mut().unwrap();
+                        TypesBuilder::build(generator, limit_expr, TypeAssertion::GeneratedByOneOf(
+                            &[SubgraphType::Numeric, SubgraphType::Integer, SubgraphType::BigInt]
+                        ));
+                        generator.clause_context.query_mut().set_limit_present();
+                    },
+                });
             },
         });
 

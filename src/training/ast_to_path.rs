@@ -456,7 +456,7 @@ impl PathGenerator {
         self.handle_limit(&query.limit)?;
 
         self.try_push_state("EXIT_Query")?;
-        let output_type = self.clause_context.query_mut().pop_output_type();
+        let output_type = self.clause_context.query_mut().take_output_type();
         // if output_type.iter().filter_map(|(o, _)| o.as_ref()).any(|o| o.value == "C12") {
         //     eprintln!("output: {:?}", output_type);
         // }

@@ -4,7 +4,7 @@ to_comment = """
 FROM_cartesian_product -> call0_FROM_item
 
 limit_num [label="limit [num]\\nmod: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
-LIMIT -> limit_num
+limit_not_present -> limit_num
 call52_types [TYPES="[integer, numeric, bigint]", MODS="[no column spec, no aggregate]", label="TYPES: [integer, numeric, bigint]\\nMODS: [no column spec, no aggregate]", shape=rectangle, style=filled, color=lightblue]
 limit_num -> call52_types
 call52_types -> EXIT_LIMIT

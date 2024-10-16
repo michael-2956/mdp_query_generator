@@ -25,7 +25,10 @@ impl OrderByBuilder {
                 *order_by = vec![];
                 return
             },
-            "order_by_list" => { },
+            "order_by_order_by_present" => {
+                generator.expect_state("order_by_list");
+                generator.clause_context.query_mut().set_order_by_present();
+            },
         });
 
         loop {

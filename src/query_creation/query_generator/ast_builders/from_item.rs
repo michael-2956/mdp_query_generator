@@ -61,7 +61,7 @@ impl FromItemBuilder {
                 };
 
                 let subquery = &mut **unwrap_pat!(from_item, TableFactor::Derived { subquery, .. }, subquery);
-                let column_idents_and_graph_types = QueryBuilder::build(generator, subquery);
+                let column_idents_and_graph_types = QueryBuilder::build(generator, subquery).into_query_props().into_select_type();
                 
                 let alias = &mut *unwrap_pat!(from_item, TableFactor::Derived { alias, .. }, alias);
                 if let Some(query_alias) = alias {
