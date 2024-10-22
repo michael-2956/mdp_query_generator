@@ -742,6 +742,10 @@ impl PathGenerator {
             "call84_types"
         } else { "call85_types" };
 
+        if !order_by.is_empty() {
+            self.try_push_state("order_by_order_by_present")?;
+        }
+
         for order_by_expr in order_by {
             self.try_push_state("order_by_list")?;
             match &order_by_expr.expr {
@@ -1017,11 +1021,11 @@ impl PathGenerator {
                             "Expected query to have \"LIMIT 1\" because of \'single row\', got {:#?}", expr
                         )))
                     }
-                    self.try_push_state("single_row_true")?;
+                    self.try_push_states(&["is_limit_present", "limit_not_present", "single_row_true"])?;
                     SubgraphType::Integer
                 },
                 _ => {
-                    self.try_push_states(&["limit_num", "call52_types"])?;
+                    self.try_push_states(&["is_limit_present", "limit_not_present", "limit_num", "call52_types"])?;
                     self.handle_types(expr, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Numeric, SubgraphType::Integer, SubgraphType::BigInt]))?
                 },
             }
