@@ -41,14 +41,49 @@ impl TomlReadable for AST2PathTestingConfig {
 }
 
 #[derive(Debug)]
+pub struct SelectTypeInfo {
+    /// partial select type
+    select_type: Vec<SubgraphType>,
+    /// real number of columns
+    real_n_cols: Option<usize>,
+    /// the type of the wildcard responsible
+    responsible_wildcard_type: Option<Vec<SubgraphType>>,
+}
+
+impl SelectTypeInfo {
+    fn new(real_n_cols: Option<usize>, responsible_wildcard_type: Option<Vec<SubgraphType>>, select_type: Vec<SubgraphType>) -> Self {
+        Self {
+            select_type,
+            real_n_cols,
+            responsible_wildcard_type,
+        }
+    }
+
+    fn empty() -> Self {
+        Self {
+            select_type: vec![],
+            real_n_cols: None,
+            responsible_wildcard_type: None,
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct ConvertionError {
     reason: String,
+    select_type_info: Option<SelectTypeInfo>,
 }
 
 impl Error for ConvertionError { }
 
 impl fmt::Display for ConvertionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(sti) = self.select_type_info.as_ref() {
+            writeln!(f, "Select type info is present:")?;
+            writeln!(f, "Partial select type: {:?}", sti.select_type)?;
+            writeln!(f, "Real number of columns: {:?}", sti.real_n_cols)?;
+            writeln!(f, "Responsible wildcard type: {:?}", sti.responsible_wildcard_type)?;
+        }
         write!(f, "AST to path convertion error:\n{}", self.reason.clone().get_indentated_string())
     }
 }
@@ -56,52 +91,30 @@ impl fmt::Display for ConvertionError {
 impl ConvertionError {
     pub fn new(reason: String) -> Self {
         Self {
-            reason
+            reason,
+            select_type_info: None
         }
     }
-}
 
-#[derive(Debug)]
-pub struct ConvertionErrorWithPartialSelectType {
-    select_type: Vec<SubgraphType>,
-    real_n_cols: Option<usize>,
-    responsible_wildcard_type: Option<Vec<SubgraphType>>,
-    err: ConvertionError,
-}
-
-impl Error for ConvertionErrorWithPartialSelectType { }
-
-impl fmt::Display for ConvertionErrorWithPartialSelectType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Partial Select Type: {:?}\nError:\n{}", self.select_type, self.err)
-    }
-}
-
-macro_rules! add_pst {
-    ($result:expr) => {
-        $result.map_err(|err| ConvertionErrorWithPartialSelectType {
-            real_n_cols: None, responsible_wildcard_type: None, select_type: vec![], err
-        })
-    };
-}
-
-impl ConvertionErrorWithPartialSelectType {
-    fn with_reason(reason: String) -> Self {
+    pub fn with_type_info(reason: String, select_type_info: SelectTypeInfo) -> Self {
         Self {
-            real_n_cols: None,
-            select_type: vec![],
-            responsible_wildcard_type: None,
-            err: ConvertionError::new(reason),
+            reason,
+            select_type_info: Some(select_type_info)
         }
     }
 
-    fn new(reason: String, real_n_cols: Option<usize>, responsible_wildcard_type: Option<Vec<SubgraphType>>, select_type: Vec<SubgraphType>) -> Self {
-        Self {
-            real_n_cols,
-            select_type,
-            responsible_wildcard_type,
-            err: ConvertionError::new(reason),
-        }
+    pub fn add_type_info(&mut self, select_type_info: SelectTypeInfo) {
+        self.select_type_info = Some(select_type_info)
+    }
+
+    /// removes select type info from the error.\
+    /// if none present, returns empty selecttypeinfo
+    pub fn take_sti(&mut self) -> SelectTypeInfo {
+        self.select_type_info.take().unwrap_or(SelectTypeInfo::empty())
+    }
+
+    pub fn select_type_info_ref(&self) -> Option<&SelectTypeInfo> {
+        self.select_type_info.as_ref()
     }
 }
 
@@ -324,15 +337,18 @@ fn check_responsible(
         n_cols_completed: usize,
         n_cols_total: usize,
         tp: SubgraphType,
-        err: &ConvertionErrorWithPartialSelectType
+        err: &ConvertionError
     ) -> Result<bool, ConvertionError> {
-    let type_is_responsible = !column_count_can_cause_errors && n_cols_completed == err.select_type.len();
-    let type_info_present = err.responsible_wildcard_type.is_some();
+    let Some(select_info) = err.select_type_info_ref() else {
+        return Err(ConvertionError::new(format!("No select type info in check_responsible. Err: {err}")))
+    };
+    let type_is_responsible = !column_count_can_cause_errors && n_cols_completed == select_info.select_type.len();
+    let type_info_present = select_info.responsible_wildcard_type.is_some();
     if type_is_responsible && !type_info_present {
         // we, the last link, are responsible for the error.
         Err(ConvertionError::new(format!(
             "Having determined {n_cols_completed}/{n_cols_total} types: {:?},\nTried {tp} for the last column, but got an error:\n{}",
-            err.select_type, err.err
+            select_info.select_type, err
         )))
     } else {
         // will make us, the last link in the chain, return Ok(err)
@@ -491,25 +507,26 @@ impl PathGenerator {
                     let column_type_list = QueryTypes::ColumnTypeLists {
                         column_type_lists: column_types.into_iter().map(|x| vec![x]).collect_vec()
                     };
-                    add_pst!(_self.try_push_state("call0_set_expression"))?;
+                    _self.try_push_state("call0_set_expression")?;
                     _self.state_generator.set_known_query_type_list(column_type_list);
                     _self.handle_set_expression(query_body)?;
                     Ok(())
                 }
             )?;
             match select_err {
-                Some(err) => {
+                Some(mut err) => {
                     if !column_count_can_cause_errors {
-                        return Err(ConvertionError::new(format!("Couldn't select SELECT type. Got the error:\n{}", err.err)))
+                        return Err(ConvertionError::new(format!("Couldn't select SELECT type. Got the error:\n{}", err)))
                     } else {
                         self.restore_checkpoint_consume(checkpoint_opt.unwrap());
                         // wildcard caused an error, so try another time.
                         // the number of columns actually known now
-                        match err.real_n_cols {
+                        let select_type_info = err.take_sti();
+                        match select_type_info.real_n_cols {
                             Some(real_n_cols) => n_cols = Some(real_n_cols),
                             None => {
                                 // the problem is not us
-                                return Err(ConvertionError::new(format!("real_n_cols estimation is empty! Error:\n{}", err.err)))
+                                return Err(ConvertionError::new(format!("real_n_cols estimation is empty! Error:\n{}", err)))
                             },
                         }
                     }
@@ -521,8 +538,12 @@ impl PathGenerator {
     }
 
     /// subgraph def_set_expression_determine_type
+    /// 
+    /// - returns Ok(None) if everything went ok
+    /// - returns Ok(Some(err)) if the error bears some important info, like the real number of columns
+    /// - returns Err(err) if there is not important info
     fn handle_set_expression_determine_type_and_try<
-        F: Fn(&mut PathGenerator, Vec<SubgraphType>) -> Result<(), ConvertionErrorWithPartialSelectType> + Clone
+        F: Fn(&mut PathGenerator, Vec<SubgraphType>) -> Result<(), ConvertionError> + Clone
     >(
         &mut self,
         expr_str: Option<String>,
@@ -532,7 +553,7 @@ impl PathGenerator {
         column_count_can_cause_errors: bool,
         mut item_type_iter: Option<impl Iterator<Item = SubgraphType> + Clone>,
         and_try: F
-    ) -> Result<Option<ConvertionErrorWithPartialSelectType>, ConvertionError> {
+    ) -> Result<Option<ConvertionError>, ConvertionError> {
         let before_us_checkpoint = self.get_checkpoint(false);
         self.try_push_states(&["set_expression_determine_type", "call9_types_type"])?;
         let column_type_lists = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::QueryTypes);
@@ -540,8 +561,8 @@ impl PathGenerator {
         self.state_generator.set_known_list(first_column_list.clone());
         let n_cols_completed = n_cols_total - n_cols_remaining;
 
-        let error_with_incomplete_type: Arc<Mutex<Option<ConvertionErrorWithPartialSelectType>>> = Arc::new(Mutex::new(None));
-        let error_with_new_cols_type_info: Arc<Mutex<Option<ConvertionErrorWithPartialSelectType>>> = Arc::new(Mutex::new(None));
+        let error_with_incomplete_type: Arc<Mutex<Option<ConvertionError>>> = Arc::new(Mutex::new(None));
+        let error_with_new_cols_type_info: Arc<Mutex<Option<ConvertionError>>> = Arc::new(Mutex::new(None));
         
         let tp_opt = item_type_iter.as_mut().and_then(|it| it.next());
 
@@ -600,11 +621,11 @@ impl PathGenerator {
             // type is known: don't test it out
             self.handle_types_type(&tp)?;
             continue_with_type(self, tp)?;
-            if let Some(error_with_new_cols_type_info) = error_with_new_cols_type_info.lock().unwrap().take() {
+            if let Some(mut error_with_new_cols_type_info) = error_with_new_cols_type_info.lock().unwrap().take() {
                 return Err(ConvertionError::new(format!(
                     "Unexpected type information exit after type already determined.\nGot responsible_wildcard_type = {:?}\nGot err = {}",
-                    error_with_new_cols_type_info.responsible_wildcard_type,
-                    error_with_new_cols_type_info.err
+                    error_with_new_cols_type_info.take_sti().responsible_wildcard_type,
+                    error_with_new_cols_type_info
                 )));
             }
         } else {
@@ -614,9 +635,10 @@ impl PathGenerator {
                 TypeAssertion::GeneratedByOneOf(&first_column_list),
                 continue_with_type
             )?;
-            if let Some(err) = error_with_new_cols_type_info.lock().unwrap().take() {
+            if let Some(mut err) = error_with_new_cols_type_info.lock().unwrap().take() {
+                let select_type_info = err.take_sti();
                 // did we get any type info?
-                if let Some(new_cols_type_info) = err.responsible_wildcard_type {
+                if let Some(new_cols_type_info) = select_type_info.responsible_wildcard_type {
                     // if yes, try again but with the known type
                     self.restore_checkpoint_consume(before_us_checkpoint);
                     self.handle_set_expression_determine_type_and_try(
@@ -632,7 +654,7 @@ impl PathGenerator {
                     // if no, this is unexpected
                     return Err(ConvertionError::new(format!(
                         "Got an error about a wildcard column, but it does not have type info.\nselect_type: {:?}\nreal_n_cols: {:?}\nresponsible_wildcard_type: {:?}\nError:\n{err}",
-                        err.select_type, err.real_n_cols, err.responsible_wildcard_type
+                        select_type_info.select_type, select_type_info.real_n_cols, select_type_info.responsible_wildcard_type
                     )))
                 }
             }
@@ -644,31 +666,39 @@ impl PathGenerator {
     }
 
     /// subgraph def_set_expression
-    fn handle_set_expression(&mut self, query_body: &SetExpr) -> Result<(), ConvertionErrorWithPartialSelectType> {
-        add_pst!(self.try_push_state("set_expression"))?;
+    fn handle_set_expression(&mut self, query_body: &SetExpr) -> Result<(), ConvertionError> {
+        self.try_push_state("set_expression")?;
 
-        add_pst!(self.try_push_state("call0_SELECT_query"))?;
-        let select_body = &**unwrap_variant!(query_body, SetExpr::Select);
-        self.handle_select_query(select_body)?;
+        match query_body {
+            SetExpr::Select(select_body) => {
+                self.try_push_state("call0_SELECT_query")?;
+                self.handle_select_query(&**select_body)?;
+            },
+            // SetExpr::Query(query) => {
+            //     self.try_push_state("call7_Query")?;
+            //     self.handle_query(query)
+            // },
+            any => return Err(ConvertionError::new(format!("Unexpected query body: {:?}", any))),
+        }
 
-        add_pst!(self.try_push_state("EXIT_set_expression"))?;
+        self.try_push_state("EXIT_set_expression")?;
 
         Ok(())
     }
 
     /// subgraph def_SELECT_query
-    fn handle_select_query(&mut self, select_body: &Select) -> Result<(), ConvertionErrorWithPartialSelectType> {
-        add_pst!(self.try_push_state("SELECT_query"))?;
+    fn handle_select_query(&mut self, select_body: &Select) -> Result<(), ConvertionError> {
+        self.try_push_state("SELECT_query")?;
 
-        add_pst!(self.try_push_state("call0_FROM"))?;
-        add_pst!(self.handle_from(&select_body.from))?;
+        self.try_push_state("call0_FROM")?;
+        self.handle_from(&select_body.from)?;
 
         if let Some(ref selection) = select_body.selection {
-            add_pst!(self.try_push_state("call0_WHERE"))?;
-            add_pst!(self.handle_where(selection))?;
+            self.try_push_state("call0_WHERE")?;
+            self.handle_where(selection)?;
         }
 
-        add_pst!(self.try_push_state("WHERE_done"))?;
+        self.try_push_state("WHERE_done")?;
 
         if select_body.group_by != GroupByExpr::Expressions(vec![]) {
             self.handle_query_after_group_by(select_body, true)?;
@@ -676,29 +706,33 @@ impl PathGenerator {
             let implicit_group_by_checkpoint = self.get_checkpoint(true);
             match self.handle_query_after_group_by(select_body, false) {
                 Ok(..) => { },
-                Err(err_no_grouping) => {
+                Err(mut err_no_grouping) => {
                     self.restore_checkpoint(&implicit_group_by_checkpoint);
                     match self.handle_query_after_group_by(select_body, true) {
                         Ok(..) => { },
-                        Err(err_grouping) => {
+                        Err(mut err_grouping) => {
                             self.restore_checkpoint_consume(implicit_group_by_checkpoint);
-                            return Err(ConvertionErrorWithPartialSelectType::new(
+                            let no_grouping_info = err_no_grouping.take_sti();
+                            let grouping_info = err_grouping.take_sti();
+                            return Err(ConvertionError::with_type_info(
                                 format!(
                                     "Error converting query: {select_body}\n\
                                     Tried without implicit grouping, got an error: {err_no_grouping}\n\
                                     Tried with implicit grouping, got an error: {err_grouping}"
                                 ),
-                                err_no_grouping.real_n_cols.or(err_grouping.real_n_cols),
-                                if err_grouping.select_type.len() > err_no_grouping.select_type.len() {
-                                    err_grouping.responsible_wildcard_type  // the bigger one is the one that has correct assumptions
-                                } else {
-                                    err_no_grouping.responsible_wildcard_type
-                                },
-                                if err_grouping.select_type.len() > err_no_grouping.select_type.len() {
-                                    err_grouping.select_type
-                                } else {
-                                    err_no_grouping.select_type
-                                }
+                                SelectTypeInfo::new(
+                                    no_grouping_info.real_n_cols.or(grouping_info.real_n_cols),
+                                    if grouping_info.select_type.len() > no_grouping_info.select_type.len() {
+                                        grouping_info.responsible_wildcard_type  // the bigger one is the one that has correct assumptions
+                                    } else {
+                                        no_grouping_info.responsible_wildcard_type
+                                    },
+                                    if grouping_info.select_type.len() > no_grouping_info.select_type.len() {
+                                        grouping_info.select_type
+                                    } else {
+                                        no_grouping_info.select_type
+                                    }
+                                )
                             ))
                         }
                     }
@@ -706,29 +740,29 @@ impl PathGenerator {
             }
         };
 
-        add_pst!(self.try_push_state("EXIT_SELECT_query"))?;
+        self.try_push_state("EXIT_SELECT_query")?;
 
         Ok(())
     }
 
-    fn handle_query_after_group_by(&mut self, select_body: &Select, with_group_by: bool) -> Result<(), ConvertionErrorWithPartialSelectType> {
+    fn handle_query_after_group_by(&mut self, select_body: &Select, with_group_by: bool) -> Result<(), ConvertionError> {
         if with_group_by {
-            add_pst!(self.try_push_state("call0_GROUP_BY"))?;
-            add_pst!(self.handle_group_by(&select_body.group_by))?;
+            self.try_push_state("call0_GROUP_BY")?;
+            self.handle_group_by(&select_body.group_by)?;
         }
 
         if let Some(ref having) = select_body.having {
             if self.clause_context.top_group_by().is_grouping_active() {
-                add_pst!(self.try_push_state("call0_HAVING"))?;
-                add_pst!(self.handle_having(having))?;
+                self.try_push_state("call0_HAVING")?;
+                self.handle_having(having)?;
             } else {
-                return Err(ConvertionErrorWithPartialSelectType::with_reason(format!(
+                return Err(ConvertionError::new(format!(
                     "HAVING was used but with_grouping was set to false"
                 )))
             }
         }
 
-        add_pst!(self.try_push_state("call0_SELECT"))?;
+        self.try_push_state("call0_SELECT")?;
         self.handle_select(&select_body.distinct, &select_body.projection)?;
 
         Ok(())
@@ -882,13 +916,13 @@ impl PathGenerator {
     }
 
     /// subgraph def_SELECT
-    fn handle_select(&mut self, distinct: &Option<Distinct>, projection: &Vec<SelectItem>) -> Result<Vec<SubgraphType>, ConvertionErrorWithPartialSelectType> {
-        add_pst!(self.try_push_state("SELECT"))?;
+    fn handle_select(&mut self, distinct: &Option<Distinct>, projection: &Vec<SelectItem>) -> Result<Vec<SubgraphType>, ConvertionError> {
+        self.try_push_state("SELECT")?;
         if distinct.is_some() {
-            add_pst!(self.try_push_state("SELECT_DISTINCT"))?;
+            self.try_push_state("SELECT_DISTINCT")?;
             self.clause_context.query_mut().set_distinct();
         }
-        add_pst!(self.try_push_state("call0_SELECT_item"))?;
+        self.try_push_state("call0_SELECT_item")?;
         
         let select_item_state = if self.clause_context.top_group_by().is_grouping_active() {
             "call73_types"
@@ -901,21 +935,19 @@ impl PathGenerator {
             Ok(..) => {
                 self.clause_context.query_mut().select_type().iter().map(|(_, tp)| tp.clone()).collect_vec()
             },
-            Err(err) => {
+            Err(mut err) => {
                 let select_type = self.clause_context.query_mut().select_type().iter().map(|(_, tp)| tp.clone()).collect_vec();
                 let (real_n_cols, responsible_wildcard_type) = determine_n_cols_and_responsible_wildcard_with_clause_context(
                     projection, &self.clause_context, select_type.len()
                 );
-                return Err(ConvertionErrorWithPartialSelectType {
-                    real_n_cols: Some(real_n_cols),
-                    responsible_wildcard_type,
-                    select_type,
-                    err,
-                })
+                err.add_type_info(SelectTypeInfo::new(
+                    Some(real_n_cols), responsible_wildcard_type, select_type
+                ));
+                return Err(err)
             },
         };
 
-        add_pst!(self.try_push_state("EXIT_SELECT"))?;
+        self.try_push_state("EXIT_SELECT")?;
 
         Ok(select_type)
     }
