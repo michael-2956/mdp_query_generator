@@ -68,7 +68,7 @@ impl SelectTypeInfo {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ConvertionError {
     reason: String,
     select_type_info: Option<SelectTypeInfo>,

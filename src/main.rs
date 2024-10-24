@@ -108,7 +108,7 @@ fn test_ast_to_path(config: Config) {
             return;
         },
     };
-    if let Err(err) = tester.test() {
+    if let Err(err) = tester.test_parallel() {
         eprintln!("\n{err}");
     }
 }

@@ -1,6 +1,7 @@
 *generated_queries.sql
 ast2path_time_plot.py
 ast2path_time.txt
+ast2path_time_parallel.txt
 openai_keys.sh
 weights_in_dot/
 weights/
