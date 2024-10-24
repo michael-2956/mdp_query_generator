@@ -142,14 +142,12 @@ impl TestAST2Path {
                         )));
                         break
                     }
-                    // Send the result back
                     result_tx.send((path_len, elapsed_time)).unwrap();
                 }
             });
             handles.push(handle);
         }
 
-        // Generate structures in the main thread and send them to workers
         for i in 0..n_tests {
             if error_flag.load(Ordering::SeqCst) {
                 eprintln!("\nAborting generation due to error in worker threads.");
@@ -157,7 +155,7 @@ impl TestAST2Path {
             }
             if i % 1 == 0 {
                 if self.config.main_config.print_progress {
-                    print!("Generating: {}/{}      \r", i, self.config.ast2path_testing_config.n_tests);
+                    print!("Generating: {}/{}      \r", i+1, self.config.ast2path_testing_config.n_tests);
                     std::io::stdout().flush().unwrap();
                 }
             }
@@ -174,6 +172,9 @@ impl TestAST2Path {
 
         let mut path_length_time = vec![];
         let mut n_completed = 0usize;
+        if error_flag.load(Ordering::SeqCst) {
+            drop(result_tx)
+        }
         for result in result_rx {
             n_completed += 1;
             path_length_time.push(result);
@@ -186,17 +187,16 @@ impl TestAST2Path {
             }
             // Check if an error has been encountered to stop processing
             if error_flag.load(Ordering::SeqCst) {
-                eprintln!("\nAborting result collection due to error in worker threads.");
+                eprintln!("Aborting result collection due to error in worker threads.");
                 break;
             }
         }
 
-        // Wait for all worker threads to finish
         for handle in handles {
             handle.join().unwrap();
         }
 
-        // Check if an error occurred and output the index
+        // Check if an error occurred
         if error_flag.load(Ordering::SeqCst) {
             let convertion_error_guard = convertion_error.lock().unwrap();
             let convertion_error = convertion_error_guard.as_ref().unwrap();
