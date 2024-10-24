@@ -192,6 +192,7 @@ impl<StC: StateChooser> QueryGenerator<StC> {
     fn next_state(&mut self) -> SmolStr {
         let next_state = self.next_state_opt().unwrap();
         // eprintln!("{next_state}");
+        // eprintln!("{}\n", self.current_query_raw_ptr.map(|p| unsafe { &*p }).unwrap());
         if let Some(ref mut model) = self.train_model {
             model.process_state(
                 self.state_generator.call_stack_ref(),

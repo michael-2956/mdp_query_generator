@@ -615,9 +615,9 @@ impl StatelessCallModifier for CanSkipLimitModifier {
 
     fn run(&self, _function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool {
         let val = unwrap_variant!(associated_value.unwrap(), ValueSetterValue::CanSkipLimit);
-        if !val.must_skip {
-            val.can_skip
-        } else { true }
+        if val.must_skip {
+            true
+        } else { val.can_skip }
     }
 }
 
@@ -793,7 +793,7 @@ impl ValueSetter for OrderByPresentValueSetter {
     fn get_value(&self, clause_context: &ClauseContext, function_context: &FunctionContext) -> ValueSetterValue {
         ValueSetterValue::OrderByPresent(OrderByPresentValue {
             order_by_already_present: match function_context.current_node.node_common.name.as_str() {
-                "order_by_order_by_present" => clause_context.query().order_by_present(),
+                "order_by_check_order_by_present" => clause_context.query().order_by_present(),
                 any => panic!("{any} unexpectedly triggered the OrderByPresentValue value setter"),
             },
         })

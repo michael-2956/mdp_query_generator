@@ -359,6 +359,8 @@ impl ClauseContext {
             } => {
                 self.query_props_stack = query_props_stack;
                 self.all_accessible_froms = all_accessible_froms;
+                // eprintln!("\n\n8 Restore checkpoint");
+                self.all_accessible_froms.get_fc_hierarchy_raw().next();
                 self.group_by_contents_stack = group_by_contents_stack;
             },
             ClauseContextCheckpoint::CutOff {
@@ -466,35 +468,6 @@ impl ClauseContext {
         eprintln!("Clause hierarchy: {:#?}", self.get_clause_hierarchy_iter().collect::<Vec<_>>());
     }
 
-    pub fn get_relation_levels_selectable_by_qualified_wildcard_old(&self, allowed_types: Vec<SubgraphType>, single_column: bool) -> Vec<Vec<IdentName>> {
-        // first level is always present because we're in SELECT
-        self.get_filtered_from_clause_hierarchy_with_allowed_columns(ColumnRetrievalOptions::new(
-            self.top_group_by().is_grouping_active(),
-            false, // we are in SELECT
-            false,  // we are definitely not an aggregate function argument
-        )).map(|(from_contents, shaded_rel_names, _, allowed_rel_col_names_opt)| {
-            from_contents.relations_iter().filter(|(rel_name, relation)| {
-                !shaded_rel_names.contains(rel_name) && {
-                    let all_columns: Vec<_> = relation.get_all_columns_iter().collect();
-                    if single_column && all_columns.len() != 1 {
-                        // the relation is not eligible if the number of columns is > 1 and single_column is on
-                        false
-                    } else {
-                        all_columns.iter().all(|(col_name, col_type)| {
-                            allowed_types.contains_generator_of(*col_type) && if let Some(
-                                allowed_rel_col_names
-                            ) = &allowed_rel_col_names_opt {
-                                if let Some(col_name) = col_name {
-                                    allowed_rel_col_names.contains(&[(**rel_name).clone(), (**col_name).clone()])
-                                } else { false }
-                            } else { true }
-                        })
-                    }
-                }
-            }).map(|(rel_name, ..)| rel_name.clone()).collect()
-        }).collect()
-    }
-
     /// allow_prefix allows columns to be a prefix of query_types
     fn all_columns_match_types_and_names(
         columns: Vec<(IdentName, Option<IdentName>, SubgraphType)>,
@@ -557,6 +530,16 @@ impl ClauseContext {
             )
         }).collect_vec();
         Self::all_columns_match_types_and_names(columns, query_types, &allowed_rel_col_names_opt, false)
+    }
+
+    pub fn get_relation_name_str_hierarchy(&self) -> Vec<(Vec<String>, bool, Option<Vec<String>>)> {
+        self.all_accessible_froms.get_fc_hierarchy_raw().map(|(from_contents, active, subfrom)| {
+            (
+                from_contents.relations_iter().map(|(rel_name, _)| format!("{rel_name}")).collect_vec(),
+                active,
+                subfrom.map(|from_contents| from_contents.relations_iter().map(|(rel_name, _)| format!("{rel_name}")).collect_vec()),
+            )
+        }).collect_vec()
     }
 
     pub fn get_relation_levels_selectable_by_qualified_wildcard(&self, query_types: &QueryTypes) -> Vec<Vec<IdentName>> {
@@ -773,7 +756,11 @@ impl ClauseContext {
                 "Couldn't find column named {}.\nAccessible columns: {:#?}",
                     ObjectName(ident_components.clone()), self.get_accessible_column_levels_iter(
                         check_accessibility, column_retrieval_options
-                    ).collect::<Vec<_>>(),
+                    ).map(
+                        |lv| lv.into_iter().map(
+                            |(tp, [rel_name, col_name])| format!("{tp}: {rel_name}.{col_name}")
+                        ).collect_vec()
+                    ).collect_vec(),
             ))),
         }
     }
@@ -896,6 +883,7 @@ impl AllAccessibleFroms {
     }
 
     fn restore_from_cutoff_checkpoint(&mut self, checkpoint: AllAccessibleFromsCutoffCheckpoint) {
+        self.from_is_active_stack.truncate(checkpoint.stack_length);
         *self.from_is_active_stack.last_mut().unwrap() = checkpoint.from_is_active_last;
         self.from_contents_stack.truncate(checkpoint.stack_length);
         *self.from_contents_stack.last_mut().unwrap() = checkpoint.from_contents_last;
@@ -918,13 +906,32 @@ impl AllAccessibleFroms {
     /// returns an iterator of FromContents that first contains current subfrom, then
     /// the top from, then all the other froms from bottom query level to top query level
     fn get_from_contents_hierarchy_iter(&self) -> impl Iterator<Item = Option<&FromContents>> {
-        self.from_contents_stack.iter().rev()
-            .zip(self.from_is_active_stack.iter().rev())
-            .zip(self.subfrom_opt_stack.iter().rev())
+        if self.from_contents_stack.len() != self.from_is_active_stack.len() ||
+            self.from_contents_stack.len() != self.subfrom_opt_stack.len()
+        {
+            eprintln!("self.from_contents_stack.len(): {}", self.from_contents_stack.len());
+            eprintln!("self.from_is_active_stack.len(): {}", self.from_is_active_stack.len());
+            eprintln!("self.subfrom_opt_stack.len(): {}\n", self.subfrom_opt_stack.len());
+            panic!("Length mismatch")
+        }
+        self.from_contents_stack.iter()
+            .zip(self.from_is_active_stack.iter())
+            .zip(self.subfrom_opt_stack.iter())
+            .rev()
             .map(|((from_contents, from_is_active), subfrom_opt)|
                 subfrom_opt.as_ref().or(
                     if *from_is_active { Some(from_contents) } else { None }
                 )
+            )
+    }
+
+    fn get_fc_hierarchy_raw(&self) -> impl Iterator<Item = (&FromContents, bool, Option<&FromContents>)> {
+        self.from_contents_stack.iter()
+            .zip(self.from_is_active_stack.iter())
+            .zip(self.subfrom_opt_stack.iter())
+            .rev()
+            .map(|((from_contents, from_is_active), subfrom_opt)|
+                (from_contents, *from_is_active, subfrom_opt.as_ref())
             )
     }
 
@@ -1330,6 +1337,7 @@ impl GroupByContents {
         self.single_group_grouping = true;
     }
 
+    /// GROUPING SETS ( (), (), () ) has single group but multiple rows
     pub fn is_single_group(&self) -> bool {
         return self.single_group_grouping
     }
@@ -1338,6 +1346,7 @@ impl GroupByContents {
         self.single_row_grouping = true;
     }
 
+    /// GROUPING SETS ( (), (), () ) has single group but multiple rows
     pub fn is_single_row(&self) -> bool {
         return self.single_row_grouping
     }
@@ -1655,16 +1664,6 @@ impl Relation {
     fn get_all_column_names_iter(&self) -> impl Iterator<Item = &IdentName> {
         self.accessible_columns.get_column_names_iter()
             .chain(self.ambiguous_columns.iter().map(|(x, ..)| x))
-    }
-
-    /// get all columns with their types, including the unnamed ones and ambiguous ones
-    fn get_all_columns_iter(&self) -> impl Iterator<Item = (Option<&IdentName>, &SubgraphType)> {
-        self.get_accessible_columns_iter()
-            .map(|(col_ident, col_tp)| (Some(col_ident), col_tp))
-            .chain(self.unnamed_columns.iter().map(|x| (None, x)))
-            .chain(self.ambiguous_columns.iter().map(|(column_name, graph_type)| (
-                Some(column_name), graph_type
-            )))
     }
 
     /// get all columns with their types, including the unnamed ones and ambiguous ones

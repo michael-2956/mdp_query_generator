@@ -38,6 +38,7 @@ pub struct LLMPrompts {
     /// whether to print the prompts and responses
     pub print_prompts_and_responses: bool,
     pub query_requests: Vec<String>,
+    #[allow(dead_code)]
     pub backtrack_prompt: String,
 }
 

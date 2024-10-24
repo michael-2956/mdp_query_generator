@@ -46,7 +46,7 @@ impl TestAST2Path {
                     std::io::stdout().flush().unwrap();
                 }
             }
-            // if i < 1511 { continue; }
+            // if i < 0 { continue; }
             // eprintln!("\nTested query: {query}\n");
             let path_gen_start = Instant::now();
             let path = self.path_generator.get_query_path(&query)?;

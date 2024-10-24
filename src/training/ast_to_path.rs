@@ -11,7 +11,7 @@ use sqlparser::ast::{self, BinaryOperator, DataType, DateTimeField, Distinct, Ex
 use crate::{
     config::TomlReadable, query_creation::{
         query_generator::{
-            aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, ast_builders::types_value::TypeAssertion, call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue}, query_info::{ClauseContext, ClauseContextCheckpoint, ColumnRetrievalOptions, DatabaseSchema, IdentName, QueryProps}
+            aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, ast_builders::types_value::TypeAssertion, call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue}, query_info::{ClauseContext, ClauseContextCheckpoint, ClauseContextFrame, ColumnRetrievalOptions, DatabaseSchema, IdentName, QueryProps}
         },
         state_generator::{
             markov_chain_generator::{
@@ -40,7 +40,7 @@ impl TomlReadable for AST2PathTestingConfig {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SelectTypeInfo {
     /// partial select type
     select_type: Vec<SubgraphType>,
@@ -79,10 +79,12 @@ impl Error for ConvertionError { }
 impl fmt::Display for ConvertionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(sti) = self.select_type_info.as_ref() {
-            writeln!(f, "Select type info is present:")?;
-            writeln!(f, "Partial select type: {:?}", sti.select_type)?;
-            writeln!(f, "Real number of columns: {:?}", sti.real_n_cols)?;
-            writeln!(f, "Responsible wildcard type: {:?}", sti.responsible_wildcard_type)?;
+            writeln!(f, "Note: Select type info is present:")?;
+            writeln!(f, "  Partial select type: {:?}", sti.select_type)?;
+            writeln!(f, "  Real number of columns: {:?}", sti.real_n_cols)?;
+            writeln!(f, "  Responsible wildcard type: {:?}", sti.responsible_wildcard_type)?;
+        } else {
+            writeln!(f, "Note: Select type info is not present")?;
         }
         write!(f, "AST to path convertion error:\n{}", self.reason.clone().get_indentated_string())
     }
@@ -93,6 +95,13 @@ impl ConvertionError {
         Self {
             reason,
             select_type_info: None
+        }
+    }
+
+    pub fn with_type_info_opt(reason: String, select_type_info: Option<SelectTypeInfo>) -> Self {
+        Self {
+            reason,
+            select_type_info
         }
     }
 
@@ -111,6 +120,10 @@ impl ConvertionError {
     /// if none present, returns empty selecttypeinfo
     pub fn take_sti(&mut self) -> SelectTypeInfo {
         self.select_type_info.take().unwrap_or(SelectTypeInfo::empty())
+    }
+
+    pub fn take_sti_opt(&mut self) -> Option<SelectTypeInfo> {
+        self.select_type_info.take()
     }
 
     pub fn select_type_info_ref(&self) -> Option<&SelectTypeInfo> {
@@ -310,6 +323,9 @@ fn determine_n_cols_and_responsible_wildcard_with_clause_context(projection: &Ve
                     let relation = match rel_name.0.as_slice() {
                         [ident] => {
                             let identname: IdentName = ident.clone().into();
+                            // eprintln!("\nSearching for {identname}");
+                            // eprintln!("In projection: {:?}", projection.iter().map(|x| format!("{x}")).join(", "));
+                            // eprintln!("From levels: {:#?}\n", clause_context.get_relation_name_str_hierarchy());
                             clause_context.get_relation_by_name(&identname)
                         },
                         any => panic!("schema.table alias is not supported: {}", ObjectName(any.to_vec())),
@@ -330,7 +346,7 @@ fn determine_n_cols_and_responsible_wildcard_with_clause_context(projection: &Ve
     (n_cols, responsible_wildcard_type)
 }
 
-/// - returns error if we are responsible\
+/// - returns error if we are responsible
 /// - if we are not, returns Ok(true) if we should utilize the new type info
 fn check_responsible(
         column_count_can_cause_errors: bool,
@@ -339,22 +355,20 @@ fn check_responsible(
         tp: SubgraphType,
         err: &ConvertionError
     ) -> Result<bool, ConvertionError> {
-    let Some(select_info) = err.select_type_info_ref() else {
-        return Err(ConvertionError::new(format!("No select type info in check_responsible. Err: {err}")))
-    };
+    let esti = SelectTypeInfo::empty();
+    let select_info = err.select_type_info_ref().unwrap_or(&esti);
     let type_is_responsible = !column_count_can_cause_errors && n_cols_completed == select_info.select_type.len();
     let type_info_present = select_info.responsible_wildcard_type.is_some();
     if type_is_responsible && !type_info_present {
-        // we, the last link, are responsible for the error.
-        Err(ConvertionError::new(format!(
-            "Having determined {n_cols_completed}/{n_cols_total} types: {:?},\nTried {tp} for the last column, but got an error:\n{}",
-            select_info.select_type, err
-        )))
+        // we are responsible for the error.
+        Err(ConvertionError::with_type_info(
+            format!(
+                "Having determined {n_cols_completed}/{n_cols_total} types: {:?},\nTried {tp} for the next column, but got an error:\n{}",
+                select_info.select_type, err
+            ), select_info.clone()
+        ))
     } else {
-        // will make us, the last link in the chain, return Ok(err)
-        // this will in turn allow to backtrack until we meet the problem causing type,
-        // since we are not responsible for the error
-        Ok(type_is_responsible)  // type_info_present is true
+        Ok(type_is_responsible)  // if type_is_responsible is true, type_info_present is true
     }
 }
 
@@ -459,7 +473,7 @@ impl PathGenerator {
     }
 
     /// subgraph def_Query
-    fn handle_query(&mut self, query: &Box<Query>) -> Result<Vec<(Option<IdentName>, SubgraphType)>, ConvertionError> {
+    fn handle_query(&mut self, query: &Box<Query>) -> Result<ClauseContextFrame, ConvertionError> {
         self.clause_context.on_query_begin(self.state_generator.get_fn_modifiers_opt());
         self.try_push_state("Query")?;
 
@@ -472,27 +486,36 @@ impl PathGenerator {
         self.handle_limit(&query.limit)?;
 
         self.try_push_state("EXIT_Query")?;
-        let output_type = self.clause_context.query_mut().take_output_type();
-        // if output_type.iter().filter_map(|(o, _)| o.as_ref()).any(|o| o.value == "C12") {
-        //     eprintln!("output: {:?}", output_type);
-        // }
-        self.clause_context.on_query_end();
 
-        return Ok(output_type)
+        Ok(self.clause_context.on_query_end())
     }
 
     fn handle_query_body(&mut self, query_body: &SetExpr) -> Result<(), ConvertionError> {
         self.try_push_state("call1_set_expression_determine_type")?;
 
-        let mut n_cols = determine_n_cols(query_body);
+        let column_type_lists = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::QueryTypes);
+        // the number of columns the caller expectes from us. We can't change this, so we should pass real_n_cols to the caller
+        let expected_n_cols_opt = match column_type_lists {
+            QueryTypes::ColumnTypeLists { column_type_lists } => Some(column_type_lists.len()),
+            QueryTypes::TypeList { type_list: _ } => None,
+        };
+        // eprintln!("Query body: {}", query_body);
+        // eprintln!("expected_n_cols_opt = {:?}", expected_n_cols_opt);
+
+        let mut n_cols = determine_n_cols(query_body).or(expected_n_cols_opt.clone());
         let expr_str = Some(format!("{query_body}"));
+        let mut expected_column_count_matched = false;
         loop {
-            let mut column_count_can_cause_errors = false;
-            let mut n_cols_arg = 1usize;
-            match &n_cols {
-                Some(n_cols) => n_cols_arg = *n_cols,
-                None => column_count_can_cause_errors = true,
-            }
+            let (column_count_can_cause_errors, n_cols_arg) = match &n_cols {
+                // by default, columns can cause errors if the expected n cols restricts us
+                Some(n_cols) => (
+                    if expected_column_count_matched { false } else { expected_n_cols_opt.is_some()},
+                    *n_cols
+                ),
+                // otherwise, if expected n cols is None, columns can cause errors if determine_n_cols returned None
+                None => (true, 1usize),
+            };
+            // eprintln!("column_count_can_cause_errors = {column_count_can_cause_errors}, n_cols_arg = {n_cols_arg}");
             let checkpoint_opt = if column_count_can_cause_errors {
                 Some(self.get_checkpoint(true))
             } else { None };
@@ -516,17 +539,34 @@ impl PathGenerator {
             match select_err {
                 Some(mut err) => {
                     if !column_count_can_cause_errors {
-                        return Err(ConvertionError::new(format!("Couldn't select SELECT type. Got the error:\n{}", err)))
+                        return Err(ConvertionError::with_type_info(
+                            format!("Couldn't select SELECT type. Got the error:\n{}", err),
+                            err.take_sti()
+                        ))
                     } else {
                         self.restore_checkpoint_consume(checkpoint_opt.unwrap());
                         // wildcard caused an error, so try another time.
                         // the number of columns actually known now
                         let select_type_info = err.take_sti();
-                        match select_type_info.real_n_cols {
-                            Some(real_n_cols) => n_cols = Some(real_n_cols),
-                            None => {
-                                // the problem is not us
-                                return Err(ConvertionError::new(format!("real_n_cols estimation is empty! Error:\n{}", err)))
+                        // eprintln!("real_n_cols = {:?}", select_type_info.real_n_cols);
+                        match (&select_type_info.real_n_cols, &expected_n_cols_opt) {
+                            // real column number received and no expected column number by caller
+                            (Some(real_n_cols), None) => n_cols = Some(*real_n_cols),
+                            // we have the expected number of columns, but it matches
+                            (
+                                Some(real_n_cols), Some(expected_n_cols)
+                            ) if real_n_cols == expected_n_cols => {
+                                expected_column_count_matched = true;
+                                n_cols = Some(*real_n_cols);
+                            },
+                            // either no real column number received or
+                            // the expected number of columns does not match
+                            _ => {
+                                // the problem is not us, so exit with error
+                                return Err(ConvertionError::with_type_info(
+                                    format!("real_n_cols estimation is empty! Error:\n{}", err),
+                                    select_type_info,
+                                ))
                             },
                         }
                     }
@@ -638,10 +678,10 @@ impl PathGenerator {
             if let Some(mut err) = error_with_new_cols_type_info.lock().unwrap().take() {
                 let select_type_info = err.take_sti();
                 // did we get any type info?
-                if let Some(new_cols_type_info) = select_type_info.responsible_wildcard_type {
+                if let Some(new_cols_type_info) = select_type_info.responsible_wildcard_type.clone() {
                     // if yes, try again but with the known type
                     self.restore_checkpoint_consume(before_us_checkpoint);
-                    self.handle_set_expression_determine_type_and_try(
+                    match self.handle_set_expression_determine_type_and_try(
                         expr_str.clone(),
                         n_cols_remaining,
                         n_cols_total,
@@ -649,7 +689,16 @@ impl PathGenerator {
                         column_count_can_cause_errors,
                         Some(new_cols_type_info.into_iter()),
                         and_try.clone()
-                    )?;
+                    ) {
+                        Ok(_) => { },
+                        // this can only be if the caller does not allow us to have the
+                        // type we should, so attach the wildcard info
+                        Err(mut err) => {
+                            assert!(err.select_type_info_ref().is_none());
+                            err.add_type_info(select_type_info);
+                            return Err(err)
+                        },
+                    }
                 } else {
                     // if no, this is unexpected
                     return Err(ConvertionError::new(format!(
@@ -674,10 +723,18 @@ impl PathGenerator {
                 self.try_push_state("call0_SELECT_query")?;
                 self.handle_select_query(&**select_body)?;
             },
-            // SetExpr::Query(query) => {
-            //     self.try_push_state("call7_Query")?;
-            //     self.handle_query(query)
-            // },
+            SetExpr::Query(query) => {
+                self.try_push_state("call7_Query")?;
+                // select type info should be present in the error here
+                let subquery_frame = match self.handle_query(query) {
+                    Ok(x) => x,
+                    Err(err) => {
+                        // eprintln!("Returning error: {err}\n\n\n\n\n\n");
+                        return Err(err)
+                    },
+                };
+                self.clause_context.populate_with_frame(subquery_frame);
+            },
             any => return Err(ConvertionError::new(format!("Unexpected query body: {:?}", any))),
         }
 
@@ -777,7 +834,8 @@ impl PathGenerator {
         } else { "call85_types" };
 
         if !order_by.is_empty() {
-            self.try_push_state("order_by_order_by_present")?;
+            self.try_push_state("order_by_check_order_by_present")?;
+            self.clause_context.query_mut().set_order_by_present();
         }
 
         for order_by_expr in order_by {
@@ -894,7 +952,7 @@ impl PathGenerator {
                 self.try_push_state("FROM_item_alias")?;
                 self.push_node(PathNode::FromAlias(alias.name.clone()));
                 self.try_push_state("call0_Query")?;
-                let column_idents_and_graph_types = self.handle_query(subquery)?;
+                let column_idents_and_graph_types = self.handle_query(subquery)?.into_query_props().into_select_type();
                 self.push_node(PathNode::FromColumnRenames(alias.columns.clone()));
                 self.clause_context.top_from_mut().append_query(column_idents_and_graph_types, alias.clone());
             },
@@ -1054,11 +1112,14 @@ impl PathGenerator {
                         )))
                     }
                     self.try_push_states(&["is_limit_present", "limit_not_present", "single_row_true"])?;
+                    self.clause_context.query_mut().set_limit_present();
                     SubgraphType::Integer
                 },
                 _ => {
                     self.try_push_states(&["is_limit_present", "limit_not_present", "limit_num", "call52_types"])?;
-                    self.handle_types(expr, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Numeric, SubgraphType::Integer, SubgraphType::BigInt]))?
+                    let tp = self.handle_types(expr, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Numeric, SubgraphType::Integer, SubgraphType::BigInt]))?;
+                    self.clause_context.query_mut().set_limit_present();
+                    tp
                 },
             }
         } else {
@@ -1692,26 +1753,28 @@ impl PathGenerator {
         let selected_types = SubgraphType::sort_by_compatibility(selected_types);
         let mut selected_types_iter = selected_types.iter();
         let mut err_msg = "".to_string();
+        let mut select_type_info_opt = None;
         // can't use cutoff because restoration may be on a level that's less deep
         let checkpoint = self.get_checkpoint(false);
         loop {
             let tp = match selected_types_iter.next() {
                 Some(subgraph_type) => subgraph_type,
-                None => break Err(ConvertionError::new(format!(
+                None => break Err(ConvertionError::with_type_info_opt(format!(
                     "Types type didn't find a suitable type for expression, among:\n{:#?}\nExpr: {}\n{}",
                     selected_types,
                     if let Some(expr_str) = expr_str { format!("{expr_str}") } else { format!("not provided by caller") },
                     err_msg.get_indentated_string()
-                )))
+                ), select_type_info_opt))
             };
             if let Err(err) = self.handle_types_type_type(tp) {
-                break Err(ConvertionError::new(format!("{err}\n{}", err_msg.get_indentated_string())))
+                break Err(ConvertionError::with_type_info_opt(format!("{err}\n{}", err_msg.get_indentated_string()), select_type_info_opt))
             }
             type_assertion.check_type(&tp);
             match and_try(self, tp.clone()) {
                 Ok(..) => break Ok(tp.clone()),
-                Err(err) => {
-                    err_msg += format!("Tried with {tp}, but got: {}\n", err.get_indentated_string()).as_str();
+                Err(mut err) => {
+                    select_type_info_opt = err.take_sti_opt();
+                    err_msg += format!("Tried with {tp}, but got:\n{}\n", err.get_indentated_string()).as_str();
                     self.restore_checkpoint(&checkpoint);
                 },
             };
@@ -1832,7 +1895,7 @@ impl PathGenerator {
         self.state_generator.set_known_query_type_list(QueryTypes::ColumnTypeLists {
             column_type_lists: vec![selected_types.clone()]  // single column
         });
-        let col_type_list = self.handle_query(subquery)?;
+        let col_type_list = self.handle_query(subquery)?.into_query_props().into_select_type();
         if let [(.., query_subgraph_type)] = col_type_list.as_slice() {
             // change to explorable if we use this feature
             Ok(query_subgraph_type.clone())

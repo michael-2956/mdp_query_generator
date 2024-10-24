@@ -522,11 +522,11 @@ digraph G {
         // new state that set the value "OrderByPresentValue"
         // order_by_list should have modifier "OrderByPresentModifier"
 
-        order_by_order_by_present [label="Order by present?\n[set value]", set_value="OrderByPresentValue"]
-        ORDER_BY -> order_by_order_by_present
+        order_by_check_order_by_present [label="Order by present?\n[set value]", set_value="OrderByPresentValue"]
+        ORDER_BY -> order_by_check_order_by_present
 
         order_by_list [label="ORDER BY list\n[set value]\n[call mod]", set_value="OrderByExpressionAllowedValue", call_modifier="OrderByPresentModifier"]
-        order_by_order_by_present -> order_by_list
+        order_by_check_order_by_present -> order_by_list
         order_by_expr_done [label="Expression done"]
 
         order_by_select_reference [label="SELECT reference\n[set value]", set_value="select_has_accessible_columns"]
