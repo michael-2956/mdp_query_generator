@@ -26,6 +26,9 @@ pub struct ProgramArgs {
     /// Start AST2Path testing from query with given number. Does not work when --parallel is present.
     #[structopt(long = "start_ast2path_from")]
     pub start_ast2path_from: Option<usize>,
+    /// Test query from q.sql
+    #[structopt(long = "test_qsql_query")]
+    pub test_qsql_query: bool,
 }
 
 pub trait TomlReadable {
@@ -100,6 +103,9 @@ impl Config {
         }
         if program_args.parallel {
             self.ast2path_testing_config.parallel = true;
+        }
+        if program_args.test_qsql_query {
+            self.ast2path_testing_config.test_qsql_query = true;
         }
         if let Some(start_ast2path_from) = program_args.start_ast2path_from {
             self.ast2path_testing_config.start_testing_from = Some(start_ast2path_from);

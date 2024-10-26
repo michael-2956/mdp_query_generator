@@ -1,9 +1,9 @@
 use std::{fs, io::Write, path::PathBuf, str::FromStr, sync::{atomic::{AtomicBool, Ordering}, mpsc::{self, Receiver, Sender}, Arc, Mutex}, thread, time::Instant};
 
 use itertools::Itertools;
-use sqlparser::ast::Query;
+use sqlparser::{ast::{Query, Statement}, dialect::PostgreSqlDialect, parser::Parser};
 
-use crate::{config::{Config, TomlReadable}, query_creation::{query_generator::{query_info::DatabaseSchema, value_choosers::DeterministicValueChooser, QueryGenerator}, state_generator::{markov_chain_generator::error::SyntaxError, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, substitute_models::{AntiCallModel, PathModel}, MarkovChainGenerator}}};
+use crate::{config::{Config, TomlReadable}, query_creation::{query_generator::{query_info::DatabaseSchema, value_choosers::DeterministicValueChooser, QueryGenerator}, state_generator::{markov_chain_generator::error::SyntaxError, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, substitute_models::{AntiCallModel, PathModel}, MarkovChainGenerator}}, unwrap_variant};
 
 use super::{ConvertionError, PathGenerator};
 
@@ -12,6 +12,7 @@ pub struct AST2PathTestingConfig {
     pub schema: PathBuf,
     pub n_tests: usize,
     pub parallel: bool,
+    pub test_qsql_query: bool,
     pub start_testing_from: Option<usize>,
 }
 
@@ -22,6 +23,7 @@ impl TomlReadable for AST2PathTestingConfig {
             schema: PathBuf::from_str(section["testing_schema"].as_str().unwrap()).unwrap(),
             n_tests: section["n_tests"].as_integer().unwrap() as usize,
             parallel: section["parallel"].as_bool().unwrap(),
+            test_qsql_query: false,
             start_testing_from: None
         }
     }
@@ -54,6 +56,21 @@ impl TestAST2Path {
             ),
             config: config,
         })
+    }
+
+    pub fn test_query(&mut self) -> Result<(), ConvertionError> {
+        let query_str = fs::read_to_string("q.sql").unwrap();
+        let query = unwrap_variant!(Parser::parse_sql(&PostgreSqlDialect {}, &query_str).unwrap().into_iter().next().unwrap(), Statement::Query);
+        let path = self.path_generator.get_query_path(&query)?;
+        let generated_query = self.path_query_generator.generate_with_substitute_model_and_value_chooser(
+            Box::new(PathModel::from_path_nodes(&path)),
+            Box::new(DeterministicValueChooser::from_path_nodes(&path))
+        );
+        if *query != generated_query {
+            eprintln!("\nAST -> path -> AST mismatch!\nOriginal  query: {}\nGenerated query: {}", query, generated_query);
+            eprintln!("Path: {:?}", path);
+        }
+        Ok(())
     }
 
     pub fn test(&mut self) -> Result<(), ConvertionError> {

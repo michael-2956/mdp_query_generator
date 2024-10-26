@@ -102,6 +102,7 @@ fn run_training(config: Config) {
 
 fn test_ast_to_path(config: Config) {
     let parallel = config.ast2path_testing_config.parallel;
+    let test_qsql_query = config.ast2path_testing_config.test_qsql_query;
     let mut tester = match TestAST2Path::with_config(config) {
         Ok(tester) => tester,
         Err(err) => {
@@ -109,12 +110,16 @@ fn test_ast_to_path(config: Config) {
             return;
         },
     };
-    if let Err(err) = if parallel {
+    let result = if test_qsql_query {
+        tester.test_query()
+    } else if parallel {
         tester.test_parallel()
-    } else { tester.test() } {
+    } else {
+        tester.test()
+    };
+    if let Err(err) = result {
         eprintln!("\n{err}");
     }
-    
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
