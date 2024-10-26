@@ -171,27 +171,16 @@ impl TestAST2Path {
             handles.push(handle);
         }
 
-        let mut path_length_time = vec![];
-        let mut n_completed = 0usize;
-        let process_result = |result: (usize, f64), n_completed: &mut usize, path_length_time: &mut Vec<(usize, f64)>| {
-            *n_completed += 1;
-            path_length_time.push(result);
-        };
-
         for i in 0..n_tests {
             if error_flag.load(Ordering::SeqCst) {
                 eprintln!("\nAborting generation & collection due to error in worker threads.");
                 break;
             }
-            if let Ok(result) = result_rx.try_recv() {
-                process_result(result, &mut n_completed, &mut path_length_time);
-            }
             if i % 1 == 0 {
                 if self.config.main_config.print_progress {
                     print!(
-                        "Generating: {}/{} | Converted: {}/{}      \r",
+                        "Generating: {}/{}      \r",
                         i+1, self.config.ast2path_testing_config.n_tests,
-                        n_completed, self.config.ast2path_testing_config.n_tests
                     );
                     std::io::stdout().flush().unwrap();
                 }
@@ -207,11 +196,14 @@ impl TestAST2Path {
 
         println!();
         
+        let mut path_length_time = vec![];
+        let mut n_completed = 0usize;
         if error_flag.load(Ordering::SeqCst) {
             drop(result_tx)
         }
         for result in result_rx {
-            process_result(result, &mut n_completed, &mut path_length_time);
+            n_completed += 1;
+            path_length_time.push(result);
             if self.config.main_config.print_progress && n_completed % 1 == 0 {
                 print!("Converted: {}/{}      \r", n_completed, self.config.ast2path_testing_config.n_tests);
                 std::io::stdout().flush().unwrap();
