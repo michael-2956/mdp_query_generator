@@ -165,7 +165,13 @@ impl TestAST2Path {
                         )));
                         break
                     }
-                    result_tx.send((path_len, elapsed_time)).unwrap();
+                    match result_tx.send((path_len, elapsed_time)) {
+                        Ok(..) => { },
+                        Err(..) => {
+                            assert!(error_flag.load(Ordering::SeqCst));
+                            break
+                        },
+                    }
                 }
             });
             handles.push(handle);
@@ -218,8 +224,13 @@ impl TestAST2Path {
             }
         }
 
-        for handle in handles {
-            handle.join().unwrap();
+        for (i, handle) in handles.into_iter().enumerate() {
+            match handle.join() {
+                Ok(..) => { },
+                Err(..) => {
+                    eprintln!("Couldn't join thread {i}: Thread panicked")
+                },
+            }
         }
 
         // Check if an error occurred
