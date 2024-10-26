@@ -6,7 +6,7 @@ use itertools::Itertools;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
-use sqlparser::ast::{self, BinaryOperator, DataType, DateTimeField, Distinct, Expr, FunctionArg, FunctionArgExpr, GroupByExpr, Ident, Interval, ObjectName, OrderByExpr, Query, Select, SelectItem, SetExpr, TableFactor, TableWithJoins, TimezoneInfo, TrimWhereField, UnaryOperator, Value};
+use sqlparser::ast::{self, BinaryOperator, DataType, DateTimeField, Distinct, Expr, FunctionArg, FunctionArgExpr, GroupByExpr, Ident, Interval, ObjectName, OrderByExpr, Query, Select, SelectItem, SetExpr, SetOperator, SetQuantifier, TableFactor, TableWithJoins, TimezoneInfo, TrimWhereField, UnaryOperator, Value};
 
 use crate::{
     query_creation::{
@@ -106,7 +106,7 @@ impl ConvertionError {
         self.select_type_info.take().unwrap_or(SelectTypeInfo::empty())
     }
 
-    pub fn take_sti_opt(&mut self) -> Option<SelectTypeInfo> {
+    pub fn take_select_type_info(&mut self) -> Option<SelectTypeInfo> {
         self.select_type_info.take()
     }
 
@@ -699,25 +699,66 @@ impl PathGenerator {
     }
 
     /// subgraph def_set_expression
-    fn handle_set_expression(&mut self, query_body: &SetExpr) -> Result<(), ConvertionError> {
+    fn handle_set_expression(&mut self, expr: &SetExpr) -> Result<(), ConvertionError> {
         self.try_push_state("set_expression")?;
 
-        match query_body {
+        match expr {
             SetExpr::Select(select_body) => {
                 self.try_push_state("call0_SELECT_query")?;
                 self.handle_select_query(&**select_body)?;
             },
             SetExpr::Query(query) => {
                 self.try_push_state("call7_Query")?;
-                // select type info should be present in the error here
-                let subquery_frame = match self.handle_query(query) {
-                    Ok(x) => x,
-                    Err(err) => {
-                        // eprintln!("Returning error: {err}\n\n\n\n\n\n");
-                        return Err(err)
-                    },
+                // if error occurs, select type info will be present
+                let subquery_frame = self.handle_query(query)?;
+                self.clause_context.replace_with_frame(subquery_frame);
+            },
+            SetExpr::SetOperation {
+                op,
+                set_quantifier,
+                left,
+                right,
+            } => {
+                self.try_push_state("set_expression_set_operation")?;
+                if *set_quantifier != SetQuantifier::None {
+                    return Err(ConvertionError::new(format!("In set expression: {expr},\nError: Set quentifiers are not supported")))
+                }
+
+                self.try_push_state(match op {
+                    SetOperator::Intersect => "query_set_op_intersect",
+                    SetOperator::Union => "query_set_op_union",
+                    SetOperator::Except => "query_set_op_except",
+                })?;
+                // Determine first set operation and second set operation call nodes.
+                let (f_setop_cn, s_setop_cn) = match op {
+                    SetOperator::Union | SetOperator::Except => ("call2_set_expression", "call5_set_expression"),
+                    SetOperator::Intersect => ("call3_set_expression", "call4_set_expression"),
                 };
-                self.clause_context.populate_with_frame(subquery_frame);
+
+                let empty_frame = self.clause_context.clone_frame();
+                self.try_push_state(f_setop_cn)?;
+                // if error occurs, select type info will be present here, and it will represent the leftmost select
+                self.handle_set_expression(&**left)?;
+                let left_frame = self.clause_context.replace_with_frame(empty_frame);
+
+                self.try_push_state(s_setop_cn)?;
+                
+                match self.handle_set_expression(&**right) {
+                    Ok(..) => { },
+                    Err(mut err) => {
+                        if let Some(select_type_info) = err.take_select_type_info() {
+                            // select type related error should not occur here. Thus, if it is present,
+                            // we should remove it with indication, so the error is interpreted correctly
+                            return Err(ConvertionError::new(format!(
+                                "Unexpected select type info on the right hand of a set expression.\nRemoved type info: {:#?}\nExpression: {expr}\nError: {err}",
+                                select_type_info
+                            )))
+                        } else {
+                            return Err(err)
+                        }
+                    },
+                }
+                self.clause_context.merge_right_frame_into_setop_parent(left_frame);
             },
             any => return Err(ConvertionError::new(format!("Unexpected query body: {:?}", any))),
         }
@@ -1757,7 +1798,7 @@ impl PathGenerator {
             match and_try(self, tp.clone()) {
                 Ok(..) => break Ok(tp.clone()),
                 Err(mut err) => {
-                    select_type_info_opt = err.take_sti_opt();
+                    select_type_info_opt = err.take_select_type_info();
                     err_msg += format!("Tried with {tp}, but got:\n{}\n", err.get_indentated_string()).as_str();
                     self.restore_checkpoint(&checkpoint);
                 },

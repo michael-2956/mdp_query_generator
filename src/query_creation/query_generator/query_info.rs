@@ -414,7 +414,7 @@ impl ClauseContext {
     }
 
     /// returns the old frame.
-    pub fn populate_with_frame(&mut self, frame: ClauseContextFrame) -> ClauseContextFrame {
+    pub fn replace_with_frame(&mut self, frame: ClauseContextFrame) -> ClauseContextFrame {
         let query_props = self.query_props_stack.pop().unwrap();
         self.query_props_stack.push(frame.query_props);
         let group_by_contents = self.group_by_contents_stack.pop().unwrap();
@@ -431,7 +431,7 @@ impl ClauseContext {
     /// creating a frame with the info nessesary for order by & limit of the parent query.\
     /// this is for set operations, which is why current frame should be the right one and
     /// left frame should be supplied
-    pub fn make_right_frame_into_setop_parent(&mut self, left_frame: ClauseContextFrame) {
+    pub fn merge_right_frame_into_setop_parent(&mut self, left_frame: ClauseContextFrame) {
         self.query_props_stack.last_mut().unwrap().make_right_props_into_setop_parent(left_frame.query_props);
         // from info should be empty, since none of those will be accessible anyway in ORDER BY or LIMIT
         self.all_accessible_froms.clear_current_frame();

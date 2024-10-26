@@ -127,40 +127,30 @@ digraph G {
         // if we have intersect, none are stronger, so we forbid [union, except, intersect] on the right
         // and [union, except] on the left, since intersect can still be placed on the left.
 
-        // set_expression_set_operation [label="Set operation\nmod.: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
-        // set_expression -> set_expression_set_operation
+        set_expression_set_operation [label="Set operation\nmod.: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
+        set_expression -> set_expression_set_operation
 
-        // call5_Query [TYPES="Q[...]", label="Query\nTYPES=Q[...]", shape=rectangle, style=filled, color=green]
-        // call6_Query [TYPES="Q[...]", label="Query\nTYPES=Q[...]", shape=rectangle, style=filled, color=green]
-        // call5_Query -> call6_Query
-        // call6_Query -> EXIT_set_expression
+        call3_set_expression [TYPES="Q[...]", MODS="[no union except]" label="Set expression\nTYPES=Q[...]\nMODS=[no union except]", shape=rectangle, color=indianred, style=filled]
+        call4_set_expression [TYPES="Q[...]", MODS="[no union except, no intersect]", label="Set expression\nTYPES=Q[...]\nMODS=[no union except, no intersect]", shape=rectangle, color=indianred, style=filled]
+        call3_set_expression -> call4_set_expression
+        call4_set_expression -> EXIT_set_expression
 
-        // call3_set_expression [TYPES="Q[...]", MODS="[no union except]" label="Set operation\nTYPES=Q[...]\nMODS=[no union except]", shape=rectangle, color=indianred, style=filled]
-        // call3_set_expression -> call6_Query
-        // call4_set_expression [TYPES="Q[...]", MODS="[no union except, no intersect]", label="Set operation\nTYPES=Q[...]\nMODS=[no union except, no intersect]", shape=rectangle, color=indianred, style=filled]
-        // call3_set_expression -> call4_set_expression
-        // call4_set_expression -> EXIT_set_expression
+        query_set_op_intersect [label="intersect\nmod.: 'no intersect' -> OFF", modifier="no intersect", modifier_mode="off"]
+        set_expression_set_operation -> query_set_op_intersect
+        query_set_op_intersect -> call3_set_expression
 
-        // query_set_op_intersect [label="intersect\nmod.: 'no intersect' -> OFF", modifier="no intersect", modifier_mode="off"]
-        // set_expression_set_operation -> query_set_op_intersect
-        // query_set_op_intersect -> call3_set_expression
-        // query_set_op_intersect -> call5_Query
+        call2_set_expression [TYPES="Q[...]", MODS="[]" label="Set expression\nTYPES=Q[...]\nMODS=[]", shape=rectangle, color=indianred, style=filled]
+        call5_set_expression [TYPES="Q[...]", MODS="[no union except]", label="Set expression\nTYPES=Q[...]\nMODS=[no union except]", shape=rectangle, color=indianred, style=filled]
+        call2_set_expression -> call5_set_expression
+        call5_set_expression -> EXIT_set_expression
 
-        // call2_set_expression [TYPES="Q[...]", MODS="[]" label="Set operation\nTYPES=Q[...]\nMODS=[]", shape=rectangle, color=indianred, style=filled]
-        // call2_set_expression -> call6_Query
-        // call5_set_expression [TYPES="Q[...]", MODS="[no union except]", label="Set operation\nTYPES=Q[...]\nMODS=[no union except]", shape=rectangle, color=indianred, style=filled]
-        // call2_set_expression -> call5_set_expression
-        // call5_set_expression -> EXIT_set_expression
+        query_set_op_union [label="union\nmod.: 'no union except' -> OFF", modifier="no union except", modifier_mode="off"]
+        set_expression_set_operation -> query_set_op_union
+        query_set_op_union -> call2_set_expression
 
-        // query_set_op_union [label="union\nmod.: 'no union except' -> OFF", modifier="no union except", modifier_mode="off"]
-        // set_expression_set_operation -> query_set_op_union
-        // query_set_op_union -> call2_set_expression
-        // query_set_op_union -> call5_Query
-
-        // query_set_op_except [label="except\nmod.: 'no union except' -> OFF", modifier="no union except", modifier_mode="off"]
-        // set_expression_set_operation -> query_set_op_except
-        // query_set_op_except -> call2_set_expression
-        // query_set_op_except -> call5_Query
+        query_set_op_except [label="except\nmod.: 'no union except' -> OFF", modifier="no union except", modifier_mode="off"]
+        set_expression_set_operation -> query_set_op_except
+        query_set_op_except -> call2_set_expression
     }
 
     subgraph def_SELECT_query {

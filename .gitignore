@@ -1,5 +1,7 @@
 *generated_queries.sql
 ast2path_time_plot.py
+err_to_analyse.txt
+analyse_ast2path_err.py
 ast2path_time.txt
 ast2path_time_parallel.txt
 openai_keys.sh
