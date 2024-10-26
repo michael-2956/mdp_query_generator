@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use structopt::StructOpt;
 use toml::Value;
 
-use crate::{programs::{semantic_correctness::SemanticCorrectnessConfig, syntax_coverage::SyntaxCoverageConfig}, query_creation::{query_generator::QueryGeneratorConfig, state_generator::{markov_chain_generator::StateGeneratorConfig, substitute_models::AntiCallModelConfig}}, training::{ast_to_path::AST2PathTestingConfig, models::ModelConfig, trainer::TrainingConfig}};
+use crate::{programs::{semantic_correctness::SemanticCorrectnessConfig, syntax_coverage::SyntaxCoverageConfig}, query_creation::{query_generator::QueryGeneratorConfig, state_generator::{markov_chain_generator::StateGeneratorConfig, substitute_models::AntiCallModelConfig}}, training::{ast_to_path::tester::AST2PathTestingConfig, models::ModelConfig, trainer::TrainingConfig}};
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "basic")]
@@ -20,6 +20,12 @@ pub struct ProgramArgs {
     /// Anticall model setting
     #[structopt(short = "asl", long = "anticall_stir_level")]
     pub anticall_stir_level: Option<usize>,
+    /// Run the program in parallel (if supported, otherwise no effect)
+    #[structopt(long = "parallel")]
+    pub parallel: bool,
+    /// Start AST2Path testing from query with given number. Does not work when --parallel is present.
+    #[structopt(long = "start_ast2path_from")]
+    pub start_ast2path_from: Option<usize>,
 }
 
 pub trait TomlReadable {
@@ -91,6 +97,12 @@ impl Config {
             self.main_config.num_generate = num_queries;
             self.ast2path_testing_config.n_tests = num_queries;
             self.semantic_correctness_config.n_tests = num_queries;
+        }
+        if program_args.parallel {
+            self.ast2path_testing_config.parallel = true;
+        }
+        if let Some(start_ast2path_from) = program_args.start_ast2path_from {
+            self.ast2path_testing_config.start_testing_from = Some(start_ast2path_from);
         }
         if let Some(anticall_stir_level) = program_args.anticall_stir_level {
             self.anticall_model_config.stir_level = anticall_stir_level;

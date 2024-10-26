@@ -101,6 +101,7 @@ fn run_training(config: Config) {
 }
 
 fn test_ast_to_path(config: Config) {
+    let parallel = config.ast2path_testing_config.parallel;
     let mut tester = match TestAST2Path::with_config(config) {
         Ok(tester) => tester,
         Err(err) => {
@@ -108,9 +109,12 @@ fn test_ast_to_path(config: Config) {
             return;
         },
     };
-    if let Err(err) = tester.test_parallel() {
+    if let Err(err) = if parallel {
+        tester.test_parallel()
+    } else { tester.test() } {
         eprintln!("\n{err}");
     }
+    
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

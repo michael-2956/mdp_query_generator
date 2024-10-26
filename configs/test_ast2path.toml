@@ -49,6 +49,8 @@ print_weights_after_training=false
 testing_schema="schema/tpc-h_tables.sql"
 # number of tests
 n_tests=1000
+# run tests in parallel
+parallel=false
 
 [training]
 # path to a file with all the training queries separated by ";\n"

@@ -1,4 +1,4 @@
-use std::{error::Error, fmt, iter, path::PathBuf, str::FromStr, sync::{Arc, Mutex}};
+use std::{error::Error, fmt, iter, sync::{Arc, Mutex}};
 
 pub mod tester;
 
@@ -9,7 +9,7 @@ use smol_str::SmolStr;
 use sqlparser::ast::{self, BinaryOperator, DataType, DateTimeField, Distinct, Expr, FunctionArg, FunctionArgExpr, GroupByExpr, Ident, Interval, ObjectName, OrderByExpr, Query, Select, SelectItem, SetExpr, TableFactor, TableWithJoins, TimezoneInfo, TrimWhereField, UnaryOperator, Value};
 
 use crate::{
-    config::TomlReadable, query_creation::{
+    query_creation::{
         query_generator::{
             aggregate_function_settings::{AggregateFunctionAgruments, AggregateFunctionDistribution}, ast_builders::types_value::TypeAssertion, call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue, WildcardRelationsValue}, query_info::{ClauseContext, ClauseContextCheckpoint, ClauseContextFrame, ColumnRetrievalOptions, DatabaseSchema, IdentName, QueryProps}
         },
@@ -23,22 +23,6 @@ use crate::{
     },
     unwrap_pat, unwrap_variant, unwrap_variant_or_else
 };
-
-#[derive(Debug, Clone)]
-pub struct AST2PathTestingConfig {
-    pub schema: PathBuf,
-    pub n_tests: usize,
-}
-
-impl TomlReadable for AST2PathTestingConfig {
-    fn from_toml(toml_config: &toml::Value) -> Self {
-        let section = &toml_config["ast_to_path_testing"];
-        Self {
-            schema: PathBuf::from_str(section["testing_schema"].as_str().unwrap()).unwrap(),
-            n_tests: section["n_tests"].as_integer().unwrap() as usize,
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct SelectTypeInfo {

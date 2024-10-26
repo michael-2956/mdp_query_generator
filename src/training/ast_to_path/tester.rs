@@ -1,11 +1,31 @@
-use std::{fs, io::Write, sync::{atomic::{AtomicBool, Ordering}, mpsc::{self, Receiver, Sender}, Arc, Mutex}, thread, time::Instant};
+use std::{fs, io::Write, path::PathBuf, str::FromStr, sync::{atomic::{AtomicBool, Ordering}, mpsc::{self, Receiver, Sender}, Arc, Mutex}, thread, time::Instant};
 
 use itertools::Itertools;
 use sqlparser::ast::Query;
 
-use crate::{config::Config, query_creation::{query_generator::{query_info::DatabaseSchema, value_choosers::DeterministicValueChooser, QueryGenerator}, state_generator::{markov_chain_generator::error::SyntaxError, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, substitute_models::{AntiCallModel, PathModel}, MarkovChainGenerator}}};
+use crate::{config::{Config, TomlReadable}, query_creation::{query_generator::{query_info::DatabaseSchema, value_choosers::DeterministicValueChooser, QueryGenerator}, state_generator::{markov_chain_generator::error::SyntaxError, state_choosers::{MaxProbStateChooser, ProbabilisticStateChooser}, substitute_models::{AntiCallModel, PathModel}, MarkovChainGenerator}}};
 
 use super::{ConvertionError, PathGenerator};
+
+#[derive(Debug, Clone)]
+pub struct AST2PathTestingConfig {
+    pub schema: PathBuf,
+    pub n_tests: usize,
+    pub parallel: bool,
+    pub start_testing_from: Option<usize>,
+}
+
+impl TomlReadable for AST2PathTestingConfig {
+    fn from_toml(toml_config: &toml::Value) -> Self {
+        let section = &toml_config["ast_to_path_testing"];
+        Self {
+            schema: PathBuf::from_str(section["testing_schema"].as_str().unwrap()).unwrap(),
+            n_tests: section["n_tests"].as_integer().unwrap() as usize,
+            parallel: section["parallel"].as_bool().unwrap(),
+            start_testing_from: None
+        }
+    }
+}
 
 pub struct TestAST2Path {
     config: Config,
@@ -38,6 +58,7 @@ impl TestAST2Path {
 
     pub fn test(&mut self) -> Result<(), ConvertionError> {
         let mut path_length_time = vec![];
+        let start_testing_from = self.config.ast2path_testing_config.start_testing_from.clone();
         for i in 0..self.config.ast2path_testing_config.n_tests {
             let query = Box::new(self.random_query_generator.generate());
             if i % 1 == 0 {
@@ -46,8 +67,10 @@ impl TestAST2Path {
                     std::io::stdout().flush().unwrap();
                 }
             }
-            // if i < 0 { continue; }
-            // eprintln!("\nTested query: {query}\n");
+            if let Some(start_testing_from) = start_testing_from {
+                if i < start_testing_from { continue; }
+                eprintln!("\nTested query: {query}\n");
+            }
             let path_gen_start = Instant::now();
             let path = self.path_generator.get_query_path(&query)?;
             path_length_time.push((path.len(), path_gen_start.elapsed().as_secs_f64()));
@@ -203,7 +226,7 @@ impl TestAST2Path {
             eprintln!("\nProcess aborted due to an error");
             return Err((*convertion_error).clone())
         } else {
-            println!("\nAll items processed successfully.");
+            println!("\nAll queries converted successfully.");
         }
 
         fs::write("ast2path_time_parallel.txt", format!(
