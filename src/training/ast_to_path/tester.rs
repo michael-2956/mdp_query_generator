@@ -219,7 +219,7 @@ impl TestAST2Path {
             }
             // Check if an error has been encountered to stop processing
             if error_flag.load(Ordering::SeqCst) {
-                eprintln!("Aborting result collection due to error in worker threads.");
+                eprintln!("\nAborting result collection due to error in worker threads.");
                 break;
             }
         }
