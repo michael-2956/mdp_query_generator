@@ -102,7 +102,7 @@ impl ConvertionError {
 
     /// removes select type info from the error.\
     /// if none present, returns empty selecttypeinfo
-    pub fn take_sti(&mut self) -> SelectTypeInfo {
+    pub fn take_select_type_info_or_empty(&mut self) -> SelectTypeInfo {
         self.select_type_info.take().unwrap_or(SelectTypeInfo::empty())
     }
 
@@ -307,9 +307,6 @@ fn determine_n_cols_and_responsible_wildcard_with_clause_context(projection: &Ve
                     let relation = match rel_name.0.as_slice() {
                         [ident] => {
                             let identname: IdentName = ident.clone().into();
-                            // eprintln!("\nSearching for {identname}");
-                            // eprintln!("In projection: {:?}", projection.iter().map(|x| format!("{x}")).join(", "));
-                            // eprintln!("From levels: {:#?}\n", clause_context.get_relation_name_str_hierarchy());
                             clause_context.get_relation_by_name(&identname)
                         },
                         any => panic!("schema.table alias is not supported: {}", ObjectName(any.to_vec())),
@@ -330,8 +327,10 @@ fn determine_n_cols_and_responsible_wildcard_with_clause_context(projection: &Ve
     (n_cols, responsible_wildcard_type)
 }
 
-/// - returns error if we are responsible
-/// - if we are not, returns Ok(true) if we should utilize the new type info
+/// - returns error if we are responsible, making caller try another type
+/// - returns Ok(true) if we are responsible, but the type of the next column is now known,\
+///   making the caller use the newly acquired type info
+/// - returns Ok(false) if we are not responsible, making caller pass the error up the chain
 fn check_responsible(
         column_count_can_cause_errors: bool,
         n_cols_completed: usize,
@@ -341,10 +340,17 @@ fn check_responsible(
     ) -> Result<bool, ConvertionError> {
     let esti = SelectTypeInfo::empty();
     let select_info = err.select_type_info_ref().unwrap_or(&esti);
+    // We are not responsible in two cases:
+    // -> If the column count can cause errors, the real_n_cols info should
+    //    be passed up the chain to be implemented, after which the entire
+    //    type selection should be restarted.
+    // -> If all of the previously selected types are correct, we are responsible
+    //    and should try to choose some different type
     let type_is_responsible = !column_count_can_cause_errors && n_cols_completed == select_info.select_type.len();
+    // The info about the actual type of our column was given
     let type_info_present = select_info.responsible_wildcard_type.is_some();
     if type_is_responsible && !type_info_present {
-        // we are responsible for the error.
+        // We are responsible for the error, but did not get type info about following columns
         Err(ConvertionError::with_type_info(
             format!(
                 "Having determined {n_cols_completed}/{n_cols_total} types: {:?},\nTried {tp} for the next column, but got an error:\n{}",
@@ -352,7 +358,12 @@ fn check_responsible(
             ), select_info.clone()
         ))
     } else {
-        Ok(type_is_responsible)  // if type_is_responsible is true, type_info_present is true
+        // This covers two cases:
+        // - We either got type info about new columns, in which case
+        //   type_is_responsible is true and type_info_present is true, or
+        // - We are not responsible, in which case type_is_responsible is false
+        //   and type_info_present doesn't matter since we just pass the error up
+        Ok(type_is_responsible)
     }
 }
 
@@ -478,31 +489,36 @@ impl PathGenerator {
         self.try_push_state("call1_set_expression_determine_type")?;
 
         let column_type_lists = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::QueryTypes);
-        // the number of columns the caller expectes from us. We can't change this, so we should pass real_n_cols to the caller
+        // the number of columns the caller expectes from us. We are not responsible
+        // for this, we will pass real_n_cols to the caller if they mismatch.
         let expected_n_cols_opt = match column_type_lists {
             QueryTypes::ColumnTypeLists { column_type_lists } => Some(column_type_lists.len()),
             QueryTypes::TypeList { type_list: _ } => None,
         };
-        // eprintln!("Query body: {}", query_body);
-        // eprintln!("expected_n_cols_opt = {:?}", expected_n_cols_opt);
 
         let mut n_cols = determine_n_cols(query_body).or(expected_n_cols_opt.clone());
         let expr_str = Some(format!("{query_body}"));
         let mut expected_column_count_matched = false;
         loop {
             let (column_count_can_cause_errors, n_cols_arg) = match &n_cols {
-                // by default, columns can cause errors if the expected n cols restricts us
                 Some(n_cols) => (
+                    // by default, columns can cause errors if the expected n cols restricts us
+                    // (for example, is 1 when actually we have 3 columns)
+                    // however, not if they matched
                     if expected_column_count_matched { false } else { expected_n_cols_opt.is_some()},
                     *n_cols
                 ),
-                // otherwise, if expected n cols is None, columns can cause errors if determine_n_cols returned None
+                // if expected n cols is None, columns can cause errors if determine_n_cols returned None
+                // for example, if a wildcard was present
                 None => (true, 1usize),
             };
-            // eprintln!("column_count_can_cause_errors = {column_count_can_cause_errors}, n_cols_arg = {n_cols_arg}");
+
+            // if column count can cause errors, we will restore and use real_n_cols to rerun with the correct column count
             let checkpoint_opt = if column_count_can_cause_errors {
                 Some(self.get_checkpoint(true))
             } else { None };
+
+            // if the next call returns Ok(Some(err)), we have to check that error for the real number of columns
             let select_err = self.handle_set_expression_determine_type_and_try(
                 expr_str.clone(),
                 n_cols_arg,
@@ -520,31 +536,35 @@ impl PathGenerator {
                     Ok(())
                 }
             )?;
+
+            // Check if the method wants us to check the error for real_n_cols
             match select_err {
                 Some(mut err) => {
                     if !column_count_can_cause_errors {
                         return Err(ConvertionError::with_type_info(
                             format!("Couldn't select SELECT type. Got the error:\n{}", err),
-                            err.take_sti()
+                            err.take_select_type_info_or_empty()
                         ))
                     } else {
                         self.restore_checkpoint_consume(checkpoint_opt.unwrap());
-                        // wildcard caused an error, so try another time.
-                        // the number of columns actually known now
-                        let select_type_info = err.take_sti();
-                        // eprintln!("real_n_cols = {:?}", select_type_info.real_n_cols);
+                        // column count caused an error, so try another time with real_n_cols
+                        let select_type_info = err.take_select_type_info_or_empty();
                         match (&select_type_info.real_n_cols, &expected_n_cols_opt) {
-                            // real column number received and no expected column number by caller
+                            // 1) real column number received and no expected column number by caller
+                            //    => test again with real_n_cols. 
                             (Some(real_n_cols), None) => n_cols = Some(*real_n_cols),
-                            // we have the expected number of columns, but it matches
+                            // 2) we got the expected number of columns, but it matches.
+                            //    => test again with column_count_can_cause_errors = false.
                             (
                                 Some(real_n_cols), Some(expected_n_cols)
                             ) if real_n_cols == expected_n_cols => {
                                 expected_column_count_matched = true;
                                 n_cols = Some(*real_n_cols);
                             },
-                            // either no real column number received or
-                            // the expected number of columns does not match
+                            // 1) no real column number received
+                            //    => return error because we can't do anything in this case
+                            // 2) real column number was received but does not match with that of the caller.
+                            //    => return error to pass real_n_cols to the caller
                             _ => {
                                 // the problem is not us, so exit with error
                                 return Err(ConvertionError::with_type_info(
@@ -578,16 +598,31 @@ impl PathGenerator {
         mut item_type_iter: Option<impl Iterator<Item = SubgraphType> + Clone>,
         and_try: F
     ) -> Result<Option<ConvertionError>, ConvertionError> {
+        // needed if we get the type info about our column and need to re-run
         let before_us_checkpoint = self.get_checkpoint(false);
         self.try_push_states(&["set_expression_determine_type", "call9_types_type"])?;
+
+        // obtain the list of types that are allowed for the current column by the caller
         let column_type_lists = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::QueryTypes);
         let (first_column_list, remaining_columns) = column_type_lists.split_first();
+        // pass it to the types_type subgraph that will be called
         self.state_generator.set_known_list(first_column_list.clone());
+
+        // the number of columns before our column
         let n_cols_completed = n_cols_total - n_cols_remaining;
 
-        let error_with_incomplete_type: Arc<Mutex<Option<ConvertionError>>> = Arc::new(Mutex::new(None));
+        // -> This will be populated by an error if and_try finishes with an error, but
+        //    the type that we selected came after the type that was responsible for it,
+        //    or in a rare case that the type in item_type_iter was wrong.
+        let error_to_pass_up: Arc<Mutex<Option<ConvertionError>>> = Arc::new(Mutex::new(None));
+        // -> This will be populated by an error if we get info about the type of our column
+        //    and we should return to before_us_checkpoint and try this type.
+        // -> In case we got info about multiple consequtive types, this will be Some(...) if
+        //    we are the first type in the sequence. We will then launch a chain of type selections
+        //    with the now known types.
         let error_with_new_cols_type_info: Arc<Mutex<Option<ConvertionError>>> = Arc::new(Mutex::new(None));
-        
+
+        // This will be Some(tp) if the type of our column is known
         let tp_opt = item_type_iter.as_mut().and_then(|it| it.next());
 
         let continue_with_type = |_self: &mut PathGenerator, tp: SubgraphType| {
@@ -608,7 +643,7 @@ impl PathGenerator {
                             *error_with_new_cols_type_info.lock().unwrap() = Some(err);
                         } else {
                             // we are not responsible: finish and pass the error up
-                            *error_with_incomplete_type.lock().unwrap() = Some(err);
+                            *error_to_pass_up.lock().unwrap() = Some(err);
                         }
                     },
                 }
@@ -634,67 +669,125 @@ impl PathGenerator {
                         *error_with_new_cols_type_info.lock().unwrap() = Some(inner_error);
                     } else {
                         // we are not responsible: finish and pass the error up
-                        *error_with_incomplete_type.lock().unwrap() = Some(inner_error);
+                        *error_to_pass_up.lock().unwrap() = Some(inner_error);
                     }
                 }
             }
             Ok(())
         };
 
-        if let Some(tp) = tp_opt {
-            // type is known: don't test it out
-            self.handle_types_type(&tp)?;
-            continue_with_type(self, tp)?;
-            if let Some(mut error_with_new_cols_type_info) = error_with_new_cols_type_info.lock().unwrap().take() {
-                return Err(ConvertionError::new(format!(
-                    "Unexpected type information exit after type already determined.\nGot responsible_wildcard_type = {:?}\nGot err = {}",
-                    error_with_new_cols_type_info.take_sti().responsible_wildcard_type,
-                    error_with_new_cols_type_info
-                )));
+        if let Some(tp) = tp_opt.as_ref() {
+            let before_type_checkpoint = self.get_checkpoint(false);
+            // -> Type is known: run with pre-determined type instead of testing it out
+            // -> If the next call errors, the caller didn't allow the actual column type,
+            //    in which case this method returns an error
+            // -> The error will be caught by the instance that gave us the type of our column
+            //    and will be returned to caller
+            self.handle_types_type(tp)?;
+            // -> Should not return an error if the type information was right
+            // -> The type information can be wrong, for example if the left hand of a
+            //    set operation has an [Integer, Integer] wildcard, but the right hand side
+            //    type has a [Integer, Number] wildcard.
+            // -> In case of incorrect type information, either error_with_new_cols_type_info
+            //    or error_with_incomplete_type can be set, and we should pass up/use them now.
+            match continue_with_type(self, tp.clone()) {
+                Ok(()) => {
+                    if let Some(esti) = error_with_new_cols_type_info.lock().unwrap().clone() {
+                        let sti = esti.select_type_info_ref().unwrap();
+                        let new_cols_type_info = sti.responsible_wildcard_type.as_ref().unwrap();
+                        if tp.get_compat_types().contains(new_cols_type_info.first().unwrap()) {
+                            return Err(ConvertionError::new(format!(
+                                "Tried the supplied type {tp}, but got error_with_new_cols_type_info with a smaller type: {esti}"
+                            )));
+                        }
+                    }
+                },
+                Err(err) => {
+                    self.restore_checkpoint_consume(before_type_checkpoint);
+                    // -> Type didn't work out, so try the types that go after it,
+                    //    as types type will arrange them by compatibility.
+                    match self.handle_types_type_and_try(
+                        expr_str.clone(),
+                        Some(tp.clone()),
+                        TypeAssertion::GeneratedByOneOf(&first_column_list),
+                        continue_with_type
+                    ) {
+                        Ok(..) => {
+                            if let Some(esti) = error_with_new_cols_type_info.lock().unwrap().clone() {
+                                let sti = esti.select_type_info_ref().unwrap();
+                                let new_cols_type_info = sti.responsible_wildcard_type.as_ref().unwrap();
+                                if tp.get_compat_types().contains(new_cols_type_info.first().unwrap()) {
+                                    return Err(ConvertionError::new(format!(
+                                        "Tried the supplied type {tp}, but got: {err}\nTried to find types after {tp}, but got error_with_new_cols_type_info with a smaller type: {esti}"
+                                    )));
+                                }
+                            }
+                        },
+                        Err(err_other_types) => {
+                            return Err(ConvertionError::new(format!(
+                                "Tried the supplied type {tp}, but got: {err}\nTried other types, but got: {err_other_types}"
+                            )))
+                        },
+                    }
+                },
             }
         } else {
-            // type is not known: test it out
+            // Type is not known: test out types from first_column_list.
+            // -> If this returns an error, the type is not among
+            //    the types supplied by caller in first_column_list
             self.handle_types_type_and_try(
                 expr_str.clone(),
+                None,
                 TypeAssertion::GeneratedByOneOf(&first_column_list),
                 continue_with_type
             )?;
-            if let Some(mut err) = error_with_new_cols_type_info.lock().unwrap().take() {
-                let select_type_info = err.take_sti();
-                // did we get any type info?
-                if let Some(new_cols_type_info) = select_type_info.responsible_wildcard_type.clone() {
-                    // if yes, try again but with the known type
-                    self.restore_checkpoint_consume(before_us_checkpoint);
-                    match self.handle_set_expression_determine_type_and_try(
-                        expr_str.clone(),
-                        n_cols_remaining,
-                        n_cols_total,
-                        column_types,
-                        column_count_can_cause_errors,
-                        Some(new_cols_type_info.into_iter()),
-                        and_try.clone()
-                    ) {
-                        Ok(_) => { },
-                        // this can only be if the caller does not allow us to have the
-                        // type we should, so attach the wildcard info
-                        Err(mut err) => {
-                            assert!(err.select_type_info_ref().is_none());
-                            err.add_type_info(select_type_info);
-                            return Err(err)
-                        },
-                    }
-                } else {
-                    // if no, this is unexpected
-                    return Err(ConvertionError::new(format!(
-                        "Got an error about a wildcard column, but it does not have type info.\nselect_type: {:?}\nreal_n_cols: {:?}\nresponsible_wildcard_type: {:?}\nError:\n{err}",
-                        select_type_info.select_type, select_type_info.real_n_cols, select_type_info.responsible_wildcard_type
-                    )))
-                }
-            }
-            
         }
 
-        let ans = error_with_incomplete_type.lock().unwrap().take();
+        // -> Check if the select handler detected the types of the
+        //    following columns and wants us to use them.
+        if let Some(mut err) = error_with_new_cols_type_info.lock().unwrap().take() {
+            assert!(error_to_pass_up.lock().unwrap().is_none());
+            // new_cols_type_info should be present in error_with_new_cols_type_info
+            // if the code works correctly.
+            let select_type_info = err.take_select_type_info_or_empty();
+            if let Some(new_cols_type_info) = select_type_info.responsible_wildcard_type.clone() {
+                self.restore_checkpoint_consume(before_us_checkpoint);
+                match self.handle_set_expression_determine_type_and_try(
+                    expr_str.clone(),
+                    n_cols_remaining,
+                    n_cols_total,
+                    column_types,
+                    column_count_can_cause_errors,
+                    Some(new_cols_type_info.clone().into_iter()),
+                    and_try.clone()
+                ) {
+                    // We may get an error, for example, if type info is correct for the left hand side
+                    // of a set operation, but too small for some types on right had side before the
+                    // current type. If we got an Ok, we are not responsible for the error, so pass it up.
+                    Ok(err) => {
+                        *error_to_pass_up.lock().unwrap() = err;
+                    },
+                    // The error can be returned without type info if the caller does not allow us to have
+                    // the type we should. If the type info is present, it we already put it there.
+                    Err(mut err) => {
+                        if err.select_type_info_ref().is_none() {
+                            err.add_type_info(select_type_info);
+                        } else {
+                            assert!(err.select_type_info_ref().unwrap().responsible_wildcard_type.is_some());
+                        }
+                        return Err(err)
+                    },
+                }
+            } else {
+                // This is unexpected, and check_responsible is probably at fault
+                return Err(ConvertionError::new(format!(
+                    "Got an error about a wildcard column, but it does not have type info about following columns.\nselect_type: {:?}\nreal_n_cols: {:?}\nresponsible_wildcard_type: {:?}\nError:\n{err}",
+                    select_type_info.select_type, select_type_info.real_n_cols, select_type_info.responsible_wildcard_type
+                )))
+            }
+        }
+
+        let ans = error_to_pass_up.lock().unwrap().take();
         Ok(ans)
     }
 
@@ -781,8 +874,8 @@ impl PathGenerator {
                         Ok(..) => { },
                         Err(mut err_grouping) => {
                             self.restore_checkpoint_consume(implicit_group_by_checkpoint);
-                            let no_grouping_info = err_no_grouping.take_sti();
-                            let grouping_info = err_grouping.take_sti();
+                            let no_grouping_info = err_no_grouping.take_select_type_info_or_empty();
+                            let grouping_info = err_grouping.take_select_type_info_or_empty();
                             return Err(ConvertionError::with_type_info(
                                 format!(
                                     "Error converting query: {select_body}\n\
@@ -1042,6 +1135,9 @@ impl PathGenerator {
             self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::QueryTypes
         );
 
+        /// TODO:
+        // make columns compatible to the requested types in both generation & ast2path
+        // before doing this, test this still works.
         let remaining_column_types = match select_item {
             select_item @ (SelectItem::UnnamedExpr(..) | SelectItem::ExprWithAlias { .. }) => {
                 let (
@@ -1159,7 +1255,7 @@ impl PathGenerator {
                 self.try_push_state("IsDistinctFrom")?;
                 if matches!(x, Expr::IsNotDistinctFrom(..)) { self.try_push_state("IsDistinctNOT")?; }
                 self.try_push_state("call0_types_type")?;
-                self.handle_types_type_and_try(None, TypeAssertion::None, |_self, returned_type| {
+                self.handle_types_type_and_try(None, None, TypeAssertion::None, |_self, returned_type| {
                     _self.state_generator.set_compatible_list(returned_type.get_compat_types());
                     _self.try_push_state("call56_types")?;
                     _self.handle_types(expr_1, TypeAssertion::CompatibleWith(returned_type.clone()))?;
@@ -1178,7 +1274,7 @@ impl PathGenerator {
                 self.try_push_state("InList")?;
                 if *negated { self.try_push_state("InListNot")?; }
                 self.try_push_state("call3_types_type")?;
-                self.handle_types_type_and_try(None, TypeAssertion::None, |_self, returned_type| {
+                self.handle_types_type_and_try(None, None, TypeAssertion::None, |_self, returned_type| {
                     _self.state_generator.set_compatible_list(returned_type.get_compat_types());
                     _self.try_push_state("call57_types")?;
                     _self.handle_types(expr, TypeAssertion::CompatibleWith(returned_type.clone()))?;
@@ -1191,7 +1287,7 @@ impl PathGenerator {
                 self.try_push_state("InSubquery")?;
                 if *negated { self.try_push_state("InSubqueryNot")?; }
                 self.try_push_state("call4_types_type")?;
-                self.handle_types_type_and_try(None, TypeAssertion::None, |_self, returned_type| {
+                self.handle_types_type_and_try(None, None, TypeAssertion::None, |_self, returned_type| {
                     _self.state_generator.set_compatible_list(returned_type.get_compat_types());
                     _self.try_push_state("call58_types")?;
                     _self.handle_types(expr, TypeAssertion::CompatibleWith(returned_type.clone()))?;
@@ -1206,7 +1302,7 @@ impl PathGenerator {
             Expr::Between { expr, negated, low, high } => {
                 if *negated { panic!("Negated betweens are not supported"); }
                 self.try_push_states(&["Between", "call5_types_type"])?;
-                self.handle_types_type_and_try(None, TypeAssertion::None, |_self, returned_type| {
+                self.handle_types_type_and_try(None, None, TypeAssertion::None, |_self, returned_type| {
                     _self.state_generator.set_compatible_list(returned_type.get_compat_types());
                     _self.try_push_state("call59_types")?;
                     _self.handle_types(expr, TypeAssertion::CompatibleWith(returned_type.clone()))?;
@@ -1230,7 +1326,7 @@ impl PathGenerator {
                     any => unexpected_expr!(any),
                 })?;
                 self.try_push_state("call2_types_type")?;
-                self.handle_types_type_and_try(None, TypeAssertion::None, |_self, returned_type| {
+                self.handle_types_type_and_try(None, None, TypeAssertion::None, |_self, returned_type| {
                     _self.state_generator.set_compatible_list(returned_type.get_compat_types());
                     _self.try_push_state("call61_types")?;
                     _self.handle_types(left, TypeAssertion::CompatibleWith(returned_type.clone()))?;
@@ -1291,7 +1387,7 @@ impl PathGenerator {
                             any => unexpected_expr!(any),
                         })?;
                         self.try_push_state("call1_types_type")?;
-                        self.handle_types_type_and_try(None, TypeAssertion::None, |_self, returned_type| {
+                        self.handle_types_type_and_try(None, None, TypeAssertion::None, |_self, returned_type| {
                             _self.state_generator.set_compatible_list(returned_type.get_compat_types());
                             _self.try_push_state("call60_types")?;
                             _self.handle_types(left, TypeAssertion::CompatibleWith(returned_type.clone()))?;
@@ -1752,11 +1848,13 @@ impl PathGenerator {
     }
 
     /// subgraph def_types_type
+    /// 
+    /// If after_type is Some, will skip the types that go before it and the after_type itself
     fn handle_types_type_and_try<F: Fn(&mut PathGenerator, SubgraphType) -> Result<(), ConvertionError>>(
-        &mut self, expr_str: Option<String>, type_assertion: TypeAssertion, and_try: F
+        &mut self, expr_str: Option<String>, after_type: Option<SubgraphType>, type_assertion: TypeAssertion, and_try: F
     ) -> Result<SubgraphType, ConvertionError> {
         // Use like:
-        // let returned_type = self.handle_types_type_and_try(None, TypeAssertion::None, |_self, returned_type| {
+        // let returned_type = self.handle_types_type_and_try(None, None, TypeAssertion::None, |_self, returned_type| {
         //     _self.something(...);
         //     Ok(())
         // })?;
@@ -1764,6 +1862,19 @@ impl PathGenerator {
         let selected_types = unwrap_variant!(self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
         let selected_types = SubgraphType::sort_by_compatibility(selected_types);
         let mut selected_types_iter = selected_types.iter();
+        if let Some(after_type) = after_type {
+            let mut found = false;
+            while let Some(tp) = selected_types_iter.next() {
+                if *tp == after_type {
+                    found = true;
+                    break
+                }
+            }
+            // if not found, try all of the types that are allowed
+            if !found {
+                selected_types_iter = selected_types.iter();
+            }
+        }
         let mut err_msg = "".to_string();
         let mut select_type_info_opt = None;
         // can't use cutoff because restoration may be on a level that's less deep
@@ -1783,7 +1894,9 @@ impl PathGenerator {
             }
             type_assertion.check_type(&tp);
             match and_try(self, tp.clone()) {
-                Ok(..) => break Ok(tp.clone()),
+                Ok(..) => {
+                    break Ok(tp.clone())
+                },
                 Err(mut err) => {
                     select_type_info_opt = err.take_select_type_info();
                     err_msg += format!("Tried with {tp}, but got:\n{}\n", err.get_indentated_string()).as_str();
@@ -2163,7 +2276,7 @@ impl PathGenerator {
     /// subgraph def_list_expr
     fn handle_list_expr(&mut self, list: &Vec<Expr>) -> Result<SubgraphType, ConvertionError> {
         self.try_push_states(&["list_expr", "call6_types_type"])?;
-        let inner_type = self.handle_types_type_and_try(None, TypeAssertion::None, |_self, inner_type| {
+        let inner_type = self.handle_types_type_and_try(None, None, TypeAssertion::None, |_self, inner_type| {
             _self.state_generator.set_compatible_list(inner_type.get_compat_types());
             _self.try_push_state("call16_types")?;
             _self.handle_types(&list[0], TypeAssertion::CompatibleWith(inner_type.clone()))?;
@@ -2200,13 +2313,13 @@ impl PathGenerator {
         } else { panic!("handle_case reveived {expr}") };
 
         self.try_push_states(&["case_first_result", "call7_types_type"])?;
-        let out_type = self.handle_types_type_and_try(None, TypeAssertion::None, |_self, out_type| {
+        let out_type = self.handle_types_type_and_try(None, None, TypeAssertion::None, |_self, out_type| {
             _self.try_push_state("call82_types")?;
             _self.state_generator.set_compatible_list(out_type.get_compat_types());
             _self.handle_types(&results[0], TypeAssertion::CompatibleWith(out_type.clone()))?;
             if let Some(operand_expr) = operand {
                 _self.try_push_states(&["simple_case", "simple_case_operand", "call8_types_type"])?;
-                _self.handle_types_type_and_try(None, TypeAssertion::None, |_self, operand_type| {
+                _self.handle_types_type_and_try(None, None, TypeAssertion::None, |_self, operand_type| {
                     _self.state_generator.set_compatible_list(operand_type.get_compat_types());
                     _self.try_push_state("call78_types")?;
                     _self.handle_types(operand_expr, TypeAssertion::CompatibleWith(operand_type.clone()))?;

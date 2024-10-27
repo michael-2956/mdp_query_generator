@@ -1,59 +1,80 @@
-SELECT
-    CASE
-        WHEN NOT false THEN C_NATIONKEY
-    END AS C2,
-    T1.*
-FROM
-    (
-        SELECT DISTINCT
-            CAST(NULL AS TEXT)
-        FROM
-            (
-                (
-                    SELECT DISTINCT
-                        CAST(NULL AS TEXT) AS C1
-                    FROM
-                        CUSTOMER
-                    ORDER BY
-                        C1 ASC NULLS LAST
-                )
-            ) AS T2
-        GROUP BY
-            true
-        ORDER BY
-            "text",
-            "text" ASC NULLS FIRST,
-            "text" DESC
-    ) AS T1,
-    CUSTOMER AS T3 (R1)
-WHERE
-    true
-INTERSECT
-(
-    (
-        SELECT
-            4.993609530061892,
-            CAST(NULL AS TEXT) AS C3
-        FROM
-            NATION,
-            PARTSUPP
-            JOIN PART ON CASE
-                WHEN false THEN true
-            END,
-            SUPPLIER
-        WHERE
-            false
-        ORDER BY
-            C3 DESC NULLS LAST,
-            (
-                CASE CAST(NULL AS TEXT)
-                    WHEN CAST(NULL AS TEXT) THEN TIMESTAMP '2023-01-30 14:37:05'
-                    WHEN 'HJeihfbwei' THEN CAST(NULL AS DATE)
-                END
-            )
-    )
-    LIMIT
-        (- CAST(NULL AS INTEGER))
-)
-LIMIT
-    (-1)
+-- SELECT
+--     1,
+--     T1.*
+-- FROM
+--     (
+--         SELECT
+--             CAST(NULL AS TEXT)
+--         FROM
+--             NATION
+--     ) AS T1
+-- INTERSECT
+-- SELECT
+--     1.2,
+--     CAST(NULL AS TEXT)
+-- FROM
+--     NATION
+
+-- SELECT
+--     1 AS C2,
+--     T1.*
+-- FROM
+--     (
+--         SELECT
+--             CAST(NULL AS TEXT)
+--         FROM
+--             CUSTOMER
+--     ) AS T1
+-- INTERSECT
+-- (
+--     SELECT
+--         4.993609530061892,
+--         CAST(NULL AS TEXT) AS C3
+--     FROM
+--         NATION
+-- )
+
+-- SELECT
+--     T1.*
+-- FROM
+--     (
+--         SELECT
+--             CAST(NULL AS BIGINT)
+--         FROM
+--             NATION
+--     ) AS T1
+-- INTERSECT
+-- SELECT
+--     T2.*
+-- FROM
+--     (
+--         SELECT
+--             CAST(NULL AS NUMERIC)
+--         FROM
+--             NATION
+--     ) AS T2
+
+-- SELECT
+--     T1.*
+-- FROM
+--     (
+--         SELECT
+--             CAST(NULL AS INTEGER)
+--         FROM
+--             NATION
+--     ) AS T1
+-- INTERSECT
+-- SELECT
+--     CAST(NULL AS NUMERIC)
+-- FROM
+--     NATION
+
+-- SELECT
+--     CAST(NULL AS INTEGER)
+-- FROM
+--     NATION
+-- INTERSECT
+-- SELECT
+--     CAST(NULL AS NUMERIC)
+-- FROM
+--     NATION
