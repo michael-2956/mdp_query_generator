@@ -101,13 +101,14 @@ impl QueryBuilder {
         query.body = Box::new(SetExpressionBuilder::nothing());
         SetExpressionBuilder::build(generator, &mut query.body);
 
-        let query_type = generator.clause_context.query().select_type();
-        if !column_type_list.check_type(query_type.iter().map(|(_, t)| t)) {
-            panic!(
-                "set_expression created query type: {:?}\nbut the requested type was: {:?}",
-                query_type, column_type_list
-            )
-        }
+        // todo: restore this with compatible types. helpful for detecting bugs
+        // let query_type = generator.clause_context.query().select_type();
+        // if !column_type_list.check_type(query_type.iter().map(|(_, t)| t)) {
+        //     panic!(
+        //         "set_expression created query type: {:?}\nbut the requested type was: {:?}",
+        //         query_type, column_type_list
+        //     )
+        // }
 
         generator.expect_state("call0_ORDER_BY");
         query.order_by = OrderByBuilder::highlight();

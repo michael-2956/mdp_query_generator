@@ -1,3 +1,16 @@
+select
+    (
+        case
+            when false then date '01.01.2124'
+            else date '01.01.2024'
+        end
+    ) - date (
+        case
+            when false then date '01.01.2123'
+            else date '01.01.2023'
+        end
+    );
+
 -- SELECT
 --     1,
 --     T1.*
@@ -14,7 +27,6 @@
 --     CAST(NULL AS TEXT)
 -- FROM
 --     NATION
-
 -- SELECT
 --     1 AS C2,
 --     T1.*
@@ -33,7 +45,6 @@
 --     FROM
 --         NATION
 -- )
-
 -- SELECT
 --     T1.*
 -- FROM
@@ -53,7 +64,6 @@
 --         FROM
 --             NATION
 --     ) AS T2
-
 -- SELECT
 --     T1.*
 -- FROM
@@ -68,7 +78,6 @@
 --     CAST(NULL AS NUMERIC)
 -- FROM
 --     NATION
-
 -- SELECT
 --     CAST(NULL AS INTEGER)
 -- FROM

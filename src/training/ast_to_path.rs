@@ -1,4 +1,4 @@
-use std::{error::Error, fmt, iter, sync::{Arc, Mutex}};
+use std::{collections::HashSet, error::Error, fmt, iter, sync::{Arc, Mutex}};
 
 pub mod tester;
 
@@ -1135,9 +1135,6 @@ impl PathGenerator {
             self.state_generator.get_fn_selected_types_unwrapped(), CallTypes::QueryTypes
         );
 
-        /// TODO:
-        // make columns compatible to the requested types in both generation & ast2path
-        // before doing this, test this still works.
         let remaining_column_types = match select_item {
             select_item @ (SelectItem::UnnamedExpr(..) | SelectItem::ExprWithAlias { .. }) => {
                 let (
@@ -1146,8 +1143,10 @@ impl PathGenerator {
                 match select_item {
                     SelectItem::UnnamedExpr(expr) => {
                         self.try_push_states(&["SELECT_unnamed_expr", "select_expr", select_item_state])?;
-                        self.state_generator.set_known_list(first_column_list.clone());
-                        let tp = self.handle_types(expr, TypeAssertion::GeneratedByOneOf(&first_column_list))?;
+                        self.state_generator.set_compatible_list(first_column_list.iter().flat_map(
+                            |tp| tp.get_compat_types().into_iter()  // vec![tp.clone()].into_iter()
+                        ).collect::<HashSet<SubgraphType>>().into_iter().collect_vec());
+                        let tp = self.handle_types(expr, TypeAssertion::CompatibleWithOneOf(&first_column_list))?;
                         self.try_push_state("select_expr_done")?;
                         let alias = QueryProps::extract_alias(&expr);
                         self.clause_context.query_mut().select_type_mut().push((alias, tp));
@@ -1156,8 +1155,10 @@ impl PathGenerator {
                         self.try_push_state("SELECT_expr_with_alias")?;
                         self.push_node(PathNode::SelectAlias(alias.clone()));  // the order is important
                         self.try_push_states(&["select_expr", select_item_state])?;
-                        self.state_generator.set_known_list(first_column_list.clone());
-                        let tp = self.handle_types(expr, TypeAssertion::GeneratedByOneOf(&first_column_list))?;
+                        self.state_generator.set_compatible_list(first_column_list.iter().flat_map(
+                            |tp| tp.get_compat_types().into_iter()  // vec![tp.clone()].into_iter()
+                        ).collect::<HashSet<SubgraphType>>().into_iter().collect_vec());
+                        let tp = self.handle_types(expr, TypeAssertion::CompatibleWithOneOf(&first_column_list))?;
                         self.try_push_state("select_expr_done")?;
                         self.clause_context.query_mut().select_type_mut().push((Some(alias.clone().into()), tp));
                     },
@@ -1225,7 +1226,8 @@ impl PathGenerator {
                 },
                 _ => {
                     self.try_push_states(&["is_limit_present", "limit_not_present", "limit_num", "call52_types"])?;
-                    let tp = self.handle_types(expr, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Numeric, SubgraphType::Integer, SubgraphType::BigInt]))?;
+                    self.state_generator.set_compatible_list(SubgraphType::Numeric.get_compat_types());
+                    let tp = self.handle_types(expr, TypeAssertion::CompatibleWith(SubgraphType::Numeric))?;
                     self.clause_context.query_mut().set_limit_present();
                     tp
                 },
@@ -1711,10 +1713,10 @@ impl PathGenerator {
 
                 let checkpoint = self.get_checkpoint(true);
                 self.try_push_state("call91_types")?;
-                match self.handle_types(left, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Interval])) {
+                match self.handle_types(left, TypeAssertion::GeneratedBy(SubgraphType::Interval)) {
                     Ok(_) => {
                         self.try_push_state("call92_types")?;
-                        self.handle_types(right, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Interval]))?;
+                        self.handle_types(right, TypeAssertion::GeneratedBy(SubgraphType::Interval))?;
                     },
                     Err(err) => {
                         self.restore_checkpoint_consume(checkpoint);
@@ -1722,9 +1724,9 @@ impl PathGenerator {
                             return Err(err)  // only timestamp - timestamp
                         }
                         self.try_push_state("call98_types")?;
-                        self.handle_types(left, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Timestamp]))?;
+                        self.handle_types(left, TypeAssertion::GeneratedBy(SubgraphType::Timestamp))?;
                         self.try_push_state("call99_types")?;
-                        self.handle_types(right, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Timestamp]))?;
+                        self.handle_types(right, TypeAssertion::GeneratedBy(SubgraphType::Timestamp))?;
                     },
                 }
             },

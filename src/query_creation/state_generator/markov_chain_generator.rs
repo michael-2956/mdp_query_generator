@@ -954,8 +954,10 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         self.call_stack.last_mut().unwrap().known_type_list = Some(type_list);
     }
 
-    /// set the compatible type list for the next node that will use the TYPES="[compatible]"
-    /// these will be wrapped automatically if uses_wrapped_types=true
+    /// Set the compatible type list for the next node that will use the `TYPES="[compatible]"`
+    /// 
+    /// Note that these will be interpreted literally and work the same as set_known_list.
+    /// The point is to add the functionality to graph in the future (at least partially or fully)
     pub fn set_compatible_list(&mut self, type_list: Vec<SubgraphType>) {
         self.call_stack.last_mut().unwrap().compatible_type_list = Some(type_list);
     }

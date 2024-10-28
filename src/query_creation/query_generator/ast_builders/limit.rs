@@ -32,9 +32,8 @@ impl LimitBuilder {
                     "limit_num" => {
                         generator.expect_state("call52_types");
                         let limit_expr = limit.as_mut().unwrap();
-                        TypesBuilder::build(generator, limit_expr, TypeAssertion::GeneratedByOneOf(
-                            &[SubgraphType::Numeric, SubgraphType::Integer, SubgraphType::BigInt]
-                        ));
+                        generator.state_generator.set_compatible_list(SubgraphType::Numeric.get_compat_types());
+                        TypesBuilder::build(generator, limit_expr, TypeAssertion::CompatibleWith(SubgraphType::Numeric));
                         generator.clause_context.query_mut().set_limit_present();
                     },
                 });

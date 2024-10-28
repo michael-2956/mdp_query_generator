@@ -294,10 +294,10 @@ digraph G {
         SELECT_expr_with_alias -> select_expr
         select_expr_done [label="Expression done"]
         select_expr_done -> call1_SELECT_item
-        call73_types [label="TYPES: [args[0]]\nMODS: [group by columns]\ncall mod.: 'grouping mode switch'", TYPES="[known]", MODS="[group by columns]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
+        call73_types [label="TYPES: [compatible(args[0])]\nMODS: [group by columns]\ncall mod.: 'grouping mode switch'", TYPES="[compatible]", MODS="[group by columns]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
         select_expr -> call73_types
         call73_types -> select_expr_done
-        call54_types [label="TYPES: [args[0]]\nMODS: [no aggregate]\ncall mod.: 'grouping mode switch'", TYPES="[known]", MODS="[no aggregate]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
+        call54_types [label="TYPES: [compatible(args[0])]\nMODS: [no aggregate]\ncall mod.: 'grouping mode switch'", TYPES="[compatible]", MODS="[no aggregate]", call_modifier="grouping mode switch", shape=rectangle, style=filled, color=lightblue]
         select_expr -> call54_types
         call54_types -> select_expr_done
 
@@ -575,7 +575,7 @@ digraph G {
 
         limit_num [label="limit [num]\nmod: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
         limit_not_present -> limit_num
-        call52_types [TYPES="[integer, numeric, bigint]", MODS="[no column spec, no aggregate]", label="TYPES: [integer, numeric, bigint]\nMODS: [no column spec, no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        call52_types [TYPES="[compatible]", MODS="[no column spec, no aggregate]", label="TYPES: [compatible(numeric)]\nMODS: [no column spec, no aggregate]", shape=rectangle, style=filled, color=lightblue]
         limit_num -> call52_types
         call52_types -> EXIT_LIMIT
     }

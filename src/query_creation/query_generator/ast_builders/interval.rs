@@ -32,22 +32,22 @@ impl IntervalBuilder {
 
                 let left = &mut **unwrap_pat!(interval, Expr::BinaryOp { left, .. }, left);
                 match_next_state!(generator, {
-                    "call98_types" => { // only timestamp - timestamp
-                        TypesBuilder::build(generator, left, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Timestamp]));
+                    "call98_types" => { // only timestamp - timestamp in graph
+                        TypesBuilder::build(generator, left, TypeAssertion::GeneratedBy(SubgraphType::Timestamp));
                     },
                     "call91_types" => {
-                        TypesBuilder::build(generator, left, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Interval]));
+                        TypesBuilder::build(generator, left, TypeAssertion::GeneratedBy(SubgraphType::Interval));
                     },
                 });
 
                 let right = &mut **unwrap_pat!(interval, Expr::BinaryOp { right, .. }, right);
                 *right = TypesBuilder::highlight();
                 match_next_state!(generator, {
-                    "call99_types" => { // only timestamp - timestamp
-                        TypesBuilder::build(generator, right, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Timestamp]));
+                    "call99_types" => { // only timestamp - timestamp in graph
+                        TypesBuilder::build(generator, right, TypeAssertion::GeneratedBy(SubgraphType::Timestamp));
                     },
                     "call92_types" => {
-                        TypesBuilder::build(generator, right, TypeAssertion::GeneratedByOneOf(&[SubgraphType::Interval]));
+                        TypesBuilder::build(generator, right, TypeAssertion::GeneratedBy(SubgraphType::Interval));
                     },
                 });
             },

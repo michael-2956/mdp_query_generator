@@ -1,6 +1,9 @@
+use std::collections::HashSet;
+
+use itertools::Itertools;
 use sqlparser::ast::{ObjectName, SelectItem, WildcardAdditionalOptions};
 
-use crate::{query_creation::{query_generator::{ast_builders::{types::TypesBuilder, types_value::TypeAssertion}, call_modifiers::{ValueSetterValue, WildcardRelationsValue}, highlight_ident, match_next_state, query_info::QueryProps, value_chooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, CallTypes}}, unwrap_pat, unwrap_variant};
+use crate::{query_creation::{query_generator::{ast_builders::{types::TypesBuilder, types_value::TypeAssertion}, call_modifiers::{ValueSetterValue, WildcardRelationsValue}, highlight_ident, match_next_state, query_info::QueryProps, value_chooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, CallTypes}}, unwrap_pat, unwrap_variant};
 
 /// subgraph def_SELECT_item
 pub struct SelectItemBuilder { }
@@ -84,8 +87,10 @@ impl SelectItemBuilder {
                     "call73_types" => { },
                     "call54_types" => { },
                 });
-                generator.state_generator.set_known_list(first_column_list.clone());
-                let subgraph_type = TypesBuilder::build(generator, expr, TypeAssertion::GeneratedByOneOf(&first_column_list));
+                generator.state_generator.set_compatible_list(first_column_list.iter().flat_map(
+                    |tp| tp.get_compat_types().into_iter()  // vec![tp.clone()].into_iter()
+                ).collect::<HashSet<SubgraphType>>().into_iter().collect_vec());
+                let subgraph_type = TypesBuilder::build(generator, expr, TypeAssertion::CompatibleWithOneOf(&first_column_list));
                 generator.expect_state("select_expr_done");
                 if alias.is_none() {
                     alias = QueryProps::extract_alias(expr);
