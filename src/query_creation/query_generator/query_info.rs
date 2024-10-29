@@ -1175,7 +1175,7 @@ impl QueryProps {
         }
     }
 
-    pub fn extract_alias(expr: &Expr) -> Option<IdentName> {
+    pub fn extract_alias(expr: &Expr, from_contents: &FromContents) -> Option<IdentName> {
         match &expr.unnested() {
             Expr::Cast { expr, data_type, format: _ } if matches!(**expr, Expr::Value(..)) || matches!(
                 &**expr, Expr::UnaryOp { op, expr: inner_expr } if *op == UnaryOperator::Minus && matches!(**inner_expr, Expr::Value(..))
@@ -1214,7 +1214,7 @@ impl QueryProps {
                     ) || matches!(
                         else_expr.unnested(), Expr::Interval { .. }
                     ) { None } else {
-                        Self::extract_alias(else_expr).map(IdentName::into)
+                        Self::extract_alias(else_expr, from_contents).map(IdentName::into)
                     })
                     .or(
                         if else_result.as_ref().map_or(
@@ -1257,8 +1257,21 @@ impl QueryProps {
             Expr::Subquery(query) => {
                 let select_body = Self::get_select_body(&query.body);
                 match select_body.projection.as_slice() {
-                    &[SelectItem::UnnamedExpr(ref expr)] => Self::extract_alias(expr).map(IdentName::into),
+                    &[SelectItem::UnnamedExpr(ref expr)] => Self::extract_alias(expr, from_contents).map(IdentName::into),
                     &[SelectItem::ExprWithAlias { expr: _, ref alias }] => Some(alias.clone().into()),
+                    &[SelectItem::QualifiedWildcard(ref tb_name, _)] => {
+                        let relation = from_contents.get_relation_by_name(&tb_name.0.first().unwrap().clone().into()).unwrap();
+                        let mut wcit = relation.get_wildcard_columns_iter();
+                        let Some((c_name, _)) = wcit.next() else { panic!("0 columns") };
+                        assert!(wcit.next().is_none());
+                        c_name.map(IdentName::into)
+                    },
+                    &[SelectItem::Wildcard(_)] => {
+                        let mut wcit = from_contents.get_wildcard_columns_iter();
+                        let Some((c_name, _)) = wcit.next() else { panic!("0 columns") };
+                        assert!(wcit.next().is_none());
+                        c_name.map(IdentName::into)
+                    },
                     _ => None,
                 }
             },

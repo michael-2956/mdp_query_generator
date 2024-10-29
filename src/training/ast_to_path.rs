@@ -1148,7 +1148,7 @@ impl PathGenerator {
                         ).collect::<HashSet<SubgraphType>>().into_iter().collect_vec());
                         let tp = self.handle_types(expr, TypeAssertion::CompatibleWithOneOf(&first_column_list))?;
                         self.try_push_state("select_expr_done")?;
-                        let alias = QueryProps::extract_alias(&expr);
+                        let alias = QueryProps::extract_alias(&expr, self.clause_context.top_active_from());
                         self.clause_context.query_mut().select_type_mut().push((alias, tp));
                     },
                     SelectItem::ExprWithAlias { expr, alias } => {

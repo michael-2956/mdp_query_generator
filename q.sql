@@ -1,3 +1,23 @@
+SELECT DISTINCT
+    T4.*,
+    (
+        SELECT
+            T4.*
+        FROM
+            REGION
+        LIMIT
+            1
+    )
+FROM
+    (
+        SELECT
+            1 AS C4
+        FROM
+            LINEITEM
+    ) AS T4
+ORDER BY
+    C4;
+
 -- select
 --     (
 --         case

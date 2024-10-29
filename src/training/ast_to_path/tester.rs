@@ -62,6 +62,8 @@ impl TestAST2Path {
         let query_str = fs::read_to_string("q.sql").unwrap();
         let query = unwrap_variant!(Parser::parse_sql(&PostgreSqlDialect {}, &query_str).unwrap().into_iter().next().unwrap(), Statement::Query);
         let path = self.path_generator.get_query_path(&query)?;
+        // eprintln!("Query: {:#?}", query);
+        // eprintln!("\n\n\n\n\nGenerating from path...");
         let generated_query = self.path_query_generator.generate_with_substitute_model_and_value_chooser(
             Box::new(PathModel::from_path_nodes(&path)),
             Box::new(DeterministicValueChooser::from_path_nodes(&path))
@@ -73,7 +75,7 @@ impl TestAST2Path {
         let mut n_spaces = 0usize;
         for path_node in path {
             for _ in 0..n_spaces {
-                eprint!(".  ");
+                eprint!("=  ");
             }
             match path_node {
                 super::PathNode::State(smol_str) => {
