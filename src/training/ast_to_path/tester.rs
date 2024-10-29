@@ -70,6 +70,25 @@ impl TestAST2Path {
             eprintln!("\nAST -> path -> AST mismatch!\nOriginal  query: {}\nGenerated query: {}", query, generated_query);
             eprintln!("Path: {:?}", path);
         }
+        let mut n_spaces = 0usize;
+        for path_node in path {
+            for _ in 0..n_spaces {
+                eprint!(".  ");
+            }
+            match path_node {
+                super::PathNode::State(smol_str) => {
+                    if smol_str.starts_with("EXIT_") {
+                        n_spaces -= 1;
+                    }
+                    eprintln!("{smol_str}")
+                },
+                super::PathNode::NewSubgraph(smol_str) => {
+                    n_spaces += 1;
+                    eprintln!("{smol_str}");
+                },
+                any => eprintln!("{:?}", any)
+            }
+        }
         Ok(())
     }
 

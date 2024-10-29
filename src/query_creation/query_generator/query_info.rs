@@ -1059,6 +1059,30 @@ impl QueryProps {
     }
 
     fn make_right_props_into_setop_parent(&mut self, left_frame_props: QueryProps) {
+        assert!(
+            left_frame_props.column_idents_and_graph_types.as_ref().unwrap().len() ==
+            self.column_idents_and_graph_types.as_ref().unwrap().len()
+        );
+        let merged_idents_and_graph_types = left_frame_props.column_idents_and_graph_types.as_ref().unwrap().iter()
+            .zip(self.column_idents_and_graph_types.as_ref().unwrap().iter()).map(
+                |((col_name, left_col_tp), (_, right_col_tp))| {
+                    let merged_type = if let Some(ord) = left_col_tp.compare_left_to_right(right_col_tp) {
+                        match ord {
+                            // left < right, take the bigger type.
+                            std::cmp::Ordering::Less => right_col_tp.clone(),
+                            // left >= right, take the left type.
+                            std::cmp::Ordering::Equal | std::cmp::Ordering::Greater => left_col_tp.clone(),
+                        }
+                    } else {
+                        panic!(
+                            "Types {left_col_tp} and {right_col_tp} are not compatible and thus cannot be merged.\nLeft column_idents_and_graph_types: {:?}\nRight column_idents_and_graph_types: {:?}\n",
+                            left_frame_props.column_idents_and_graph_types, self.column_idents_and_graph_types
+                        )
+                    };
+                    // always take the left name
+                    (col_name.clone(), merged_type)
+                }
+            ).collect_vec();
         *self = Self {
             // select distinct doesn't matter, since we can only use select expressions in ORDER BY anyway, so disregard it
             distinct: false,
@@ -1071,7 +1095,7 @@ impl QueryProps {
             // this variable was used already
             is_aggregation_indicated: false,
             // the select body inherits names and types of the left frame.
-            column_idents_and_graph_types: left_frame_props.column_idents_and_graph_types,
+            column_idents_and_graph_types: Some(merged_idents_and_graph_types),
             // irrelevant since we exited subqueries of these frames already
             current_subquery_call_options: None,
         };

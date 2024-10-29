@@ -153,13 +153,16 @@ impl SubgraphType {
 
 pub trait ContainsSubgraphType {
     fn contains_generator_of(&self, tp: &SubgraphType) -> bool;
+    fn any_type_is_bigger_than(&self, tp: &SubgraphType) -> bool;
 }
 
 impl ContainsSubgraphType for Vec<SubgraphType> {
     fn contains_generator_of(&self, tp: &SubgraphType) -> bool {
-        self.iter().any(|searched_type|
-            (*tp).is_same_or_more_determined_or_undetermined(searched_type)
-        )
+        self.as_slice().contains_generator_of(tp)
+    }
+    
+    fn any_type_is_bigger_than(&self, tp: &SubgraphType) -> bool {
+        self.as_slice().any_type_is_bigger_than(tp)
     }
 }
 
@@ -169,9 +172,28 @@ impl ContainsSubgraphType for [SubgraphType] {
             (*tp).is_same_or_more_determined_or_undetermined(searched_type)
         )
     }
+
+    fn any_type_is_bigger_than(&self, tp: &SubgraphType) -> bool {
+        self.iter().any(
+            |my_tp| [Ordering::Equal, Ordering::Greater].contains(&my_tp.compare_left_to_right(tp).unwrap())
+        )
+    }
 }
 
 impl SubgraphType {
+    /// returns None if types cannot be compared. In other words, they are not compatible in either direction
+    pub fn compare_left_to_right(&self, right: &SubgraphType) -> Option<Ordering> {
+        if self.get_compat_types().contains(right) && right.get_compat_types().contains(self) {
+            Some(Ordering::Equal)
+        } else if self.get_compat_types().contains(right) {
+            Some(Ordering::Greater)
+        } else if right.get_compat_types().contains(self) {
+            Some(Ordering::Less)
+        } else {
+            None
+        }
+    }
+
     /// Sorted in a way that latter are convertible
     /// to former, if any compatibility exists
     pub fn sort_by_compatibility(mut type_vec: Vec<SubgraphType>) -> Vec<SubgraphType> {

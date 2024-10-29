@@ -1,16 +1,15 @@
-select
-    (
-        case
-            when false then date '01.01.2124'
-            else date '01.01.2024'
-        end
-    ) - date (
-        case
-            when false then date '01.01.2123'
-            else date '01.01.2023'
-        end
-    );
-
+-- select
+--     (
+--         case
+--             when false then date '01.01.2124'
+--             else date '01.01.2024'
+--         end
+--     ) - date (
+--         case
+--             when false then date '01.01.2123'
+--             else date '01.01.2023'
+--         end
+--     );
 -- SELECT
 --     1,
 --     T1.*

@@ -7,7 +7,7 @@ use core::fmt::Debug;
 use smol_str::SmolStr;
 
 use super::{
-    dot_parser, dot_parser::{DotTokenizer, FunctionInputsType, CodeUnit, NodeCommon, FunctionDeclaration, TypeWithFields}, error::SyntaxError, subgraph_type::SubgraphType,
+    dot_parser::{self, CodeUnit, DotTokenizer, FunctionDeclaration, FunctionInputsType, NodeCommon, TypeWithFields}, error::SyntaxError, subgraph_type::{ContainsSubgraphType, SubgraphType},
 };
 
 /// this structure contains all the parsed graph functions
@@ -148,7 +148,7 @@ impl QueryTypes {
         }
     }
 
-    pub fn check_type<'a>(&self, mut query_type: impl Iterator<Item = &'a SubgraphType>) -> bool {
+    pub fn check_type_fits<'a>(&self, mut query_type: impl Iterator<Item = &'a SubgraphType>) -> bool {
         match self {
             QueryTypes::ColumnTypeLists {
                 column_type_lists
@@ -157,7 +157,7 @@ impl QueryTypes {
                 let mut ok = true;
                 while let Some(type_list) = column_type_lists_iter.next() {
                     match query_type.next() {
-                        Some(prefix_type) => if !type_list.contains(prefix_type) {
+                        Some(prefix_type) => if !type_list.any_type_is_bigger_than(prefix_type) {
                             ok = false;
                             break;
                         },
@@ -167,7 +167,7 @@ impl QueryTypes {
                 // Ensure every type iterator is exhausted
                 ok && query_type.next().is_none() && column_type_lists_iter.next().is_none()
             },
-            QueryTypes::TypeList { type_list } => query_type.all(|tp| type_list.contains(tp)),
+            QueryTypes::TypeList { type_list } => query_type.all(|tp| type_list.any_type_is_bigger_than(tp)),
         }
     }
 
