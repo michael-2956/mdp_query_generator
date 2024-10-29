@@ -1,6 +1,6 @@
 use sqlparser::ast::{Expr, Value};
 
-use crate::{query_creation::{query_generator::{expr_precedence::ExpressionPriority, match_next_state, QueryGenerator}, state_generator::{markov_chain_generator::markov_chain::QueryTypes, state_choosers::StateChooser, subgraph_type::{ContainsSubgraphType, SubgraphType}, CallTypes}}, unwrap_variant};
+use crate::{query_creation::{query_generator::{expr_precedence::ExpressionPriority, match_next_state, query_info::IdentName, QueryGenerator}, state_generator::{markov_chain_generator::markov_chain::QueryTypes, state_choosers::StateChooser, subgraph_type::{ContainsSubgraphType, SubgraphType}, CallTypes}}, unwrap_variant};
 
 use super::{aggregate_function::AggregateFunctionBuilder, case::CaseBuilder, column_spec::ColumnSpecBuilder, formulas::FormulasBuilder, literals::LiteralsBuilder, query::QueryBuilder, types::TypesBuilder};
 
@@ -49,9 +49,11 @@ impl TypesValueBuilder {
         TypesBuilder::highlight()
     }
 
+    /// value may have a name if it comes from a subquery
     pub fn build<StC: StateChooser>(
         generator: &mut QueryGenerator<StC>, types_value: &mut Expr, type_assertion: TypeAssertion
-    ) -> SubgraphType {
+    ) -> (Option<IdentName>, SubgraphType) {
+        let mut column_name = None;
         generator.expect_state("types_value");
         let selected_types = unwrap_variant!(generator.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
         generator.state_generator.set_known_list(selected_types.clone());
@@ -60,7 +62,9 @@ impl TypesValueBuilder {
                 generator.expect_state("call1_types_value");
                 *types_value = Expr::Nested(Box::new(TypesValueBuilder::highlight()));
                 let expr = &mut **unwrap_variant!(types_value, Expr::Nested);
-                TypesValueBuilder::build(generator, expr, TypeAssertion::None)
+                let selected_type;
+                (column_name, selected_type) = TypesValueBuilder::build(generator, expr, TypeAssertion::None);
+                selected_type
             },
             "types_value_null" => {
                 *types_value = Expr::Value(Value::Null);
@@ -98,8 +102,9 @@ impl TypesValueBuilder {
                 *types_value = Expr::Subquery(Box::new(QueryBuilder::nothing()));
                 let subquery = &mut **unwrap_variant!(types_value, Expr::Subquery);
                 let column_types = QueryBuilder::build(generator, subquery).into_query_props().into_select_type();
-                let selected_type = match column_types.len() {
-                    1 => column_types.into_iter().next().unwrap().1,
+                let selected_type;
+                (column_name, selected_type) = match column_types.len() {
+                    1 => column_types.into_iter().next().unwrap(),
                     any => panic!(
                         "Subquery should have selected a single column, \
                         but selected {any} columns. Subquery: {subquery}"
@@ -115,6 +120,6 @@ impl TypesValueBuilder {
         let mut p = Expr::Value(Value::Null); std::mem::swap(types_value, &mut p);
         *types_value = p.nest_children_if_needed();
 
-        selected_type
+        (column_name, selected_type)
     }
 }

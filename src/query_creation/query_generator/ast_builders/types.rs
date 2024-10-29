@@ -1,6 +1,6 @@
 use sqlparser::ast::{Expr, Ident};
 
-use crate::{query_creation::{query_generator::{match_next_state, QueryGenerator, ast_builders::types_value::TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, CallTypes}}, unwrap_variant};
+use crate::{query_creation::{query_generator::{ast_builders::types_value::TypeAssertion, match_next_state, query_info::IdentName, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, CallTypes}}, unwrap_variant};
 
 use super::types_value::TypesValueBuilder;
 
@@ -15,10 +15,18 @@ impl TypesBuilder {
     pub fn nothing() -> Expr {
         Expr::Identifier(Ident::new(""))
     }
-
+    
     pub fn build<StC: StateChooser>(
         generator: &mut QueryGenerator<StC>, expr: &mut Expr, type_assertion: TypeAssertion
     ) -> SubgraphType {
+        Self::build_store_name(generator, expr, type_assertion).1
+    }
+
+    /// Returns the value name in addition to its type, useful when preserving
+    /// column names of subqueries is important.
+    pub fn build_store_name<StC: StateChooser>(
+        generator: &mut QueryGenerator<StC>, expr: &mut Expr, type_assertion: TypeAssertion
+    ) -> (Option<IdentName>, SubgraphType) {
         generator.expect_state("types");
 
         let selected_types = unwrap_variant!(generator.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
@@ -37,9 +45,9 @@ impl TypesBuilder {
         generator.state_generator.set_known_list(allowed_type_list);
         generator.expect_state("call0_types_value");
         *expr = TypesValueBuilder::highlight();
-        let selected_type = TypesValueBuilder::build(generator, expr, type_assertion);
+        let (column_name, selected_type) = TypesValueBuilder::build(generator, expr, type_assertion);
 
         generator.expect_state("EXIT_types");
-        selected_type
+        (column_name, selected_type)
     }
 }

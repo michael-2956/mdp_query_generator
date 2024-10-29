@@ -90,10 +90,11 @@ impl SelectItemBuilder {
                 generator.state_generator.set_compatible_list(first_column_list.iter().flat_map(
                     |tp| tp.get_compat_types().into_iter()  // vec![tp.clone()].into_iter()
                 ).collect::<HashSet<SubgraphType>>().into_iter().collect_vec());
-                let subgraph_type = TypesBuilder::build(generator, expr, TypeAssertion::CompatibleWithOneOf(&first_column_list));
+                let (column_name, subgraph_type) = TypesBuilder::build_store_name(generator, expr, TypeAssertion::CompatibleWithOneOf(&first_column_list));
+                alias = alias.or(column_name);
                 generator.expect_state("select_expr_done");
                 if alias.is_none() {
-                    alias = QueryProps::extract_alias(expr, generator.clause_context.top_active_from());
+                    alias = QueryProps::extract_alias(expr);
                 }
                 generator.clause_context.query_mut().select_type_mut().push((alias, subgraph_type));
                 remaining_columns
