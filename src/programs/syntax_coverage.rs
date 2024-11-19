@@ -5,7 +5,7 @@ use std::{fs, path::PathBuf};
 use itertools::Itertools;
 use postgres::{Client, NoTls};
 use serde::Deserialize;
-use sqlparser::ast::{ColumnDef, DataType, ExactNumberInfo, Ident, ObjectName, SetExpr, Statement, TableConstraint, TimezoneInfo};
+use sqlparser::ast::{ColumnDef, DataType, ExactNumberInfo, Ident, ObjectName, Statement, TableConstraint, TimezoneInfo};
 use sqlparser::dialect::PostgreSqlDialect;
 use sqlparser::parser::Parser;
 
@@ -374,7 +374,6 @@ pub fn test_syntax_coverage(config: Config) {
     let mut n_ok = 0usize;
     let mut n_total = 0usize;
     let mut n_parse_err = 0usize;
-    let mut n_other_set_op = 0usize;
     let mut psql_query_errors = PostgreSQLErrors::with_filters(vec![
         PostgreSQLErrorFilter::starts_ends("db error: ERROR: column ", " does not exist"),
         PostgreSQLErrorFilter::starts_ends("db error: ERROR: column ", " must appear in the GROUP BY clause or be used in an aggregate function"),
@@ -495,26 +494,18 @@ pub fn test_syntax_coverage(config: Config) {
             };
 
             let query = unwrap_variant!(statements.into_iter().next().unwrap(), Statement::Query);
-            if !matches!(*query.body, SetExpr::Select(..)) {
-                n_other_set_op += 1;
-                continue;
-            }
 
             match path_generator.get_query_path(&query) {
                 Ok(_) => n_ok += 1, // todo: test that path results in the same query
-                Err(err) => {
-                    let err_str = format!("{err}");
-                    if err_str.contains("Expected SetExpr::Select, got") {
-                        n_other_set_op += 1;
-                    } else {
-                        // eprintln!("\n\nDB: {db_id}");
-                        // eprintln!("Query: {query_str}");
-                        // eprintln!("Error: {err_str}");
-                        // eprintln!("Schema:\n{}", db.get_schema_string());
-                        // // eprintln!("Schema AST:\n{}", db.table_defs.iter().map(|td| format!("{:#?}", td)).join("\n\n"));
-                        // do_break = true;
-                        // break;
-                    }
+                Err(_) => {
+                    // let err_str = format!("{err}");
+                    // eprintln!("\n\nDB: {db_id}");
+                    // eprintln!("Query: {query_str}");
+                    // eprintln!("Error: {err_str}");
+                    // eprintln!("Schema:\n{}", db.get_schema_string());
+                    // // eprintln!("Schema AST:\n{}", db.table_defs.iter().map(|td| format!("{:#?}", td)).join("\n\n"));
+                    // do_break = true;
+                    // break;
                 },
             }
         }
@@ -530,7 +521,6 @@ pub fn test_syntax_coverage(config: Config) {
     
     println!("{n_ok} / {n_total} converted succesfully ({:.2}%)", 100f64 * n_ok as f64 / n_total as f64);
     println!("{n_parse_err} / {n_total} parse errors ({:.2}%)", 100f64 * n_parse_err as f64 / n_total as f64);
-    println!("{n_other_set_op} / {n_total} unimplemented set expressions ({:.2}%)", 100f64 * n_other_set_op as f64 / n_total as f64);
     println!("{n_incorrect_schema} / {n_total} incorrect schemas ({:.2}%)", 100f64 * n_incorrect_schema as f64 / n_total as f64);
 
     println!("\nOther Postgres Errors:");
@@ -539,7 +529,6 @@ pub fn test_syntax_coverage(config: Config) {
     let n_rest: usize = n_total
         - n_ok
         - n_parse_err
-        - n_other_set_op
         - n_incorrect_schema
         - psql_query_errors.total_errors();
     println!("\nOther convertion errors: {n_rest} / {n_total} ({:.2}%)", 100f64 * n_rest as f64 / n_total as f64);
