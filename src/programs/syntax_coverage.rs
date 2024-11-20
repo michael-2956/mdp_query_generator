@@ -5,7 +5,7 @@ use std::{fs, path::PathBuf};
 use itertools::Itertools;
 use postgres::{Client, NoTls};
 use serde::Deserialize;
-use sqlparser::ast::{ColumnDef, DataType, ExactNumberInfo, GroupByExpr, Ident, ObjectName, SetExpr, Statement, TableConstraint, TimezoneInfo};
+use sqlparser::ast::{ColumnDef, DataType, ExactNumberInfo, Expr, GroupByExpr, Ident, ObjectName, SetExpr, Statement, TableConstraint, TimezoneInfo};
 use sqlparser::dialect::PostgreSqlDialect;
 use sqlparser::parser::Parser;
 
@@ -448,14 +448,6 @@ fn try_schema_reorder(client: &mut Client, table_defs: &Vec<CreateTableSt>, err_
     reorder_success
 }
 
-fn extract_select(set_expr: &SetExpr) -> GroupByExpr {
-    match set_expr {
-        SetExpr::Select(select) => select.group_by.clone(),
-        SetExpr::SetOperation { op: _, set_quantifier: _, left, .. } => extract_select(left),
-        any => unreachable!("{any}"),
-    }
-}
-
 pub fn test_syntax_coverage(config: Config) {
     let dbs: Vec<SpiderDatabase> = serde_json::from_str(fs::read_to_string(
         config.syntax_coverage_config.spider_tables_json_path
@@ -495,7 +487,28 @@ pub fn test_syntax_coverage(config: Config) {
                 vec![]
             }
         })),
-        PostgreSQLErrorFilter::starts_ends("db error: ERROR: column ", " must appear in the GROUP BY clause or be used in an aggregate function"),
+        PostgreSQLErrorFilter::starts_ends("db error: ERROR: column ", " must appear in the GROUP BY clause or be used in an aggregate function").add_fix(
+            Box::new(|_self, query_str, err_str| {
+                let column_name = _self.get_inbetween(&err_str);
+                let mut altered = false;
+                let mut query_ast = string_to_query(query_str.as_str()).unwrap();
+                if let Some(unquoted) = column_name.strip_prefix("\"").and_then(|column_name| column_name.strip_suffix("\"")) {
+                    if let SetExpr::Select(select) = &mut *query_ast.body {
+                        if let GroupByExpr::Expressions(group_by_exprs) = &mut select.group_by {
+                            group_by_exprs.push(Expr::CompoundIdentifier(unquoted.split('.').into_iter().map(
+                                |x| Ident::new(x)
+                            ).collect()));
+                            altered = true;
+                        }
+                    }
+                }
+                if altered {
+                    vec![format!("{query_ast}")]
+                } else {
+                    vec![]
+                }
+            }
+        )),
         PostgreSQLErrorFilter::starts_ends("db error: ERROR: relation ", " does not exist"),
         PostgreSQLErrorFilter::contains("db error: ERROR: for SELECT DISTINCT, ORDER BY expressions must appear in select list"),
         PostgreSQLErrorFilter::contains("db error: ERROR: function avg(character varying) does not exist"),
@@ -596,13 +609,9 @@ pub fn test_syntax_coverage(config: Config) {
 
             match psql_query_errors.try_query(&mut client, &query_str) {
                 PostgreSQLErrorAction::Skip(err_str) => {
-                    if let (true, col_name) = debug_filter.check_get_inbetween(&err_str) {
-                        // column_set.insert(col_name[1..col_name.len()-1].to_string());
-                        // column_set.insert(query_str.clone());
-                        let group_by = extract_select(&*string_to_query(query_str.as_str()).unwrap().body);
-                        let col_name = col_name.unwrap();
-                        info_set.insert(format!("{col_name}, {group_by}  \t|\t  {query_str}"));
-                    } // try 2 fixes here: replace " with nothing and nothing with '
+                    if let (true, Some(col_name)) = debug_filter.check_get_inbetween(&err_str) {
+                        info_set.insert(col_name[1..col_name.len()-1].to_string());
+                    }
                     continue;
                 },
                 PostgreSQLErrorAction::Stop(err_str) => {
@@ -647,7 +656,7 @@ pub fn test_syntax_coverage(config: Config) {
         }
     }
 
-    println!("Column set:\n{}", info_set.into_iter().join("\n    "));
+    // println!("Info set:\n    {}", info_set.into_iter().join("\n    "));
     println!("\n\nQuery error summary:");
     
     println!("{n_ok} / {n_total} converted succesfully ({:.2}%)", 100f64 * n_ok as f64 / n_total as f64);
