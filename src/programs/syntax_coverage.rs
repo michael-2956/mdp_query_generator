@@ -669,6 +669,8 @@ pub fn test_syntax_coverage(config: Config) {
     let mut n_reordered_schemas = 0usize;
     let n_dbs = dbs.len();
 
+    let mut failed_queries = vec![];
+
     for (db_id, db) in dbs.into_iter() {
         eprint!("Testing: {} / {} ({n_ok} / {n_total} OK)   \r", n_duplicates + n_total, queries.len());
         
@@ -750,6 +752,7 @@ pub fn test_syntax_coverage(config: Config) {
             match path_generator.get_query_path(&query) {
                 Ok(_) => n_ok += 1, // todo: test that path results in the same query
                 Err(_) => {
+                    failed_queries.push(query_str);
                     // let err_str = format!("{err}");
                     // eprintln!("\n\nDB: {db_id}");
                     // eprintln!("Query: {query_str}");
@@ -796,4 +799,6 @@ pub fn test_syntax_coverage(config: Config) {
     println!("\nOut of schemas, {n_reordered_schemas}/{n_dbs} ({:.2}%) were reordered", 100f64 * n_reordered_schemas as f64 / n_dbs as f64);
     
     println!("\nIn total, {n_duplicates} / {} ({:.2}%) of queries were duplicates", n_duplicates + n_total, 100f64 * n_duplicates as f64 / (n_duplicates + n_total) as f64);
+
+    println!("Failed queries:\n    {}", failed_queries.into_iter().join("\n    "));
 }
