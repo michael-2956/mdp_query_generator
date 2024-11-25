@@ -18,7 +18,7 @@ use crate::query_creation::state_generator::state_choosers::MaxProbStateChooser;
 use crate::query_creation::state_generator::substitute_models::PathModel;
 use crate::query_creation::state_generator::MarkovChainGenerator;
 use crate::training::ast_to_path::PathGenerator;
-use crate::unwrap_variant;
+use crate::{unwrap_pat, unwrap_variant};
 
 #[derive(Debug, Clone)]
 pub struct SyntaxCoverageConfig {
@@ -242,44 +242,54 @@ pub fn drop_database_if_exists(db_name: &str) -> Result<(), Box<dyn std::error::
     Ok(())
 }
 
-enum PostgreSQLErrorFilter {
+#[derive(Debug)]
+enum PostgreSQLErrorFilterKind {
     StartEnd {
         starts_with: String,
         ends_with: String,
-        fix: Option<Box<dyn Fn(&PostgreSQLErrorFilter, String, String) -> Vec<String>>>,
     },
     Contains {
         what: String,
-        fix: Option<Box<dyn Fn(&PostgreSQLErrorFilter, String, String) -> Vec<String>>>,
+    },
+    ContainsSequence {
+        sequence: Vec<String>,
     }
+}
+
+struct PostgreSQLErrorFilter {
+    filter_kind: PostgreSQLErrorFilterKind,
+    fix: Option<Box<dyn Fn(&PostgreSQLErrorFilter, String, String) -> Vec<String>>>,
 }
 
 impl PostgreSQLErrorFilter {
     fn contains(what: &str) -> Self {
-        Self::Contains { what: what.to_string(), fix: None  }
-    }
-
-    fn starts_ends(starts_with: &str, ends_with: &str) -> Self {
-        Self::StartEnd { starts_with: starts_with.to_string(), ends_with: ends_with.to_string(), fix: None }
-    }
-
-    fn add_fix(self, fix: Box<dyn Fn(&PostgreSQLErrorFilter, String, String) -> Vec<String>>) -> Self {
-        match self {
-            PostgreSQLErrorFilter::StartEnd { starts_with, ends_with, fix: _ } => {
-                PostgreSQLErrorFilter::StartEnd { starts_with, ends_with, fix: Some(fix) }
-            },
-            PostgreSQLErrorFilter::Contains { what, fix: _} => {
-                PostgreSQLErrorFilter::Contains { what, fix: Some(fix) }
-            },
+        Self {
+            filter_kind: PostgreSQLErrorFilterKind::Contains { what: what.to_string() },
+            fix: None
         }
     }
 
+    fn contains_sequence(members: &[&str]) -> Self {
+        Self {
+            filter_kind: PostgreSQLErrorFilterKind::ContainsSequence { sequence: members.into_iter().map(|m| m.to_string()).collect() },
+            fix: None
+        }
+    }
+
+    fn starts_ends(starts_with: &str, ends_with: &str) -> Self {
+        Self {
+            filter_kind: PostgreSQLErrorFilterKind::StartEnd { starts_with: starts_with.to_string(), ends_with: ends_with.to_string() },
+            fix: None
+        }
+    }
+
+    fn add_fix(mut self, fix: Box<dyn Fn(&PostgreSQLErrorFilter, String, String) -> Vec<String>>) -> Self {
+        self.fix = Some(fix);
+        self
+    }
+
     fn try_run_fix(&self, query_str: String, err_str: String) -> Option<Vec<String>> {
-        let fix = match self {
-            PostgreSQLErrorFilter::StartEnd { starts_with: _, ends_with: _, fix } => fix,
-            PostgreSQLErrorFilter::Contains { what: _, fix } => fix,
-        };
-        if let Some(fix) = fix.as_ref() {
+        if let Some(fix) = self.fix.as_ref() {
             Some(fix(self, query_str, err_str))
         } else {
             None
@@ -288,29 +298,60 @@ impl PostgreSQLErrorFilter {
 
     fn check(&self, err_str: &str) -> bool {
         let cut_ind = err_str.find("\nHINT: ").unwrap_or(err_str.len());
-        match self {
-            PostgreSQLErrorFilter::StartEnd { starts_with, ends_with, fix: _ } => err_str.starts_with(starts_with) && err_str[0..cut_ind].ends_with(ends_with),
-            PostgreSQLErrorFilter::Contains { what, fix: _ } => err_str.contains(what),
+        match &self.filter_kind {
+            PostgreSQLErrorFilterKind::StartEnd { starts_with, ends_with } => err_str.starts_with(starts_with) && err_str[0..cut_ind].ends_with(ends_with),
+            PostgreSQLErrorFilterKind::Contains { what } => err_str.contains(what),
+            PostgreSQLErrorFilterKind::ContainsSequence { sequence } => {
+                let mut err_str = err_str;
+                for s in sequence.iter() {
+                    if let Some(p) = err_str.find(s) {
+                        err_str = &err_str[p+s.len()..err_str.len()];
+                    } else {
+                        return false
+                    }
+                }
+                return true
+            },
         }
     }
 
     fn get_inbetween(&self, err_str: &str) -> String {
         let cut_ind = err_str.find("\nHINT: ").unwrap_or(err_str.len());
-        match self {
-            PostgreSQLErrorFilter::StartEnd { starts_with, ends_with, fix: _ } => {
+        match &self.filter_kind {
+            PostgreSQLErrorFilterKind::StartEnd { starts_with, ends_with } => {
                 err_str[0..cut_ind]
                     .strip_prefix(starts_with).unwrap()
                     .strip_suffix(ends_with).unwrap()
                     .to_string()
             },
-            PostgreSQLErrorFilter::Contains { what, .. } => panic!("No in-between for the Check({what}) filter")
+            any => panic!("No in-between for the {:?} filter", any),
+        }
+    }
+
+    fn get_inbetween_sequence(&self, err_str: &str) -> Vec<String> {
+        match &self.filter_kind {
+            PostgreSQLErrorFilterKind::ContainsSequence { sequence } => {
+                let mut inbetweens = vec![];
+                let mut err_str = err_str;
+                for s in sequence.iter() {
+                    if let Some(p) = err_str.find(s) {
+                        inbetweens.push(err_str[0..p].to_string());
+                        err_str = &err_str[p+s.len()..err_str.len()];
+                    } else {
+                        panic!("Pattern {s} not found in {err_str}")
+                    }
+                }
+                inbetweens.push(err_str[0..err_str.len()].to_string());
+                inbetweens
+            },
+            any => panic!("No in-between sequence for the {:?} filter", any),
         }
     }
 
     fn check_get_inbetween(&self, err_str: &str) -> (bool, Option<String>) {
         let cut_ind = err_str.find("\nHINT: ").unwrap_or(err_str.len());
-        match self {
-            PostgreSQLErrorFilter::StartEnd { starts_with, ends_with, fix: _ } => {
+        match &self.filter_kind {
+            PostgreSQLErrorFilterKind::StartEnd { starts_with, ends_with } => {
                 if err_str.starts_with(starts_with) && err_str[0..cut_ind].ends_with(ends_with) {
                     (true, Some(
                         err_str[0..cut_ind]
@@ -322,26 +363,27 @@ impl PostgreSQLErrorFilter {
                     (false, None)
                 }
             },
-            PostgreSQLErrorFilter::Contains { what, fix: _ } => (err_str.contains(what), None),
+            _ => (self.check(err_str), None),
         }
     }
 }
 
 impl fmt::Display for PostgreSQLErrorFilter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PostgreSQLErrorFilter::StartEnd { starts_with: startswith, ends_with: endswith, fix: _ } => write!(f, "{startswith} [...] {endswith}"),
-            PostgreSQLErrorFilter::Contains { what, fix: _ } => write!(f, "{what}"),
+        match &self.filter_kind {
+            PostgreSQLErrorFilterKind::StartEnd { starts_with: startswith, ends_with: endswith } => write!(f, "{startswith} [...] {endswith}"),
+            PostgreSQLErrorFilterKind::Contains { what } => write!(f, "{what}"),
+            PostgreSQLErrorFilterKind::ContainsSequence { sequence: members } => write!(f, "{}", members.iter().join(" [...] ")),
         }
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 enum PostgreSQLErrorAction {
     /// error string
-    Skip(String),
+    RecognisedError(String),
     /// error string
-    Stop(String),
+    UnrecognisedError(String),
     /// query string
     Ok(String)
 }
@@ -359,12 +401,27 @@ impl PostgreSQLErrors {
         }
     }
 
-    /// - returns Stop when the error does not match anything
-    fn try_query(&mut self, client: &mut Client, query_str: &String) -> PostgreSQLErrorAction {
+    fn record_err_action(&mut self, action: &PostgreSQLErrorAction) {
+        match action {
+            PostgreSQLErrorAction::RecognisedError(err_str) => {
+                let filter_str = self.filters.iter().find(|filter| filter.check(&err_str)).unwrap().to_string();
+                *self.n_errors.entry(filter_str).or_insert(0) += 1;
+            },
+            PostgreSQLErrorAction::UnrecognisedError(err_str) => {
+                *self.n_errors.entry(format!("unrecognised error: {err_str}")).or_insert(0) += 1;
+            },
+            PostgreSQLErrorAction::Ok(..) => panic!("record_err_action does not accept Ok(..)"),
+        }
+    }
+
+    /// - If query runs OK or it was fixed, returns the fixed query
+    /// - In case it fails to fix, returns original error
+    fn try_query(&mut self, client: &mut Client, query_str: &String, record_error: bool) -> PostgreSQLErrorAction {
         let mut query_changed_from_original = false;
-        let mut original_filter_key = None;
+        let mut original_error = None;
+        let mut original_error_key = None;
         let mut past_errors = BTreeSet::new();
-        let mut last_action = None;
+        let mut fixed_query = None;
         let mut query_queue = VecDeque::new();
         query_queue.push_back(query_str.clone());
         while let Some(query_str) = query_queue.pop_front() {
@@ -377,31 +434,34 @@ impl PostgreSQLErrors {
                 match self.filters.iter().find(|filter| filter.check(&err_str)) {
                     Some(filter) => {
                         if !query_changed_from_original {
-                            original_filter_key = Some(filter.to_string());
+                            original_error_key = Some(filter.to_string());
+                            original_error = Some(PostgreSQLErrorAction::RecognisedError(err_str.clone()));
                         }
-                        if let Some(new_query_strs) = filter.try_run_fix(query_str.clone(), err_str.clone()) {
+                        if let Some(new_query_strs) = filter.try_run_fix(query_str.clone(), err_str) {
                             query_queue.extend(new_query_strs.into_iter());
                             query_changed_from_original = true;
                         }
-                        last_action = Some(PostgreSQLErrorAction::Skip(err_str));
                     },
                     None => {
-                        if query_changed_from_original {
-                            last_action = Some(PostgreSQLErrorAction::Skip(err_str));
-                        } else {
-                            last_action = Some(PostgreSQLErrorAction::Stop(err_str));
+                        if !query_changed_from_original {
+                            original_error_key = Some(format!("unrecognised error: {err_str}"));
+                            original_error = Some(PostgreSQLErrorAction::UnrecognisedError(err_str));
                         }
                     },
                 }
             } else {
-                last_action = Some(PostgreSQLErrorAction::Ok(query_str));
+                fixed_query = Some(query_str);
                 break;
             }
         }
-        if !matches!(last_action, Some(PostgreSQLErrorAction::Ok(..))) {
-            *self.n_errors.entry(original_filter_key.unwrap()).or_insert(0) += 1;
+        if let Some(query_str) = fixed_query {
+            PostgreSQLErrorAction::Ok(query_str)
+        } else {
+            if record_error {
+                *self.n_errors.entry(original_error_key.unwrap()).or_insert(0) += 1;
+            }
+            original_error.unwrap()
         }
-        last_action.unwrap()
     }
 
     fn print_stats(&self, n_total: usize) {
@@ -415,37 +475,63 @@ impl PostgreSQLErrors {
     }
 }
 
-fn try_schema_reorder(client: &mut Client, table_defs: &Vec<CreateTableSt>, err_str: &mut String) -> bool {
+fn run_schema_try_fix_try_reorder(client: &mut Client, table_defs: &Vec<CreateTableSt>, psql_schema_errors: &mut PostgreSQLErrors) -> PostgreSQLErrorAction {
     let relation_doesnt_exist_filter = PostgreSQLErrorFilter::starts_ends("db error: ERROR: relation ", " does not exist");
-    let mut reorder_success = false;
-    if relation_doesnt_exist_filter.check(err_str.as_str()) {
-        let mut table_def_queue = VecDeque::<String>::new();
-        for table_def in table_defs.iter() {
-            table_def_queue.push_back(format!("{table_def};"));
-        }
-        reorder_success = true;
-        let mut error_counter = 0usize;
-        while let Some(table_def_str) = table_def_queue.pop_front() {
-            if let Err(err_table) = client.batch_execute(table_def_str.as_str()) {
-                let err_table_str = format!("{err_table}");
+
+    let mut success = true;
+
+    let mut table_def_queue = VecDeque::<String>::new();
+    for table_def in table_defs.iter() {
+        table_def_queue.push_back(format!("{table_def};"));
+    }
+
+    let mut err_action = None;
+    let mut schema_str = "".to_string();
+
+    let mut error_counter = 0usize;
+
+    let mut did_reorder = false;
+
+    while let Some(table_def_str) = table_def_queue.pop_front() {
+        match psql_schema_errors.try_query(client, &table_def_str, false) {
+            ref e @ (
+                PostgreSQLErrorAction::RecognisedError(ref err_table_str) |
+                PostgreSQLErrorAction::UnrecognisedError(ref err_table_str)
+            ) => {
                 if relation_doesnt_exist_filter.check(err_table_str.as_str()) {
+                    did_reorder = true;
                     error_counter += 1;
                     table_def_queue.push_back(table_def_str);
                 } else {
-                    *err_str = err_table_str;
-                    reorder_success = false;
+                    err_action = Some(e.clone());
+                    success = false;
                     break;
                 }
-            } else {
+            },
+            PostgreSQLErrorAction::Ok(table_str) => {
+                schema_str += format!("{table_str};\n").as_str();
                 error_counter = 0usize;
-            }
-            if error_counter > table_def_queue.len() {
-                reorder_success = false;
-                break;
-            }
+            },
+        }
+        // this means there are circular relations and reorder didn't help
+        if error_counter > table_def_queue.len() {
+            err_action = Some(PostgreSQLErrorAction::RecognisedError(relation_doesnt_exist_filter.to_string()));
+            success = false;
+            break;
         }
     }
-    reorder_success
+
+    if success {
+        if did_reorder {
+            PostgreSQLErrorAction::Ok(format!("-- NOTE: schema was reordered\n\n{schema_str}"))
+        } else {
+            PostgreSQLErrorAction::Ok(schema_str)
+        }
+    } else {
+        let err_action = err_action.unwrap();
+        psql_schema_errors.record_err_action(&err_action);
+        err_action
+    }
 }
 
 pub fn test_syntax_coverage(config: Config) {
@@ -517,14 +603,11 @@ pub fn test_syntax_coverage(config: Config) {
         PostgreSQLErrorFilter::contains("db error: ERROR: function sum(character varying) does not exist"),
         PostgreSQLErrorFilter::contains("db error: ERROR: function sum(character) does not exist"),
         PostgreSQLErrorFilter::contains("db error: ERROR: function sum(text) does not exist"),
-        PostgreSQLErrorFilter::contains("db error: ERROR: operator does not exist: text > integer"),
-        PostgreSQLErrorFilter::contains("db error: ERROR: operator does not exist: text < integer"),
-        PostgreSQLErrorFilter::contains("db error: ERROR: operator does not exist: character varying > integer"),
-        PostgreSQLErrorFilter::contains("db error: ERROR: operator does not exist: character varying >= integer"),
-        PostgreSQLErrorFilter::contains("db error: ERROR: operator does not exist: character varying = integer"),
-        PostgreSQLErrorFilter::contains("db error: ERROR: operator does not exist: character varying < integer"),
-        PostgreSQLErrorFilter::contains("db error: ERROR: operator does not exist: boolean = integer"),
-        PostgreSQLErrorFilter::contains("db error: ERROR: operator does not exist: bit = integer"),
+        PostgreSQLErrorFilter::contains_sequence(&["db error: ERROR: operator does not exist: ", " > ", ""]),
+        PostgreSQLErrorFilter::contains_sequence(&["db error: ERROR: operator does not exist: ", " >= ", ""]),
+        PostgreSQLErrorFilter::contains_sequence(&["db error: ERROR: operator does not exist: ", " = ", ""]),
+        PostgreSQLErrorFilter::contains_sequence(&["db error: ERROR: operator does not exist: ", " <= ", ""]),
+        PostgreSQLErrorFilter::contains_sequence(&["db error: ERROR: operator does not exist: ", " < ", ""]),
         PostgreSQLErrorFilter::contains("db error: ERROR: syntax error at or near \"INTERSECT\""),
         PostgreSQLErrorFilter::contains("db error: ERROR: syntax error at or near \"GROUP\""),
         PostgreSQLErrorFilter::contains("db error: ERROR: syntax error at or near \"WHERE\""),
@@ -535,7 +618,45 @@ pub fn test_syntax_coverage(config: Config) {
     
     let debug_filter = PostgreSQLErrorFilter::starts_ends("db error: ERROR: column ", " must appear in the GROUP BY clause or be used in an aggregate function");
     let mut info_set = BTreeSet::new();
-    
+
+    let mut psql_schema_errors = PostgreSQLErrors::with_filters(vec![
+        PostgreSQLErrorFilter::contains_sequence(&[
+            "db error: ERROR: foreign key constraint", "cannot be implemented",
+            "Key columns", "and", "are of incompatible types:", "and", "."
+        ]).add_fix(Box::new(|_self, statement_str, error_str| {
+            let inbetween_sequence = _self.get_inbetween_sequence(&error_str);
+            let (column_name_1, _, type_1, type_2) = inbetween_sequence.into_iter().skip(3).take(4).collect_tuple().unwrap();
+            let column_name_1 = column_name_1.trim_matches(|c| c == '"' || c == ' ').to_string();
+            // let column_name_2 = column_name_2.trim_matches(|c| c == '"' || c == ' ').to_string();
+            let type_1 = type_1.trim_matches(|c| c == '"' || c == ' ').to_string();
+            let type_2 = type_2.trim_matches(|c| c == '"' || c == ' ').to_string();
+            let mut create_table_stmt = Parser::parse_sql(&PostgreSqlDialect {}, &statement_str).unwrap().into_iter().next().unwrap();
+            if type_1 == "text" && type_2 == "integer" {
+                // change text to integer
+                let columns = unwrap_pat!(create_table_stmt, Statement::CreateTable { ref mut columns, .. }, columns);
+                let column_def = columns.iter_mut().find(|col| col.name.value == column_name_1).unwrap();
+                column_def.data_type = DataType::Integer(None);
+                vec![format!("{create_table_stmt}")]
+                // vec![]
+            } else {
+                // // remove foreign key constraints
+                // let constraints = unwrap_pat!(create_table_stmt, Statement::CreateTable { ref mut constraints, .. }, constraints);
+                // *constraints = constraints.iter().filter_map(|constraint| {
+                //     if matches!(constraint, TableConstraint::ForeignKey { .. }) {
+                //         None
+                //     } else {
+                //         Some(constraint.clone())
+                //     }
+                // }).collect_vec();
+                // // eprintln!("\n\n\nStatement:\n{statement_str}\n");
+                // // eprintln!("{column_name_1} ({type_1}) ||| {column_name_2} ({type_2})\n\n");
+                // vec![format!("{create_table_stmt}")]
+                vec![]
+            }
+        })),
+        PostgreSQLErrorFilter::contains("db error: ERROR: there is no unique constraint matching given keys for referenced table "),
+        // PostgreSQLErrorFilter::starts_ends("db error: ERROR: relation ", " does not exist"),
+    ]);
     let incorrect_schemas = [
         "race_track", "academic", "phone_market", "student_assessment",
         "city_record", "imdb", "dorm_1", "shop_membership", "concert_singer",
@@ -566,55 +687,48 @@ pub fn test_syntax_coverage(config: Config) {
 
         let conn_str = format!("host=localhost user=query_test_user dbname={}", db_name);
         let mut client = Client::connect(&conn_str, NoTls).unwrap();
-        if let Err(err) = client.batch_execute(db.get_schema_string().as_str()) {
-            if incorrect_schemas.contains(&db_id.as_str()) {
+
+        match run_schema_try_fix_try_reorder(&mut client, &db.table_defs, &mut psql_schema_errors) {
+            PostgreSQLErrorAction::RecognisedError(..) => {
+                assert!(incorrect_schemas.contains(&db_id.as_str()));
                 n_incorrect_schema += db_queries.len();
                 client.close().unwrap();
                 drop_database_if_exists(&db_name).unwrap();
                 continue;
-            }
-
-            let mut err_str = format!("{err}");
-
-            if (err_str.contains("Key columns") && err_str.contains("are of incompatible types: ")) ||
-                err_str.starts_with("db error: ERROR: there is no unique constraint matching given keys for referenced table ")
-            {
-                eprintln!("\n\nFor database: {db_id}.sql\nError: {err_str}\n\n");
-                n_incorrect_schema += db_queries.len();
-                client.close().unwrap();
-                drop_database_if_exists(&db_name).unwrap();
-                continue;
-            }
-            
-            if try_schema_reorder(&mut client, &db.table_defs, &mut err_str) {
-                n_reordered_schemas += 1;
-            } else {
-                eprintln!("\n\nDB: {db_id}");
-                eprintln!("Schema:\n{}", db.get_schema_string());
-                eprintln!("PostgreSQL error: {err_str}");
-                // eprintln!("AST:\n{}", db.table_defs.iter().map(|td| format!("{:#?}", td)).join("\n\n"));
-                client.close().unwrap();
-                drop_database_if_exists(&db_name).unwrap();
-                break;
-            }
+            },
+            PostgreSQLErrorAction::UnrecognisedError(err_str) => {
+                if !incorrect_schemas.contains(&db_id.as_str()) {
+                    eprintln!("\n\nDB: {db_id}");
+                    eprintln!("Schema:\n{}", db.get_schema_string());
+                    eprintln!("PostgreSQL error: {err_str}");
+                    // eprintln!("AST:\n{}", db.table_defs.iter().map(|td| format!("{:#?}", td)).join("\n\n"));
+                    client.close().unwrap();
+                    drop_database_if_exists(&db_name).unwrap();
+                    break;
+                }
+            },
+            PostgreSQLErrorAction::Ok(fixed_schema) => {
+                if fixed_schema.starts_with("-- NOTE: schema was reordered") {
+                    n_reordered_schemas += 1;
+                }
+            },
         }
 
         let mut path_generator = PathGenerator::new(
             db.clone(), &config.chain_config,
             config.generator_config.aggregate_functions_distribution.clone(),
         ).unwrap();
-        // path_generator.set_try_with_quotes(true);
 
         for mut query_str in db_queries {
 
-            match psql_query_errors.try_query(&mut client, &query_str) {
-                PostgreSQLErrorAction::Skip(err_str) => {
+            match psql_query_errors.try_query(&mut client, &query_str, true) {
+                PostgreSQLErrorAction::RecognisedError(err_str) => {
                     if let (true, Some(col_name)) = debug_filter.check_get_inbetween(&err_str) {
                         info_set.insert(col_name[1..col_name.len()-1].to_string());
                     }
                     continue;
                 },
-                PostgreSQLErrorAction::Stop(err_str) => {
+                PostgreSQLErrorAction::UnrecognisedError(err_str) => {
                     eprintln!("\n\nDB: {db_id}");
                     eprintln!("Query: {query_str}");
                     eprintln!("PostgreSQL error: {err_str}");
@@ -662,6 +776,9 @@ pub fn test_syntax_coverage(config: Config) {
     println!("{n_ok} / {n_total} converted succesfully ({:.2}%)", 100f64 * n_ok as f64 / n_total as f64);
     println!("{n_parse_err} / {n_total} parse errors ({:.2}%)", 100f64 * n_parse_err as f64 / n_total as f64);
     println!("{n_incorrect_schema} / {n_total} incorrect schemas ({:.2}%)", 100f64 * n_incorrect_schema as f64 / n_total as f64);
+
+    println!("\nSchema errors include:");
+    psql_schema_errors.print_stats(n_dbs);
 
     println!("\nOther Postgres Errors:");
     psql_query_errors.print_stats(n_total);
