@@ -639,19 +639,19 @@ pub fn test_syntax_coverage(config: Config) {
                 vec![format!("{create_table_stmt}")]
                 // vec![]
             } else {
-                // // remove foreign key constraints
-                // let constraints = unwrap_pat!(create_table_stmt, Statement::CreateTable { ref mut constraints, .. }, constraints);
-                // *constraints = constraints.iter().filter_map(|constraint| {
-                //     if matches!(constraint, TableConstraint::ForeignKey { .. }) {
-                //         None
-                //     } else {
-                //         Some(constraint.clone())
-                //     }
-                // }).collect_vec();
-                // // eprintln!("\n\n\nStatement:\n{statement_str}\n");
-                // // eprintln!("{column_name_1} ({type_1}) ||| {column_name_2} ({type_2})\n\n");
-                // vec![format!("{create_table_stmt}")]
-                vec![]
+                // remove foreign key constraints
+                let constraints = unwrap_pat!(create_table_stmt, Statement::CreateTable { ref mut constraints, .. }, constraints);
+                *constraints = constraints.iter().filter_map(|constraint| {
+                    if matches!(constraint, TableConstraint::ForeignKey { .. }) {
+                        None
+                    } else {
+                        Some(constraint.clone())
+                    }
+                }).collect_vec();
+                // eprintln!("\n\n\nStatement:\n{statement_str}\n");
+                // eprintln!("{column_name_1} ({type_1}) ||| {column_name_2} ({type_2})\n\n");
+                vec![format!("{create_table_stmt}")]
+                // vec![]
             }
         })),
         PostgreSQLErrorFilter::contains("db error: ERROR: there is no unique constraint matching given keys for referenced table "),
@@ -690,7 +690,7 @@ pub fn test_syntax_coverage(config: Config) {
         let conn_str = format!("host=localhost user=query_test_user dbname={}", db_name);
         let mut client = Client::connect(&conn_str, NoTls).unwrap();
 
-        match run_schema_try_fix_try_reorder(&mut client, &db.table_defs, &mut psql_schema_errors) {
+        let fixed_schema = match run_schema_try_fix_try_reorder(&mut client, &db.table_defs, &mut psql_schema_errors) {
             PostgreSQLErrorAction::RecognisedError(..) => {
                 assert!(incorrect_schemas.contains(&db_id.as_str()));
                 n_incorrect_schema += db_queries.len();
@@ -707,19 +707,31 @@ pub fn test_syntax_coverage(config: Config) {
                     client.close().unwrap();
                     drop_database_if_exists(&db_name).unwrap();
                     break;
+                } else {
+                    continue;
                 }
             },
             PostgreSQLErrorAction::Ok(fixed_schema) => {
                 if fixed_schema.starts_with("-- NOTE: schema was reordered") {
                     n_reordered_schemas += 1;
                 }
+                fixed_schema
             },
-        }
+        };
+
+        let db = DatabaseSchema::parse_schema_string_and_adapt_sqlite(fixed_schema);
 
         let mut path_generator = PathGenerator::new(
             db.clone(), &config.chain_config,
             config.generator_config.aggregate_functions_distribution.clone(),
         ).unwrap();
+
+        let mut path_query_generator = QueryGenerator::<MaxProbStateChooser>::from_state_generator_and_config_with_schema(
+            MarkovChainGenerator::with_config(&config.chain_config).unwrap(),
+            db.clone(),
+            config.generator_config.clone(),
+            Box::new(PathModel::empty())
+        );
 
         for mut query_str in db_queries {
 
@@ -750,7 +762,18 @@ pub fn test_syntax_coverage(config: Config) {
             let query = unwrap_variant!(statements.into_iter().next().unwrap(), Statement::Query);
 
             match path_generator.get_query_path(&query) {
-                Ok(_) => n_ok += 1, // todo: test that path results in the same query
+                Ok(path) => {
+                    n_ok += 1;
+                    let generated_query = path_query_generator.generate_with_substitute_model_and_value_chooser(
+                        Box::new(PathModel::from_path_nodes(&path)),
+                        Box::new(DeterministicValueChooser::from_path_nodes(&path))
+                    );
+                    let generated_normalised = format!("{generated_query}").replace('"', "").to_lowercase();
+                    let source_normalised = format!("{query}").replace('"', "").to_lowercase();
+                    if format!("{generated_query}").replace('"', "").to_lowercase() != format!("{query}").replace('"', "").to_lowercase() {
+                        eprintln!("\nQuery mismatch!\nDB: {db_id}\nQuery (normalized): {source_normalised}\nReconstructed (normalized): {generated_normalised}\n");
+                    }
+                }, // todo: test that path results in the same query
                 Err(_) => {
                     failed_queries.push(query_str);
                     // let err_str = format!("{err}");
@@ -791,7 +814,7 @@ pub fn test_syntax_coverage(config: Config) {
         - n_parse_err
         - n_incorrect_schema
         - psql_query_errors.total_errors();
-    println!("\nOther convertion errors: {n_rest} / {n_total} ({:.2}%)", 100f64 * n_rest as f64 / n_total as f64);
+    println!("\nOther convertion errors (AST2Path): {n_rest} / {n_total} ({:.2}%)", 100f64 * n_rest as f64 / n_total as f64);
 
     let n_valid = n_total - psql_query_errors.total_errors() - n_incorrect_schema;
     println!("\nIn total, {n_ok}/{n_valid} ({:.2}%) of valid queries were converted", 100f64 * n_ok as f64 / n_valid as f64);

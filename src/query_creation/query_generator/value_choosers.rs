@@ -232,8 +232,11 @@ impl DeterministicValueChooser {
 impl QueryValueChooser for DeterministicValueChooser {
     fn choose_table_name(&mut self, available_table_names: &Vec<ObjectName>) -> ObjectName {
         let name = self.chosen_tables.next();
-        let search_name = name.to_string().to_uppercase();
-        if !available_table_names.iter().any(|avail_name| avail_name.to_string().to_uppercase() == search_name) {
+        let search_name_identname = IdentName::from(name.0[0].clone());
+        if !available_table_names.iter().any(|avail_name| {
+            let avail_name_identname = IdentName::from(avail_name.0[0].clone());
+            avail_name_identname == search_name_identname
+        }) {
             panic!("Selected table name {name} is not present: {:?}", available_table_names)
         }
         name
