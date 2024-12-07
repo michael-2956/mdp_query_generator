@@ -655,7 +655,7 @@ pub fn test_syntax_coverage(config: Config) {
                 (("integer", "text"), (false, DataType::Integer(None))),
                 (("character varying", "integer"), (true, DataType::Integer(None))),
                 (("integer", "character varying"), (false, DataType::Integer(None))),
-                (("text", "real"), (false, DataType::Real)),
+                (("text", "real"), (true, DataType::Real)),
             ].into_iter().find_map(|((rtp1, rtp2), rule)| {
                 if type_1 == rtp1 && type_2 == rtp2 { Some(rule) } else { None }
             });
