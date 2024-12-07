@@ -643,28 +643,40 @@ pub fn test_syntax_coverage(config: Config) {
             
             let inbetween_sequence = _self.get_inbetween_sequence(&error_str);
             let (column_name_1, column_name_2, type_1, type_2) = inbetween_sequence.into_iter().skip(3).take(4).collect_tuple().unwrap();
+            // these will be in lowercase
             let column_name_1 = column_name_1.trim_matches(|c| c == '"' || c == ' ').to_string();
             let column_name_2 = column_name_2.trim_matches(|c| c == '"' || c == ' ').to_string();
             let type_1 = type_1.trim_matches(|c| c == '"' || c == ' ').to_string();
             let type_2 = type_2.trim_matches(|c| c == '"' || c == ' ').to_string();
-            
+
+            // rule says whether last definition has the issue and the new data type
+            let rule_opt = [
+                (("text", "integer"), (true, DataType::Integer(None))),
+                (("integer", "text"), (false, DataType::Integer(None))),
+                (("character varying", "integer"), (true, DataType::Integer(None))),
+                (("integer", "character varying"), (false, DataType::Integer(None))),
+                (("text", "real"), (false, DataType::Real)),
+            ].into_iter().find_map(|((rtp1, rtp2), rule)| {
+                if type_1 == rtp1 && type_2 == rtp2 { Some(rule) } else { None }
+            });
+
             let mut create_table_stmts = Parser::parse_sql(&PostgreSqlDialect {}, &statements_str).unwrap();
             let last_create_table_stmt = create_table_stmts.iter_mut().last().unwrap();
 
-            if (type_1 == "text" && type_2 == "integer") || (type_1 == "integer" && type_2 == "text") {
-                let modded_column_def = if type_1 == "text" {
+            if let Some((change_last, new_data_type)) = rule_opt {
+                let modded_column_def = if change_last {
                     // if we want to change last definition
                     let columns = unwrap_pat!(last_create_table_stmt, Statement::CreateTable { columns, .. }, columns);
-                    columns.iter_mut().find(|col| col.name.value == column_name_1).unwrap()
+                    columns.iter_mut().find(|col| col.name.value.to_lowercase() == column_name_1).unwrap()
                 } else {
                     // if we want to change some previous definition
                     let constraints = unwrap_pat!(last_create_table_stmt, Statement::CreateTable { constraints, .. }, constraints);
                     let problem_constraint = constraints.iter_mut().find_map(|constraint| {
                         if let TableConstraint::ForeignKey { columns, referred_columns, .. } = constraint {
                             let constraint_column = columns.iter_mut().next().unwrap();
-                            if constraint_column.value == column_name_1 {
+                            if constraint_column.value.to_lowercase() == column_name_1 {
                                 let referred_column = referred_columns.iter_mut().next().unwrap();
-                                if referred_column.value == column_name_2 {
+                                if referred_column.value.to_lowercase() == column_name_2 {
                                     Some(constraint)
                                 } else { None }
                             } else { None }
@@ -675,13 +687,13 @@ pub fn test_syntax_coverage(config: Config) {
                     let foreign_table_column = create_table_stmts.iter_mut().find_map(|stmt| {
                         if let Statement::CreateTable { name, columns, .. } = stmt {
                             if *name == foreign_table_name {
-                                Some(columns.iter_mut().find(|col| col.name.value == column_name_2).unwrap())
+                                Some(columns.iter_mut().find(|col| col.name.value.to_lowercase() == column_name_2).unwrap())
                             } else { None }
                         } else { None }
                     }).unwrap();
                     foreign_table_column
                 };
-                modded_column_def.data_type = DataType::Integer(None);
+                modded_column_def.data_type = new_data_type;
                 vec![format!("{}", create_table_stmts.into_iter().map(|stmt| format!("{stmt};\n")).join(""))]
             } else {
                 eprintln!("\n\n\nLast statement:\n{last_create_table_stmt}\n");
