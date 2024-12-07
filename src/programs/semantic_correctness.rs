@@ -1,10 +1,8 @@
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
-use postgres::{Client, NoTls};
-
 use crate::{config::{Config, TomlReadable}, query_creation::{query_generator::{query_info::DatabaseSchema, QueryGenerator}, state_generator::{state_choosers::ProbabilisticStateChooser, substitute_models::AntiCallModel, MarkovChainGenerator}}};
 
-use super::syntax_coverage::{create_database, drop_database_if_exists};
+use super::syntax_coverage::{create_database_and_connect, drop_database_if_exists};
 
 #[derive(Debug, Clone)]
 pub struct SemanticCorrectnessConfig {
@@ -36,9 +34,8 @@ pub fn test_semantic_correctness(config: Config) {
 
     let db_name = format!("query_test_user_semantic").to_lowercase();
     drop_database_if_exists(&db_name).unwrap();
-    create_database(&db_name).unwrap();
-    let conn_str = format!("host=localhost user=query_test_user dbname={}", db_name);
-    let mut client = Client::connect(&conn_str, NoTls).unwrap();
+    let mut client = create_database_and_connect(&db_name).unwrap();
+
     if let Err(err) = client.batch_execute(db.get_schema_string().as_str()) {
         eprintln!("Semantic testing failed!\nSchema creation error: {err}");
         client.close().unwrap();

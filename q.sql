@@ -1,9 +1,94 @@
+#746 (18.74%): db error: ERROR: column  [...]  does not exist
+#208 (5.22%): db error: ERROR: column  [...]  must appear in the GROUP BY clause or be used in an aggregate function
+#75 (1.88%): db error: ERROR: operator does not exist:  [...]  =  [...] 
+#14 (0.35%): db error: ERROR: function sum(character varying) does not exist
+#11 (0.28%): db error: ERROR: syntax error at or near "WHERE"
+#10 (0.25%): db error: ERROR: operator does not exist:  [...]  >  [...] 
+#8 (0.20%): db error: ERROR: function avg(character varying) does not exist
+#8 (0.20%): db error: ERROR: function avg(text) does not exist
+#6 (0.15%): db error: ERROR: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+#6 (0.15%): db error: ERROR: operator does not exist:  [...]  <  [...] 
+#4 (0.10%): db error: ERROR: syntax error at or near "GROUP"
+#4 (0.10%): db error: ERROR: subquery in FROM must have an alias
+#3 (0.08%): db error: ERROR: function avg(character) does not exist
+#3 (0.08%): db error: ERROR: function sum(character) does not exist
+#2 (0.05%): db error: ERROR: operator does not exist:  [...]  >=  [...] 
+#1 (0.03%): db error: ERROR: relation  [...]  does not exist
+#1 (0.03%): db error: ERROR: syntax error at or near "INTERSECT"
+#1 (0.03%): db error: ERROR: missing FROM-clause entry for table 
+#1 (0.03%): db error: ERROR: syntax error at or near ";"
+
+#14 (0.35%): db error: ERROR: column  [...]  does not exist
+#208 (5.22%): db error: ERROR: column  [...]  must appear in the GROUP BY clause or be used in an aggregate function
+#75 (1.88%): db error: ERROR: operator does not exist:  [...]  =  [...] 
+#14 (0.35%): db error: ERROR: function sum(character varying) does not exist
+#11 (0.28%): db error: ERROR: syntax error at or near "WHERE"
+#10 (0.25%): db error: ERROR: operator does not exist:  [...]  >  [...] 
+#8 (0.20%): db error: ERROR: function avg(character varying) does not exist
+#8 (0.20%): db error: ERROR: function avg(text) does not exist
+#6 (0.15%): db error: ERROR: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+#6 (0.15%): db error: ERROR: operator does not exist:  [...]  <  [...] 
+#4 (0.10%): db error: ERROR: syntax error at or near "GROUP"
+#4 (0.10%): db error: ERROR: subquery in FROM must have an alias
+#3 (0.08%): db error: ERROR: function avg(character) does not exist
+#3 (0.08%): db error: ERROR: function sum(character) does not exist
+#2 (0.05%): db error: ERROR: operator does not exist:  [...]  >=  [...] 
+#1 (0.03%): db error: ERROR: relation  [...]  does not exist
+#1 (0.03%): db error: ERROR: syntax error at or near "INTERSECT"
+#1 (0.03%): db error: ERROR: missing FROM-clause entry for table 
+#1 (0.03%): db error: ERROR: syntax error at or near ";"
+
+
+#7 (0.18%): db error: ERROR: column  [...]  does not exist
+#4 (0.10%): db error: ERROR: column  [...]  must appear in the GROUP BY clause or be used in an aggregate function
+#75 (1.88%): db error: ERROR: operator does not exist:  [...]  =  [...] 
+#14 (0.35%): db error: ERROR: function sum(character varying) does not exist
+#11 (0.28%): db error: ERROR: syntax error at or near "WHERE"
+#10 (0.25%): db error: ERROR: operator does not exist:  [...]  >  [...] 
+#8 (0.20%): db error: ERROR: function avg(text) does not exist
+#8 (0.20%): db error: ERROR: function avg(character varying) does not exist
+#6 (0.15%): db error: ERROR: operator does not exist:  [...]  <  [...] 
+#6 (0.15%): db error: ERROR: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+#4 (0.10%): db error: ERROR: subquery in FROM must have an alias
+#4 (0.10%): db error: ERROR: syntax error at or near "GROUP"
+#3 (0.08%): db error: ERROR: function sum(character) does not exist
+#3 (0.08%): db error: ERROR: function avg(character) does not exist
+#2 (0.05%): db error: ERROR: operator does not exist:  [...]  >=  [...] 
+#1 (0.03%): db error: ERROR: missing FROM-clause entry for table 
+#1 (0.03%): db error: ERROR: syntax error at or near "INTERSECT"
+#1 (0.03%): db error: ERROR: syntax error at or near ";"
+#1 (0.03%): db error: ERROR: relation  [...]  does not exist
+
+
+
+#19 (0.48%): db error: ERROR: operator does not exist:  [...]  =  [...] 
+#14 (0.35%): db error: ERROR: function sum(character varying) does not exist
+#11 (0.28%): db error: ERROR: syntax error at or near "WHERE"
+#10 (0.25%): db error: ERROR: operator does not exist:  [...]  >  [...] 
+#8 (0.20%): db error: ERROR: function avg(text) does not exist
+#7 (0.18%): db error: ERROR: column  [...]  does not exist
+#6 (0.15%): db error: ERROR: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+#6 (0.15%): db error: ERROR: operator does not exist:  [...]  <  [...] 
+#6 (0.15%): db error: ERROR: function avg(character varying) does not exist
+#4 (0.10%): db error: ERROR: syntax error at or near "GROUP"
+#4 (0.10%): db error: ERROR: column  [...]  must appear in the GROUP BY clause or be used in an aggregate function
+#3 (0.08%): db error: ERROR: function sum(character) does not exist
+#3 (0.08%): db error: ERROR: function avg(character) does not exist
+#3 (0.08%): db error: ERROR: subquery in FROM must have an alias
+#2 (0.05%): db error: ERROR: operator does not exist:  [...]  >=  [...] 
+#1 (0.03%): db error: ERROR: relation  [...]  does not exist
+#1 (0.03%): db error: ERROR: missing FROM-clause entry for table 
+#1 (0.03%): db error: ERROR: syntax error at or near "INTERSECT"
+#1 (0.03%): db error: ERROR: syntax error at or near ";"
+
+
+
 -- SELECT T1.name ,  T1.date ,  T2.name FROM race AS T1 JOIN track AS T2 ON T1.track_id  =  T2.track_id;
 -- SELECT T2.name, T2.location FROM race AS T1 JOIN track AS T2 ON T1.track_id = T2.track_id GROUP BY T1.track_id, t2.name, t2.location HAVING count(*) = 1;
 -- SELECT T2.name, count(*) FROM race AS T1 JOIN track AS T2 ON T1.track_id = T2.track_id GROUP BY T1.track_id, t2.name;
 -- SELECT T2.name FROM race AS T1 JOIN track AS T2 ON T1.track_id = T2.track_id GROUP BY T1.track_id, t2.name ORDER BY count(*) DESC LIMIT 1;
 -- SELECT name FROM track EXCEPT SELECT T2.name FROM race AS T1 JOIN track AS T2 ON T1.track_id  =  T2.track_id WHERE T1.class  =  'GT';
-SELECT name FROM track WHERE track_id NOT IN (SELECT track_id FROM race);
+-- SELECT name FROM track WHERE track_id NOT IN (SELECT track_id FROM race);
 -- SELECT Name FROM phone WHERE Phone_id NOT IN (SELECT Phone_ID FROM phone_market);
 -- SELECT T2.Name ,  sum(T1.Num_of_stock) FROM phone_market AS T1 JOIN phone AS T2 ON T1.Phone_ID  =  T2.Phone_ID GROUP BY T2.Name;
 -- SELECT T2.Name FROM phone_market AS T1 JOIN phone AS T2 ON T1.Phone_ID  =  T2.Phone_ID GROUP BY T2.Name HAVING sum(T1.Num_of_stock)  >=  2000 ORDER BY sum(T1.Num_of_stock) DESC;

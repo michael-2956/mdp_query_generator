@@ -1,5 +1,5 @@
 use core::fmt;
-use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::{fs, path::PathBuf};
 
 use itertools::Itertools;
@@ -228,11 +228,18 @@ fn create_or_ensure_user_exists() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-pub fn create_database(db_id: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let create_db_command = format!("CREATE DATABASE {};", db_id);
-    let mut client = Client::connect("host=localhost user=query_test_user", NoTls)?;
-    client.batch_execute(&create_db_command)?;
-    Ok(())
+fn connect_to_db(db_name: &str) -> Result<Client, Box<dyn std::error::Error>> {
+    let conn_str = format!("host=localhost user=query_test_user dbname={}", db_name);
+    Ok(Client::connect(&conn_str, NoTls)?)
+}
+
+pub fn create_database_and_connect(db_name: &str) -> Result<Client, Box<dyn std::error::Error>> {
+    let create_db_command = format!("CREATE DATABASE {};", db_name);
+    {
+        let mut client = Client::connect("host=localhost user=query_test_user", NoTls)?;
+        client.batch_execute(&create_db_command)?;
+    }
+    connect_to_db(db_name)
 }
 
 pub fn drop_database_if_exists(db_name: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -390,14 +397,14 @@ enum PostgreSQLErrorAction {
 
 struct PostgreSQLErrors {
     filters: Vec<PostgreSQLErrorFilter>,
-    n_errors: HashMap<String, usize>,
+    n_errors: BTreeMap<String, usize>,
 }
 
 impl PostgreSQLErrors {
     fn with_filters(filters: Vec<PostgreSQLErrorFilter>) -> Self {
         Self {
             filters,
-            n_errors: HashMap::new(),
+            n_errors: BTreeMap::new(),
         }
     }
 
@@ -414,7 +421,7 @@ impl PostgreSQLErrors {
         }
     }
 
-    /// - If query runs OK or it was fixed, returns the fixed query
+    /// - If query is ok or it was fixed, returns the fixed query
     /// - In case it fails to fix, returns original error
     fn try_query(&mut self, client: &mut Client, query_str: &String, record_error: bool) -> PostgreSQLErrorAction {
         let mut query_changed_from_original = false;
@@ -425,7 +432,10 @@ impl PostgreSQLErrors {
         let mut query_queue = VecDeque::new();
         query_queue.push_back(query_str.clone());
         while let Some(query_str) = query_queue.pop_front() {
-            if let Err(err) = client.batch_execute(format!("{query_str};").as_str()) {
+            client.batch_execute("BEGIN;").unwrap();
+            let rs = client.batch_execute(format!("BEGIN;\n{query_str};\nROLLBACK;").as_str());
+            client.batch_execute("ROLLBACK;").unwrap();
+            if let Err(err) = rs {
                 let err_str = format!("{err}");
                 if past_errors.contains(&err_str) {
                     continue;
@@ -475,7 +485,9 @@ impl PostgreSQLErrors {
     }
 }
 
-fn run_schema_try_fix_try_reorder(client: &mut Client, table_defs: &Vec<CreateTableSt>, psql_schema_errors: &mut PostgreSQLErrors) -> PostgreSQLErrorAction {
+fn create_schema_try_reorder_try_fix(db_name: &String, table_defs: &Vec<CreateTableSt>, psql_schema_errors: &mut PostgreSQLErrors) -> PostgreSQLErrorAction {
+    let mut client = create_database_and_connect(&db_name).unwrap();
+
     let relation_doesnt_exist_filter = PostgreSQLErrorFilter::starts_ends("db error: ERROR: relation ", " does not exist");
 
     let mut success = true;
@@ -493,7 +505,8 @@ fn run_schema_try_fix_try_reorder(client: &mut Client, table_defs: &Vec<CreateTa
     let mut did_reorder = false;
 
     while let Some(table_def_str) = table_def_queue.pop_front() {
-        match psql_schema_errors.try_query(client, &table_def_str, false) {
+        let new_schema_str_candidate = schema_str.clone() + format!("{table_def_str};").as_str();
+        match psql_schema_errors.try_query(&mut client, &new_schema_str_candidate, false) {
             ref e @ (
                 PostgreSQLErrorAction::RecognisedError(ref err_table_str) |
                 PostgreSQLErrorAction::UnrecognisedError(ref err_table_str)
@@ -508,8 +521,8 @@ fn run_schema_try_fix_try_reorder(client: &mut Client, table_defs: &Vec<CreateTa
                     break;
                 }
             },
-            PostgreSQLErrorAction::Ok(table_str) => {
-                schema_str += format!("{table_str};\n").as_str();
+            PostgreSQLErrorAction::Ok(new_schema_str) => {
+                schema_str = new_schema_str;
                 error_counter = 0usize;
             },
         }
@@ -521,6 +534,8 @@ fn run_schema_try_fix_try_reorder(client: &mut Client, table_defs: &Vec<CreateTa
         }
     }
 
+    client.close().unwrap();
+
     if success {
         if did_reorder {
             PostgreSQLErrorAction::Ok(format!("-- NOTE: schema was reordered\n\n{schema_str}"))
@@ -528,6 +543,7 @@ fn run_schema_try_fix_try_reorder(client: &mut Client, table_defs: &Vec<CreateTa
             PostgreSQLErrorAction::Ok(schema_str)
         }
     } else {
+        drop_database_if_exists(&db_name).unwrap();
         let err_action = err_action.unwrap();
         psql_schema_errors.record_err_action(&err_action);
         err_action
@@ -623,35 +639,54 @@ pub fn test_syntax_coverage(config: Config) {
         PostgreSQLErrorFilter::contains_sequence(&[
             "db error: ERROR: foreign key constraint", "cannot be implemented",
             "Key columns", "and", "are of incompatible types:", "and", "."
-        ]).add_fix(Box::new(|_self, statement_str, error_str| {
+        ]).add_fix(Box::new(|_self, statements_str, error_str| {
+            
             let inbetween_sequence = _self.get_inbetween_sequence(&error_str);
-            let (column_name_1, _, type_1, type_2) = inbetween_sequence.into_iter().skip(3).take(4).collect_tuple().unwrap();
+            let (column_name_1, column_name_2, type_1, type_2) = inbetween_sequence.into_iter().skip(3).take(4).collect_tuple().unwrap();
             let column_name_1 = column_name_1.trim_matches(|c| c == '"' || c == ' ').to_string();
-            // let column_name_2 = column_name_2.trim_matches(|c| c == '"' || c == ' ').to_string();
+            let column_name_2 = column_name_2.trim_matches(|c| c == '"' || c == ' ').to_string();
             let type_1 = type_1.trim_matches(|c| c == '"' || c == ' ').to_string();
             let type_2 = type_2.trim_matches(|c| c == '"' || c == ' ').to_string();
-            let mut create_table_stmt = Parser::parse_sql(&PostgreSqlDialect {}, &statement_str).unwrap().into_iter().next().unwrap();
-            if type_1 == "text" && type_2 == "integer" {
-                // change text to integer
-                let columns = unwrap_pat!(create_table_stmt, Statement::CreateTable { ref mut columns, .. }, columns);
-                let column_def = columns.iter_mut().find(|col| col.name.value == column_name_1).unwrap();
-                column_def.data_type = DataType::Integer(None);
-                vec![format!("{create_table_stmt}")]
-                // vec![]
+            
+            let mut create_table_stmts = Parser::parse_sql(&PostgreSqlDialect {}, &statements_str).unwrap();
+            let last_create_table_stmt = create_table_stmts.iter_mut().last().unwrap();
+
+            if (type_1 == "text" && type_2 == "integer") || (type_1 == "integer" && type_2 == "text") {
+                let modded_column_def = if type_1 == "text" {
+                    // if we want to change last definition
+                    let columns = unwrap_pat!(last_create_table_stmt, Statement::CreateTable { columns, .. }, columns);
+                    columns.iter_mut().find(|col| col.name.value == column_name_1).unwrap()
+                } else {
+                    // if we want to change some previous definition
+                    let constraints = unwrap_pat!(last_create_table_stmt, Statement::CreateTable { constraints, .. }, constraints);
+                    let problem_constraint = constraints.iter_mut().find_map(|constraint| {
+                        if let TableConstraint::ForeignKey { columns, referred_columns, .. } = constraint {
+                            let constraint_column = columns.iter_mut().next().unwrap();
+                            if constraint_column.value == column_name_1 {
+                                let referred_column = referred_columns.iter_mut().next().unwrap();
+                                if referred_column.value == column_name_2 {
+                                    Some(constraint)
+                                } else { None }
+                            } else { None }
+                        } else { None }
+                    }).unwrap();
+                    let TableConstraint::ForeignKey { foreign_table, .. } = problem_constraint else { unreachable!() };
+                    let foreign_table_name = foreign_table.clone();
+                    let foreign_table_column = create_table_stmts.iter_mut().find_map(|stmt| {
+                        if let Statement::CreateTable { name, columns, .. } = stmt {
+                            if *name == foreign_table_name {
+                                Some(columns.iter_mut().find(|col| col.name.value == column_name_2).unwrap())
+                            } else { None }
+                        } else { None }
+                    }).unwrap();
+                    foreign_table_column
+                };
+                modded_column_def.data_type = DataType::Integer(None);
+                vec![format!("{}", create_table_stmts.into_iter().map(|stmt| format!("{stmt};\n")).join(""))]
             } else {
-                // remove foreign key constraints
-                let constraints = unwrap_pat!(create_table_stmt, Statement::CreateTable { ref mut constraints, .. }, constraints);
-                *constraints = constraints.iter().filter_map(|constraint| {
-                    if matches!(constraint, TableConstraint::ForeignKey { .. }) {
-                        None
-                    } else {
-                        Some(constraint.clone())
-                    }
-                }).collect_vec();
-                // eprintln!("\n\n\nStatement:\n{statement_str}\n");
-                // eprintln!("{column_name_1} ({type_1}) ||| {column_name_2} ({type_2})\n\n");
-                vec![format!("{create_table_stmt}")]
-                // vec![]
+                eprintln!("\n\n\nLast statement:\n{last_create_table_stmt}\n");
+                eprintln!("{column_name_1} ({type_1}) ||| {column_name_2} ({type_2})\n\n");
+                vec![]
             }
         })),
         PostgreSQLErrorFilter::contains("db error: ERROR: there is no unique constraint matching given keys for referenced table "),
@@ -683,19 +718,12 @@ pub fn test_syntax_coverage(config: Config) {
         n_total += db_queries.len();
 
         let db_name = format!("query_test_user_{db_id}").to_lowercase();
-        
         drop_database_if_exists(&db_name).unwrap();
-        create_database(&db_name).unwrap();
 
-        let conn_str = format!("host=localhost user=query_test_user dbname={}", db_name);
-        let mut client = Client::connect(&conn_str, NoTls).unwrap();
-
-        let fixed_schema = match run_schema_try_fix_try_reorder(&mut client, &db.table_defs, &mut psql_schema_errors) {
+        let fixed_schema = match create_schema_try_reorder_try_fix(&db_name, &db.table_defs, &mut psql_schema_errors) {
             PostgreSQLErrorAction::RecognisedError(..) => {
                 assert!(incorrect_schemas.contains(&db_id.as_str()));
                 n_incorrect_schema += db_queries.len();
-                client.close().unwrap();
-                drop_database_if_exists(&db_name).unwrap();
                 continue;
             },
             PostgreSQLErrorAction::UnrecognisedError(err_str) => {
@@ -704,8 +732,6 @@ pub fn test_syntax_coverage(config: Config) {
                     eprintln!("Schema:\n{}", db.get_schema_string());
                     eprintln!("PostgreSQL error: {err_str}");
                     // eprintln!("AST:\n{}", db.table_defs.iter().map(|td| format!("{:#?}", td)).join("\n\n"));
-                    client.close().unwrap();
-                    drop_database_if_exists(&db_name).unwrap();
                     break;
                 } else {
                     continue;
@@ -718,6 +744,10 @@ pub fn test_syntax_coverage(config: Config) {
                 fixed_schema
             },
         };
+
+        let mut client = connect_to_db(&db_name).unwrap();
+
+        client.batch_execute(fixed_schema.as_str()).unwrap();
 
         let db = DatabaseSchema::parse_schema_string_and_adapt_sqlite(fixed_schema);
 
@@ -733,9 +763,9 @@ pub fn test_syntax_coverage(config: Config) {
             Box::new(PathModel::empty())
         );
 
-        for mut query_str in db_queries {
+        for query_str in db_queries {
 
-            match psql_query_errors.try_query(&mut client, &query_str, true) {
+            let query_str = match psql_query_errors.try_query(&mut client, &query_str, true) {
                 PostgreSQLErrorAction::RecognisedError(err_str) => {
                     if let (true, Some(col_name)) = debug_filter.check_get_inbetween(&err_str) {
                         info_set.insert(col_name[1..col_name.len()-1].to_string());
@@ -749,8 +779,8 @@ pub fn test_syntax_coverage(config: Config) {
                     do_break = true;
                     break;
                 },
-                PostgreSQLErrorAction::Ok(fixed_query_str) => query_str = fixed_query_str,
-            }
+                PostgreSQLErrorAction::Ok(fixed_query_str) => fixed_query_str,
+            };
 
             let Ok(statements) = Parser::parse_sql(
                 &PostgreSqlDialect {}, query_str.as_str()
@@ -768,12 +798,13 @@ pub fn test_syntax_coverage(config: Config) {
                         Box::new(PathModel::from_path_nodes(&path)),
                         Box::new(DeterministicValueChooser::from_path_nodes(&path))
                     );
+                    // might be differences in quotes and use of lowercase
                     let generated_normalised = format!("{generated_query}").replace('"', "").to_lowercase();
                     let source_normalised = format!("{query}").replace('"', "").to_lowercase();
                     if format!("{generated_query}").replace('"', "").to_lowercase() != format!("{query}").replace('"', "").to_lowercase() {
                         eprintln!("\nQuery mismatch!\nDB: {db_id}\nQuery (normalized): {source_normalised}\nReconstructed (normalized): {generated_normalised}\n");
                     }
-                }, // todo: test that path results in the same query
+                },
                 Err(_) => {
                     failed_queries.push(query_str);
                     // let err_str = format!("{err}");
