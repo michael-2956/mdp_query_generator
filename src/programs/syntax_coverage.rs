@@ -11,7 +11,7 @@ use sqlparser::parser::Parser;
 
 use crate::config::{Config, TomlReadable};
 use crate::equivalence_testing_function::string_to_query;
-use crate::query_creation::query_generator::query_info::{CreateTableSt, DatabaseSchema};
+use crate::query_creation::query_generator::query_info::{CreateTableSt, DatabaseSchema, IdentName};
 use crate::query_creation::query_generator::value_choosers::DeterministicValueChooser;
 use crate::query_creation::query_generator::QueryGenerator;
 use crate::query_creation::state_generator::state_choosers::MaxProbStateChooser;
@@ -701,7 +701,55 @@ pub fn test_syntax_coverage(config: Config) {
                 vec![]
             }
         })),
-        PostgreSQLErrorFilter::contains("db error: ERROR: there is no unique constraint matching given keys for referenced table "),
+        PostgreSQLErrorFilter::contains_sequence(
+            &["db error: ERROR: there is no unique constraint matching given keys for referenced table \"", "\""]
+        ).add_fix(Box::new(|_self, statements_str, error_str| {
+            let inbetween_sequence = _self.get_inbetween_sequence(&error_str);
+            let foreign_table_name = IdentName::from(Ident::new(inbetween_sequence.into_iter().skip(1).next().unwrap()));
+
+            let mut create_table_stmts = Parser::parse_sql(&PostgreSqlDialect {}, &statements_str).unwrap();
+            let last_create_table_stmt = create_table_stmts.iter_mut().last().unwrap();
+
+            let constraints = unwrap_pat!(last_create_table_stmt, Statement::CreateTable { constraints, .. }, constraints);
+            let unique_column_list = constraints.iter_mut().filter_map(|constraint| {
+                if let TableConstraint::ForeignKey { foreign_table, referred_columns, .. } = constraint {
+                    if IdentName::from(foreign_table.0[0].clone()) == foreign_table_name {
+                        Some(referred_columns.iter().next().unwrap().clone())
+                    } else { None }
+                } else { None }
+            }).collect_vec();
+
+            let foreign_table_constraints = create_table_stmts.iter_mut().find_map(|stmt| {
+                if let Statement::CreateTable { name, constraints, .. } = stmt {
+                    if IdentName::from(name.0[0].clone()) == foreign_table_name {
+                        Some(constraints)
+                    } else { None }
+                } else { None }
+            }).unwrap();
+
+            let mut n_now_unique = 0usize;
+            for unique_column_name in unique_column_list {
+                // ensure all referenced columns are unique
+                if foreign_table_constraints.iter().find(
+                    |constraint| matches!(
+                        constraint, TableConstraint::Unique { columns, .. } if columns.contains(&unique_column_name)
+                    )
+                ).is_none() {
+                    foreign_table_constraints.push(TableConstraint::Unique {
+                        name: None,
+                        columns: vec![unique_column_name],
+                        is_primary: false
+                    });
+                    n_now_unique += 1;
+                }
+            }
+
+            if n_now_unique > 0 {
+                vec![format!("{}", create_table_stmts.into_iter().map(|stmt| format!("{stmt};\n")).join(""))]
+            } else {
+                vec![]
+            }
+        })),
         // PostgreSQLErrorFilter::starts_ends("db error: ERROR: relation ", " does not exist"),
     ]);
     let incorrect_schemas = [
