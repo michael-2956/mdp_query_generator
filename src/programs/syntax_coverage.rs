@@ -555,6 +555,10 @@ pub fn test_syntax_coverage(config: Config) {
         config.syntax_coverage_config.spider_tables_json_path
     ).unwrap().as_str()).unwrap();
 
+    let manually_fixed = [
+        "restaurants", "yelp", "sakila_1", "flight_4", "soccer_1", "customers_campaigns_ecommerce", "sports_competition", "store_1", "college_1", "products_for_hire", "world_1"
+    ];
+
     let dbs = dbs.into_iter().map(|db| {
         let schema_path = config.syntax_coverage_config.spider_schemas_folder.join(format!("{}.sql", db.db_id));
         let schema_str = fs::read_to_string(schema_path).unwrap().replace("PRAGMA", "-- PRAGMA");

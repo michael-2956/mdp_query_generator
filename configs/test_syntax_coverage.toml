@@ -24,7 +24,9 @@ schema_path="schema/tpc-h_tables.sql"
 [syntax_coverage]
 spider_tables_json_path="/Users/mykhailo/Downloads/spider/tables.json"
 spider_queries_json_path="/Users/mykhailo/Downloads/spider/train_spider.json"
-spider_schemas_folder="/Users/mykhailo/Downloads/spider/schemas/"
+# spider_schemas_folder="/Users/mykhailo/Downloads/spider/schemas/"
+# spider_schemas_folder="/Users/mykhailo/Downloads/spider/schemas_original/"
+spider_schemas_folder="/Users/mykhailo/Downloads/spider/schemas_minimal_changes/"
 
 
 [model]

@@ -181,6 +181,7 @@ impl DatabaseSchema {
             Ok(ast) => ast,
             Err(err) => {
                 eprintln!("Schema file parsing error! {}", err);
+                eprintln!("Schema source: {}", source);
                 panic!();
             },
         };

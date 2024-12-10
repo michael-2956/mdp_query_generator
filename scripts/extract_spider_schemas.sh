@@ -2,6 +2,7 @@
 
 if [ "$#" -ne 1 ]; then
     echo "Usage: $0 /path/to/spider/"
+    echo "Schemas from all .sqlite files will be saved to /path/to/spider/schemas"
     exit 1
 fi
 
