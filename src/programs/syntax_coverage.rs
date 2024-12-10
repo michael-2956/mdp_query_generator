@@ -630,6 +630,7 @@ pub fn test_syntax_coverage(config: Config) {
         PostgreSQLErrorFilter::contains("db error: ERROR: syntax error at or near \";\""),
         PostgreSQLErrorFilter::contains("db error: ERROR: subquery in FROM must have an alias"),
         PostgreSQLErrorFilter::contains("db error: ERROR: missing FROM-clause entry for table "),
+        PostgreSQLErrorFilter::contains_sequence(&["db error: ERROR: invalid input syntax for type ", ": \"", "\""]),
     ]);
     
     let debug_filter = PostgreSQLErrorFilter::starts_ends("db error: ERROR: column ", " must appear in the GROUP BY clause or be used in an aggregate function");
@@ -750,7 +751,58 @@ pub fn test_syntax_coverage(config: Config) {
                 vec![]
             }
         })),
-        // PostgreSQLErrorFilter::starts_ends("db error: ERROR: relation ", " does not exist"),
+        PostgreSQLErrorFilter::contains_sequence(&[
+            "db error: ERROR: column \"", "\" referenced in foreign key constraint does not exist"
+        ]).add_fix(Box::new(|_self, statements_str, error_str| {
+            let inbetween_sequence = _self.get_inbetween_sequence(&error_str);
+            let err_foreign_column_name = IdentName::from(Ident::new(inbetween_sequence.into_iter().skip(1).next().unwrap()));
+
+            // 3 fixes for 3 separate situations in 3 DBs
+            let fixes = [
+                (("keyword", "kid"), (None, Some("id"))),  // DB: imdb
+                (("player", "team_id"), (Some("team"), None)),  // DB: baseball_1
+                (("restaurant", "restaurant_id"), (None, Some("id"))),  // DB: restaurants
+            ];
+
+            let mut create_table_stmts = Parser::parse_sql(&PostgreSqlDialect {}, &statements_str).unwrap();
+            let last_create_table_stmt = create_table_stmts.iter_mut().last().unwrap();
+            let constraints = unwrap_pat!(last_create_table_stmt, Statement::CreateTable { constraints, .. }, constraints);
+            let mut fixed = false;
+
+            for ((foreign_table_name, foreign_column_name), (table_name_fix, column_name_fix)) in fixes {
+                let (foreign_table_name, foreign_column_name) = (
+                    IdentName::from(Ident::new(foreign_table_name)),
+                    IdentName::from(Ident::new(foreign_column_name))
+                );
+                if err_foreign_column_name != foreign_column_name { continue; }
+                let constraints = constraints.iter_mut().filter_map(|constraint| {
+                    if let TableConstraint::ForeignKey { foreign_table, referred_columns, .. } = constraint {
+                        if IdentName::from(foreign_table.0[0].clone()) == foreign_table_name {
+                            if IdentName::from(referred_columns.iter().next().unwrap().clone()) == foreign_column_name {
+                                Some(constraint)
+                            } else { None }
+                        } else { None }
+                    } else { None }
+                }).collect_vec();
+                for constraint in constraints {
+                    let TableConstraint::ForeignKey { foreign_table, referred_columns, .. } = constraint else { unreachable!() };
+                    if let Some(table_name_fix) = table_name_fix {
+                        *foreign_table = ObjectName(vec![Ident::new(table_name_fix)]);
+                        fixed = true;
+                    }
+                    if let Some(column_name_fix) = column_name_fix {
+                        *referred_columns = vec![Ident::new(column_name_fix)];
+                        fixed = true;
+                    }
+                }
+            }
+
+            if fixed {
+                vec![format!("{}", create_table_stmts.into_iter().map(|stmt| format!("{stmt};\n")).join(""))]
+            } else {
+                vec![]
+            }
+        })),
     ]);
     let incorrect_schemas = [
         "race_track", "academic", "phone_market", "student_assessment",
@@ -787,6 +839,8 @@ pub fn test_syntax_coverage(config: Config) {
                 continue;
             },
             PostgreSQLErrorAction::UnrecognisedError(err_str) => {
+                eprintln!("\nDB ID: {db_id}");
+                eprintln!("Error: {err_str}");
                 if !incorrect_schemas.contains(&db_id.as_str()) {
                     eprintln!("\n\nDB: {db_id}");
                     eprintln!("Schema:\n{}", db.get_schema_string());
@@ -892,9 +946,9 @@ pub fn test_syntax_coverage(config: Config) {
     
     println!("{n_ok} / {n_total} converted succesfully ({:.2}%)", 100f64 * n_ok as f64 / n_total as f64);
     println!("{n_parse_err} / {n_total} parse errors ({:.2}%)", 100f64 * n_parse_err as f64 / n_total as f64);
-    println!("{n_incorrect_schema} / {n_total} incorrect schemas ({:.2}%)", 100f64 * n_incorrect_schema as f64 / n_total as f64);
 
-    println!("\nSchema errors include:");
+    println!("\n{n_incorrect_schema} / {n_total} incorrect schemas ({:.2}%)", 100f64 * n_incorrect_schema as f64 / n_total as f64);
+    println!("Schema errors include:");
     psql_schema_errors.print_stats(n_dbs);
 
     println!("\nOther Postgres Errors:");
