@@ -5,7 +5,7 @@ use std::{fs, path::PathBuf};
 use itertools::Itertools;
 use postgres::{Client, NoTls};
 use serde::Deserialize;
-use sqlparser::ast::{ColumnDef, DataType, ExactNumberInfo, Expr, GroupByExpr, Ident, ObjectName, SetExpr, Statement, TableConstraint, TimezoneInfo};
+use sqlparser::ast::{CharacterLength, ColumnDef, DataType, ExactNumberInfo, Expr, GroupByExpr, Ident, ObjectName, SetExpr, Statement, TableConstraint, TimezoneInfo};
 use sqlparser::dialect::PostgreSqlDialect;
 use sqlparser::parser::Parser;
 
@@ -20,11 +20,20 @@ use crate::query_creation::state_generator::MarkovChainGenerator;
 use crate::training::ast_to_path::PathGenerator;
 use crate::{unwrap_pat, unwrap_variant};
 
+#[derive(Debug, Clone, PartialEq)]
+enum SyntaxCoverageModificationLevel {
+    None,
+    Conversion,
+    ConversionSchemaFixes,
+    ConversionSchemaFixesQueryFixes,
+}
+
 #[derive(Debug, Clone)]
 pub struct SyntaxCoverageConfig {
     spider_schemas_folder: PathBuf,
     spider_tables_json_path: PathBuf,
     spider_queries_json_path: PathBuf,
+    modification_level: SyntaxCoverageModificationLevel,
 }
 
 impl TomlReadable for SyntaxCoverageConfig {
@@ -34,6 +43,13 @@ impl TomlReadable for SyntaxCoverageConfig {
             spider_schemas_folder: PathBuf::from(section["spider_schemas_folder"].as_str().unwrap()),
             spider_tables_json_path: PathBuf::from(section["spider_tables_json_path"].as_str().unwrap()),
             spider_queries_json_path: PathBuf::from(section["spider_queries_json_path"].as_str().unwrap()),
+            modification_level: match section["modification_level"].as_str().unwrap() {
+                "None" => SyntaxCoverageModificationLevel::None,
+                "Conversion" => SyntaxCoverageModificationLevel::Conversion,
+                "ConversionSchemaFixes" => SyntaxCoverageModificationLevel::ConversionSchemaFixes,
+                "ConversionSchemaFixesQueryFixes" => SyntaxCoverageModificationLevel::ConversionSchemaFixesQueryFixes,
+                any => panic!("modification_level does not accept {any}")
+            }
         }
     }
 }
@@ -69,7 +85,7 @@ fn transform_sqlite_ident(mut id: Ident) -> Ident {
         id.quote_style = Some('"'); // End is a keyword, so add "
     }
     if id.quote_style == Some('`') {
-        id.quote_style = Some('"'); // postgres doe snot support `, replace with "
+        id.quote_style = Some('"'); // postgres does not support `, replace with "
     }
     if id.quote_style == Some('"') {
         id.value = id.value.to_lowercase(); // lowercase the quoted idents to make sqlite queries work
@@ -99,18 +115,27 @@ impl DatabaseSchema {
                 tb.name = transform_sqlite_objectname(tb.name);
                 tb.columns = tb.columns.into_iter().map(|mut col: ColumnDef| {
                     col.name = transform_sqlite_ident(col.name);
-                    // type substitution
+                    // type substitution for postgres-incompatible types
                     col.data_type = match col.data_type {
+                        DataType::Custom(id, props) if format!("{}", id).to_lowercase().as_str() == "number"
+                            => DataType::Numeric(match props.as_slice() {
+                                [] => ExactNumberInfo::None,
+                                [precision] => ExactNumberInfo::Precision(precision.parse().unwrap()),
+                                [precision, scale] => ExactNumberInfo::PrecisionAndScale(precision.parse().unwrap(), scale.parse().unwrap()),
+                                any => panic!("Unknown number precision: {:?}", any),
+                            }),  // ignore precision
+                        DataType::Custom(id, props) if format!("{}", id).to_lowercase().as_str() == "varchar2"
+                            => DataType::Varchar(match props.as_slice() {
+                                [] => None,
+                                [length] => Some(CharacterLength::IntegerLength { length: length.parse().unwrap(), unit: None }),
+                                any => panic!("Unknown varchar2 props: {:?}", any),
+                            }),  // ignore precision
                         DataType::Datetime(precision) => DataType::Timestamp(precision, TimezoneInfo::None),
-                        DataType::Custom(id, _) if format!("{}", id).to_lowercase().as_str() == "varchar2"
-                            => DataType::Varchar(None),  // ignore precision
-                        DataType::Custom(id, _) if format!("{}", id).to_lowercase().as_str() == "number"
-                            => DataType::Numeric(ExactNumberInfo::None),  // ignore precision
                         DataType::Double => DataType::Numeric(ExactNumberInfo::None),
                         DataType::Int(_) => DataType::Int(None), // psql does not support precision of Int
                         DataType::BigInt(_) => DataType::BigInt(None), // psql does not support precision of BigInt
                         DataType::UnsignedMediumInt(p) => DataType::Integer(p), // closest alternative
-                        DataType::UnsignedSmallInt(p) => DataType::SmallInt(p), // closest alternative
+                        DataType::UnsignedSmallInt(p) => DataType::Integer(p), // closest alternative
                         DataType::UnsignedTinyInt(p) => DataType::SmallInt(p), // closest alternative
                         DataType::Custom(id, _) if format!("{}", id).to_lowercase().as_str() == "year"
                             => DataType::Integer(None),
@@ -354,25 +379,6 @@ impl PostgreSQLErrorFilter {
             any => panic!("No in-between sequence for the {:?} filter", any),
         }
     }
-
-    fn check_get_inbetween(&self, err_str: &str) -> (bool, Option<String>) {
-        let cut_ind = err_str.find("\nHINT: ").unwrap_or(err_str.len());
-        match &self.filter_kind {
-            PostgreSQLErrorFilterKind::StartEnd { starts_with, ends_with } => {
-                if err_str.starts_with(starts_with) && err_str[0..cut_ind].ends_with(ends_with) {
-                    (true, Some(
-                        err_str[0..cut_ind]
-                            .strip_prefix(starts_with).unwrap()
-                            .strip_suffix(ends_with).unwrap()
-                            .to_string()
-                    ))
-                } else {
-                    (false, None)
-                }
-            },
-            _ => (self.check(err_str), None),
-        }
-    }
 }
 
 impl fmt::Display for PostgreSQLErrorFilter {
@@ -555,15 +561,17 @@ pub fn test_syntax_coverage(config: Config) {
         config.syntax_coverage_config.spider_tables_json_path
     ).unwrap().as_str()).unwrap();
 
+    // schemas that were manually fixed.
     let manually_fixed = [
-        "restaurants", "yelp", "sakila_1", "flight_4", "soccer_1", "customers_campaigns_ecommerce", "sports_competition", "store_1", "college_1", "products_for_hire", "world_1"
+        "restaurants", "yelp", "sakila_1", "flight_4", "soccer_1", "customers_campaigns_ecommerce",
+        "sports_competition", "store_1", "college_1", "products_for_hire", "world_1"
     ];
 
     let dbs = dbs.into_iter().map(|db| {
         let schema_path = config.syntax_coverage_config.spider_schemas_folder.join(format!("{}.sql", db.db_id));
-        let schema_str = fs::read_to_string(schema_path).unwrap().replace("PRAGMA", "-- PRAGMA");
-        let database = DatabaseSchema::parse_schema_string_and_adapt_sqlite(schema_str);
-        (db.db_id, database)
+        let schema_str = fs::read_to_string(schema_path).unwrap();
+        let database = DatabaseSchema::parse_schema_string_and_adapt_sqlite(schema_str.clone());
+        (db.db_id, database, schema_str)
     }).collect_vec();
 
     let queries: Vec<SpiderQuery> = serde_json::from_str(fs::read_to_string(
@@ -572,80 +580,36 @@ pub fn test_syntax_coverage(config: Config) {
 
     create_or_ensure_user_exists().unwrap();
 
+    let do_schema_conversion = config.syntax_coverage_config.modification_level != SyntaxCoverageModificationLevel::None;
+    let do_schema_fixes = ![
+        SyntaxCoverageModificationLevel::None, SyntaxCoverageModificationLevel::Conversion
+    ].contains(&config.syntax_coverage_config.modification_level);
+    let do_query_fixes = config.syntax_coverage_config.modification_level == SyntaxCoverageModificationLevel::ConversionSchemaFixesQueryFixes;
+
+    // number of databases
+    let n_dbs = dbs.len();
     let mut do_break = false;
+    // number of duplicate queries (not included in n_total)
     let mut n_duplicates = 0usize;
-    let mut n_incorrect_schema = 0usize;
+    // number of queries that were accepted
     let mut n_ok = 0usize;
     // does not include duplicates
     let mut n_total = 0usize;
+    // number of errors caused by sqlparser-rs
+    // when postgresql accepted the query
     let mut n_parse_err = 0usize;
-    let mut psql_query_errors = PostgreSQLErrors::with_filters(vec![
-        PostgreSQLErrorFilter::starts_ends("db error: ERROR: column ", " does not exist").add_fix(Box::new(|_self, query_str, err_str| {
-            let column_name = _self.get_inbetween(&err_str);
-            if let Some(unquoted) = column_name.strip_prefix("\"").and_then(|column_name| column_name.strip_suffix("\"")) {
-                vec![
-                    // for when it was actually a column name in ""
-                    query_str.replace(column_name.as_str(), unquoted),
-                    // for when it was actually a string in ""
-                    query_str.replace(column_name.as_str(), format!("'{unquoted}'").as_str()),
-                ]
-            } else {
-                vec![]
-            }
-        })),
-        PostgreSQLErrorFilter::starts_ends("db error: ERROR: column ", " must appear in the GROUP BY clause or be used in an aggregate function").add_fix(
-            Box::new(|_self, query_str, err_str| {
-                let column_name = _self.get_inbetween(&err_str);
-                let mut altered = false;
-                let mut query_ast = string_to_query(query_str.as_str()).unwrap();
-                if let Some(unquoted) = column_name.strip_prefix("\"").and_then(|column_name| column_name.strip_suffix("\"")) {
-                    if let SetExpr::Select(select) = &mut *query_ast.body {
-                        if let GroupByExpr::Expressions(group_by_exprs) = &mut select.group_by {
-                            group_by_exprs.push(Expr::CompoundIdentifier(unquoted.split('.').into_iter().map(
-                                |x| Ident::new(x)
-                            ).collect()));
-                            altered = true;
-                        }
-                    }
-                }
-                if altered {
-                    vec![format!("{query_ast}")]
-                } else {
-                    vec![]
-                }
-            }
-        )),
-        PostgreSQLErrorFilter::starts_ends("db error: ERROR: relation ", " does not exist"),
-        PostgreSQLErrorFilter::contains("db error: ERROR: for SELECT DISTINCT, ORDER BY expressions must appear in select list"),
-        PostgreSQLErrorFilter::contains("db error: ERROR: function avg(character varying) does not exist"),
-        PostgreSQLErrorFilter::contains("db error: ERROR: function avg(character) does not exist"),
-        PostgreSQLErrorFilter::contains("db error: ERROR: function avg(text) does not exist"),
-        PostgreSQLErrorFilter::contains("db error: ERROR: function sum(character varying) does not exist"),
-        PostgreSQLErrorFilter::contains("db error: ERROR: function sum(character) does not exist"),
-        PostgreSQLErrorFilter::contains("db error: ERROR: function sum(text) does not exist"),
-        PostgreSQLErrorFilter::contains_sequence(&["db error: ERROR: operator does not exist: ", " > ", ""]),
-        PostgreSQLErrorFilter::contains_sequence(&["db error: ERROR: operator does not exist: ", " >= ", ""]),
-        PostgreSQLErrorFilter::contains_sequence(&["db error: ERROR: operator does not exist: ", " = ", ""]),
-        PostgreSQLErrorFilter::contains_sequence(&["db error: ERROR: operator does not exist: ", " <= ", ""]),
-        PostgreSQLErrorFilter::contains_sequence(&["db error: ERROR: operator does not exist: ", " < ", ""]),
-        PostgreSQLErrorFilter::contains("db error: ERROR: syntax error at or near \"INTERSECT\""),
-        PostgreSQLErrorFilter::contains("db error: ERROR: syntax error at or near \"GROUP\""),
-        PostgreSQLErrorFilter::contains("db error: ERROR: syntax error at or near \"WHERE\""),
-        PostgreSQLErrorFilter::contains("db error: ERROR: syntax error at or near \";\""),
-        PostgreSQLErrorFilter::contains("db error: ERROR: subquery in FROM must have an alias"),
-        PostgreSQLErrorFilter::contains("db error: ERROR: missing FROM-clause entry for table "),
-        PostgreSQLErrorFilter::contains_sequence(&["db error: ERROR: invalid input syntax for type ", ": \"", "\""]),
-    ]);
-    
-    let debug_filter = PostgreSQLErrorFilter::starts_ends("db error: ERROR: column ", " must appear in the GROUP BY clause or be used in an aggregate function");
-    let mut info_set = BTreeSet::new();
+    // number queries that failed because reviewed_schemas were not fixed.
+    let mut n_unfixed_schemas = 0usize;
 
+    // number of schemas that were reordered, separate from the psql_schema_errors
+    let mut n_reordered_schemas = 0usize;
     let mut psql_schema_errors = PostgreSQLErrors::with_filters(vec![
         PostgreSQLErrorFilter::contains_sequence(&[
             "db error: ERROR: foreign key constraint", "cannot be implemented",
             "Key columns", "and", "are of incompatible types:", "and", "."
-        ]).add_fix(Box::new(|_self, statements_str, error_str| {
-            
+        ]).add_fix(Box::new(move |_self, statements_str, error_str| {
+            // this belongs to the schema conversion category
+
             let inbetween_sequence = _self.get_inbetween_sequence(&error_str);
             let (column_name_1, column_name_2, type_1, type_2) = inbetween_sequence.into_iter().skip(3).take(4).collect_tuple().unwrap();
             // these will be in lowercase
@@ -708,7 +672,9 @@ pub fn test_syntax_coverage(config: Config) {
         })),
         PostgreSQLErrorFilter::contains_sequence(
             &["db error: ERROR: there is no unique constraint matching given keys for referenced table \"", "\""]
-        ).add_fix(Box::new(|_self, statements_str, error_str| {
+        ).add_fix(Box::new(move |_self, statements_str, error_str| {
+            // this belongs to the schema conversion category
+
             let inbetween_sequence = _self.get_inbetween_sequence(&error_str);
             let foreign_table_name = IdentName::from(Ident::new(inbetween_sequence.into_iter().skip(1).next().unwrap()));
 
@@ -757,7 +723,10 @@ pub fn test_syntax_coverage(config: Config) {
         })),
         PostgreSQLErrorFilter::contains_sequence(&[
             "db error: ERROR: column \"", "\" referenced in foreign key constraint does not exist"
-        ]).add_fix(Box::new(|_self, statements_str, error_str| {
+        ]).add_fix(Box::new(move |_self, statements_str, error_str| {
+            // this is a schema fix
+            if !do_schema_fixes { return vec![] }
+
             let inbetween_sequence = _self.get_inbetween_sequence(&error_str);
             let err_foreign_column_name = IdentName::from(Ident::new(inbetween_sequence.into_iter().skip(1).next().unwrap()));
 
@@ -808,7 +777,71 @@ pub fn test_syntax_coverage(config: Config) {
             }
         })),
     ]);
-    let incorrect_schemas = [
+
+    let mut psql_query_errors = PostgreSQLErrors::with_filters(vec![
+        PostgreSQLErrorFilter::starts_ends("db error: ERROR: column ", " does not exist").add_fix(Box::new(move |_self, query_str, err_str| {
+            if !do_query_fixes { return vec![] }
+
+            let column_name = _self.get_inbetween(&err_str);
+            if let Some(unquoted) = column_name.strip_prefix("\"").and_then(|column_name| column_name.strip_suffix("\"")) {
+                vec![
+                    // for when it was actually a column name in ""
+                    query_str.replace(column_name.as_str(), unquoted),
+                    // for when it was actually a string in ""
+                    query_str.replace(column_name.as_str(), format!("'{unquoted}'").as_str()),
+                ]
+            } else {
+                vec![]
+            }
+        })),
+        PostgreSQLErrorFilter::starts_ends("db error: ERROR: column ", " must appear in the GROUP BY clause or be used in an aggregate function").add_fix(
+            Box::new(move |_self, query_str, err_str| {
+                if !do_query_fixes { return vec![] }
+
+                let column_name = _self.get_inbetween(&err_str);
+                let mut altered = false;
+                let mut query_ast = string_to_query(query_str.as_str()).unwrap();
+                if let Some(unquoted) = column_name.strip_prefix("\"").and_then(|column_name| column_name.strip_suffix("\"")) {
+                    if let SetExpr::Select(select) = &mut *query_ast.body {
+                        if let GroupByExpr::Expressions(group_by_exprs) = &mut select.group_by {
+                            group_by_exprs.push(Expr::CompoundIdentifier(unquoted.split('.').into_iter().map(
+                                |x| Ident::new(x)
+                            ).collect()));
+                            altered = true;
+                        }
+                    }
+                }
+                if altered {
+                    vec![format!("{query_ast}")]
+                } else {
+                    vec![]
+                }
+            }
+        )),
+        PostgreSQLErrorFilter::starts_ends("db error: ERROR: relation ", " does not exist"),
+        PostgreSQLErrorFilter::contains("db error: ERROR: for SELECT DISTINCT, ORDER BY expressions must appear in select list"),
+        PostgreSQLErrorFilter::contains("db error: ERROR: function avg(character varying) does not exist"),
+        PostgreSQLErrorFilter::contains("db error: ERROR: function avg(character) does not exist"),
+        PostgreSQLErrorFilter::contains("db error: ERROR: function avg(text) does not exist"),
+        PostgreSQLErrorFilter::contains("db error: ERROR: function sum(character varying) does not exist"),
+        PostgreSQLErrorFilter::contains("db error: ERROR: function sum(character) does not exist"),
+        PostgreSQLErrorFilter::contains("db error: ERROR: function sum(text) does not exist"),
+        PostgreSQLErrorFilter::contains_sequence(&["db error: ERROR: operator does not exist: ", " > ", ""]),
+        PostgreSQLErrorFilter::contains_sequence(&["db error: ERROR: operator does not exist: ", " >= ", ""]),
+        PostgreSQLErrorFilter::contains_sequence(&["db error: ERROR: operator does not exist: ", " = ", ""]),
+        PostgreSQLErrorFilter::contains_sequence(&["db error: ERROR: operator does not exist: ", " <= ", ""]),
+        PostgreSQLErrorFilter::contains_sequence(&["db error: ERROR: operator does not exist: ", " < ", ""]),
+        PostgreSQLErrorFilter::contains("db error: ERROR: syntax error at or near \"INTERSECT\""),
+        PostgreSQLErrorFilter::contains("db error: ERROR: syntax error at or near \"GROUP\""),
+        PostgreSQLErrorFilter::contains("db error: ERROR: syntax error at or near \"WHERE\""),
+        PostgreSQLErrorFilter::contains("db error: ERROR: syntax error at or near \";\""),
+        PostgreSQLErrorFilter::contains("db error: ERROR: subquery in FROM must have an alias"),
+        PostgreSQLErrorFilter::contains("db error: ERROR: missing FROM-clause entry for table "),
+        PostgreSQLErrorFilter::contains_sequence(&["db error: ERROR: invalid input syntax for type ", ": \"", "\""]),
+    ]);
+
+    // was useful in debugging process
+    let reviewed_schemas = [
         "race_track", "academic", "phone_market", "student_assessment",
         "city_record", "imdb", "dorm_1", "shop_membership", "concert_singer",
         "museum_visit", "baseball_1", "architecture", "party_people",
@@ -817,12 +850,15 @@ pub fn test_syntax_coverage(config: Config) {
         "voter_1", "yelp", "loan_1", "cre_Drama_Workshop_Groups", "car_1",
         "phone_1", "wrestler"
     ];
-    let mut n_reordered_schemas = 0usize;
-    let n_dbs = dbs.len();
 
+    // the queries not accepted by the generator
     let mut failed_queries = vec![];
 
-    for (db_id, db) in dbs.into_iter() {
+    // number of queriws that were not accepted by postgres. Includes queries that
+    // were fixed manually but initially were also not accepted.
+    let mut n_schemas_were_not_accepted = 0usize;
+
+    for (db_id, db, original_schema) in dbs.into_iter() {
         eprint!("Testing: {} / {} ({n_ok} / {n_total} OK)   \r", n_duplicates + n_total, queries.len());
         
         let db_queries = queries.iter().filter_map(
@@ -833,41 +869,69 @@ pub fn test_syntax_coverage(config: Config) {
         n_duplicates += queries.iter().filter(|sq| sq.db_id == db_id).count() - db_queries.len();
         n_total += db_queries.len();
 
+        if manually_fixed.contains(&db_id.as_str()) && !do_schema_fixes {
+            n_schemas_were_not_accepted += db_queries.len();
+            continue;
+        }
+
         let db_name = format!("query_test_user_{db_id}").to_lowercase();
         drop_database_if_exists(&db_name).unwrap();
 
-        let fixed_schema = match create_schema_try_reorder_try_fix(&db_name, &db.table_defs, &mut psql_schema_errors) {
-            PostgreSQLErrorAction::RecognisedError(..) => {
-                assert!(incorrect_schemas.contains(&db_id.as_str()));
-                n_incorrect_schema += db_queries.len();
-                continue;
-            },
-            PostgreSQLErrorAction::UnrecognisedError(err_str) => {
-                eprintln!("\nDB ID: {db_id}");
-                eprintln!("Error: {err_str}");
-                if !incorrect_schemas.contains(&db_id.as_str()) {
-                    eprintln!("\n\nDB: {db_id}");
-                    eprintln!("Schema:\n{}", db.get_schema_string());
-                    eprintln!("PostgreSQL error: {err_str}");
-                    // eprintln!("AST:\n{}", db.table_defs.iter().map(|td| format!("{:#?}", td)).join("\n\n"));
-                    break;
-                } else {
+        let fixed_schema = if do_schema_conversion {
+            match create_schema_try_reorder_try_fix(&db_name, &db.table_defs, &mut psql_schema_errors) {
+                PostgreSQLErrorAction::RecognisedError(..) => {
+                    assert!(reviewed_schemas.contains(&db_id.as_str()));
+                    n_unfixed_schemas += db_queries.len();
                     continue;
-                }
-            },
-            PostgreSQLErrorAction::Ok(fixed_schema) => {
-                if fixed_schema.starts_with("-- NOTE: schema was reordered") {
-                    n_reordered_schemas += 1;
-                }
-                fixed_schema
-            },
+                },
+                PostgreSQLErrorAction::UnrecognisedError(err_str) => {
+                    eprintln!("\nDB ID: {db_id}");
+                    eprintln!("Error: {err_str}");
+                    if !reviewed_schemas.contains(&db_id.as_str()) {
+                        eprintln!("\n\nDB: {db_id}");
+                        eprintln!("Schema:\n{}", db.get_schema_string());
+                        eprintln!("PostgreSQL error: {err_str}");
+                        // eprintln!("AST:\n{}", db.table_defs.iter().map(|td| format!("{:#?}", td)).join("\n\n"));
+                        break;
+                    } else {
+                        continue;
+                    }
+                },
+                PostgreSQLErrorAction::Ok(fixed_schema) => {
+                    if fixed_schema.starts_with("-- NOTE: schema was reordered") {
+                        n_reordered_schemas += 1;
+                    }
+                    fixed_schema
+                },
+            }
+        } else {
+            original_schema
         };
 
-        let mut client = connect_to_db(&db_name).unwrap();
+        let mut client = if do_schema_conversion {
+            let client = connect_to_db(&db_name).unwrap();
+            client
+        } else {
+            let client = create_database_and_connect(&db_name).unwrap();
+            client
+        };
 
-        client.batch_execute(fixed_schema.as_str()).unwrap();
+        if let Err(err) = client.batch_execute(&fixed_schema) {
+            if do_schema_conversion {
+                panic!("Schemas were supposed to be fixed, but this one failed:\n{fixed_schema}\n\nError:{err}")
+            } else {
+                n_schemas_were_not_accepted += db_queries.len();
+                client.close().unwrap();
+                drop_database_if_exists(&db_name).unwrap();
+                continue
+            }
+        }
 
-        let db = DatabaseSchema::parse_schema_string_and_adapt_sqlite(fixed_schema);
+        let db = if do_schema_conversion {
+            DatabaseSchema::parse_schema_string_and_adapt_sqlite(fixed_schema)
+        } else {
+            DatabaseSchema::parse_schema_string(fixed_schema)
+        };
 
         let mut path_generator = PathGenerator::new(
             db.clone(), &config.chain_config,
@@ -884,12 +948,7 @@ pub fn test_syntax_coverage(config: Config) {
         for query_str in db_queries {
 
             let query_str = match psql_query_errors.try_query(&mut client, &query_str, true) {
-                PostgreSQLErrorAction::RecognisedError(err_str) => {
-                    if let (true, Some(col_name)) = debug_filter.check_get_inbetween(&err_str) {
-                        info_set.insert(col_name[1..col_name.len()-1].to_string());
-                    }
-                    continue;
-                },
+                PostgreSQLErrorAction::RecognisedError(..) => continue,
                 PostgreSQLErrorAction::UnrecognisedError(err_str) => {
                     eprintln!("\n\nDB: {db_id}");
                     eprintln!("Query: {query_str}");
@@ -945,27 +1004,28 @@ pub fn test_syntax_coverage(config: Config) {
         }
     }
 
-    // println!("Info set:\n    {}", info_set.into_iter().join("\n    "));
     println!("\n\nQuery error summary:");
     
     println!("{n_ok} / {n_total} converted succesfully ({:.2}%)", 100f64 * n_ok as f64 / n_total as f64);
     println!("{n_parse_err} / {n_total} parse errors ({:.2}%)", 100f64 * n_parse_err as f64 / n_total as f64);
-
-    println!("\n{n_incorrect_schema} / {n_total} incorrect schemas ({:.2}%)", 100f64 * n_incorrect_schema as f64 / n_total as f64);
-    println!("Schema errors include:");
+    
+    println!("\n{n_schemas_were_not_accepted} / {n_total} queries did not run because postgresql did not accept the schemas ({:.2}%)", 100f64 * n_schemas_were_not_accepted as f64 / n_total as f64);
+    println!("\n{n_unfixed_schemas} / {n_total} queries did not run because incorrect schemas were not fixed ({:.2}%)", 100f64 * n_unfixed_schemas as f64 / n_total as f64);
+    println!("Unfixed schema errors include:");
     psql_schema_errors.print_stats(n_dbs);
 
     println!("\nOther Postgres Errors:");
     psql_query_errors.print_stats(n_total);
     
     let n_rest: usize = n_total
+        - n_schemas_were_not_accepted
         - n_ok
         - n_parse_err
-        - n_incorrect_schema
+        - n_unfixed_schemas
         - psql_query_errors.total_errors();
     println!("\nOther convertion errors (AST2Path): {n_rest} / {n_total} ({:.2}%)", 100f64 * n_rest as f64 / n_total as f64);
 
-    let n_valid = n_total - psql_query_errors.total_errors() - n_incorrect_schema;
+    let n_valid = n_total - psql_query_errors.total_errors() - n_unfixed_schemas - n_schemas_were_not_accepted;
     println!("\nIn total, {n_ok}/{n_valid} ({:.2}%) of valid queries were converted", 100f64 * n_ok as f64 / n_valid as f64);
 
     println!("\nOut of schemas, {n_reordered_schemas}/{n_dbs} ({:.2}%) were reordered", 100f64 * n_reordered_schemas as f64 / n_dbs as f64);

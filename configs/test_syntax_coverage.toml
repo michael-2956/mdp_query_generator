@@ -22,6 +22,7 @@ schema_path="schema/tpc-h_tables.sql"
 
 
 [syntax_coverage]
+modification_level="ConversionSchemaFixesQueryFixes"  # None, Conversion, ConversionSchemaFixes, ConversionSchemaFixesQueryFixes
 spider_tables_json_path="/Users/mykhailo/Downloads/spider/tables.json"
 spider_queries_json_path="/Users/mykhailo/Downloads/spider/train_spider.json"
 # spider_schemas_folder="/Users/mykhailo/Downloads/spider/schemas/"
