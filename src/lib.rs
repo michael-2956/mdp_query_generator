@@ -1,3 +1,4 @@
+pub mod rl_env;
 pub mod config;
 pub mod programs;
 pub mod training;

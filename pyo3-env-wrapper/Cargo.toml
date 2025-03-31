@@ -1,0 +1,13 @@
+[package]
+name = "pyo3-env-wrapper"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "pyo3_env_wrapper"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = "0.24.0"
+equivalence_testing = { path = ".." }
