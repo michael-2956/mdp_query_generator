@@ -1,12 +1,15 @@
+import sys
 import sqlparse
 
-raw = ""
-while True:
-    try:
-        raw += f"{input()}\n"
-    except:
-        break
+# raw = ""
+# while True:
+#     try:
+#         raw += f"{input()}\n"
+#         print(len(raw))
+#     except:
+#         break
 
+raw = open(sys.argv[1], "r").read()
 statements = raw.split(';')
 
 num_characters = 0

@@ -556,7 +556,8 @@ fn create_schema_try_reorder_try_fix(db_name: &String, table_defs: &Vec<CreateTa
     }
 }
 
-pub fn test_syntax_coverage(config: Config) {
+/// tests syntax coverage on Spider
+pub fn test_spider_syntax_coverage(config: Config) {
     let dbs: Vec<SpiderDatabase> = serde_json::from_str(fs::read_to_string(
         config.syntax_coverage_config.spider_tables_json_path
     ).unwrap().as_str()).unwrap();
@@ -1033,4 +1034,64 @@ pub fn test_syntax_coverage(config: Config) {
     println!("\nIn total, {n_duplicates} / {} ({:.2}%) of queries were duplicates", n_duplicates + n_total, 100f64 * n_duplicates as f64 / (n_duplicates + n_total) as f64);
 
     println!("Failed queries:\n    {}", failed_queries.into_iter().join("\n    "));
+}
+
+/// tests syntax coverage on TPC-H and TPC-DS
+fn text_tpc_syntax_coverage(config: Config) {
+
+    // query conversions:
+    // top 100 -> limit 100
+    // interval '14 days' instead of 14 days
+    // aliases required for subqueries
+
+    // let db = DatabaseSchema::parse_schema_string(schema_str);
+
+    // let mut path_generator = PathGenerator::new(
+    //     db.clone(), &config.chain_config,
+    //     config.generator_config.aggregate_functions_distribution.clone(),
+    // ).unwrap();
+
+    // let query_str = "select \"role_description\" from \"Roles2\";";
+    // // let query_str = "select \"RoleCode\" from Roles2;";
+
+    // let statements = Parser::parse_sql(&PostgreSqlDialect {}, query_str).unwrap();
+
+    // let query = unwrap_variant!(statements.into_iter().next().unwrap(), Statement::Query);
+
+    // println!("Query: {query_str}");
+    // let path = match path_generator.get_query_path(&query) {
+    //     Ok(path) => {
+    //         println!("Convertion successful!");
+    //         path
+    //     },
+    //     Err(err) => {
+    //         println!("Error: {err}");
+    //         return;
+    //     },
+    // };
+
+    // let mut path_query_generator = QueryGenerator::<MaxProbStateChooser>::from_state_generator_and_config_with_schema(
+    //     MarkovChainGenerator::with_config(&config.chain_config).unwrap(),
+    //     db,
+    //     config.generator_config,
+    //     Box::new(PathModel::empty())
+    // );
+
+    // let generated_query = path_query_generator.generate_with_substitute_model_and_value_chooser(
+    //     Box::new(PathModel::from_path_nodes(&path)),
+    //     Box::new(DeterministicValueChooser::from_path_nodes(&path))
+    // );
+
+    // if generated_query == *query {
+    //     println!("Query match successful!");
+    //     println!("Matched query: {generated_query}");
+    // } else {
+    //     println!("Query mismatch!");
+    //     println!("Matched query: {generated_query}");
+    // }
+}
+
+pub fn test_syntax_coverage(config: Config) {
+    // test_spider_syntax_coverage(config.clone());
+    text_tpc_syntax_coverage(config);
 }

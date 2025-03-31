@@ -56,6 +56,10 @@ fn run_generation<StC: StateChooser>(
                 println!("\n{};\n", query_string);
             }
         }
+        // i += 1;
+        // if print_queries {
+        //     println!("\n{};\n", query_string);
+        // }
 
         if config.main_config.count_equivalence {
             num_equivalent += check_query(Box::new(query_ast)) as usize;

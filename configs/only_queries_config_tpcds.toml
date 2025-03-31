@@ -17,7 +17,7 @@ print_progress=true
 
 [semantic_correctness]
 n_tests=10000
-schema_path="schema/tpc-h_tables.sql"
+schema_path="tpc_queries/tpcds/schema.sql"
 
 [syntax_coverage]
 modification_level="ConversionSchemaFixesQueryFixes"  # None, Conversion, ConversionSchemaFixes, ConversionSchemaFixesQueryFixes
@@ -48,7 +48,7 @@ print_weights_after_training=false
 
 [ast_to_path_testing]
 # schema for the testing queries generation
-testing_schema="schema/tpc-h_tables.sql"
+testing_schema="tpc_queries/tpcds/schema.sql"
 # number of tests
 n_tests=10
 # run tests in parallel
@@ -59,7 +59,7 @@ parallel=false
 # training_db_path="training_dbs/untrained_db.sql"
 training_db_path="training_dbs/untrained_db_2_performance_graph_100K.sql"
 # schema of the training queries
-training_schema="schema/tpc-h_tables.sql"
+training_schema="tpc_queries/tpcds/schema.sql"
 # where to save model weights to
 save_weights_to="weights/fullcontext/unstacked/untrained_db_2_performance_graph_100K.mw"
 
@@ -72,7 +72,7 @@ print_queries=true
 # print the table schema after parcing
 print_schema=false
 # Path to the file with the database schema
-table_schema_path="schema/tpc-h_tables.sql"
+table_schema_path="tpc_queries/tpcds/schema.sql"
 # Which substitute model to use as a state selector. Can be: "anticall", "markov".
 # Assigns probabilities when the model fails to do so or is absent
 substitute_model="anticall"
