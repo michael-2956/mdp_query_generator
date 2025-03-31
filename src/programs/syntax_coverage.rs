@@ -1037,7 +1037,7 @@ pub fn test_spider_syntax_coverage(config: Config) {
 }
 
 /// tests syntax coverage on TPC-H and TPC-DS
-fn text_tpc_syntax_coverage(config: Config) {
+fn test_tpc_syntax_coverage(config: Config) {
 
     // query conversions:
     // top 100 -> limit 100
@@ -1093,5 +1093,5 @@ fn text_tpc_syntax_coverage(config: Config) {
 
 pub fn test_syntax_coverage(config: Config) {
     // test_spider_syntax_coverage(config.clone());
-    text_tpc_syntax_coverage(config);
+    test_tpc_syntax_coverage(config);
 }
