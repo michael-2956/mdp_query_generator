@@ -1,6 +1,6 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::atomic::AtomicPtr};
 
-use crate::query_creation::state_generator::markov_chain_generator::{markov_chain::NodeParams, StackFrame};
+use crate::query_creation::{query_generator::unwrap_query_ptr_unsafe, state_generator::markov_chain_generator::{markov_chain::NodeParams, StackFrame}};
 
 use super::{llm_prompts::LLMPrompts, ModelPredictionResult, PathwayGraphModel};
 
@@ -39,7 +39,7 @@ impl PathwayGraphModel for PromptTestingModel {
         Ok(())
     }
 
-    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, current_query_ast_opt: Option<&Query>) -> ModelPredictionResult {
+    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) -> ModelPredictionResult {
         if node_outgoing.len() == 1 {
             return ModelPredictionResult::Some(node_outgoing.into_iter().map(|p| (1f64, p)).collect());
         }
@@ -56,7 +56,7 @@ impl PathwayGraphModel for PromptTestingModel {
             ).collect())
         }
 
-        let current_query_str = format!("{}", current_query_ast_opt.unwrap());
+        let current_query_str = format!("{}", unwrap_query_ptr_unsafe(current_query_ast_ptr_opt));
         let current_node = &call_stack.last().unwrap().function_context.current_node.node_common.name;
 
         let mut pass = true;

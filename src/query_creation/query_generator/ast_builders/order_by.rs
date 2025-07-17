@@ -16,7 +16,7 @@ impl OrderByBuilder {
         }]  // the decision to include the clause is in the builder itself
     }
 
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, order_by: &mut Vec<OrderByExpr>
     ) {
         generator.expect_state("ORDER_BY");

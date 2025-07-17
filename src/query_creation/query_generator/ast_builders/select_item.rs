@@ -17,7 +17,7 @@ impl SelectItemBuilder {
         vec![SelectItem::UnnamedExpr(TypesBuilder::highlight())]
     }
 
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, projection: &mut Vec<SelectItem>
     ) {
         generator.expect_state("SELECT_item");

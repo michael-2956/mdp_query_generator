@@ -30,7 +30,7 @@ pub enum ValueSetterValue {
     NameAccessibilityOfSelectedTypes(NameAccessibilityOfSelectedTypesValue),
 }
 
-pub trait ValueSetter: Debug {
+pub trait ValueSetter: Debug + Send + Sync {
     /// returns value name
     fn get_value_name(&self) -> SmolStr;
 
@@ -39,7 +39,7 @@ pub trait ValueSetter: Debug {
 }
 
 /// Call modifier that relies on external (static in function scope) values
-pub trait StatelessCallModifier: Debug {
+pub trait StatelessCallModifier: Debug + Send + Sync {
     /// returns call modifier name
     fn get_name(&self) -> SmolStr;
 
@@ -50,7 +50,7 @@ pub trait StatelessCallModifier: Debug {
     fn run(&self, function_context: &FunctionContext, associated_value: Option<&ValueSetterValue>) -> bool;
 }
 
-pub trait StatefulCallModifier: Debug {
+pub trait StatefulCallModifier: Debug + Send + Sync {
     fn new() -> Box<dyn StatefulCallModifier> where Self : Sized;
 
     fn dyn_box_clone(&self) -> Box<dyn StatefulCallModifier>;

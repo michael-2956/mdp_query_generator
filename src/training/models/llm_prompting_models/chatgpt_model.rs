@@ -1,6 +1,6 @@
-use std::{collections::HashMap, env, fmt, hash::RandomState, path::PathBuf, time::Duration};
+use std::{collections::HashMap, env, fmt, hash::RandomState, path::PathBuf, sync::atomic::AtomicPtr, time::Duration};
 
-use crate::query_creation::{query_generator::{call_modifiers::WildcardRelationsValue, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, IdentName, Relation}, value_choosers::QueryValueChooser}, state_generator::{markov_chain_generator::{markov_chain::NodeParams, StackFrame}, subgraph_type::SubgraphType}};
+use crate::query_creation::{query_generator::{call_modifiers::WildcardRelationsValue, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, IdentName, Relation}, unwrap_query_ptr_unsafe, value_choosers::QueryValueChooser}, state_generator::{markov_chain_generator::{markov_chain::NodeParams, StackFrame}, subgraph_type::SubgraphType}};
 
 use super::{llm_prompts::LLMPrompts, ModelPredictionResult, PathwayGraphModel};
 
@@ -60,7 +60,7 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
         self.current_conversation = None;
     }
 
-    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, current_query_ast_opt: Option<&Query>) -> ModelPredictionResult {
+    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) -> ModelPredictionResult {
         // Keep the decision_context_by_depth the same length as the call stack
         assert!(call_stack.len() <= self.decision_context_by_depth.len());
         self.decision_context_by_depth.truncate(call_stack.len());
@@ -89,7 +89,7 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
 
         // Form the prompt
         let current_node_name = &call_stack.last().unwrap().function_context.current_node.node_common.name;
-        let current_query_str = format!("{}", current_query_ast_opt.unwrap());
+        let current_query_str = format!("{}", unwrap_query_ptr_unsafe(current_query_ast_ptr_opt));
         let (prompt, valid_options) = self.prompts_ref().generate_prompt(
             &current_query_str, current_node_name, &node_outgoing, decision_context
         ).unwrap();
@@ -328,8 +328,8 @@ impl ChatGPTPromptingModel {
 }
 
 impl QueryValueChooser for ChatGPTPromptingModel {
-    fn set_choice_query_ast(&mut self, current_query_ref: &Query) {
-       self.value_choice_query_str = Some(format!("{current_query_ref}"));
+    fn set_choice_query_ast(&mut self, current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) {
+       self.value_choice_query_str = Some(format!("{}", unwrap_query_ptr_unsafe(current_query_ast_ptr_opt)));
     }
 
     fn choose_from_alias(&mut self) -> Ident {

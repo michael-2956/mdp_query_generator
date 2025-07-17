@@ -4,7 +4,7 @@ use crate::query_creation::{query_generator::{match_next_state, QueryGenerator},
 pub struct TypesTypeBuilder { }
 
 impl TypesTypeBuilder {
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>
     ) -> SubgraphType {
         generator.expect_state("types_type");

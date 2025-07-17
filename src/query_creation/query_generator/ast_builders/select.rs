@@ -16,7 +16,7 @@ impl SelectBuilder {
         (None, SelectItemBuilder::highlight())
     }
 
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, distinct: &mut Option<Distinct>, projection: &mut Vec<SelectItem>
     ) {
         generator.expect_state("SELECT");

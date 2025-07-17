@@ -10,7 +10,7 @@ impl Val3Builder {
         TypesBuilder::highlight()
     }
 
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, val3: &mut Expr
     ) -> SubgraphType {
         generator.expect_state("VAL_3");

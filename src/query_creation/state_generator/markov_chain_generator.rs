@@ -5,7 +5,7 @@ pub mod subgraph_type;
 pub mod error;
 mod dot_parser;
 
-use std::{path::PathBuf, collections::{HashMap, HashSet, VecDeque, BTreeMap}, sync::{Arc, Mutex}, error::Error, fmt};
+use std::{collections::{BTreeMap, HashMap, HashSet, VecDeque}, error::Error, fmt, path::PathBuf, sync::{atomic::AtomicPtr, Arc, Mutex}};
 
 use core::fmt::Debug;
 use markov_chain::QueryTypes;
@@ -50,7 +50,7 @@ struct StatefulCallModifierCreator(fn() -> Box<dyn StatefulCallModifier>);
 /// probabilities, outputs states, disables nodes if
 /// needed.
 #[derive(Debug)]
-pub struct MarkovChainGenerator<StC: StateChooser> {
+pub struct MarkovChainGenerator<StC: StateChooser + Send + Sync> {
     markov_chain: MarkovChain,
     call_stack: Vec<StackFrame>,
     pending_call: Option<CallParams>,
@@ -560,7 +560,7 @@ impl CallModifierStates {
     }
 }
 
-impl<StC: StateChooser> MarkovChainGenerator<StC> {
+impl<StC: StateChooser + Send + Sync> MarkovChainGenerator<StC> {
     pub fn with_config(config: &StateGeneratorConfig) -> Result<Self, SyntaxError> {
         let chain = MarkovChain::parse_dot(&config.graph_file_path)?;
         let mut _self = MarkovChainGenerator::<StC> {
@@ -854,7 +854,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
             clause_context: &ClauseContext,
             substitute_model: &mut (impl SubstituteModel + ?Sized),
             predictor_model_opt: Option<&mut Box<dyn PathwayGraphModel>>,
-            current_query_ast_opt: Option<&Query>,
+            current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>,
         ) -> Result<(), StateGenerationError> {
         substitute_model.notify_call_stack_length(self.call_stack.len());
 
@@ -882,7 +882,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
 
         // probability distribution recorded in model
         let last_node_outgoing = if let Some(predictor_model) = predictor_model_opt {
-            predictor_model.predict(&self.call_stack, last_node_outgoing, current_query_ast_opt)
+            predictor_model.predict(&self.call_stack, last_node_outgoing, current_query_ast_ptr_opt)
         } else { ModelPredictionResult::None(last_node_outgoing) };
 
         // transform to log probabulities, if no model is present run a dynamic one
@@ -1024,13 +1024,13 @@ impl StateGenerationError {
     }
 }
 
-impl<StC: StateChooser> MarkovChainGenerator<StC> {
+impl<StC: StateChooser + Send + Sync> MarkovChainGenerator<StC> {
     pub fn next_node_name(
             &mut self, rng: &mut ChaCha8Rng,
             clause_context: &ClauseContext,
             substitute_model: &mut (impl SubstituteModel + ?Sized),
             predictor_model_opt: Option<&mut Box<dyn PathwayGraphModel>>,
-            current_query_ast_opt: Option<&Query>,
+            current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>,
         ) -> Result<Option<SmolStr>, StateGenerationError> {
         if let Some(call_params) = self.pending_call.take() {
             return Ok(Some(self.start_function(call_params, clause_context)));
@@ -1042,7 +1042,7 @@ impl<StC: StateChooser> MarkovChainGenerator<StC> {
         }
 
         let (is_an_exit, new_node_name) = {
-            self.update_current_node(rng, clause_context, substitute_model, predictor_model_opt, current_query_ast_opt)?;
+            self.update_current_node(rng, clause_context, substitute_model, predictor_model_opt, current_query_ast_ptr_opt)?;
 
             let stack_frame = self.call_stack.last_mut().unwrap();
 

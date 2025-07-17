@@ -15,7 +15,7 @@ impl SetItemBuilder {
 
     /// builds the last expression in current_set
     /// adds an another expression to current_set if desired
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, current_set: &mut Vec<Expr>
     ) {
         generator.expect_state("set_item");

@@ -13,7 +13,7 @@ impl GroupByBuilder {
         GroupByExpr::Expressions(vec![])
     }
 
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, group_by: &mut GroupByExpr
     ) {
         generator.expect_state("GROUP_BY");

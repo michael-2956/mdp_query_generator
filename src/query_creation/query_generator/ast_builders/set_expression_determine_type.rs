@@ -6,7 +6,7 @@ use crate::{query_creation::{query_generator::{ast_builders::types_type::TypesTy
 pub struct SetExpressionDetermineTypeBuilder { }
 
 impl SetExpressionDetermineTypeBuilder {
-    pub fn build<StC: StateChooser>(generator: &mut QueryGenerator<StC>) -> VecDeque<SubgraphType> {
+    pub fn build<StC: StateChooser + Send + Sync>(generator: &mut QueryGenerator<StC>) -> VecDeque<SubgraphType> {
         generator.expect_states(&["set_expression_determine_type", "call9_types_type"]);
         
         let (

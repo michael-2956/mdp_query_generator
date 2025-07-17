@@ -12,7 +12,7 @@ impl TextBuilder {
         TypesBuilder::highlight()
     }
 
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, text: &mut Expr
     ) -> SubgraphType {
         generator.expect_state("text");

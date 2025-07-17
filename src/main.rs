@@ -12,7 +12,7 @@ use equivalence_testing::{config::{Config, ProgramArgs}, equivalence_testing_fun
 
 use structopt::StructOpt;
 
-fn run_generation<StC: StateChooser>(
+fn run_generation<StC: StateChooser + Send + Sync>(
         markov_generator: MarkovChainGenerator<StC>, config: Config, sub_model: Box<dyn SubstituteModel>
     ) {
     let mut predictor_model = if config.generator_config.use_model {
@@ -82,7 +82,7 @@ fn run_generation<StC: StateChooser>(
     }
 }
 
-fn select_sub_model_and_run_generation<StC: StateChooser>(config: Config) {
+fn select_sub_model_and_run_generation<StC: StateChooser + Send + Sync>(config: Config) {
     let markov_generator = MarkovChainGenerator::<StC>::with_config(&config.chain_config).expect("Could not create generator!");
 
     let sub_model: Box<dyn SubstituteModel> = match config.generator_config.substitute_model_name.as_str() {

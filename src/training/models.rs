@@ -1,4 +1,4 @@
-use std::{io, path::PathBuf, str::FromStr};
+use std::{io, path::PathBuf, str::FromStr, sync::atomic::AtomicPtr};
 
 use sqlparser::ast::Query;
 
@@ -77,7 +77,7 @@ pub enum ModelPredictionResult {
     None(Vec<NodeParams>)
 }
 
-pub trait PathwayGraphModel {
+pub trait PathwayGraphModel: Send + Sync {
     /// initialize the model weights
     fn init_weights(&mut self) { }
 
@@ -127,7 +127,7 @@ pub trait PathwayGraphModel {
     fn start_inference(&mut self, _schema_string: String) { }
 
     /// predict the probability distribution over the outgoing nodes that are available
-    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, current_query_ast_opt: Option<&Query>) -> ModelPredictionResult;
+    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) -> ModelPredictionResult;
 
     /// end the inference process
     fn end_inference(&mut self) { }

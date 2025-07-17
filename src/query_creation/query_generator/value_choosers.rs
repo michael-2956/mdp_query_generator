@@ -1,3 +1,5 @@
+use std::sync::atomic::AtomicPtr;
+
 use rand::{distributions::{Distribution, WeightedIndex}, seq::SliceRandom, Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use sqlparser::ast::{DateTimeField, Ident, ObjectName, Query};
@@ -6,7 +8,7 @@ use crate::{query_creation::state_generator::subgraph_type::{ContainsSubgraphTyp
 
 use super::{call_modifiers::WildcardRelationsValue, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, IdentName, Relation}};
 
-pub trait QueryValueChooser {
+pub trait QueryValueChooser: Send + Sync {
     fn choose_table_name(&mut self, available_table_names: &Vec<ObjectName>) -> ObjectName;
 
     fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, check_accessibility: CheckAccessibility, column_retrieval_options: ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]);
@@ -40,7 +42,7 @@ pub trait QueryValueChooser {
     fn reset(&mut self);
 
     /// set the current query AST for the choice that's going to be taken next
-    fn set_choice_query_ast(&mut self, _current_query_ref: &Query) { }
+    fn set_choice_query_ast(&mut self, _current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) { }
 }
 
 pub struct RandomValueChooser {

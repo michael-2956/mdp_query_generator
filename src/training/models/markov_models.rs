@@ -1,4 +1,4 @@
-use std::{collections::{BTreeMap, HashMap}, fmt::Display, io, path::PathBuf};
+use std::{collections::{BTreeMap, HashMap}, fmt::Display, io, path::PathBuf, sync::atomic::AtomicPtr};
 
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -16,7 +16,7 @@ pub mod markov_weights;
 #[derive(Debug)]
 pub struct ModelWithMarkovWeights<FnCntxt>
 where
-    FnCntxt: ModelFunctionContext
+    FnCntxt: ModelFunctionContext + Send + Sync
 {
     weights: MarkovWeights<HashMap<FnCntxt, HashMap<SmolStr, HashMap<SmolStr, f64>>>>,
     weights_ready: bool,
@@ -26,7 +26,7 @@ where
 
 impl<FnCntxt> ModelWithMarkovWeights<FnCntxt>
 where
-    FnCntxt: ModelFunctionContext
+    FnCntxt: ModelFunctionContext + Send + Sync
 {
     pub fn new() -> Self {
         Self {
@@ -44,7 +44,7 @@ where
 
 impl<FnCntxt> PathwayGraphModel for ModelWithMarkovWeights<FnCntxt>
 where
-    FnCntxt: ModelFunctionContext + 'static
+    FnCntxt: ModelFunctionContext + 'static + Send + Sync
 {
     fn start_epoch(&mut self) {
         if self.weights_ready {
@@ -101,7 +101,7 @@ where
         self.weights.print();
     }
 
-    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, _current_query_ast_opt: Option<&Query>) -> ModelPredictionResult {
+    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, _current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) -> ModelPredictionResult {
         let context = &call_stack.last().unwrap().function_context;
         let func_name = FnCntxt::from_call_stack_and_exit_frame(call_stack, None);
         let current_node = &context.current_node.node_common.name;

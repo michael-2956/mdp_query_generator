@@ -23,7 +23,7 @@ impl SetExpressionBuilder {
         SetExpr::Select(Box::new(SelectQueryBuilder::highlight_type()))
     }
 
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, body: &mut SetExpr
     ) {
         generator.expect_state("set_expression");

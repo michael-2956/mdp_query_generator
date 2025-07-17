@@ -16,7 +16,7 @@ impl TypesBuilder {
         Expr::Identifier(Ident::new(""))
     }
     
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, expr: &mut Expr, type_assertion: TypeAssertion
     ) -> SubgraphType {
         Self::build_store_name(generator, expr, type_assertion).1
@@ -24,7 +24,7 @@ impl TypesBuilder {
 
     /// Returns the value name in addition to its type, useful when preserving
     /// column names of subqueries is important.
-    pub fn build_store_name<StC: StateChooser>(
+    pub fn build_store_name<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, expr: &mut Expr, type_assertion: TypeAssertion
     ) -> (Option<IdentName>, SubgraphType) {
         generator.expect_state("types");

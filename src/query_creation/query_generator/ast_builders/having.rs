@@ -12,7 +12,7 @@ impl HavingBuilder {
         TypesBuilder::highlight()
     }
 
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, having: &mut Expr
     ) {
         generator.expect_state("HAVING");

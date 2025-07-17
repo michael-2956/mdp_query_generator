@@ -19,7 +19,7 @@ impl FromItemBuilder {
         }
     }
 
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, from_item: &mut TableFactor
     ) {
         generator.expect_state("FROM_item");

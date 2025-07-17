@@ -12,7 +12,7 @@ impl LiteralsBuilder {
         TypesBuilder::highlight()
     }
 
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, expr: &mut Expr
     ) -> SubgraphType {
         generator.expect_state("literals");

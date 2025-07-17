@@ -82,7 +82,7 @@ impl QueryBuilder {
         query_with_setexpr(SetExpressionBuilder::highlight_type())
     }
 
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, query: &mut Query
     ) -> ClauseContextFrame {
         generator.substitute_model.notify_subquery_creation_begin();

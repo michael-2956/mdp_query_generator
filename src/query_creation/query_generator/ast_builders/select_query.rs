@@ -44,7 +44,7 @@ impl SelectQueryBuilder {
         select_set_expr(false)
     }
 
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, select_body: &mut Select
     ) {
         generator.expect_state("SELECT_query");

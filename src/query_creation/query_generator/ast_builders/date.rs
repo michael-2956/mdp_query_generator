@@ -12,7 +12,7 @@ impl DateBuilder {
         TypesBuilder::highlight()
     }
 
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, date: &mut Expr
     ) -> SubgraphType {
         generator.expect_state("date");

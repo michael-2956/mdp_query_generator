@@ -6,7 +6,7 @@ pub mod value_choosers;
 pub mod expr_precedence;
 pub mod aggregate_function_settings;
 
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::atomic::{AtomicPtr, Ordering}};
 
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -54,7 +54,7 @@ impl TomlReadable for QueryGeneratorConfig {
     }
 }
 
-pub struct QueryGenerator<StC: StateChooser> {
+pub struct QueryGenerator<StC: StateChooser + Send + Sync> {
     config: QueryGeneratorConfig,
     state_generator: MarkovChainGenerator<StC>,
     substitute_model: Box<dyn SubstituteModel>,
@@ -71,8 +71,8 @@ pub struct QueryGenerator<StC: StateChooser> {
     /// code to achieve that.
     /// 
     /// Basically we have to be able to have a look at the whole\
-    /// tree while also holding an &mut to some component of it.
-    current_query_raw_ptr: Option<*const Query>,
+    /// tree while also holding a &mut to some component of it.
+    current_query_raw_ptr: Option<AtomicPtr<Query>>,
 }
 
 pub trait Unnested {
@@ -121,7 +121,7 @@ macro_rules! value_chooser {
                 predictor_model
             } else { &mut *$generator.value_chooser }
         } else { &mut *$generator.value_chooser };
-        vc.set_choice_query_ast($generator.current_query_raw_ptr.map(|p| unsafe { &*p }).unwrap());
+        vc.set_choice_query_ast(&mut $generator.current_query_raw_ptr);
         vc
     }};
 }
@@ -138,7 +138,13 @@ pub fn highlight_ident() -> Ident {
     Ident::new(HIGHLIGHT_STR)
 }
 
-impl<StC: StateChooser> QueryGenerator<StC> {
+pub fn unwrap_query_ptr_unsafe(current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) -> &Query {
+    current_query_ast_ptr_opt.as_mut().map(
+        |p| unsafe { &*p.load(Ordering::Relaxed) }
+    ).unwrap()
+}
+
+impl<StC: StateChooser + Send + Sync> QueryGenerator<StC> {
     pub fn from_state_generator_and_config(state_generator: MarkovChainGenerator<StC>, config: QueryGeneratorConfig, substitute_model: Box<dyn SubstituteModel>) -> Self {
         Self::from_state_generator_and_config_with_schema(
             state_generator,
@@ -185,14 +191,14 @@ impl<StC: StateChooser> QueryGenerator<StC> {
             &mut self.clause_context,
             &mut *self.substitute_model,
             self.predictor_model.as_mut(),
-            self.current_query_raw_ptr.map(|p| unsafe { &*p }),
+            &mut self.current_query_raw_ptr,
         ).unwrap()
     }
 
     fn next_state(&mut self) -> SmolStr {
         let next_state = self.next_state_opt().unwrap();
         // eprintln!("{next_state}");
-        // eprintln!("{}\n", self.current_query_raw_ptr.map(|p| unsafe { &*p }).unwrap());
+        // eprintln!("{}\n", unwrap_query_ptr_unsafe(&mut self.current_query_raw_ptr)).unwrap());
         if let Some(ref mut model) = self.train_model {
             model.process_state(
                 self.state_generator.call_stack_ref(),
@@ -239,7 +245,7 @@ impl<StC: StateChooser> QueryGenerator<StC> {
         }
         let mut query = QueryBuilder::nothing();
 
-        self.current_query_raw_ptr = Some(&query);  // scary!
+        self.current_query_raw_ptr = Some(AtomicPtr::new(&mut query as *mut Query));  // scary!
         QueryBuilder::build(self, &mut query);
         self.current_query_raw_ptr.take();
 

@@ -50,7 +50,7 @@ impl TypesValueBuilder {
     }
 
     /// value may have a name if it comes from a subquery
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, types_value: &mut Expr, type_assertion: TypeAssertion
     ) -> (Option<IdentName>, SubgraphType) {
         let mut column_name = None;

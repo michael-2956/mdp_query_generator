@@ -8,7 +8,7 @@ use super::{markov_chain::NodeParams, StateGenerationError};
 
 
 /// Dynamic model for assigning probabilities when using ProbabilisticModel 
-pub trait SubstituteModel {
+pub trait SubstituteModel: Send + Sync {
     fn reset(&mut self);
     /// assigns the (unnormalized) log-probabilities to the outgoing nodes.
     /// Receives log-probability distruibution recorded in graph

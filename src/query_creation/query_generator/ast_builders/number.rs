@@ -12,7 +12,7 @@ impl NumberBuilder {
         TypesBuilder::highlight()
     }
 
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, number: &mut Expr
     ) -> SubgraphType {
         generator.expect_state("number");

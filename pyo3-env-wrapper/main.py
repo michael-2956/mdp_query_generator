@@ -9,13 +9,13 @@ from pyo3_env_wrapper.pyo3_env_wrapper import (
 )
 
 class ConstraintMeetingEnvironment(gym.Env):
-    def __init__(self, constraint: QueryConstraintWrapper):
+    def __init__(self, constraint: QueryConstraintWrapper, config_path: str):
         super().__init__()
         # Single integer observation
         self.observation_space = spaces.Box(low=-999, high=999, shape=(1,), dtype=np.int32)
         # 0..9
         self.action_space = spaces.Discrete(10)
-        self.env = ConstraintMeetingEnvironmentWrapper(constraint)
+        self.env = ConstraintMeetingEnvironmentWrapper(constraint, config_path)
 
     def reset(self):
         obs = self.env.reset()  # returns a Python list
@@ -30,7 +30,7 @@ def main():
     env = ConstraintMeetingEnvironment(QueryConstraintWrapper(
         ConstraintTypeWrapper.point(3.14),
         ConstraintMetricWrapper.cost()
-    ))
+    ), "/Users/mila/research/mdp_query_gen/mdp_query_generator/configs/rl_envoronment.toml")
     print(f"{env.reset() = }")
     for action in range(-10, 11):
         print(f"env.step({action}) = {env.step(action)}")

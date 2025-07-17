@@ -10,7 +10,7 @@ impl FromBuilder {
         vec![]  // the decision to include the clause is in the builder itself
     }
 
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, from: &mut Vec<TableWithJoins>
     ) {
         generator.expect_state("FROM");

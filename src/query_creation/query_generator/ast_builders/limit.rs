@@ -12,7 +12,7 @@ impl LimitBuilder {
         Some(TypesBuilder::highlight())
     }
 
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, limit: &mut Option<Expr>
     ) {
         generator.expect_state("LIMIT");

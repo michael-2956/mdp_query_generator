@@ -16,7 +16,7 @@ impl ListExprBuilder {
         vec![]
     }
 
-    pub fn build<StC: StateChooser>(
+    pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, list_expr: &mut Vec<Expr>
     ) -> SubgraphType {
         generator.expect_state("list_expr");
