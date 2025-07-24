@@ -1,5 +1,6 @@
 use std::{io, path::PathBuf, str::FromStr, sync::atomic::AtomicPtr};
 
+use smol_str::SmolStr;
 use sqlparser::ast::Query;
 
 use crate::{config::TomlReadable, query_creation::{query_generator::value_choosers::QueryValueChooser, state_generator::markov_chain_generator::{markov_chain::NodeParams, ChainStateCheckpoint, StackFrame}}};
@@ -127,13 +128,14 @@ pub trait PathwayGraphModel: Send + Sync {
     fn start_inference(&mut self, _schema_string: String) { }
 
     /// predict the probability distribution over the outgoing nodes that are available
-    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) -> ModelPredictionResult;
+    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, current_exit_node_name: &SmolStr, current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) -> ModelPredictionResult;
 
     /// end the inference process
     fn end_inference(&mut self) { }
 
     fn write_weights_to_dot(&self, _dot_file_path: &PathBuf) -> io::Result<()> { unimplemented!() }
 
+    /// this way models can select values themselves.
     fn as_value_chooser(&mut self) -> Option<&mut dyn QueryValueChooser> { None }
 
     fn add_checkpoint(&mut self, _chain_state_checkpoint: ChainStateCheckpoint) { }

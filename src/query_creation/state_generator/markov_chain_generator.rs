@@ -882,7 +882,9 @@ impl<StC: StateChooser + Send + Sync> MarkovChainGenerator<StC> {
 
         // probability distribution recorded in model
         let last_node_outgoing = if let Some(predictor_model) = predictor_model_opt {
-            predictor_model.predict(&self.call_stack, last_node_outgoing, current_query_ast_ptr_opt)
+            let stack_frame = self.call_stack.last().unwrap();
+            let function = self.markov_chain.functions.get(&stack_frame.function_context.call_params.func_name).unwrap();
+            predictor_model.predict(&self.call_stack, last_node_outgoing, &function.exit_node_name, current_query_ast_ptr_opt)
         } else { ModelPredictionResult::None(last_node_outgoing) };
 
         // transform to log probabulities, if no model is present run a dynamic one

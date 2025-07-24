@@ -683,6 +683,15 @@ impl MarkovChain {
             }
         }
     }
+
+    pub fn get_all_states(&self) -> Vec<String> {
+        self.functions.iter().flat_map(
+            |(_, v)|
+                v.chain.keys().map(|k| k.to_string()).chain(
+                    [v.exit_node_name.to_string()].into_iter()
+                ),
+        ).collect()
+    }
 }
 
 /// add a node to the current function graph & node_params map; Perform syntax checks for optional nodes

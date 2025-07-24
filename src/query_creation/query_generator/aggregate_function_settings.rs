@@ -37,7 +37,7 @@ fn parse_type_list(mut types_str: String) -> AggregateFunctionAgruments {
 impl AggregateFunctionDistribution {
     pub fn parse_file(file_path: PathBuf) -> AggregateFunctionDistribution {
         let content: HashMap<String, HashMap<String, HashMap<String, f64>>> = serde_json::from_str(
-            &fs::read_to_string(file_path).expect("Unable to read file")
+            &fs::read_to_string(file_path.clone()).expect(&format!("Unable to read file: {}", file_path.to_string_lossy()))
         ).unwrap();
         
         let mut func_map: HashMap<SubgraphType, HashMap<AggregateFunctionAgruments, BTreeMap<String, f64>>> = HashMap::new();
@@ -56,6 +56,16 @@ impl AggregateFunctionDistribution {
         AggregateFunctionDistribution {
             func_map,
         }
+    }
+
+    pub fn get_all_function_names(&self) -> Vec<String> {
+        self.func_map.iter().flat_map(
+            |(_, v)|
+            v.iter().flat_map(
+                |(_, v)|
+                v.iter().map(|(k, _)| k.clone())
+            )
+        ).collect()
     }
 
     pub fn get_functions_and_dist(&self, arguments: &AggregateFunctionAgruments, return_type: &SubgraphType) -> (Vec<&String>, WeightedIndex<f64>) {

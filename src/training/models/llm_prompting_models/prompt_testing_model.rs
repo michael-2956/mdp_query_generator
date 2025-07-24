@@ -4,6 +4,7 @@ use crate::query_creation::{query_generator::unwrap_query_ptr_unsafe, state_gene
 
 use super::{llm_prompts::LLMPrompts, ModelPredictionResult, PathwayGraphModel};
 
+use smol_str::SmolStr;
 use sqlparser::ast::Query;
 
 pub struct PromptTestingModel {
@@ -39,7 +40,7 @@ impl PathwayGraphModel for PromptTestingModel {
         Ok(())
     }
 
-    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) -> ModelPredictionResult {
+    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, _current_exit_node_name: &SmolStr, current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) -> ModelPredictionResult {
         if node_outgoing.len() == 1 {
             return ModelPredictionResult::Some(node_outgoing.into_iter().map(|p| (1f64, p)).collect());
         }

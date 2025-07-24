@@ -26,15 +26,19 @@ impl ConstraintMeetingEnvironmentWrapper {
         }
     }
 
-    /// Reset the environment (Gym-style). Returns the initial observation.
-    pub fn reset(&mut self) -> PyResult<Vec<i32>> {
+    /// Reset the environment Returns the initial observation \
+    /// and previous generated query if such exists
+    pub fn reset(&mut self) -> PyResult<(Vec<bool>, Option<String>)> {
         Ok(self.env.reset())
     }
 
-    /// Step the environment. Returns `(observation, reward, done, info)`.
-    /// In a real environment, `action` would affect `state` more interestingly.
-    pub fn step(&mut self, action: i32) -> PyResult<(Vec<i32>, f32, bool, Option<String>)> {
+    /// Step the environment. Returns `(mask, anticall_reward, terminated)`.
+    pub fn step(&mut self, action: Option<usize>) -> PyResult<(Option<Vec<bool>>, f32, bool)> {
         Ok(self.env.step(action))
+    }
+
+    pub fn pop_query(&mut self) -> PyResult<Option<String>> {
+        Ok(self.env.pop_query())
     }
 }
 

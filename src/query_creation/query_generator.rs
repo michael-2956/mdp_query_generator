@@ -269,7 +269,9 @@ impl<StC: StateChooser + Send + Sync> QueryGenerator<StC> {
     }
 
     /// generate the next query with the provided dynamic model and value choosers
-    pub fn generate_with_substitute_model_and_value_chooser(&mut self, substitute_model: Box<dyn SubstituteModel>, value_chooser: Box<dyn QueryValueChooser>) -> Query {
+    pub fn generate_with_substitute_model_and_value_chooser(
+        &mut self, substitute_model: Box<dyn SubstituteModel>, value_chooser: Box<dyn QueryValueChooser>
+    ) -> Query {
         self.substitute_model = substitute_model;
         self.value_chooser = value_chooser;
         self.generate()

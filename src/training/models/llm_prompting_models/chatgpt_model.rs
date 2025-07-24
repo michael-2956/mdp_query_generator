@@ -6,6 +6,7 @@ use super::{llm_prompts::LLMPrompts, ModelPredictionResult, PathwayGraphModel};
 
 use chatgpt::{client::ChatGPT, config::{ChatGPTEngine, ModelConfiguration}, converse::Conversation, types::CompletionResponse};
 use rand::distributions::WeightedIndex;
+use smol_str::SmolStr;
 use sqlparser::ast::{DateTimeField, Ident, ObjectName, Query};
 use tokio::runtime::{self, Runtime};
 
@@ -60,7 +61,7 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
         self.current_conversation = None;
     }
 
-    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) -> ModelPredictionResult {
+    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, _current_exit_node_name: &SmolStr, current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) -> ModelPredictionResult {
         // Keep the decision_context_by_depth the same length as the call stack
         assert!(call_stack.len() <= self.decision_context_by_depth.len());
         self.decision_context_by_depth.truncate(call_stack.len());
