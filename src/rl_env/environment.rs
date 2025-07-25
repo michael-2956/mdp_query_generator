@@ -100,11 +100,11 @@ impl ConstraintMeetingEnvironment {
     /// and makes the model and query generator available for spawning \
     /// an another generation process
     pub fn try_join_generator(&mut self) -> Result<Option<Query>, Box<dyn Any + Send>> {
-        if let Some(handle) = self.generator_handle.take() {
-            if !handle.is_finished() {
+        if self.generator_handle.is_some() {
+            if !self.generator_handle.as_ref().unwrap().is_finished() {
                 return Ok(None);
             }
-            let ((model, query), qg) = match handle.join() {
+            let ((model, query), qg) = match self.generator_handle.take().unwrap().join() {
                 Ok(r) => r,
                 Err(e) => {
                     match e.downcast::<String>() {
@@ -142,16 +142,23 @@ impl ConstraintMeetingEnvironment {
 
     /// restarts generation, returns original observation \
     /// and previous query string if available
-    pub fn reset(&mut self) -> (Vec<bool>, Option<String>) {
-        let query = self.try_join_generator().unwrap();
-        
+    pub fn reset(&mut self) -> (Option<Vec<bool>>, Option<String>) {
+        let query = match self.try_join_generator() {
+            Ok(query) => query,
+            Err(err) => panic!("Failed to join in reset(): {}", err.downcast::<String>().unwrap()),
+        };
+
+        if self.query_generator.is_none() || self.model.is_none() {  // cannot reset twice
+            return (None, query.map(|query| format!("{query}")))
+        }
+
         self.model.as_mut().unwrap().as_value_chooser().unwrap().reset();
         
         self.spawn_generator();
 
         let initial_obs = self.observation_rs.recv().unwrap().unwrap();
 
-        (initial_obs, query.map(|query| format!("{query}")))
+        (Some(initial_obs), query.map(|query| format!("{query}")))
     }
 
     /// Step the environment. Returns `(mask, anticall_reward, terminated)`.
@@ -162,7 +169,7 @@ impl ConstraintMeetingEnvironment {
 
         let obs = self.observation_rs.recv().unwrap();
 
-        let terminated = obs.is_none();
+        let terminated = obs.is_none();  // TODO: renew query generator and model after termination
 
         (obs, 0f32, terminated)  // TODO: anticall reward
     }

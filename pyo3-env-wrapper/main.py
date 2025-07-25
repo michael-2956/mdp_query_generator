@@ -19,12 +19,14 @@ class ConstraintMeetingEnvironment(gym.Env):
         self.max_steps = max_steps
         self.env = ConstraintMeetingEnvironmentWrapper(config_path)
 
-        self.previous_mask = self.env.reset()
+        self.previous_mask, _query_str_opt = self.env.reset()
         self.observation_space = spaces.MultiBinary(len(self.previous_mask))
         self.action_space = spaces.Discrete(len(self.previous_mask))
 
     def reset(self):
-        self.previous_mask, query_str_opt = self.env.reset()
+        previous_mask_or_none, query_str_opt = self.env.reset()
+        if previous_mask_or_none is not None:
+            self.previous_mask = previous_mask_or_none
         info = {}
         if query_str_opt is not None:
             info['query_str'] = query_str_opt
@@ -57,17 +59,17 @@ class ConstraintMeetingEnvironment(gym.Env):
 
 def main():
     env = ConstraintMeetingEnvironment("/Users/mila/research/mdp_query_gen/mdp_query_generator/configs/rl_envoronment.toml")
-    # while True:
-    #     obs, info = env.reset()
-    #     done = False
-    #     while not done:
-    #         valid_actions = np.flatnonzero(obs)
-    #         action = np.random.choice(valid_actions)
-    #         obs, reward, terminated, truncated, info = env.step(action)
-    #         done = terminated or truncated
-    #         print(f"Step: {env.current_step}, Action: {action}, Reward: {reward}, Done: {done}, Info: {info}")
-    #     if terminated:
-    #         break  # terminate if a query was generated successfully
+    while True:
+        obs, info = env.reset()
+        done = False
+        while not done:
+            valid_actions = np.flatnonzero(obs)
+            action = np.random.choice(valid_actions)
+            obs, reward, terminated, truncated, info = env.step(action)
+            done = terminated or truncated
+            print(f"Step: {env.current_step}, Action: {action}, Reward: {reward}, Done: {done}, Info: {info}")
+        if terminated:
+            break  # terminate if a query was generated successfully
     query_str_opt = env.pop_query()
     print(f"Resulting query: {query_str_opt}")
     

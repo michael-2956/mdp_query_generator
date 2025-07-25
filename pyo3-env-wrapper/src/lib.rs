@@ -27,7 +27,7 @@ impl ConstraintMeetingEnvironmentWrapper {
 
     /// Reset the environment Returns the initial observation \
     /// and previous generated query if such exists
-    pub fn reset(&mut self) -> PyResult<(Vec<bool>, Option<String>)> {
+    pub fn reset(&mut self) -> PyResult<(Option<Vec<bool>>, Option<String>)> {
         Ok(self.env.reset())
     }
 
