@@ -3,9 +3,6 @@ from gymnasium import spaces
 import numpy as np
 from pyo3_env_wrapper.pyo3_env_wrapper import (
     ConstraintMeetingEnvironmentWrapper,
-    QueryConstraintWrapper,
-    ConstraintTypeWrapper,
-    ConstraintMetricWrapper
 )
 
 def to_bool_numpy(l):
@@ -14,14 +11,13 @@ def to_bool_numpy(l):
 class ConstraintMeetingEnvironment(gym.Env):
     def __init__(
             self,
-            constraint: QueryConstraintWrapper,
             config_path: str,
             max_steps: int = 10000,
         ):
         super().__init__()
 
         self.max_steps = max_steps
-        self.env = ConstraintMeetingEnvironmentWrapper(constraint, config_path)
+        self.env = ConstraintMeetingEnvironmentWrapper(config_path)
 
         self.previous_mask = self.env.reset()
         self.observation_space = spaces.MultiBinary(len(self.previous_mask))
@@ -60,21 +56,18 @@ class ConstraintMeetingEnvironment(gym.Env):
 
 
 def main():
-    env = ConstraintMeetingEnvironment(QueryConstraintWrapper(
-        ConstraintTypeWrapper.point(3.14),
-        ConstraintMetricWrapper.cost()
-    ), "/Users/mila/research/mdp_query_gen/mdp_query_generator/configs/rl_envoronment.toml")
-    while True:
-        obs, info = env.reset()
-        done = False
-        while not done:
-            valid_actions = np.flatnonzero(obs)
-            action = np.random.choice(valid_actions)
-            obs, reward, terminated, truncated, info = env.step(action)
-            done = terminated or truncated
-            print(f"Step: {env.current_step}, Action: {action}, Reward: {reward}, Done: {done}, Info: {info}")
-        if terminated:
-            break  # terminate if a query was generated successfully
+    env = ConstraintMeetingEnvironment("/Users/mila/research/mdp_query_gen/mdp_query_generator/configs/rl_envoronment.toml")
+    # while True:
+    #     obs, info = env.reset()
+    #     done = False
+    #     while not done:
+    #         valid_actions = np.flatnonzero(obs)
+    #         action = np.random.choice(valid_actions)
+    #         obs, reward, terminated, truncated, info = env.step(action)
+    #         done = terminated or truncated
+    #         print(f"Step: {env.current_step}, Action: {action}, Reward: {reward}, Done: {done}, Info: {info}")
+    #     if terminated:
+    #         break  # terminate if a query was generated successfully
     query_str_opt = env.pop_query()
     print(f"Resulting query: {query_str_opt}")
     

@@ -9,11 +9,14 @@ use crate::{query_creation::state_generator::subgraph_type::{ContainsSubgraphTyp
 use super::{call_modifiers::WildcardRelationsValue, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, IdentName, Relation}};
 
 pub trait QueryValueChooser: Send + Sync {
+    /// choose table name (from those avilable in schema)
     fn choose_table_name(&mut self, available_table_names: &Vec<ObjectName>) -> ObjectName;
 
+    /// choose column name and relation it comes from based on criteria
     fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, check_accessibility: CheckAccessibility, column_retrieval_options: ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]);
 
-    fn choose_select_alias_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident;
+    /// choose unique select identifiers (aliased or not) to place in ORDER BY
+    fn choose_select_ident_for_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident;
 
     fn choose_aggregate_function_name(&mut self, func_names: Vec<&String>, dist: WeightedIndex<f64>) -> ObjectName;
 
@@ -68,7 +71,7 @@ impl QueryValueChooser for RandomValueChooser {
         ((*col_tp).clone(), [(*rel_name).clone(), (*col_name).clone()])
     }
 
-    fn choose_select_alias_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident {
+    fn choose_select_ident_for_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident {
         (**aliases.choose(&mut self.rng).as_ref().unwrap()).clone().into()
     }
 
@@ -76,7 +79,7 @@ impl QueryValueChooser for RandomValueChooser {
         let selected_name = *func_names.iter().nth(dist.sample(&mut self.rng)).unwrap();
         ObjectName(vec![Ident {
             value: selected_name.clone(),
-            quote_style: (None),
+            quote_style: None,
         }])
     }
 
@@ -259,7 +262,7 @@ impl QueryValueChooser for DeterministicValueChooser {
         (col_tp, retrieved_column_name)
     }
 
-    fn choose_select_alias_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident {
+    fn choose_select_ident_for_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident {
         let ident = self.chosen_order_by_select_refs.next();
         if !aliases.contains(&&ident.clone().into()) {
             panic!("Cannot choose {ident} in ORDER BY: it is not present among SELECT aliases: {:?}", aliases);

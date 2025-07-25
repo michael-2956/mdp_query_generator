@@ -692,7 +692,7 @@ impl ValueSetter for SelectAccessibleColumnsValueSetter {
         ValueSetterValue::SelectAccessibleColumns(SelectAccessibleColumnsValue {
             accessible_columns: match function_context.current_node.node_common.name.as_str() {
                 "order_by_select_reference" => {
-                    clause_context.query().get_all_select_aliases_iter()
+                    clause_context.query().get_all_select_idents_iter()
                         .fold(BTreeMap::new(),|mut acc, ident| {
                             // count them
                             *acc.entry(ident.clone()).or_insert(0usize) += 1; acc

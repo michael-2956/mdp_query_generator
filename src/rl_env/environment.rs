@@ -1,4 +1,4 @@
-use std::{any::Any, collections::HashMap, fmt::Display, path::PathBuf, sync::atomic::AtomicPtr, thread, time::SystemTime};
+use std::{any::Any, collections::HashMap, fmt::Display, path::PathBuf, sync::atomic::AtomicPtr, thread};
 
 use bimap::BiHashMap;
 use chrono::{Duration, NaiveDate, NaiveDateTime};
@@ -8,8 +8,7 @@ use postgres::{types::FromSql, Client, NoTls};
 use rand::{thread_rng, Rng};
 use rust_decimal::Decimal;
 use smol_str::SmolStr;
-use sqlparser::ast::{DataType, DateTimeField, Ident, ObjectName, Query, TimezoneInfo};
-use tokio::runtime::{self, Runtime};
+use sqlparser::ast::{DateTimeField, Ident, ObjectName, Query};
 
 use crate::{config::Config, query_creation::{query_generator::{call_modifiers::WildcardRelationsValue, query_info::{self, ClauseContext, DatabaseSchema, IdentName, Relation}, value_choosers::QueryValueChooser, QueryGenerator}, state_generator::{markov_chain_generator::{markov_chain::NodeParams, StackFrame}, state_choosers::MaxProbStateChooser, subgraph_type::SubgraphType, substitute_models::DeterministicModel, MarkovChainGenerator}}, training::models::{ModelPredictionResult, PathwayGraphModel}};
 
@@ -22,29 +21,29 @@ pub enum ConstraintType {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum ConstraintMetric {
-    Cost,
-    Cardinality
-}
+// #[derive(Debug, Clone)]
+// pub enum ConstraintMetric {
+//     Cost,
+//     Cardinality
+// }
 
-pub struct QueryConstraint {
-    c_type: ConstraintType,
-    metric: ConstraintMetric,
-}
+// pub struct QueryConstraint {
+//     c_type: ConstraintType,
+//     metric: ConstraintMetric,
+// }
 
-impl QueryConstraint {
-    pub fn new(c_type: ConstraintType, metric: ConstraintMetric) -> Self {
-        Self {
-            c_type,
-            metric,
-        }
-    }
-}
+// impl QueryConstraint {
+//     pub fn new(c_type: ConstraintType, metric: ConstraintMetric) -> Self {
+//         Self {
+//             c_type,
+//             metric,
+//         }
+//     }
+// }
 
 pub struct ConstraintMeetingEnvironment {
-    config: Config,
-    constraint: QueryConstraint,
+    // config: Config,
+    // constraint: QueryConstraint,
     query_generator: Option<QueryGenerator<MaxProbStateChooser>>,
     observation_rs: crossbeam_channel::Receiver<Option<Vec<bool>>>,
     decision_sd: crossbeam_channel::Sender<Option<usize>>,
@@ -53,7 +52,7 @@ pub struct ConstraintMeetingEnvironment {
 }
 
 impl ConstraintMeetingEnvironment {
-    pub fn new(constraint: QueryConstraint, config_path: PathBuf) -> Self {
+    pub fn new(config_path: PathBuf) -> Self {
         let config = Config::read_config(&config_path).unwrap();
         
         // when model sends None to the observation channel, we treat this
@@ -75,13 +74,13 @@ impl ConstraintMeetingEnvironment {
         let all_chain_states = state_generator.markov_chain_ref().get_all_states();
 
         Self {
-            constraint,
+            // constraint,
             query_generator: Some(QueryGenerator::from_state_generator_and_config(
                 state_generator,
-                config.generator_config.clone(),
+                config.generator_config,
                 Box::new(DeterministicModel::empty())
             )),
-            config,
+            // config,
             observation_rs,
             decision_sd,
             generator_handle: None,
@@ -165,7 +164,7 @@ impl ConstraintMeetingEnvironment {
 
         let terminated = obs.is_none();
 
-        (obs, 0f32, terminated)
+        (obs, 0f32, terminated)  // TODO: anticall reward
     }
 
     /// returns a query if generation has finished
@@ -195,34 +194,29 @@ impl InteractiveModel {
         n_ds_samples: usize,
         n_random_samples: usize,
     ) -> Self {
-        // TODO:
-        //    - do all the sampling needed for TODO 2 / TODO 3
-        //    - store action space size for env
-
         let mut sample_value_tp_map = HashMap::new();
         let mut state_id_bimap = BiHashMap::new();
         let mut free_id = 0usize;
 
-        // TODO: prefix keys with --SUBSECTION so that there's no overlap
-        let mut add_state = |state: String| {
-            state_id_bimap.insert(state, free_id);
+        let mut add_state = |state: String, section_name: &str| {
+            state_id_bimap.insert(format!("{section_name}--{state}"), free_id);
             free_id += 1;
         };
 
         // add all graph states
         for state in all_chain_states {
-            add_state(state);
+            add_state(state, "GRAPH");
         }
 
         // aggregate function names
         for agg_func_name in all_agg_function_names {
-            add_state(agg_func_name);
+            add_state(agg_func_name, "AGG_FUNC");
         }
 
         // aliases
         for i in 0..n_allocated_aliases {
-            add_state(format!("C{i}"));
-            add_state(format!("T{i}"));
+            add_state(format!("C{i}"), "C_NAME");
+            add_state(format!("T{i}"), "R_NAME");
         }
 
         // WARNING: put this in config instead
@@ -231,16 +225,12 @@ impl InteractiveModel {
         // table names
         for table_decl in schema.table_defs {
             let table_name = format!("{}", table_decl.name);
-            add_state(table_name.clone());
+            add_state(table_name.clone(), "R_NAME");
             for column in table_decl.columns {
                 // column names
                 let column_name = format!("{}", column.name);
-                add_state(column_name.clone());
+                add_state(column_name.clone(), "C_NAME");
 
-                // sample values (dataset, 100)
-                // TODO:
-                //       - check how the display strings are formatted
-                //       - store indexes to be able to choose
                 let sv_tp = SubgraphType::from_data_type(&column.data_type);
                 let values = match &sv_tp {
                     SubgraphType::Timestamp => {
@@ -263,10 +253,8 @@ impl InteractiveModel {
                     },
                     tp => unimplemented!("{tp}"),
                 };
-                println!("\n{table_name}.{column_name}:");
-                println!("values: {:?}", values);
                 for value in values {
-                    add_state(value.clone());
+                    add_state(value.clone(), &format!("DB_SAMPLE_{sv_tp}"));
                     sample_value_tp_map.insert(value, sv_tp.clone());
                 }
             }
@@ -274,6 +262,13 @@ impl InteractiveModel {
 
         // sample values (normal distrib, 100)
         let mut rng = thread_rng();
+
+        let mut add_random_sample_states = |state_list: Vec<String>, tp: SubgraphType| {
+            for state in state_list {
+                add_state(state.clone(), &format!("RANDOM_SAMPLE_{tp}"));
+                sample_value_tp_map.insert(state, tp.clone());
+            }
+        };
 
         // timestamp
         let base_ts = NaiveDateTime::parse_from_str(
@@ -289,10 +284,7 @@ impl InteractiveModel {
                 dt.format("%Y-%m-%d %H:%M:%S").to_string()
             })
             .collect();
-        for timestamp in timestamps {
-            add_state(timestamp.clone());
-            sample_value_tp_map.insert(timestamp, SubgraphType::Timestamp);
-        }
+        add_random_sample_states(timestamps, SubgraphType::Timestamp);
 
         // interval
         let intv_dist = Normal::new(
@@ -301,43 +293,31 @@ impl InteractiveModel {
         let intervals: Vec<String> = (0..n_random_samples)
             .map(|_| {
                 let secs = intv_dist.sample(&mut rng);
-                format!("{:.2} seconds", secs.max(0.))  // clamp to ≥0
+                format!("{:.2} seconds", secs.abs())
             })
             .collect();
-        for interval in intervals {
-            add_state(interval.clone());
-            sample_value_tp_map.insert(interval, SubgraphType::Interval);
-        }
+        add_random_sample_states(intervals, SubgraphType::Interval);
 
         // numeric
         let num_dist = Normal::new(0., 100.).unwrap();
         let numerics: Vec<String> = (0..n_random_samples)
             .map(|_| format!("{:.8}", num_dist.sample(&mut rng)))
             .collect();
-        for numeric in numerics {
-            add_state(numeric.clone());
-            sample_value_tp_map.insert(numeric, SubgraphType::Numeric);
-        }
+        add_random_sample_states(numerics, SubgraphType::Numeric);
 
         // integer
         let int_dist = Normal::new(0., 100.).unwrap();
         let integers: Vec<String> = (0..n_random_samples)
             .map(|_| (int_dist.sample(&mut rng).round() as i32).to_string())
             .collect();
-        for integer in integers {
-            add_state(integer.clone());
-            sample_value_tp_map.insert(integer, SubgraphType::Integer);
-        }
+        add_random_sample_states(integers, SubgraphType::Integer);
 
         // bigint
         let bigint_dist = Normal::new(0., 100_000_000.).unwrap();
         let bigints: Vec<String> = (0..n_random_samples)
             .map(|_| (bigint_dist.sample(&mut rng).round() as i64).to_string())
             .collect();
-        for bigint in bigints {
-            add_state(bigint.clone());
-            sample_value_tp_map.insert(bigint, SubgraphType::BigInt);
-        }
+        add_random_sample_states(bigints, SubgraphType::BigInt);
 
         // text
         let texts: Vec<String> = (0..n_random_samples)
@@ -348,10 +328,7 @@ impl InteractiveModel {
                     .collect()
             })
             .collect();
-        for text in texts {
-            add_state(text.clone());
-            sample_value_tp_map.insert(text, SubgraphType::Text);
-        }
+        add_random_sample_states(texts, SubgraphType::Text);
 
         // date
         let base_date = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
@@ -363,10 +340,7 @@ impl InteractiveModel {
                 d.format("%Y-%m-%d").to_string()
             })
             .collect();
-        for date in dates {
-            add_state(date.clone());
-            sample_value_tp_map.insert(date, SubgraphType::Date);
-        }
+        add_random_sample_states(dates, SubgraphType::Date);
 
         let mut tp_sample_map: HashMap<SubgraphType, Vec<String>> = HashMap::new();
         for (value, tp) in sample_value_tp_map.into_iter() {
@@ -405,24 +379,63 @@ impl InteractiveModel {
             .into_iter().map(|v: T| format!("{v}")).collect()
     }
 
-    fn gen_mask(&self, available_states: Vec<&str>) -> Vec<bool> {
+    fn gen_mask(&self, available_states: &Vec<&str>, sections: &[&str]) -> Vec<bool> {
         let mut mask = vec![false; self.state_id_bimap.len()];
         for state in available_states {
-            let state_id = self.state_id_bimap.get_by_left(state).unwrap();
-            mask[*state_id] = true;
+            for section in sections {
+                let state_id = self.state_id_bimap.get_by_left(&format!("{section}--{state}")).unwrap();
+                mask[*state_id] = true;
+            }
         }
         mask
+    }
+
+    /// returns the selected state minus category name
+    fn get_state_by_id(&self, state_id: &usize) -> &str {
+        let sp = self.state_id_bimap.get_by_right(state_id).unwrap().split("--").collect_vec();
+        assert!(sp.len() == 2);
+        sp[1]
+    }
+
+    /// sends the mask to the model and returns decision id 
+    fn send_mask_receive_decision_id(&mut self, mask: Vec<bool>) -> usize {
+        self.observation_sd.send(Some(mask.clone())).unwrap();
+        let decision_id = match self.decision_rs.recv() {
+            Ok(Some(decision_id)) => decision_id,
+            Ok(None) => panic!("No decision (got None)"),
+            Err(err) => panic!("decision_rs.recv() error: {err}")
+        };
+        assert!(mask[decision_id]);
+        decision_id
+    }
+
+    /// sends the mask to the model and returns the selected state minus category name
+    fn send_mask_receive_state_str(&mut self, mask: Vec<bool>) -> &str {
+        let decision_id = self.send_mask_receive_decision_id(mask);
+        self.get_state_by_id(&decision_id)
+    }
+
+    fn get_sample_mask_by_type(&self, tp: &SubgraphType) -> Vec<bool> {
+        self.gen_mask(
+            &self.tp_sample_map
+                .get(&tp).unwrap().iter()
+                .map(|s| s.as_str()).collect(), 
+            &[
+                &format!("RANDOM_SAMPLE_{}", tp),
+                &format!("DB_SAMPLE_{}", tp)
+            ]
+        )
     }
 }
 
 impl PathwayGraphModel for InteractiveModel {
     fn as_value_chooser(&mut self) -> Option<&mut dyn QueryValueChooser> { Some(self) }
     
-    fn process_state(&mut self, call_stack: &Vec<StackFrame>, popped_stack_frame: Option<&StackFrame>) { unimplemented!() }
+    fn process_state(&mut self, _call_stack: &Vec<StackFrame>, _popped_stack_frame: Option<&StackFrame>) { unimplemented!() }
 
-    fn write_weights(&self, file_path: &PathBuf) -> std::io::Result<()> { unimplemented!() }
+    fn write_weights(&self, _file_path: &PathBuf) -> std::io::Result<()> { unimplemented!() }
 
-    fn load_weights(&mut self, file_path: &PathBuf) -> std::io::Result<()> { unimplemented!() }
+    fn load_weights(&mut self, _file_path: &PathBuf) -> std::io::Result<()> { unimplemented!() }
 
     /// send states available for decision to observation_sd, \
     /// receiving the decision from decision_rs, checking that it \
@@ -433,14 +446,11 @@ impl PathwayGraphModel for InteractiveModel {
             self.start_node_stack.push(
                 call_stack.last().unwrap().function_context.call_params.func_name.to_string()
             );
-            let mask = self.gen_mask(vec![self.start_node_stack.last().unwrap().as_str()]);
-            self.observation_sd.send(Some(mask.clone())).unwrap();
-            let decision_id = match self.decision_rs.recv().unwrap() {
-                Some(decision_id) => decision_id,
-                None => panic!("No decision (got None)"),
-            };
-            assert!(mask[decision_id]);
-            // no need to return the decision
+            let mask = self.gen_mask(
+                &vec![self.start_node_stack.last().unwrap().as_str()],
+                &["GRAPH"]
+            );
+            self.send_mask_receive_decision_id(mask);  // no need to return the decision
         }
         self.start_node_stack.truncate(call_stack.len());
 
@@ -449,15 +459,8 @@ impl PathwayGraphModel for InteractiveModel {
                 params.node_common.name.as_str()
             }
         ).collect_vec();
-        let mask = self.gen_mask(available_states);
-        self.observation_sd.send(Some(mask.clone())).unwrap();
-        let decision_id = match self.decision_rs.recv().unwrap() {
-            Some(decision_id) => decision_id,
-            None => panic!("No decision (got None)"),
-        };
-        assert!(mask[decision_id]);
-
-        let chosen_state = self.state_id_bimap.get_by_right(&decision_id).unwrap();
+        let mask = self.gen_mask(&available_states, &["GRAPH"]);
+        let chosen_state = self.send_mask_receive_state_str(mask).to_string();
 
         if call_stack.len() == 1 && chosen_state == current_exit_node_name.as_str() {
             // as predict() will never be invoked again, send terminating observation
@@ -476,120 +479,145 @@ impl PathwayGraphModel for InteractiveModel {
 
 impl QueryValueChooser for InteractiveModel {
     fn choose_table_name(&mut self, available_table_names: &Vec<ObjectName>) -> ObjectName {
-        // TODO 1: when we refer to the table aliases we created previously,
-        //         would it be smart to allocate neurons just for
-        //         the max number of table aliases possible, if every
-        //         time they would refer to different things?
-        
-        // available_table_names[self.rng.gen_range(0..available_table_names.len())].clone()
-        
-        todo!()
+        let state_to_obj = available_table_names.iter().map(
+            |table_name| (format!("{table_name}"), table_name)
+        ).collect::<HashMap<_, _>>();
+        let mask = self.gen_mask(
+            &state_to_obj.keys().map(|s|s.as_str()).collect_vec(),
+            &["R_NAME"]
+        );
+        (*state_to_obj.get(self.send_mask_receive_state_str(mask)).unwrap()).clone()
     }
 
     fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, check_accessibility: query_info::CheckAccessibility, column_retrieval_options: query_info::ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]) {
-        // TODO 1: when we refer to the columns we created previously,
-        //         would it be smart to allocate neurons just for
-        //         the max number of columns possible?
-        
-        // let column_levels = clause_context.get_non_empty_column_levels_by_types(column_types.clone(), check_accessibility, column_retrieval_options.clone());
-        // let columns = *column_levels.choose(&mut self.rng).as_ref().unwrap();
-        // let (col_tp, [rel_name, col_name]) = *columns.choose(&mut self.rng).as_ref().unwrap();
-        // ((*col_tp).clone(), [(*rel_name).clone(), (*col_name).clone()])
-        
-        todo!()
+        // all available columns
+        let columns = clause_context.get_non_empty_column_levels_by_types(
+            column_types.clone(), check_accessibility, column_retrieval_options.clone()
+        ).into_iter().flat_map(|v| v.into_iter()).collect_vec();
+        // relation -> column -> data
+        let mut rstate_to_cstate_to_col: HashMap<String, HashMap<String, (&SubgraphType, [&IdentName; 2])>> = HashMap::new();
+        for (tp, [r, c]) in columns {
+            rstate_to_cstate_to_col
+                .entry(format!("{r}")).or_default()
+                .insert(format!("{c}"), (tp, [r, c]));
+        }
+        // send relation choice to model
+        let rstate = self.send_mask_receive_state_str(
+            self.gen_mask(
+                &rstate_to_cstate_to_col.keys().map(|s|s.as_str()).collect_vec(),
+                &["R_NAME"]
+            )
+        );
+        // send column choice to model
+        let cstate_to_col = rstate_to_cstate_to_col.get(rstate).unwrap();
+        let cstate: &str = self.send_mask_receive_state_str(
+            self.gen_mask(
+                &cstate_to_col.keys().map(|s|s.as_str()).collect_vec(),
+                &["C_NAME"]
+            )
+        );
+        // extract data
+        let (tp, [r, c]) = *cstate_to_col.get(cstate).unwrap();
+        (tp.clone(), [r.clone(), c.clone()])
     }
 
-    fn choose_select_alias_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident {
-        // TODO 1:   when we refer to an alias we created previously,
-        //           would it be smart to allocate neurons just for
-        //           the max number of select aliases possible? - Yes
-        // Problem:  How would the network be able to count tokens?
-        // Solution: Use LSTM embedding to attend to next token embeddings?
-
-        // (**aliases.choose(&mut self.rng).as_ref().unwrap()).clone().into()
-
-        todo!()
+    fn choose_select_ident_for_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident {
+        let state_to_ident = aliases.iter().map(
+            |alias| (format!("{alias}"), *alias)
+        ).collect::<HashMap<_, _>>();
+        let mask = self.gen_mask(
+            &state_to_ident.keys().map(|s|s.as_str()).collect_vec(),
+            &["C_NAME"]
+        );
+        (*state_to_ident.get(self.send_mask_receive_state_str(mask)).unwrap()).clone().into()
     }
 
-    fn choose_aggregate_function_name(&mut self, func_names: Vec<&String>, dist: rand::distributions::WeightedIndex<f64>) -> ObjectName {
-        // TODO 2: there's a limited number of function names available
-        //         their total total number can be extracted from json
-        //         then give a neuron to each one
-        todo!()
+    fn choose_aggregate_function_name(&mut self, func_names: Vec<&String>, _dist: rand::distributions::WeightedIndex<f64>) -> ObjectName {
+        let mask = self.gen_mask(
+            &func_names.iter().map(|s| s.as_str()).collect_vec(),
+            &["AGG_FUNC"]
+        );
+        let fname = self.send_mask_receive_state_str(mask).to_string();
+        ObjectName(vec![Ident {
+            value: fname,
+            quote_style: None,
+        }])
     }
 
     fn choose_bigint(&mut self) -> String {
-        // let states = self.tp_sample_map.get(&SubgraphType::BigInt).unwrap();
-        // TODO 3: sample N_r=1024 random values, N_d=min(ds, 1024) values from the DS
-        todo!()
+        let mask = self.get_sample_mask_by_type(&SubgraphType::BigInt);
+        self.send_mask_receive_state_str(mask).to_string()
     }
 
     fn choose_integer(&mut self) -> String {
-        // TODO 3
-        todo!()
+        let mask = self.get_sample_mask_by_type(&SubgraphType::Integer);
+        self.send_mask_receive_state_str(mask).to_string()
     }
 
     fn choose_numeric(&mut self) -> String {
-        // TODO 3
-        todo!()
+        let mask = self.get_sample_mask_by_type(&SubgraphType::Numeric);
+        self.send_mask_receive_state_str(mask).to_string()
     }
 
     fn choose_text(&mut self) -> String {
-        // TODO 3
-        todo!()
+        let mask = self.get_sample_mask_by_type(&SubgraphType::Text);
+        self.send_mask_receive_state_str(mask).to_string()
     }
 
     fn choose_date(&mut self) -> String {
-        // TODO 3
-        // note: NaiveDate string looks like "2023-08-10" already
-        todo!()
+        let mask = self.get_sample_mask_by_type(&SubgraphType::Date);
+        self.send_mask_receive_state_str(mask).to_string()
     }
 
     fn choose_timestamp(&mut self) -> String {
-        // TODO 3
-        // note: NaiveDateTime string looks like '2025-01-01 12:00:00' already
-        todo!()
+        let mask = self.get_sample_mask_by_type(&SubgraphType::Timestamp);
+        self.send_mask_receive_state_str(mask).to_string()
     }
 
     fn choose_interval(&mut self, with_field: bool) -> (String, Option<DateTimeField>) {
-        // PROBLEM 1: cannot always just sample values from the DS, as intervals might not be
-        //            present there.
-        //          - Can just sample from a normal distribution then.
-        // TODO 3:  - Or maybe for every field we should have N_r=1024 random values to sample
-        //            and then N_d=min(ds, 1024) values from the DS???
-        //          - Then, there are always random values present when we don't have
-        //            the dataset values present
-        // PROBLEM 2: also, multiple formats available,
-        //          - but I guess if with_field is false just transform it into a string.
-        //          - it would be simple as we can just represent all as seconds
-
-        // if with_field {
-        //     ("1".to_string(), Some(DateTimeField::Day))
-        // } else { ("1 day".to_string(), None) }
-        todo!()
+        let mask = self.get_sample_mask_by_type(&SubgraphType::Interval);
+        let interval = self.send_mask_receive_state_str(mask).to_string();
+        if with_field {
+            (
+                interval.split_once(" seconds").unwrap().0.to_string(),
+                Some(DateTimeField::Second)
+            )
+        } else { (interval, None) }
     }
 
     fn choose_qualified_wildcard_relation<'a>(&mut self, clause_context: &'a ClauseContext, wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation) {
-        // TODO 1
-
-        // let alias = wildcard_relations.relation_levels_selectable_by_qualified_wildcard
-        //     .iter().filter(|x| !x.is_empty()).collect::<Vec<_>>()
-        //     .choose(&mut self.rng).unwrap()
-        //     .choose(&mut self.rng).unwrap();
-        // let relation = clause_context.get_relation_by_name(alias);
-        // (alias.clone().into(), relation)
-        
-        todo!()
+        let aliases = wildcard_relations.relation_levels_selectable_by_qualified_wildcard
+            .iter().flat_map(|v| v.into_iter()).collect_vec();
+        let state_to_ident = aliases.iter().map(
+            |alias| (format!("{alias}"), *alias)
+        ).collect::<HashMap<_, _>>();
+        let mask = self.gen_mask(
+            &state_to_ident.keys().map(|s|s.as_str()).collect_vec(),
+            &["R_NAME"]
+        );
+        let alias = (*state_to_ident.get(self.send_mask_receive_state_str(mask)).unwrap()).clone();
+        let relation = clause_context.get_relation_by_name(&alias);
+        (alias.into(), relation)
     }
 
     fn choose_select_alias(&mut self) -> Ident {
         self.free_select_alias_index += 1;
-        Ident::new(format!("C{}", self.free_select_alias_index))
+        let c_name = format!("C{}", self.free_select_alias_index);
+        assert!(self.send_mask_receive_state_str(self.gen_mask(
+            &vec![c_name.as_str()],
+            &["C_NAME"]
+        )) == c_name);
+        Ident::new(c_name)
     }
 
     fn choose_from_alias(&mut self) -> Ident {
         self.free_from_alias_index += 1;
-        Ident::new(format!("T{}", self.free_from_alias_index))
+        let r_name = format!("T{}", self.free_from_alias_index);
+        assert!(self.send_mask_receive_state_str(self.gen_mask(
+            &vec![r_name.as_str()],
+            &["R_NAME"]
+        )) == r_name);
+        Ident::new(r_name)
     }
 
     fn choose_from_column_renames(&mut self, _n_columns: usize) -> Vec<Ident> {

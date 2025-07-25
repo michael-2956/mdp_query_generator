@@ -2,7 +2,6 @@ use std::{path::PathBuf, str::FromStr};
 
 use equivalence_testing::rl_env::environment::ConstraintMeetingEnvironment;
 use pyo3::prelude::*;
-use query_constraint_wrapper::{ConstraintMetricWrapper, ConstraintTypeWrapper, QueryConstraintWrapper};
 
 pub mod query_constraint_wrapper;
 
@@ -16,11 +15,11 @@ pub struct ConstraintMeetingEnvironmentWrapper {
 impl ConstraintMeetingEnvironmentWrapper {
     /// Constructor visible to Python.  e.g. `env = my_rust_env.ConstraintMeetingEnvironmentWrapper(0)`
     #[new]
-    pub fn new(query_constraint: QueryConstraintWrapper, config_path: &str) -> Self {
-        let inner_constraint = query_constraint.into_inner();
+    pub fn new(config_path: &str) -> Self {
+        // let inner_constraint = query_constraint.into_inner();
         ConstraintMeetingEnvironmentWrapper {
             env: ConstraintMeetingEnvironment::new(
-                inner_constraint,
+                // inner_constraint,
                 PathBuf::from_str(config_path).unwrap()
             ),
         }
@@ -46,8 +45,8 @@ impl ConstraintMeetingEnvironmentWrapper {
 #[pymodule]
 fn pyo3_env_wrapper(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ConstraintMeetingEnvironmentWrapper>()?;
-    m.add_class::<ConstraintTypeWrapper>()?;
-    m.add_class::<ConstraintMetricWrapper>()?;
-    m.add_class::<QueryConstraintWrapper>()?;
+    // m.add_class::<ConstraintTypeWrapper>()?;
+    // m.add_class::<ConstraintMetricWrapper>()?;
+    // m.add_class::<QueryConstraintWrapper>()?;
     Ok(())
 }

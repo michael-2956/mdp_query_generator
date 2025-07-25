@@ -585,7 +585,7 @@ impl ClauseContext {
     )> {
         let mut shaded_rel_names: HashSet<IdentName> = HashSet::new();
         let mut shaded_col_names: HashSet<IdentName> = if column_retrieval_options.shade_by_select_aliases {
-            HashSet::from_iter(self.query().get_all_select_aliases_iter().cloned())
+            HashSet::from_iter(self.query().get_all_select_idents_iter().cloned())
         } else { HashSet::new() };
         self.get_clause_hierarchy_iter().enumerate().filter_map(
             |(i, v_opt)| v_opt.map(|v| (i, v))
@@ -1150,8 +1150,8 @@ impl QueryProps {
         self.column_idents_and_graph_types.unwrap()
     }
 
-    pub fn get_all_select_aliases_iter(&self) -> impl Iterator<Item = &IdentName> {
-        self.select_type().iter().filter_map(|(alias, ..)| alias.as_ref())
+    pub fn get_all_select_idents_iter(&self) -> impl Iterator<Item = &IdentName> {
+        self.select_type().iter().filter_map(|(ident, ..)| ident.as_ref())
     }
 
     pub fn take_output_type(&mut self) -> Vec<(Option<IdentName>, SubgraphType)> {

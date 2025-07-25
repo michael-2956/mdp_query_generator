@@ -383,7 +383,7 @@ impl QueryValueChooser for ChatGPTPromptingModel {
         ObjectName(vec![Ident::new(func_name)])
     }
 
-    fn choose_select_alias_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident {
+    fn choose_select_ident_for_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident {
         self.get_chosen_value("select_alias_order_by", aliases.clone()).clone().into()
     }
 

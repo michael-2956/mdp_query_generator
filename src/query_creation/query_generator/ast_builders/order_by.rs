@@ -41,7 +41,7 @@ impl OrderByBuilder {
                         .get_named_value::<SelectAccessibleColumnsValue>().unwrap(),
                         ValueSetterValue::SelectAccessibleColumns
                     ).accessible_columns.iter().collect::<Vec<_>>();
-                    let alias = value_chooser!(generator).choose_select_alias_order_by(aliases);
+                    let alias = value_chooser!(generator).choose_select_ident_for_order_by(aliases);
                     order_by_expr.expr = Expr::Identifier(alias);
                 },
                 "order_by_expr" => {
