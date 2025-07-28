@@ -1,6 +1,6 @@
 use sqlparser::ast::{SetExpr, SetOperator, SetQuantifier};
 
-use crate::{query_creation::{query_generator::{ast_builders::query::QueryBuilder, match_next_state, QueryGenerator}, state_generator::{markov_chain_generator::markov_chain::QueryTypes, state_choosers::StateChooser, CallTypes}}, unwrap_pat, unwrap_variant};
+use crate::{query_creation::{query_generator::{ast_builders::query::QueryBuilder, match_next_state, QueryGenerationResult, QueryGenerator}, state_generator::{markov_chain_generator::markov_chain::QueryTypes, state_choosers::StateChooser, CallTypes}}, unwrap_pat, unwrap_variant};
 
 use super::select_query::SelectQueryBuilder;
 
@@ -25,17 +25,17 @@ impl SetExpressionBuilder {
 
     pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, body: &mut SetExpr
-    ) {
-        generator.expect_state("set_expression");
+    ) -> QueryGenerationResult<()> {
+        generator.expect_state("set_expression")?;
 
         match_next_state!(generator, {
             "call0_SELECT_query" => {
                 let select_body = &mut **unwrap_variant!(body, SetExpr::Select);
-                SelectQueryBuilder::build(generator, select_body);
+                SelectQueryBuilder::build(generator, select_body)?;
             },
             "call7_Query" => {
                 *body = SetExpr::Query(Box::new(QueryBuilder::nothing()));
-                let subquery_frame = QueryBuilder::build(generator, &mut **unwrap_variant!(body, SetExpr::Query));
+                let subquery_frame = QueryBuilder::build(generator, &mut **unwrap_variant!(body, SetExpr::Query))?;
                 // we inherit the properties of the subquery
                 generator.clause_context.replace_with_frame(subquery_frame);
             },
@@ -59,20 +59,22 @@ impl SetExpressionBuilder {
                 let left_frame = match_next_state!(generator, {
                     "call3_set_expression" | "call2_set_expression" => {
                         let empty_frame = generator.clause_context.clone_frame();
-                        Self::build(generator, left);
+                        Self::build(generator, left)?;
                         generator.clause_context.replace_with_frame(empty_frame)
                     }
                 });
 
                 let right = &mut **unwrap_pat!(body, SetExpr::SetOperation { right, .. }, right);
                 match_next_state!(generator, {
-                    "call4_set_expression" | "call5_set_expression" => Self::build(generator, right)
+                    "call4_set_expression" | "call5_set_expression" => Self::build(generator, right)?
                 });
 
                 generator.clause_context.merge_right_frame_into_setop_parent(left_frame);
             },
         });
 
-        generator.expect_state("EXIT_set_expression");
+        generator.expect_state("EXIT_set_expression")?;
+
+        Ok(())
     }
 }

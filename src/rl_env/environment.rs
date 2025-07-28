@@ -1,4 +1,4 @@
-use std::{any::Any, collections::HashMap, fmt::Display, path::PathBuf, sync::atomic::AtomicPtr, thread};
+use std::{collections::HashMap, fmt::Display, path::PathBuf, sync::atomic::AtomicPtr, thread};
 
 use bimap::BiHashMap;
 use chrono::{Duration, NaiveDate, NaiveDateTime};
@@ -10,7 +10,7 @@ use rust_decimal::Decimal;
 use smol_str::SmolStr;
 use sqlparser::ast::{DateTimeField, Ident, ObjectName, Query};
 
-use crate::{config::Config, query_creation::{query_generator::{call_modifiers::WildcardRelationsValue, query_info::{self, ClauseContext, DatabaseSchema, IdentName, QueryProps, Relation}, value_choosers::QueryValueChooser, QueryGenerator}, state_generator::{markov_chain_generator::{markov_chain::NodeParams, StackFrame}, state_choosers::MaxProbStateChooser, subgraph_type::SubgraphType, substitute_models::DeterministicModel, MarkovChainGenerator}}, training::models::{ModelPredictionResult, PathwayGraphModel}};
+use crate::{config::Config, query_creation::{query_generator::{call_modifiers::WildcardRelationsValue, query_info::{self, ClauseContext, DatabaseSchema, IdentName, QueryProps, Relation}, value_choosers::QueryValueChooser, QueryGenerationError, QueryGenerator}, state_generator::{markov_chain_generator::{markov_chain::NodeParams, StackFrame, StateGenerationError}, state_choosers::MaxProbStateChooser, subgraph_type::SubgraphType, substitute_models::DeterministicModel, MarkovChainGenerator}}, training::models::{DecisionError, DecisionResult, ModelPrediction, PathwayGraphModel}};
 
 #[derive(Debug, Clone)]
 pub enum ConstraintType {
@@ -42,12 +42,11 @@ pub enum ConstraintType {
 // }
 
 pub struct ConstraintMeetingEnvironment {
-    config: Config,
     // constraint: QueryConstraint,
     query_generator: Option<QueryGenerator<MaxProbStateChooser>>,
     observation_rs: crossbeam_channel::Receiver<Option<Vec<bool>>>,
     decision_sd: crossbeam_channel::Sender<Option<usize>>,
-    generator_handle: Option<thread::JoinHandle<((Box<dyn PathwayGraphModel>, sqlparser::ast::Query), QueryGenerator<MaxProbStateChooser>)>>,
+    generator_handle: Option<thread::JoinHandle<(Result<(Box<dyn PathwayGraphModel>, sqlparser::ast::Query), (QueryGenerationError, Box<dyn PathwayGraphModel>)>, QueryGenerator<MaxProbStateChooser>)>>,
     model: Option<Box<dyn PathwayGraphModel>>,
     truncated: bool,
     terminated: bool,
@@ -65,7 +64,6 @@ impl ConstraintMeetingEnvironment {
         ) = Self::create_model_and_generator(config.clone());
 
         Self {
-            config,
             // constraint,
             query_generator: Some(query_generator),
             observation_rs,
@@ -121,19 +119,6 @@ impl ConstraintMeetingEnvironment {
         )
     }
 
-    fn replace_model_and_generator(&mut self) {
-        let (
-            query_generator,
-            model,
-            observation_rs,
-            decision_sd,
-        ) = Self::create_model_and_generator(self.config.clone());
-        self.query_generator = Some(query_generator);
-        self.model = Some(model);
-        self.observation_rs = observation_rs;
-        self.decision_sd = decision_sd;
-    }
-
     /// Returns Ok(None) when the generation is running or has failed, \
     /// returns the query otherwise. If possible, restores data for the \
     /// new generation to be started
@@ -146,26 +131,23 @@ impl ConstraintMeetingEnvironment {
     ///   the generation being truncated, returns Ok(None), otherwise \
     ///   returns the error
     /// - If the generator thread if abcent, returns Ok(None)
-    pub fn try_join_generator(&mut self) -> Result<Option<Query>, Box<dyn Any + Send>> {
+    pub fn try_join_generator(&mut self) -> Result<Option<Query>, QueryGenerationError> {
         if self.generator_handle.is_some() {
             if !self.generator_handle.as_ref().unwrap().is_finished() && !self.truncated && !self.terminated {
                 return Ok(None);
             }
-            let ((model, query), qg) = match self.generator_handle.take().unwrap().join() {
-                Ok(r) => r,
-                Err(e) => {
-                    self.replace_model_and_generator();
-                    match e.downcast::<&str>() {
-                        Ok(es) => {
-                            if *es == "No decision (got None)" {
-                                assert!(self.truncated);  // sanity check
-                                return Ok(None)
-                            } else {
-                                return Err(es);
-                            }
-                        },
-                        Err(err) => return Err(err),
-                    }
+            let (qg, model, query) = match self.generator_handle.take().unwrap().join().unwrap() {
+                (Ok((model, query)), qg) => (qg, model, query),
+                (Err((qg_error, model)), qg) => match qg_error {
+                    QueryGenerationError::StateGeneration(
+                        StateGenerationError::ModelDecisionError(DecisionError::Truncated)
+                    ) => {
+                        assert!(self.truncated);  // sanity check
+                        self.query_generator = Some(qg);
+                        self.model = Some(model);
+                        return Ok(None)
+                    },
+                    any => return Err(any)
                 },
             };
             self.query_generator = Some(qg);
@@ -194,10 +176,7 @@ impl ConstraintMeetingEnvironment {
     /// - If successful, returns original observation \
     /// - Returns previous query string if available
     pub fn reset(&mut self) -> (Option<Vec<bool>>, Option<String>) {
-        let query = match self.try_join_generator() {
-            Ok(query) => query,
-            Err(err) => panic!("Failed to join in reset(): {:?}", err.downcast::<&str>()),
-        };
+        let query = self.try_join_generator().unwrap();
 
         // the resources were taken by another generation: cannot reset
         if self.query_generator.is_none() || self.model.is_none() {
@@ -238,6 +217,7 @@ impl ConstraintMeetingEnvironment {
     }
 }
 
+#[derive(Debug)]
 struct InteractiveModel {
     observation_sd: crossbeam_channel::Sender<Option<Vec<bool>>>,
     decision_rs: crossbeam_channel::Receiver<Option<usize>>,
@@ -542,7 +522,7 @@ impl PathwayGraphModel for InteractiveModel {
     /// send states available for decision to observation_sd, \
     /// receiving the decision from decision_rs, checking that it \
     /// is valid.
-    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, current_exit_node_name: &SmolStr, _current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) -> ModelPredictionResult {
+    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, current_exit_node_name: &SmolStr, _current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) -> DecisionResult<ModelPrediction> {
         if call_stack.len() > self.start_node_stack.len() {
             assert!(call_stack.len() == self.start_node_stack.len() + 1);
             self.start_node_stack.push(
@@ -569,12 +549,12 @@ impl PathwayGraphModel for InteractiveModel {
             self.observation_sd.send(None).unwrap();
         }
 
-        ModelPredictionResult::Some(node_outgoing.into_iter().map(
+        Ok(ModelPrediction::Some(node_outgoing.into_iter().map(
             |params| (
                 if params.node_common.name == chosen_state { 1f64 } else { 0f64 },
                 params
             )
-        ).collect())
+        ).collect()))
     }
 }
 

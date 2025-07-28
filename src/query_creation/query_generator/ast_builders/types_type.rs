@@ -1,4 +1,4 @@
-use crate::query_creation::{query_generator::{match_next_state, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}};
+use crate::query_creation::{query_generator::{match_next_state, QueryGenerationResult, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}};
 
 /// subgraph def_types_type
 pub struct TypesTypeBuilder { }
@@ -6,8 +6,8 @@ pub struct TypesTypeBuilder { }
 impl TypesTypeBuilder {
     pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>
-    ) -> SubgraphType {
-        generator.expect_state("types_type");
+    ) -> QueryGenerationResult<SubgraphType> {
+        generator.expect_state("types_type")?;
 
         let tp = match_next_state!(generator, {
             "types_type_bigint" => SubgraphType::BigInt,
@@ -20,8 +20,8 @@ impl TypesTypeBuilder {
             "types_type_timestamp" => SubgraphType::Timestamp,
         });
 
-        generator.expect_state("EXIT_types_type");
+        generator.expect_state("EXIT_types_type")?;
 
-        tp
+        Ok(tp)
     }
 }

@@ -1,6 +1,6 @@
 use sqlparser::ast::Expr;
 
-use crate::query_creation::{query_generator::{match_next_state, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}};
+use crate::query_creation::{query_generator::{match_next_state, QueryGenerationResult, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}};
 
 use super::{date::DateBuilder, interval::IntervalBuilder, number::NumberBuilder, text::TextBuilder, timestamp::TimestampBuilder, types::TypesBuilder, val_3::Val3Builder};
 
@@ -14,20 +14,20 @@ impl FormulasBuilder {
 
     pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, expr: &mut Expr
-    ) -> SubgraphType {
-        generator.expect_state("formulas");
+    ) -> QueryGenerationResult<SubgraphType> {
+        generator.expect_state("formulas")?;
         generator.assert_single_type_argument();
         let selected_type = match_next_state!(generator, {
             "call2_number" |
             "call1_number" |
-            "call0_number" => NumberBuilder::build(generator, expr),
-            "call1_VAL_3" => Val3Builder::build(generator, expr),
-            "call0_text" => TextBuilder::build(generator, expr),
-            "call0_date" => DateBuilder::build(generator, expr),
-            "call0_timestamp" => TimestampBuilder::build(generator, expr),
-            "call0_interval" => IntervalBuilder::build(generator, expr),
+            "call0_number" => NumberBuilder::build(generator, expr)?,
+            "call1_VAL_3" => Val3Builder::build(generator, expr)?,
+            "call0_text" => TextBuilder::build(generator, expr)?,
+            "call0_date" => DateBuilder::build(generator, expr)?,
+            "call0_timestamp" => TimestampBuilder::build(generator, expr)?,
+            "call0_interval" => IntervalBuilder::build(generator, expr)?,
         });
-        generator.expect_state("EXIT_formulas");
-        selected_type
+        generator.expect_state("EXIT_formulas")?;
+        Ok(selected_type)
     }
 }

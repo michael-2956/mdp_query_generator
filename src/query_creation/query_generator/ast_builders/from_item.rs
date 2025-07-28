@@ -1,6 +1,6 @@
 use sqlparser::ast::{ObjectName, TableAlias, TableFactor};
 
-use crate::{query_creation::{query_generator::{call_modifiers::{AvailableTableNamesValue, ValueSetterValue}, highlight_ident, match_next_state, value_chooser, QueryGenerator}, state_generator::state_choosers::StateChooser}, unwrap_pat, unwrap_variant};
+use crate::{query_creation::{query_generator::{call_modifiers::{AvailableTableNamesValue, ValueSetterValue}, highlight_ident, match_next_state, value_chooser, QueryGenerationResult, QueryGenerator}, state_generator::state_choosers::StateChooser}, unwrap_pat, unwrap_variant};
 
 use super::query::QueryBuilder;
 
@@ -21,8 +21,8 @@ impl FromItemBuilder {
 
     pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, from_item: &mut TableFactor
-    ) {
-        generator.expect_state("FROM_item");
+    ) -> QueryGenerationResult<()> {
+        generator.expect_state("FROM_item")?;
 
         let alias = unwrap_pat!(from_item, TableFactor::Table { alias, .. }, alias);
         // TODO: is this logical for the LLM?
@@ -61,7 +61,7 @@ impl FromItemBuilder {
                 };
 
                 let subquery = &mut **unwrap_pat!(from_item, TableFactor::Derived { subquery, .. }, subquery);
-                let column_idents_and_graph_types = QueryBuilder::build(generator, subquery).into_query_props().into_select_type();
+                let column_idents_and_graph_types = QueryBuilder::build(generator, subquery)?.into_query_props().into_select_type();
                 
                 let alias = &mut *unwrap_pat!(from_item, TableFactor::Derived { alias, .. }, alias);
                 if let Some(query_alias) = alias {
@@ -72,6 +72,8 @@ impl FromItemBuilder {
             },
         });
 
-        generator.expect_state("EXIT_FROM_item");
+        generator.expect_state("EXIT_FROM_item")?;
+
+        Ok(())
     }
 }

@@ -63,7 +63,7 @@ pub fn test_semantic_correctness(config: Config) {
             eprint!("Testing: {} / {} ({} OK)   \r", i, n_tests, n_ok + n_ignored);
         }
 
-        let query = path_query_generator.generate();
+        let query = path_query_generator.generate().unwrap();
 
         match client.batch_execute(format!("{query};").as_str()) {
             Ok(_) => n_ok += 1,

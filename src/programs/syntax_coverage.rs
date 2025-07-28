@@ -225,7 +225,7 @@ pub fn test_single_query_path(config: Config) {
     let generated_query = path_query_generator.generate_with_substitute_model_and_value_chooser(
         Box::new(PathModel::from_path_nodes(&path)),
         Box::new(DeterministicValueChooser::from_path_nodes(&path))
-    );
+    ).unwrap();
 
     if generated_query == *query {
         println!("Query match successful!");
@@ -975,7 +975,7 @@ pub fn test_spider_syntax_coverage(config: Config) {
                     let generated_query = path_query_generator.generate_with_substitute_model_and_value_chooser(
                         Box::new(PathModel::from_path_nodes(&path)),
                         Box::new(DeterministicValueChooser::from_path_nodes(&path))
-                    );
+                    ).unwrap();
                     // might be differences in quotes and use of lowercase
                     let generated_normalised = format!("{generated_query}").replace('"', "").to_lowercase();
                     let source_normalised = format!("{query}").replace('"', "").to_lowercase();

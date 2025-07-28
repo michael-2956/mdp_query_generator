@@ -1,6 +1,6 @@
 use sqlparser::ast::{BinaryOperator, Expr, UnaryOperator};
 
-use crate::{query_creation::{query_generator::{match_next_state, QueryGenerator, ast_builders::types_value::TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}}, unwrap_pat};
+use crate::{query_creation::{query_generator::{ast_builders::types_value::TypeAssertion, match_next_state, QueryGenerationResult, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}}, unwrap_pat};
 
 use super::types::TypesBuilder;
 
@@ -14,12 +14,12 @@ impl IntervalBuilder {
 
     pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, interval: &mut Expr
-    ) -> SubgraphType {
-        generator.expect_state("interval");
+    ) -> QueryGenerationResult<SubgraphType> {
+        generator.expect_state("interval")?;
 
         match_next_state!(generator, {
             "interval_binary" => {
-                generator.expect_state("interval_add_subtract");
+                generator.expect_state("interval_add_subtract")?;
                 let op = match_next_state!(generator, {
                     "interval_add_subtract_plus" => BinaryOperator::Plus,
                     "interval_add_subtract_minus" => BinaryOperator::Minus,
@@ -33,10 +33,10 @@ impl IntervalBuilder {
                 let left = &mut **unwrap_pat!(interval, Expr::BinaryOp { left, .. }, left);
                 match_next_state!(generator, {
                     "call98_types" => { // only timestamp - timestamp in graph
-                        TypesBuilder::build(generator, left, TypeAssertion::GeneratedBy(SubgraphType::Timestamp));
+                        TypesBuilder::build(generator, left, TypeAssertion::GeneratedBy(SubgraphType::Timestamp))?;
                     },
                     "call91_types" => {
-                        TypesBuilder::build(generator, left, TypeAssertion::GeneratedBy(SubgraphType::Interval));
+                        TypesBuilder::build(generator, left, TypeAssertion::GeneratedBy(SubgraphType::Interval))?;
                     },
                 });
 
@@ -44,10 +44,10 @@ impl IntervalBuilder {
                 *right = TypesBuilder::highlight();
                 match_next_state!(generator, {
                     "call99_types" => { // only timestamp - timestamp in graph
-                        TypesBuilder::build(generator, right, TypeAssertion::GeneratedBy(SubgraphType::Timestamp));
+                        TypesBuilder::build(generator, right, TypeAssertion::GeneratedBy(SubgraphType::Timestamp))?;
                     },
                     "call92_types" => {
-                        TypesBuilder::build(generator, right, TypeAssertion::GeneratedBy(SubgraphType::Interval));
+                        TypesBuilder::build(generator, right, TypeAssertion::GeneratedBy(SubgraphType::Interval))?;
                     },
                 });
             },
@@ -56,14 +56,14 @@ impl IntervalBuilder {
                     op: UnaryOperator::Minus,
                     expr: Box::new(TypesBuilder::highlight())
                 };
-                generator.expect_state("call93_types");
+                generator.expect_state("call93_types")?;
                 let expr = &mut **unwrap_pat!(interval, Expr::UnaryOp { expr, .. }, expr);
-                TypesBuilder::build(generator, expr, TypeAssertion::GeneratedBy(SubgraphType::Interval));
+                TypesBuilder::build(generator, expr, TypeAssertion::GeneratedBy(SubgraphType::Interval))?;
             },
         });
 
-        generator.expect_state("EXIT_interval");
+        generator.expect_state("EXIT_interval")?;
         
-        SubgraphType::Interval
+        Ok(SubgraphType::Interval)
     }
 }

@@ -30,10 +30,10 @@ fn run_generation<StC: StateChooser + Send + Sync>(
         let start_time = Instant::now();
         let query_ast;
         (predictor_model, query_ast) = if let Some(model) = predictor_model {
-            let (model, query) = generator.generate_with_model(model);
+            let (model, query) = generator.generate_with_model(model).unwrap();
             (Some(model), query)
         } else {
-            (None, generator.generate())
+            (None, generator.generate().unwrap())
         };
         accumulated_time_ns += (Instant::now() - start_time).as_nanos();
 

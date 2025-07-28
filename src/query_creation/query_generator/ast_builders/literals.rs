@@ -1,6 +1,6 @@
 use sqlparser::ast::{DataType, Expr, Interval, TimezoneInfo, UnaryOperator, Value};
 
-use crate::{query_creation::{query_generator::{highlight_str, match_next_state, value_chooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}}, unwrap_pat};
+use crate::{query_creation::{query_generator::{highlight_str, match_next_state, value_chooser, QueryGenerationResult, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}}, unwrap_pat};
 
 use super::types::TypesBuilder;
 
@@ -14,8 +14,8 @@ impl LiteralsBuilder {
 
     pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, expr: &mut Expr
-    ) -> SubgraphType {
-        generator.expect_state("literals");
+    ) -> QueryGenerationResult<SubgraphType> {
+        generator.expect_state("literals")?;
 
         let tp = match_next_state!(generator, {
             "bool_literal" => {
@@ -99,11 +99,11 @@ impl LiteralsBuilder {
         match_next_state!(generator, {
             "literals_explicit_cast" => {
                 *expr = Expr::Cast { expr: Box::new(expr.clone()), data_type: tp.to_data_type(), format: None };
-                generator.expect_state("EXIT_literals");
+                generator.expect_state("EXIT_literals")?;
             }, // then 
             "EXIT_literals" => { }
         });
 
-        tp
+        Ok(tp)
     }
 }

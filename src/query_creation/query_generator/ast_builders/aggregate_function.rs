@@ -1,6 +1,6 @@
 use sqlparser::ast::{self, Expr, FunctionArg, FunctionArgExpr, ObjectName};
 
-use crate::{query_creation::{query_generator::{aggregate_function_settings::AggregateFunctionAgruments, highlight_ident, match_next_state, value_chooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}}, unwrap_pat};
+use crate::{query_creation::{query_generator::{aggregate_function_settings::AggregateFunctionAgruments, highlight_ident, match_next_state, value_chooser, QueryGenerationResult, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}}, unwrap_pat};
 
 use super::{types::TypesBuilder, types_value::TypeAssertion};
 
@@ -22,8 +22,8 @@ impl AggregateFunctionBuilder {
 
     pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, expr: &mut Expr
-    ) -> SubgraphType {
-        generator.expect_state("aggregate_function");
+    ) -> QueryGenerationResult<SubgraphType> {
+        generator.expect_state("aggregate_function")?;
 
         *expr = Expr::Function(ast::Function {
             name: ObjectName(vec![]),
@@ -45,7 +45,7 @@ impl AggregateFunctionBuilder {
             "aggregate_distinct" => true,
         });
 
-        generator.expect_state("aggregate_select_return_type");
+        generator.expect_state("aggregate_select_return_type")?;
 
         let args = unwrap_pat!(expr, Expr::Function(ast::Function{ args, .. }), args);
         *args = vec![unnamed_arg(TypesBuilder::highlight())];
@@ -61,14 +61,14 @@ impl AggregateFunctionBuilder {
                         AggregateFunctionAgruments::Wildcard
                     },
                     "arg_bigint_any" => {
-                        generator.expect_state("call65_types");
-                        TypesBuilder::build(generator, get_last_expr_mut(args), TypeAssertion::None);
+                        generator.expect_state("call65_types")?;
+                        TypesBuilder::build(generator, get_last_expr_mut(args), TypeAssertion::None)?;
                         AggregateFunctionAgruments::AnyType
                     },
                     "arg_bigint" => {
-                        generator.expect_state("call75_types");
+                        generator.expect_state("call75_types")?;
                         generator.state_generator.set_compatible_list(SubgraphType::BigInt.get_compat_types());
-                        TypesBuilder::build(generator, get_last_expr_mut(args), TypeAssertion::CompatibleWith(SubgraphType::BigInt));
+                        TypesBuilder::build(generator, get_last_expr_mut(args), TypeAssertion::CompatibleWith(SubgraphType::BigInt))?;
                         AggregateFunctionAgruments::TypeList(vec![SubgraphType::BigInt])
                     },
                 });
@@ -86,16 +86,16 @@ impl AggregateFunctionBuilder {
 
                 match_next_state!(generator, {
                     arm if arm == states[0] => {
-                        generator.expect_state(states[1]);
-                        TypesBuilder::build(generator, get_last_expr_mut(args), TypeAssertion::CompatibleWith(return_type.clone()));
+                        generator.expect_state(states[1])?;
+                        TypesBuilder::build(generator, get_last_expr_mut(args), TypeAssertion::CompatibleWith(return_type.clone()))?;
                         args.push(unnamed_arg(TypesBuilder::highlight())); // add the placeholder for the next argument
                         args_type_v.push(return_type.clone());
                     },
                     arm if arm == states[2] => { },
                 });
 
-                generator.expect_state(states[3]);
-                TypesBuilder::build(generator, get_last_expr_mut(args), TypeAssertion::CompatibleWith(return_type.clone()));
+                generator.expect_state(states[3])?;
+                TypesBuilder::build(generator, get_last_expr_mut(args), TypeAssertion::CompatibleWith(return_type.clone()))?;
                 args_type_v.push(return_type.clone());
 
                 let args_type = AggregateFunctionAgruments::TypeList(args_type_v);
@@ -111,9 +111,9 @@ impl AggregateFunctionBuilder {
                     any => generator.panic_unexpected(any),
                 };
 
-                generator.expect_states(states);
+                generator.expect_states(states)?;
                 generator.state_generator.set_compatible_list(return_type.get_compat_types());
-                TypesBuilder::build(generator, get_last_expr_mut(args), TypeAssertion::CompatibleWith(return_type.clone()));
+                TypesBuilder::build(generator, get_last_expr_mut(args), TypeAssertion::CompatibleWith(return_type.clone()))?;
 
                 (AggregateFunctionAgruments::TypeList(vec![return_type.clone()]), return_type)
             },
@@ -124,7 +124,7 @@ impl AggregateFunctionBuilder {
         *name = ObjectName(vec![highlight_ident()]);
         *name = value_chooser!(generator).choose_aggregate_function_name(func_names, dist);
 
-        generator.expect_state("EXIT_aggregate_function");
-        return_type
+        generator.expect_state("EXIT_aggregate_function")?;
+        Ok(return_type)
     }
 }

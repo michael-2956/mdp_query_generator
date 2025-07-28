@@ -1,6 +1,6 @@
 use sqlparser::ast::{Join, JoinConstraint, JoinOperator, TableWithJoins};
 
-use crate::{query_creation::{query_generator::{ast_builders::{from_item::FromItemBuilder, types::TypesBuilder}, match_next_state, QueryGenerator, ast_builders::types_value::TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}}, unwrap_pat};
+use crate::{query_creation::{query_generator::{ast_builders::{from_item::FromItemBuilder, types::TypesBuilder, types_value::TypeAssertion}, match_next_state, QueryGenerationResult, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}}, unwrap_pat};
 
 /// subgraph def_FROM
 pub struct FromBuilder { }
@@ -12,8 +12,8 @@ impl FromBuilder {
 
     pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, from: &mut Vec<TableWithJoins>
-    ) {
-        generator.expect_state("FROM");
+    ) -> QueryGenerationResult<()> {
+        generator.expect_state("FROM")?;
 
         loop {
             generator.clause_context.top_from_mut().add_subfrom();
@@ -24,7 +24,7 @@ impl FromBuilder {
                         joins: vec![]
                     });
                     let from_item = &mut from.last_mut().unwrap().relation;
-                    FromItemBuilder::build(generator, from_item);
+                    FromItemBuilder::build(generator, from_item)?;
                 },
                 "EXIT_FROM" => {
                     generator.clause_context.top_from_mut().delete_subfrom();
@@ -49,11 +49,11 @@ impl FromBuilder {
                             join_operator,
                         });
 
-                        generator.expect_states(&["FROM_join_to", "call1_FROM_item"]);
+                        generator.expect_states(&["FROM_join_to", "call1_FROM_item"])?;
                         let relation = &mut joins.last_mut().unwrap().relation;
-                        FromItemBuilder::build(generator, relation);
+                        FromItemBuilder::build(generator, relation)?;
 
-                        generator.expect_states(&["FROM_join_on", "call83_types"]);
+                        generator.expect_states(&["FROM_join_on", "call83_types"])?;
                         let join_on = unwrap_pat!(&mut joins.last_mut().unwrap().join_operator,
                             JoinOperator::Inner(JoinConstraint::On(join_on)) |
                             JoinOperator::LeftOuter(JoinConstraint::On(join_on)) |
@@ -62,7 +62,7 @@ impl FromBuilder {
                             join_on
                         );
                         generator.clause_context.top_from_mut().activate_subfrom();
-                        TypesBuilder::build(generator, join_on, TypeAssertion::GeneratedBy(SubgraphType::Val3));
+                        TypesBuilder::build(generator, join_on, TypeAssertion::GeneratedBy(SubgraphType::Val3))?;
                         generator.clause_context.top_from_mut().deactivate_subfrom();
 
                         match_next_state!(generator, {
@@ -76,5 +76,7 @@ impl FromBuilder {
             generator.clause_context.top_from_mut().delete_subfrom();
         }
         generator.clause_context.top_from_mut().activate_from();
+
+        Ok(())
     }
 }

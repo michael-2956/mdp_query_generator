@@ -1,6 +1,6 @@
 use sqlparser::ast::{Expr, Value};
 
-use crate::{query_creation::{query_generator::{expr_precedence::ExpressionPriority, match_next_state, query_info::IdentName, QueryGenerator}, state_generator::{markov_chain_generator::markov_chain::QueryTypes, state_choosers::StateChooser, subgraph_type::{ContainsSubgraphType, SubgraphType}, CallTypes}}, unwrap_variant};
+use crate::{query_creation::{query_generator::{expr_precedence::ExpressionPriority, match_next_state, query_info::IdentName, QueryGenerationResult, QueryGenerator}, state_generator::{markov_chain_generator::markov_chain::QueryTypes, state_choosers::StateChooser, subgraph_type::{ContainsSubgraphType, SubgraphType}, CallTypes}}, unwrap_variant};
 
 use super::{aggregate_function::AggregateFunctionBuilder, case::CaseBuilder, column_spec::ColumnSpecBuilder, formulas::FormulasBuilder, literals::LiteralsBuilder, query::QueryBuilder, types::TypesBuilder};
 
@@ -52,18 +52,18 @@ impl TypesValueBuilder {
     /// value may have a name if it comes from a subquery
     pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, types_value: &mut Expr, type_assertion: TypeAssertion
-    ) -> (Option<IdentName>, SubgraphType) {
+    ) -> QueryGenerationResult<(Option<IdentName>, SubgraphType)> {
         let mut column_name = None;
-        generator.expect_state("types_value");
+        generator.expect_state("types_value")?;
         let selected_types = unwrap_variant!(generator.state_generator.get_fn_selected_types_unwrapped(), CallTypes::TypeList);
         generator.state_generator.set_known_list(selected_types.clone());
         let selected_type = match_next_state!(generator, {
             "types_value_nested" => {
-                generator.expect_state("call1_types_value");
+                generator.expect_state("call1_types_value")?;
                 *types_value = Expr::Nested(Box::new(TypesValueBuilder::highlight()));
                 let expr = &mut **unwrap_variant!(types_value, Expr::Nested);
                 let selected_type;
-                (column_name, selected_type) = TypesValueBuilder::build(generator, expr, TypeAssertion::None);
+                (column_name, selected_type) = TypesValueBuilder::build(generator, expr, TypeAssertion::None)?;
                 selected_type
             },
             "types_value_null" => {
@@ -86,13 +86,13 @@ impl TypesValueBuilder {
                 };
                 null_type
             },
-            "call0_case" => CaseBuilder::build(generator, types_value),
-            "call0_formulas" => FormulasBuilder::build(generator, types_value),
-            "call0_literals" => LiteralsBuilder::build(generator, types_value),
-            "call0_aggregate_function" => AggregateFunctionBuilder::build(generator, types_value),
+            "call0_case" => CaseBuilder::build(generator, types_value)?,
+            "call0_formulas" => FormulasBuilder::build(generator, types_value)?,
+            "call0_literals" => LiteralsBuilder::build(generator, types_value)?,
+            "call0_aggregate_function" => AggregateFunctionBuilder::build(generator, types_value)?,
             "column_type_available" => {
-                generator.expect_state("call0_column_spec");
-                ColumnSpecBuilder::build(generator, types_value)
+                generator.expect_state("call0_column_spec")?;
+                ColumnSpecBuilder::build(generator, types_value)?
             },
             "call1_Query" => {
                 // known list is also set at this point but we ignore that
@@ -101,7 +101,7 @@ impl TypesValueBuilder {
                 });
                 *types_value = Expr::Subquery(Box::new(QueryBuilder::nothing()));
                 let subquery = &mut **unwrap_variant!(types_value, Expr::Subquery);
-                let column_types = QueryBuilder::build(generator, subquery).into_query_props().into_select_type();
+                let column_types = QueryBuilder::build(generator, subquery)?.into_query_props().into_select_type();
                 let selected_type;
                 (column_name, selected_type) = match column_types.len() {
                     1 => column_types.into_iter().next().unwrap(),
@@ -114,12 +114,12 @@ impl TypesValueBuilder {
             },
         });
         type_assertion.check(&selected_type, &types_value);
-        generator.expect_state("EXIT_types_value");
+        generator.expect_state("EXIT_types_value")?;
 
         // avoid cloning
         let mut p = Expr::Value(Value::Null); std::mem::swap(types_value, &mut p);
         *types_value = p.nest_children_if_needed();
 
-        (column_name, selected_type)
+        Ok((column_name, selected_type))
     }
 }

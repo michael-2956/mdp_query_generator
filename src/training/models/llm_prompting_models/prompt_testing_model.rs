@@ -1,12 +1,13 @@
 use std::{path::PathBuf, sync::atomic::AtomicPtr};
 
-use crate::query_creation::{query_generator::unwrap_query_ptr_unsafe, state_generator::markov_chain_generator::{markov_chain::NodeParams, StackFrame}};
+use crate::{query_creation::{query_generator::unwrap_query_ptr_unsafe, state_generator::markov_chain_generator::{markov_chain::NodeParams, StackFrame}}, training::models::DecisionResult};
 
-use super::{llm_prompts::LLMPrompts, ModelPredictionResult, PathwayGraphModel};
+use super::{llm_prompts::LLMPrompts, ModelPrediction, PathwayGraphModel};
 
 use smol_str::SmolStr;
 use sqlparser::ast::Query;
 
+#[derive(Debug)]
 pub struct PromptTestingModel {
     prompts: Option<LLMPrompts>,
 }
@@ -40,9 +41,9 @@ impl PathwayGraphModel for PromptTestingModel {
         Ok(())
     }
 
-    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, _current_exit_node_name: &SmolStr, current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) -> ModelPredictionResult {
+    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, _current_exit_node_name: &SmolStr, current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) -> DecisionResult<ModelPrediction> {
         if node_outgoing.len() == 1 {
-            return ModelPredictionResult::Some(node_outgoing.into_iter().map(|p| (1f64, p)).collect());
+            return Ok(ModelPrediction::Some(node_outgoing.into_iter().map(|p| (1f64, p)).collect()));
         }
 
         // TODO: Remove this once the qualified_column_name/unqualified_column_name will be
@@ -50,11 +51,11 @@ impl PathwayGraphModel for PromptTestingModel {
         if node_outgoing.iter().any(|node| [
             "qualified_column_name", "unqualified_column_name"
         ].contains(&node.node_common.name.as_str())) {
-            return ModelPredictionResult::Some(node_outgoing.into_iter().map(
+            return Ok(ModelPrediction::Some(node_outgoing.into_iter().map(
                 |node| (if node.node_common.name.as_str() == "qualified_column_name" {
                     1f64
                 } else { 0f64 }, node)
-            ).collect())
+            ).collect()))
         }
 
         let current_query_str = format!("{}", unwrap_query_ptr_unsafe(current_query_ast_ptr_opt));
@@ -84,7 +85,7 @@ impl PathwayGraphModel for PromptTestingModel {
             panic!("Query: {current_query_str}\n# templates: {num_templates}\nCurrent node: {current_node}\nOutgoing nodes: {outgoing_str}\nPrompts: {prompt_str}")
         }
         
-        ModelPredictionResult::None(node_outgoing)
+        Ok(ModelPrediction::None(node_outgoing))
     }
 }
 

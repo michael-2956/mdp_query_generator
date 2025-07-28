@@ -1,6 +1,6 @@
 use sqlparser::ast::Expr;
 
-use crate::query_creation::{query_generator::{QueryGenerator, ast_builders::types_value::TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}};
+use crate::query_creation::{query_generator::{ast_builders::types_value::TypeAssertion, QueryGenerationResult, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}};
 
 use super::types::TypesBuilder;
 
@@ -14,11 +14,12 @@ impl HavingBuilder {
 
     pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, having: &mut Expr
-    ) {
-        generator.expect_state("HAVING");
-        generator.expect_state("call45_types");
-        TypesBuilder::build(generator, having, TypeAssertion::GeneratedBy(SubgraphType::Val3));
+    ) -> QueryGenerationResult<()> {
+        generator.expect_state("HAVING")?;
+        generator.expect_state("call45_types")?;
+        TypesBuilder::build(generator, having, TypeAssertion::GeneratedBy(SubgraphType::Val3))?;
         generator.clause_context.query_mut().set_aggregation_indicated();
-        generator.expect_state("EXIT_HAVING");
+        generator.expect_state("EXIT_HAVING")?;
+        Ok(())
     }
 }

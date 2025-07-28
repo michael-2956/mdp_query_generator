@@ -1,6 +1,6 @@
 use sqlparser::ast::Expr;
 
-use crate::query_creation::{query_generator::{ast_builders::types_type::TypesTypeBuilder, match_next_state, QueryGenerator, ast_builders::types_value::TypeAssertion}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}};
+use crate::query_creation::{query_generator::{ast_builders::{types_type::TypesTypeBuilder, types_value::TypeAssertion}, match_next_state, QueryGenerationResult, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType}};
 
 use super::types::TypesBuilder;
 
@@ -18,23 +18,23 @@ impl ListExprBuilder {
 
     pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, list_expr: &mut Vec<Expr>
-    ) -> SubgraphType {
-        generator.expect_state("list_expr");
-        generator.expect_state("call6_types_type");
-        let inner_type = TypesTypeBuilder::build(generator);
+    ) -> QueryGenerationResult<SubgraphType> {
+        generator.expect_state("list_expr")?;
+        generator.expect_state("call6_types_type")?;
+        let inner_type = TypesTypeBuilder::build(generator)?;
         generator.state_generator.set_compatible_list(inner_type.get_compat_types());
-        generator.expect_state("call16_types");
+        generator.expect_state("call16_types")?;
         
         let expr = list_expr.last_mut().unwrap();
-        TypesBuilder::build(generator, expr, TypeAssertion::CompatibleWith(inner_type.clone()));
-        generator.expect_state("list_expr_multiple_values");
+        TypesBuilder::build(generator, expr, TypeAssertion::CompatibleWith(inner_type.clone()))?;
+        generator.expect_state("list_expr_multiple_values")?;
 
         list_expr.push(TypesBuilder::highlight());
         loop {
             match_next_state!(generator, {
                 "call49_types" => {
                     let expr = list_expr.last_mut().unwrap();
-                    TypesBuilder::build(generator, expr, TypeAssertion::CompatibleWith(inner_type.clone()));
+                    TypesBuilder::build(generator, expr, TypeAssertion::CompatibleWith(inner_type.clone()))?;
                     list_expr.push(TypesBuilder::highlight());
                 },
                 "EXIT_list_expr" => {
@@ -44,6 +44,6 @@ impl ListExprBuilder {
             })
         }
 
-        SubgraphType::ListExpr(Box::new(inner_type))
+        Ok(SubgraphType::ListExpr(Box::new(inner_type)))
     }
 }

@@ -1,6 +1,6 @@
 use sqlparser::ast::{Expr, GroupByExpr, Select, Value};
 
-use crate::query_creation::{query_generator::{ast_builders::{from::FromBuilder, group_by::GroupByBuilder, having::HavingBuilder, select::SelectBuilder, where_clause::WhereBuilder}, match_next_state, QueryGenerator}, state_generator::state_choosers::StateChooser};
+use crate::query_creation::{query_generator::{ast_builders::{from::FromBuilder, group_by::GroupByBuilder, having::HavingBuilder, select::SelectBuilder, where_clause::WhereBuilder}, match_next_state, QueryGenerationResult, QueryGenerator}, state_generator::state_choosers::StateChooser};
 
 pub struct SelectQueryBuilder { }
 
@@ -46,19 +46,19 @@ impl SelectQueryBuilder {
 
     pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, select_body: &mut Select
-    ) {
-        generator.expect_state("SELECT_query");
+    ) -> QueryGenerationResult<()> {
+        generator.expect_state("SELECT_query")?;
 
-        generator.expect_state("call0_FROM");
+        generator.expect_state("call0_FROM")?;
         select_body.from = FromBuilder::highlight();
-        FromBuilder::build(generator, &mut select_body.from);
+        FromBuilder::build(generator, &mut select_body.from)?;
 
         select_body.selection = Some(WhereBuilder::highlight());
         match_next_state!(generator, {
             "call0_WHERE" => {
                 let where_val3 = select_body.selection.as_mut().unwrap();
-                WhereBuilder::build(generator, where_val3);
-                generator.expect_state("WHERE_done");
+                WhereBuilder::build(generator, where_val3)?;
+                generator.expect_state("WHERE_done")?;
             },
             "WHERE_done" => { select_body.selection = None; },
         });
@@ -66,13 +66,13 @@ impl SelectQueryBuilder {
         select_body.group_by = GroupByBuilder::highlight();
         match_next_state!(generator, {
             "call0_GROUP_BY" => {
-                GroupByBuilder::build(generator, &mut select_body.group_by);
+                GroupByBuilder::build(generator, &mut select_body.group_by)?;
 
                 select_body.having = Some(HavingBuilder::highlight());
                 match_next_state!(generator, {
                     "call0_HAVING" => {
-                        HavingBuilder::build(generator, select_body.having.as_mut().unwrap());
-                        generator.expect_state("call0_SELECT");
+                        HavingBuilder::build(generator, select_body.having.as_mut().unwrap())?;
+                        generator.expect_state("call0_SELECT")?;
                     },
                     "call0_SELECT" => {
                         select_body.having = None;
@@ -85,7 +85,7 @@ impl SelectQueryBuilder {
         });
 
         (select_body.distinct, select_body.projection) = SelectBuilder::nothing();
-        SelectBuilder::build(generator, &mut select_body.distinct, &mut select_body.projection);
+        SelectBuilder::build(generator, &mut select_body.distinct, &mut select_body.projection)?;
 
         if generator.clause_context.top_group_by().is_grouping_active() && !generator.clause_context.query().is_aggregation_indicated() {
             if select_body.group_by == GroupByExpr::Expressions(vec![]) {
@@ -95,6 +95,8 @@ impl SelectQueryBuilder {
             }
         }
 
-        generator.expect_state("EXIT_SELECT_query");
+        generator.expect_state("EXIT_SELECT_query")?;
+
+        Ok(())
     }
 }

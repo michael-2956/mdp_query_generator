@@ -5,11 +5,11 @@ use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 use sqlparser::ast::Query;
 
-use crate::query_creation::state_generator::markov_chain_generator::{markov_chain::{CallParams, NodeParams}, StackFrame};
+use crate::{query_creation::state_generator::markov_chain_generator::{markov_chain::{CallParams, NodeParams}, StackFrame}, training::models::DecisionResult};
 
 use self::markov_weights::MarkovWeights;
 
-use super::{ModelPredictionResult, PathwayGraphModel};
+use super::{ModelPrediction, PathwayGraphModel};
 
 pub mod markov_weights;
 
@@ -101,7 +101,7 @@ where
         self.weights.print();
     }
 
-    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, _current_exit_node_name: &SmolStr, _current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) -> ModelPredictionResult {
+    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, _current_exit_node_name: &SmolStr, _current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) -> DecisionResult<ModelPrediction> {
         let context = &call_stack.last().unwrap().function_context;
         let func_name = FnCntxt::from_call_stack_and_exit_frame(call_stack, None);
         let current_node = &context.current_node.node_common.name;
@@ -137,10 +137,10 @@ where
                 eprintln!("output = {:#?}\n", output);
             }
         }
-        output.map_or(
-            ModelPredictionResult::None(node_outgoing),
-            |output| ModelPredictionResult::Some(output)
-        )
+        Ok(output.map_or(
+            ModelPrediction::None(node_outgoing),
+            |output| ModelPrediction::Some(output)
+        ))
     }
 
     fn write_weights_to_dot(&self, dot_file_path: &PathBuf) -> io::Result<()> {

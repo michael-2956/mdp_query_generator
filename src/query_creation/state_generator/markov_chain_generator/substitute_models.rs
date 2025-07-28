@@ -2,7 +2,7 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 
-use crate::{config::TomlReadable, training::ast_to_path::PathNode};
+use crate::{config::TomlReadable, query_creation::state_generator::markov_chain_generator::StateGenerationResult, training::ast_to_path::PathNode};
 
 use super::{markov_chain::NodeParams, StateGenerationError};
 
@@ -12,7 +12,7 @@ pub trait SubstituteModel: Send + Sync {
     fn reset(&mut self);
     /// assigns the (unnormalized) log-probabilities to the outgoing nodes.
     /// Receives log-probability distruibution recorded in graph
-    fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError>;
+    fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> StateGenerationResult<Vec::<(f64, NodeParams)>>;
     /// is called at the beginning of each subquery creation
     fn notify_subquery_creation_begin(&mut self) {}
     /// is called at the end of each subquery creation
@@ -33,7 +33,7 @@ impl MarkovModel {
 }
 
 impl SubstituteModel for MarkovModel {
-    fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError> {
+    fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> StateGenerationResult<Vec::<(f64, NodeParams)>> {
         Ok(node_outgoing)
     }
 
@@ -66,11 +66,11 @@ impl PathModel {
 }
 
 impl SubstituteModel for PathModel {
-    fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError> {
+    fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> StateGenerationResult<Vec::<(f64, NodeParams)>> {
         let node_name = &self.path[self.index];
         self.index += 1;
         if node_outgoing.iter().find(|(.., node)| node.node_common.name == *node_name).is_none() {
-            Err(StateGenerationError::new(format!(
+            Err(StateGenerationError::with_reason(format!(
                 "Did not find {node_name} among {:?}", node_outgoing.iter().map(
                     |(.., node)| node.node_common.name.to_string()
                 ).collect::<Vec<_>>()
@@ -116,10 +116,10 @@ impl DeterministicModel {
 }
 
 impl SubstituteModel for DeterministicModel {
-    fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError> {
+    fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> StateGenerationResult<Vec::<(f64, NodeParams)>> {
         let node_name = self.state_to_choose.take().unwrap();
         if node_outgoing.iter().find(|(.., node)| node.node_common.name == node_name).is_none() {
-            Err(StateGenerationError::new(format!(
+            Err(StateGenerationError::with_reason(format!(
                 "Did not find {node_name} among {:?}", node_outgoing.iter().map(
                     |(.., node)| node.node_common.name.to_string()
                 ).collect::<Vec<_>>()
@@ -210,7 +210,7 @@ impl AntiCallModel {
 }
 
 impl SubstituteModel for AntiCallModel {
-    fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> Result<Vec::<(f64, NodeParams)>, StateGenerationError> {
+    fn trasform_log_probabilities(&mut self, node_outgoing: Vec<(f64, NodeParams)>) -> StateGenerationResult<Vec::<(f64, NodeParams)>> {
         let prob_multiplier = if self.stats.current_stack_length > self.actual_stir_level { 100f64 } else { 0f64 };
         Ok(node_outgoing.into_iter().map(|(l_p, node)| (
             l_p - (node.min_calls_until_function_exit as f64) * prob_multiplier,

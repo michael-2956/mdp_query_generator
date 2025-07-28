@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use sqlparser::ast::{Query, SetExpr};
 
-use crate::query_creation::{query_generator::{ast_builders::{limit::LimitBuilder, order_by::OrderByBuilder}, query_info::ClauseContextFrame, QueryGenerator}, state_generator::{markov_chain_generator::markov_chain::QueryTypes, state_choosers::StateChooser}};
+use crate::query_creation::{query_generator::{ast_builders::{limit::LimitBuilder, order_by::OrderByBuilder}, query_info::ClauseContextFrame, QueryGenerationResult, QueryGenerator}, state_generator::{markov_chain_generator::markov_chain::QueryTypes, state_choosers::StateChooser}};
 
 use super::{set_expression::SetExpressionBuilder, set_expression_determine_type::SetExpressionDetermineTypeBuilder};
 
@@ -84,22 +84,22 @@ impl QueryBuilder {
 
     pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, query: &mut Query
-    ) -> ClauseContextFrame {
+    ) -> QueryGenerationResult<ClauseContextFrame> {
         generator.substitute_model.notify_subquery_creation_begin();
         generator.clause_context.on_query_begin(generator.state_generator.get_fn_modifiers_opt());
-        generator.expect_state("Query");
+        generator.expect_state("Query")?;
 
-        generator.expect_state("call1_set_expression_determine_type");
+        generator.expect_state("call1_set_expression_determine_type")?;
         let column_type_list = QueryTypes::ColumnTypeLists {
             column_type_lists: SetExpressionDetermineTypeBuilder::build(
                 generator
-            ).into_iter().map(|x| vec![x]).collect_vec()
+            )?.into_iter().map(|x| vec![x]).collect_vec()
         };
 
-        generator.expect_state("call0_set_expression");
+        generator.expect_state("call0_set_expression")?;
         generator.state_generator.set_known_query_type_list(column_type_list.clone());
         query.body = Box::new(SetExpressionBuilder::nothing());
-        SetExpressionBuilder::build(generator, &mut query.body);
+        SetExpressionBuilder::build(generator, &mut query.body)?;
 
         let query_type = generator.clause_context.query().select_type();
         if !column_type_list.check_type_fits(query_type.iter().map(|(_, t)| t)) {
@@ -109,16 +109,16 @@ impl QueryBuilder {
             )
         }
 
-        generator.expect_state("call0_ORDER_BY");
+        generator.expect_state("call0_ORDER_BY")?;
         query.order_by = OrderByBuilder::highlight();
-        OrderByBuilder::build(generator, &mut query.order_by);
+        OrderByBuilder::build(generator, &mut query.order_by)?;
 
-        generator.expect_state("call0_LIMIT");
+        generator.expect_state("call0_LIMIT")?;
         query.limit = LimitBuilder::highlight();
-        LimitBuilder::build(generator, &mut query.limit);
+        LimitBuilder::build(generator, &mut query.limit)?;
 
-        generator.expect_state("EXIT_Query");
+        generator.expect_state("EXIT_Query")?;
         generator.substitute_model.notify_subquery_creation_end();
-        generator.clause_context.on_query_end()
+        Ok(generator.clause_context.on_query_end())
     }
 }

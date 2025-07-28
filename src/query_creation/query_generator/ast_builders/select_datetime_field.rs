@@ -1,6 +1,6 @@
 use sqlparser::ast::DateTimeField;
 
-use crate::query_creation::{query_generator::{match_next_state, QueryGenerator}, state_generator::state_choosers::StateChooser};
+use crate::query_creation::{query_generator::{match_next_state, QueryGenerationResult, QueryGenerator}, state_generator::state_choosers::StateChooser};
 
 /// subgraph def_select_datetime_field
 pub struct SelectDatetimeFieldBuilder { }
@@ -8,8 +8,8 @@ pub struct SelectDatetimeFieldBuilder { }
 impl SelectDatetimeFieldBuilder {
     pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>
-    ) -> DateTimeField {
-        generator.expect_state("select_datetime_field");
+    ) -> QueryGenerationResult<DateTimeField> {
+        generator.expect_state("select_datetime_field")?;
         let field = match_next_state!(generator, {
             "select_datetime_field_microseconds" => DateTimeField::Microseconds,
             "select_datetime_field_milliseconds" => DateTimeField::Milliseconds,
@@ -27,7 +27,7 @@ impl SelectDatetimeFieldBuilder {
             "select_datetime_field_century" => DateTimeField::Century,
             "select_datetime_field_millennium" => DateTimeField::Millennium,
         });
-        generator.expect_state("EXIT_select_datetime_field");
-        field
+        generator.expect_state("EXIT_select_datetime_field")?;
+        Ok(field)
     }
 }

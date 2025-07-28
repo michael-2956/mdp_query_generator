@@ -6,14 +6,14 @@ pub mod value_choosers;
 pub mod expr_precedence;
 pub mod aggregate_function_settings;
 
-use std::{path::PathBuf, sync::atomic::{AtomicPtr, Ordering}};
+use std::{error::Error, fmt, path::PathBuf, sync::atomic::{AtomicPtr, Ordering}};
 
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use smol_str::SmolStr;
 use sqlparser::ast::{Expr, Ident, Query};
 
-use crate::{config::TomlReadable, training::models::PathwayGraphModel};
+use crate::{config::TomlReadable, query_creation::state_generator::markov_chain_generator::StateGenerationError, training::models::PathwayGraphModel};
 
 use super::{
     super::unwrap_variant,
@@ -75,6 +75,33 @@ pub struct QueryGenerator<StC: StateChooser + Send + Sync> {
     current_query_raw_ptr: Option<AtomicPtr<Query>>,
 }
 
+#[derive(Debug)]
+pub enum QueryGenerationError {
+    WithReason(String),
+    StateGeneration(StateGenerationError),
+}
+
+impl Error for QueryGenerationError { }
+
+impl fmt::Display for QueryGenerationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            QueryGenerationError::WithReason(reason) => write!(
+                        f, "Query generation error: {}", reason),
+            QueryGenerationError::StateGeneration(sg_error) => write!(
+                        f, "State generation error: {sg_error}"),
+        }
+    }
+}
+
+impl QueryGenerationError {
+    pub fn with_reason(reason: String) -> Self {
+        Self::WithReason(reason)
+    }
+}
+
+pub type QueryGenerationResult<T> = Result<T, QueryGenerationError>;
+
 pub trait Unnested {
     fn unnested(&self) -> &Expr;
 }
@@ -90,7 +117,7 @@ impl Unnested for Expr {
 
 macro_rules! match_next_state {
     ($generator:expr, { $($state:pat $(if $guard:expr)? => $body:block),* $(,)? }) => {
-        match $generator.next_state().as_str() {
+        match $generator.next_state()?.as_str() {
             $(
                 $state $(if $guard)? => $body,
             )*
@@ -98,7 +125,7 @@ macro_rules! match_next_state {
         }
     };
     ($generator:expr, { $($state:pat $(if $guard:expr)? => $body:expr),* $(,)? }) => {
-        match $generator.next_state().as_str() {
+        match $generator.next_state()?.as_str() {
             $(
                 $state $(if $guard)? => { $body },
             )*
@@ -184,19 +211,24 @@ impl<StC: StateChooser + Send + Sync> QueryGenerator<StC> {
         }
     }
 
-    fn next_state_opt(&mut self) -> Option<SmolStr> {
+    fn next_state_opt(&mut self) -> QueryGenerationResult<Option<SmolStr>> {
         // self.perform_model_backtracking();
-        self.state_generator.next_node_name(
+        match self.state_generator.next_node_name(
             &mut self.rng,
             &mut self.clause_context,
             &mut *self.substitute_model,
             self.predictor_model.as_mut(),
             &mut self.current_query_raw_ptr,
-        ).unwrap()
+        ) {
+            Ok(state_opt) => Ok(state_opt),
+            Err(sg_error) => Err(
+                QueryGenerationError::StateGeneration(sg_error)
+            ),
+        }
     }
 
-    fn next_state(&mut self) -> SmolStr {
-        let next_state = self.next_state_opt().unwrap();
+    fn next_state(&mut self) -> QueryGenerationResult<SmolStr> {
+        let next_state = self.next_state_opt()?.unwrap();
         // eprintln!("{next_state}");
         // eprintln!("{}\n", unwrap_query_ptr_unsafe(&mut self.current_query_raw_ptr)).unwrap());
         if let Some(ref mut model) = self.train_model {
@@ -205,7 +237,7 @@ impl<StC: StateChooser + Send + Sync> QueryGenerator<StC> {
                 self.state_generator.get_last_popped_stack_frame_ref(),
             );
         }
-        next_state
+        Ok(next_state)
     }
 
     fn panic_unexpected(&mut self, state: &str) -> ! {
@@ -213,18 +245,20 @@ impl<StC: StateChooser + Send + Sync> QueryGenerator<StC> {
         panic!("Unexpected state: {state}");
     }
 
-    fn expect_state(&mut self, state: &str) {
-        let new_state = self.next_state();
+    fn expect_state(&mut self, state: &str) -> QueryGenerationResult<()> {
+        let new_state = self.next_state()?;
         if new_state.as_str() != state {
             self.state_generator.print_stack();
             panic!("Expected {state}, got {new_state}")
         }
+        Ok(())
     }
 
-    fn expect_states(&mut self, states: &[&str]) {
+    fn expect_states(&mut self, states: &[&str]) -> QueryGenerationResult<()> {
         for state in states {
-            self.expect_state(*state)
+            self.expect_state(*state)?
         }
+        Ok(())
     }
 
     fn assert_single_type_argument(&self) -> SubgraphType {
@@ -239,39 +273,40 @@ impl<StC: StateChooser + Send + Sync> QueryGenerator<StC> {
     /// starting point; calls QueryBuilder::build for the first time.\
     /// NOTE: If you use this function without a predictor model,\
     /// it will use uniform distributions 
-    pub fn generate(&mut self) -> Query {
+    pub fn generate(&mut self) -> QueryGenerationResult<Query> {
         if let Some(model) = self.predictor_model.as_mut() {
             model.start_inference(self.clause_context.schema_ref().get_schema_string());
         }
         let mut query = QueryBuilder::nothing();
 
         self.current_query_raw_ptr = Some(AtomicPtr::new(&mut query as *mut Query));  // scary!
-        QueryBuilder::build(self, &mut query);
+        QueryBuilder::build(self, &mut query)?;
         self.current_query_raw_ptr.take();
 
         self.value_chooser.reset();
         // reset the generator
-        if let Some(state) = self.next_state_opt() {
+        if let Some(state) = self.next_state_opt()? {
             panic!("Couldn't reset state_generator: Received {state}");
         }
         self.substitute_model.reset();
         if let Some(model) = self.predictor_model.as_mut() {
             model.end_inference();
         }
-        query
+        Ok(query)
     }
 
     /// generate the next query with the provided model generating the probabilities
-    pub fn generate_with_model(&mut self, model: Box<dyn PathwayGraphModel>) -> (Box<dyn PathwayGraphModel>, Query) {
+    pub fn generate_with_model(&mut self, model: Box<dyn PathwayGraphModel>) -> Result<(Box<dyn PathwayGraphModel>, Query), (QueryGenerationError, Box<dyn PathwayGraphModel>)> {
         self.predictor_model = Some(model);
-        let query = self.generate();
-        (self.predictor_model.take().unwrap(), query)
+        let query = self.generate().map_err(
+            |err| (err, self.predictor_model.take().unwrap()))?;
+        Ok((self.predictor_model.take().unwrap(), query))
     }
 
     /// generate the next query with the provided dynamic model and value choosers
     pub fn generate_with_substitute_model_and_value_chooser(
         &mut self, substitute_model: Box<dyn SubstituteModel>, value_chooser: Box<dyn QueryValueChooser>
-    ) -> Query {
+    ) -> QueryGenerationResult<Query> {
         self.substitute_model = substitute_model;
         self.value_chooser = value_chooser;
         self.generate()

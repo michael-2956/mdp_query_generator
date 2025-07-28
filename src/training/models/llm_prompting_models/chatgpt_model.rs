@@ -1,8 +1,8 @@
 use std::{collections::HashMap, env, fmt, hash::RandomState, path::PathBuf, sync::atomic::AtomicPtr, time::Duration};
 
-use crate::query_creation::{query_generator::{call_modifiers::WildcardRelationsValue, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, IdentName, Relation}, unwrap_query_ptr_unsafe, value_choosers::QueryValueChooser}, state_generator::{markov_chain_generator::{markov_chain::NodeParams, StackFrame}, subgraph_type::SubgraphType}};
+use crate::{query_creation::{query_generator::{call_modifiers::WildcardRelationsValue, query_info::{CheckAccessibility, ClauseContext, ColumnRetrievalOptions, IdentName, Relation}, unwrap_query_ptr_unsafe, value_choosers::QueryValueChooser}, state_generator::{markov_chain_generator::{markov_chain::NodeParams, StackFrame}, subgraph_type::SubgraphType}}, training::models::DecisionResult};
 
-use super::{llm_prompts::LLMPrompts, ModelPredictionResult, PathwayGraphModel};
+use super::{llm_prompts::LLMPrompts, ModelPrediction, PathwayGraphModel};
 
 use chatgpt::{client::ChatGPT, config::{ChatGPTEngine, ModelConfiguration}, converse::Conversation, types::CompletionResponse};
 use rand::distributions::WeightedIndex;
@@ -19,12 +19,13 @@ macro_rules! gen_format_fn {
     }}};
 }
 
+#[derive(Debug)]
 pub struct ChatGPTPromptingModel {
     /// stores unused decision context by call_stack depth\
     /// the decision context applies to the first non-choiuce\
     /// decision in the inserted subgraph
     decision_context_by_depth: Vec<Option<String>>,
-    current_conversation: Option<Conversation>,
+    current_conversation: Option<ConversationWrapper>,
     /// the query string for the next value choice, set by the\
     /// set_choice_query_ast method of the QueryValueChooser trait
     value_choice_query_str: Option<String>,
@@ -35,6 +36,26 @@ pub struct ChatGPTPromptingModel {
     next_decision_n: usize,
     asked_to_backtrack: bool,
     client: ChatGPT,
+}
+
+struct ConversationWrapper(Conversation);
+
+impl std::fmt::Debug for ConversationWrapper {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("ConversationWrapper").finish()
+    }
+}
+
+impl Into<Conversation> for ConversationWrapper {
+    fn into(self) -> Conversation {
+        self.0
+    }
+}
+
+impl From<Conversation> for ConversationWrapper {
+    fn from(value: Conversation) -> Self {
+        Self(value)
+    }
 }
 
 impl PathwayGraphModel for ChatGPTPromptingModel {
@@ -61,7 +82,7 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
         self.current_conversation = None;
     }
 
-    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, _current_exit_node_name: &SmolStr, current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) -> ModelPredictionResult {
+    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, _current_exit_node_name: &SmolStr, current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) -> DecisionResult<ModelPrediction> {
         // Keep the decision_context_by_depth the same length as the call stack
         assert!(call_stack.len() <= self.decision_context_by_depth.len());
         self.decision_context_by_depth.truncate(call_stack.len());
@@ -70,7 +91,7 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
         // No need to predict if only one outgoing node is available
         if let [ref single_node] = node_outgoing.as_slice() {
             let single_node_name = single_node.node_common.name.clone();
-            return self.produce_prediction(node_outgoing, &single_node_name)
+            return Ok(self.produce_prediction(node_outgoing, &single_node_name))
         }
 
         // Automatically select "qualified_column_name" and "interval_literal_format_string"
@@ -81,7 +102,7 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
             "qualified_column_name", "interval_literal_format_string"
         ] {
             if node_outgoing.iter().any(|node| node.node_common.name == auto_select_state) {
-                return self.produce_prediction(node_outgoing, auto_select_state)
+                return Ok(self.produce_prediction(node_outgoing, auto_select_state))
             }
         }
 
@@ -109,7 +130,7 @@ impl PathwayGraphModel for ChatGPTPromptingModel {
         let node_name = option_nodes.get(&model_answer).unwrap().clone();
 
         // Return the prediction result
-        self.produce_prediction(node_outgoing, &node_name)
+        Ok(self.produce_prediction(node_outgoing, &node_name))
     }
 
     fn as_value_chooser(&mut self) -> Option<&mut dyn QueryValueChooser> { Some(self) }
@@ -188,7 +209,7 @@ impl ChatGPTPromptingModel {
         _self
     }
 
-    fn produce_prediction(&mut self, node_outgoing: Vec<NodeParams>, selected_node: &str) -> ModelPredictionResult {
+    fn produce_prediction(&mut self, node_outgoing: Vec<NodeParams>, selected_node: &str) -> ModelPrediction {
         if let Some(call_node) = node_outgoing.iter().find(
             // if we selected a call node
             |node| node.call_params.is_some() && node.node_common.name.as_str() == selected_node
@@ -196,7 +217,7 @@ impl ChatGPTPromptingModel {
             // add call node context to stack
             self.decision_context_by_depth.push(self.prompts_ref().get_call_node_context(&call_node.node_common.name));
         }
-        ModelPredictionResult::Some(node_outgoing.into_iter().map(
+        ModelPrediction::Some(node_outgoing.into_iter().map(
             |node| (if node.node_common.name.as_str() == selected_node { 1f64 } else { 0f64 }, node)
         ).collect())
     }
@@ -215,7 +236,7 @@ impl ChatGPTPromptingModel {
             eprintln!("Direction message:\n{}\n", split_in_two(&direction_message));
         }
 
-        self.current_conversation = Some(self.client.new_conversation_directed(direction_message));
+        self.current_conversation = Some(self.client.new_conversation_directed(direction_message).into());
     }
 
     fn query_model(&mut self, prompt: String) -> CompletionResponse {
@@ -223,15 +244,15 @@ impl ChatGPTPromptingModel {
             eprintln!("Prompt:\n{}\n", prompt);
         }
         self.async_runtime.block_on(async {
-            let mut result = self.current_conversation.as_mut().unwrap().send_message(prompt.clone()).await;
+            let mut result = self.current_conversation.as_mut().unwrap().0.send_message(prompt.clone()).await;
             while result.is_err() {
                 eprintln!("Request error: {}", result.unwrap_err());
                 tokio::time::sleep(Duration::from_secs(5)).await;
-                result = self.client.send_history(&self.current_conversation.as_ref().unwrap().history).await;
+                result = self.client.send_history(&self.current_conversation.as_ref().unwrap().0.history).await;
             }
             let response = result.unwrap();
             assert!(response.message().role == chatgpt::types::Role::Assistant);
-            self.current_conversation.as_mut().unwrap().history.push(response.message().clone());
+            self.current_conversation.as_mut().unwrap().0.history.push(response.message().clone());
             response
         })
     }

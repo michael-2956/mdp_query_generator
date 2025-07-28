@@ -1,6 +1,6 @@
 use sqlparser::ast::{Expr, GroupByExpr};
 
-use crate::{query_creation::{query_generator::{ast_builders::{column_spec::ColumnSpecBuilder, set_item::SetItemBuilder, types::TypesBuilder}, match_next_state, query_info::ColumnRetrievalOptions, QueryGenerator}, state_generator::state_choosers::StateChooser}, unwrap_variant};
+use crate::{query_creation::{query_generator::{ast_builders::{column_spec::ColumnSpecBuilder, set_item::SetItemBuilder, types::TypesBuilder}, match_next_state, query_info::ColumnRetrievalOptions, QueryGenerationResult, QueryGenerator}, state_generator::state_choosers::StateChooser}, unwrap_variant};
 
 pub struct GroupByBuilder { }
 
@@ -15,8 +15,8 @@ impl GroupByBuilder {
 
     pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, group_by: &mut GroupByExpr
-    ) {
-        generator.expect_state("GROUP_BY");
+    ) -> QueryGenerationResult<()> {
+        generator.expect_state("GROUP_BY")?;
 
         let group_by_vec = unwrap_variant!(group_by, GroupByExpr::Expressions);
 
@@ -25,12 +25,12 @@ impl GroupByBuilder {
                 // grouping is present but not indicated (is implicit)
                 generator.clause_context.top_group_by_mut().set_single_group_grouping();
                 generator.clause_context.top_group_by_mut().set_single_row_grouping();
-                generator.expect_state("EXIT_GROUP_BY");
+                generator.expect_state("EXIT_GROUP_BY")?;
                 *group_by_vec = vec![];
-                return
+                return Ok(())
             },
             "has_accessible_columns" => {
-                generator.expect_state("grouping_column_list");
+                generator.expect_state("grouping_column_list")?;
             },
         });
 
@@ -43,7 +43,7 @@ impl GroupByBuilder {
 
             match_next_state!(generator, {
                 "call1_column_spec" => {
-                    let column_type = ColumnSpecBuilder::build(generator, group_by_entry);
+                    let column_type = ColumnSpecBuilder::build(generator, group_by_entry)?;
                     let column_name = generator.clause_context.retrieve_column_by_column_expr(
                         group_by_entry, ColumnRetrievalOptions::new(false, false, false)
                     ).unwrap().1;
@@ -70,14 +70,14 @@ impl GroupByBuilder {
                             unwrap_variant!(group_by_entry, Expr::Cube)
                         },
                     });
-                    generator.expect_state("set_list");
+                    generator.expect_state("set_list")?;
                     loop {
                         set_list.push(SetItemBuilder::highlight());
                         let current_set = set_list.last_mut().unwrap();
 
                         match_next_state!(generator, {
                             "call1_set_item" => {
-                                SetItemBuilder::build(generator, current_set);
+                                SetItemBuilder::build(generator, current_set)?;
                             },
                             "set_list_empty_allowed" => {
                                 *current_set = vec![];
@@ -113,5 +113,7 @@ impl GroupByBuilder {
         }
 
         generator.clause_context.query_mut().set_aggregation_indicated();
+
+        Ok(())
     }
 }

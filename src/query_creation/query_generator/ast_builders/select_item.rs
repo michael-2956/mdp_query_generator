@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use itertools::Itertools;
 use sqlparser::ast::{ObjectName, SelectItem, WildcardAdditionalOptions};
 
-use crate::{query_creation::{query_generator::{ast_builders::{types::TypesBuilder, types_value::TypeAssertion}, call_modifiers::{ValueSetterValue, WildcardRelationsValue}, highlight_ident, match_next_state, query_info::QueryProps, value_chooser, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, CallTypes}}, unwrap_pat, unwrap_variant};
+use crate::{query_creation::{query_generator::{ast_builders::{types::TypesBuilder, types_value::TypeAssertion}, call_modifiers::{ValueSetterValue, WildcardRelationsValue}, highlight_ident, match_next_state, query_info::QueryProps, value_chooser, QueryGenerationResult, QueryGenerator}, state_generator::{state_choosers::StateChooser, subgraph_type::SubgraphType, CallTypes}}, unwrap_pat, unwrap_variant};
 
 /// subgraph def_SELECT_item
 pub struct SelectItemBuilder { }
@@ -19,15 +19,15 @@ impl SelectItemBuilder {
 
     pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, projection: &mut Vec<SelectItem>
-    ) {
-        generator.expect_state("SELECT_item");
+    ) -> QueryGenerationResult<()> {
+        generator.expect_state("SELECT_item")?;
 
         match_next_state!(generator, {
             "SELECT_item_grouping_enabled" => { },
             "SELECT_item_can_finish" => {
                 projection.pop(); // last item is not used
-                generator.expect_state("EXIT_SELECT_item");
-                return
+                generator.expect_state("EXIT_SELECT_item")?;
+                return Ok(())
             }
         });
 
@@ -82,7 +82,7 @@ impl SelectItemBuilder {
                     },
                     any => generator.panic_unexpected(any)
                 };
-                generator.expect_state("select_expr");
+                generator.expect_state("select_expr")?;
                 match_next_state!(generator, {
                     "call73_types" => { },
                     "call54_types" => { },
@@ -90,9 +90,9 @@ impl SelectItemBuilder {
                 generator.state_generator.set_compatible_list(first_column_list.iter().flat_map(
                     |tp| tp.get_compat_types().into_iter()  // vec![tp.clone()].into_iter()
                 ).collect::<HashSet<SubgraphType>>().into_iter().collect_vec());
-                let (column_name, subgraph_type) = TypesBuilder::build_store_name(generator, expr, TypeAssertion::CompatibleWithOneOf(&first_column_list));
+                let (column_name, subgraph_type) = TypesBuilder::build_store_name(generator, expr, TypeAssertion::CompatibleWithOneOf(&first_column_list))?;
                 alias = alias.or(column_name);
-                generator.expect_state("select_expr_done");
+                generator.expect_state("select_expr_done")?;
                 if alias.is_none() {
                     alias = QueryProps::extract_alias(expr);
                 }
@@ -101,11 +101,13 @@ impl SelectItemBuilder {
             }
         });
 
-        generator.expect_state("call1_SELECT_item");
+        generator.expect_state("call1_SELECT_item")?;
         generator.state_generator.set_known_query_type_list(remaining_columns);
         projection.push(SelectItem::UnnamedExpr(TypesBuilder::highlight()));
-        SelectItemBuilder::build(generator, projection);
+        SelectItemBuilder::build(generator, projection)?;
 
-        generator.expect_state("EXIT_SELECT_item");
+        generator.expect_state("EXIT_SELECT_item")?;
+
+        Ok(())
     }
 }

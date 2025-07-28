@@ -1,4 +1,4 @@
-use std::{io, path::PathBuf, str::FromStr, sync::atomic::AtomicPtr};
+use std::{error::Error, fmt::{self, Debug}, io, path::PathBuf, str::FromStr, sync::atomic::AtomicPtr};
 
 use smol_str::SmolStr;
 use sqlparser::ast::Query;
@@ -73,12 +73,32 @@ impl ModelConfig {
 }
 
 /// Returns None with a value if the prediction could not be made
-pub enum ModelPredictionResult {
+pub enum ModelPrediction {
     Some(Vec<(f64, NodeParams)>),
     None(Vec<NodeParams>)
 }
 
-pub trait PathwayGraphModel: Send + Sync {
+#[derive(Debug)]
+pub enum DecisionError {
+    Truncated,
+}
+
+pub type DecisionResult<T> = Result<T, DecisionError>;
+
+impl Error for DecisionError { }
+
+impl fmt::Display for DecisionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DecisionError::Truncated => write!(
+                f, "Model's result was truncated"
+            ),
+        }
+        
+    }
+}
+
+pub trait PathwayGraphModel: Send + Sync + Debug {
     /// initialize the model weights
     fn init_weights(&mut self) { }
 
@@ -128,7 +148,13 @@ pub trait PathwayGraphModel: Send + Sync {
     fn start_inference(&mut self, _schema_string: String) { }
 
     /// predict the probability distribution over the outgoing nodes that are available
-    fn predict(&mut self, call_stack: &Vec<StackFrame>, node_outgoing: Vec<NodeParams>, current_exit_node_name: &SmolStr, current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>) -> ModelPredictionResult;
+    fn predict(
+        &mut self,
+        call_stack: &Vec<StackFrame>,
+        node_outgoing: Vec<NodeParams>,
+        current_exit_node_name: &SmolStr,
+        current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>
+    ) -> DecisionResult<ModelPrediction>;
 
     /// end the inference process
     fn end_inference(&mut self) { }

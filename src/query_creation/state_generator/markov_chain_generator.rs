@@ -15,7 +15,7 @@ use smol_str::SmolStr;
 use sqlparser::ast::Query;
 use take_until::TakeUntilExt;
 
-use crate::{config::TomlReadable, query_creation::{query_generator::{call_modifiers::{AvailableTableNamesValueSetter, CanAddMoreColumnsModifier, CanSkipLimitModifier, CanSkipLimitValueSetter, DistinctAggregationModifier, DistinctAggregationValueSetter, FromTableNamesAvailableModifier, GroupingEnabledValueSetter, GroupingModeSwitchModifier, HasAccessibleColumnsModifier, HasAccessibleColumnsValueSetter, IsColumnTypeAvailableModifier, IsColumnTypeAvailableValueSetter, IsEmptySetAllowedModifier, IsGroupingSetsValueSetter, IsWildcardAvailableModifier, LimitIsNotPresentModifier, LimitIsNotPresentValueSetter, NameAccessibilityOfSelectedTypesValueSetter, NamedValue, OrderByPresentModifier, OrderByPresentValueSetter, QueryTypeNotExhaustedModifier, QueryTypeNotExhaustedValueSetter, SelectAccessibleColumnsValueSetter, SelectHasAccessibleColumnsModifier, OrderByExpressionAllowedModifier, OrderByExpressionAllowedValueSetter, SelectedTypesAccessibleByNamingMethodModifier, StatefulCallModifier, StatelessCallModifier, ValueSetter, ValueSetterValue, WildcardRelationsValueSetter}, query_info::ClauseContext}, state_generator::markov_chain_generator::markov_chain::FunctionTypes}, training::models::{ModelPredictionResult, PathwayGraphModel}, unwrap_variant};
+use crate::{config::TomlReadable, query_creation::{query_generator::{call_modifiers::{AvailableTableNamesValueSetter, CanAddMoreColumnsModifier, CanSkipLimitModifier, CanSkipLimitValueSetter, DistinctAggregationModifier, DistinctAggregationValueSetter, FromTableNamesAvailableModifier, GroupingEnabledValueSetter, GroupingModeSwitchModifier, HasAccessibleColumnsModifier, HasAccessibleColumnsValueSetter, IsColumnTypeAvailableModifier, IsColumnTypeAvailableValueSetter, IsEmptySetAllowedModifier, IsGroupingSetsValueSetter, IsWildcardAvailableModifier, LimitIsNotPresentModifier, LimitIsNotPresentValueSetter, NameAccessibilityOfSelectedTypesValueSetter, NamedValue, OrderByExpressionAllowedModifier, OrderByExpressionAllowedValueSetter, OrderByPresentModifier, OrderByPresentValueSetter, QueryTypeNotExhaustedModifier, QueryTypeNotExhaustedValueSetter, SelectAccessibleColumnsValueSetter, SelectHasAccessibleColumnsModifier, SelectedTypesAccessibleByNamingMethodModifier, StatefulCallModifier, StatelessCallModifier, ValueSetter, ValueSetterValue, WildcardRelationsValueSetter}, query_info::ClauseContext}, state_generator::markov_chain_generator::markov_chain::FunctionTypes}, training::models::{DecisionError, ModelPrediction, PathwayGraphModel}, unwrap_variant};
 
 use self::{
     dot_parser::{NodeCommon, TypeWithFields}, error::SyntaxError, markov_chain::{
@@ -855,7 +855,7 @@ impl<StC: StateChooser + Send + Sync> MarkovChainGenerator<StC> {
             substitute_model: &mut (impl SubstituteModel + ?Sized),
             predictor_model_opt: Option<&mut Box<dyn PathwayGraphModel>>,
             current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>,
-        ) -> Result<(), StateGenerationError> {
+        ) -> StateGenerationResult<()> {
         substitute_model.notify_call_stack_length(self.call_stack.len());
 
         let (last_node, last_node_outgoing) = {
@@ -885,11 +885,18 @@ impl<StC: StateChooser + Send + Sync> MarkovChainGenerator<StC> {
             let stack_frame = self.call_stack.last().unwrap();
             let function = self.markov_chain.functions.get(&stack_frame.function_context.call_params.func_name).unwrap();
             predictor_model.predict(&self.call_stack, last_node_outgoing, &function.exit_node_name, current_query_ast_ptr_opt)
-        } else { ModelPredictionResult::None(last_node_outgoing) };
+        } else { Ok(ModelPrediction::None(last_node_outgoing)) };
+
+        let last_node_outgoing = match last_node_outgoing {
+            Ok(r) => r,
+            Err(err) => {
+                return Err(StateGenerationError::ModelDecisionError(err))
+            },
+        };
 
         // transform to log probabulities, if no model is present run a dynamic one
         let last_node_outgoing = match last_node_outgoing {
-            ModelPredictionResult::Some(predictions) => {
+            ModelPrediction::Some(predictions) => {
                 let prob_sum: f64 = predictions.iter().map(|x| x.0).sum();
                 if (prob_sum - 1f64).abs() > std::f64::EPSILON {
                     panic!("Model predicted probabilities with a sum of {}, should have been close to 1.", prob_sum)
@@ -900,7 +907,7 @@ impl<StC: StateChooser + Send + Sync> MarkovChainGenerator<StC> {
                 // substitute_model.trasform_log_probabilities(preds)?
                 preds
             },
-            ModelPredictionResult::None(outgoing_nodes) => {
+            ModelPrediction::None(outgoing_nodes) => {
                 let fill_with = - (outgoing_nodes.len() as f64).ln();
                 let uniform = outgoing_nodes.into_iter().map(|node| (fill_with, node)).collect();
                 substitute_model.trasform_log_probabilities(uniform)?
@@ -1008,23 +1015,31 @@ impl<StC: StateChooser + Send + Sync> MarkovChainGenerator<StC> {
 }
 
 #[derive(Debug)]
-pub struct StateGenerationError {
-    pub reason: String,
+pub enum StateGenerationError {
+    WithReason(String),
+    ModelDecisionError(DecisionError),
 }
 
 impl Error for StateGenerationError { }
 
 impl fmt::Display for StateGenerationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "State generation convertion error: {}", self.reason)
+        match self {
+            StateGenerationError::WithReason(reason) => write!(
+                        f, "State generation error: {}", reason),
+            StateGenerationError::ModelDecisionError(decision_error) => write!(
+                        f, "Model decision error: {decision_error}"),
+        }
     }
 }
 
 impl StateGenerationError {
-    pub fn new(reason: String) -> Self {
-        Self { reason }
+    pub fn with_reason(reason: String) -> Self {
+        Self::WithReason(reason)
     }
 }
+
+pub type StateGenerationResult<T> = Result<T, StateGenerationError>;
 
 impl<StC: StateChooser + Send + Sync> MarkovChainGenerator<StC> {
     pub fn next_node_name(
@@ -1033,7 +1048,7 @@ impl<StC: StateChooser + Send + Sync> MarkovChainGenerator<StC> {
             substitute_model: &mut (impl SubstituteModel + ?Sized),
             predictor_model_opt: Option<&mut Box<dyn PathwayGraphModel>>,
             current_query_ast_ptr_opt: &mut Option<AtomicPtr<Query>>,
-        ) -> Result<Option<SmolStr>, StateGenerationError> {
+        ) -> StateGenerationResult<Option<SmolStr>> {
         if let Some(call_params) = self.pending_call.take() {
             return Ok(Some(self.start_function(call_params, clause_context)));
         }

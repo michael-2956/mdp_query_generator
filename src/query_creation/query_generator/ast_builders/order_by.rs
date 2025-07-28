@@ -1,6 +1,6 @@
 use sqlparser::ast::{Expr, OrderByExpr};
 
-use crate::{query_creation::{query_generator::{ast_builders::types_value::TypeAssertion, call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue}, match_next_state, value_chooser, QueryGenerator}, state_generator::state_choosers::StateChooser}, unwrap_variant};
+use crate::{query_creation::{query_generator::{ast_builders::types_value::TypeAssertion, call_modifiers::{SelectAccessibleColumnsValue, ValueSetterValue}, match_next_state, value_chooser, QueryGenerationResult, QueryGenerator}, state_generator::state_choosers::StateChooser}, unwrap_variant};
 
 use super::types::TypesBuilder;
 
@@ -18,15 +18,15 @@ impl OrderByBuilder {
 
     pub fn build<StC: StateChooser + Send + Sync>(
         generator: &mut QueryGenerator<StC>, order_by: &mut Vec<OrderByExpr>
-    ) {
-        generator.expect_state("ORDER_BY");
+    ) -> QueryGenerationResult<()> {
+        generator.expect_state("ORDER_BY")?;
         match_next_state!(generator, {
             "EXIT_ORDER_BY" => {
                 *order_by = vec![];
-                return
+                return Ok(())
             },
             "order_by_check_order_by_present" => {
-                generator.expect_state("order_by_list");
+                generator.expect_state("order_by_list")?;
                 generator.clause_context.query_mut().set_order_by_present();
             },
         });
@@ -36,7 +36,7 @@ impl OrderByBuilder {
 
             match_next_state!(generator, {
                 "order_by_select_reference" => {
-                    generator.expect_state("order_by_select_reference_by_alias");
+                    generator.expect_state("order_by_select_reference_by_alias")?;
                     let aliases = &unwrap_variant!(generator.state_generator
                         .get_named_value::<SelectAccessibleColumnsValue>().unwrap(),
                         ValueSetterValue::SelectAccessibleColumns
@@ -48,20 +48,20 @@ impl OrderByBuilder {
                     match_next_state!(generator, {
                         "call84_types" | "call85_types" => { }
                     });
-                    TypesBuilder::build(generator, &mut order_by_expr.expr, TypeAssertion::None);
+                    TypesBuilder::build(generator, &mut order_by_expr.expr, TypeAssertion::None)?;
                 },
             });
-            generator.expect_state("order_by_expr_done");
+            generator.expect_state("order_by_expr_done")?;
 
             match_next_state!(generator, {
                 "order_by_order_selected" => { },
                 "order_by_asc" => {
                     order_by_expr.asc = Some(true);
-                    generator.expect_state("order_by_order_selected");
+                    generator.expect_state("order_by_order_selected")?;
                 },
                 "order_by_desc" => {
                     order_by_expr.asc = Some(false);
-                    generator.expect_state("order_by_order_selected");
+                    generator.expect_state("order_by_order_selected")?;
                 },
             });
 
@@ -69,11 +69,11 @@ impl OrderByBuilder {
                 "order_by_nulls_order_selected" => { },
                 "order_by_nulls_first" => {
                     order_by_expr.nulls_first = Some(true);
-                    generator.expect_state("order_by_nulls_order_selected");
+                    generator.expect_state("order_by_nulls_order_selected")?;
                 },
                 "order_by_nulls_last" => {
                     order_by_expr.nulls_first = Some(false);
-                    generator.expect_state("order_by_nulls_order_selected");
+                    generator.expect_state("order_by_nulls_order_selected")?;
                 },
             });
 
@@ -88,5 +88,7 @@ impl OrderByBuilder {
                 "EXIT_ORDER_BY" => break,
             });
         }
+
+        Ok(())
     }
 }

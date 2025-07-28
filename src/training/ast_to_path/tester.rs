@@ -67,7 +67,7 @@ impl TestAST2Path {
         let generated_query = self.path_query_generator.generate_with_substitute_model_and_value_chooser(
             Box::new(PathModel::from_path_nodes(&path)),
             Box::new(DeterministicValueChooser::from_path_nodes(&path))
-        );
+        ).unwrap();
         if *query != generated_query {
             eprintln!("\nAST -> path -> AST mismatch!\nOriginal  query: {}\nGenerated query: {}", query, generated_query);
             eprintln!("Path: {:?}", path);
@@ -98,7 +98,7 @@ impl TestAST2Path {
         let mut path_length_time = vec![];
         let start_testing_from = self.config.ast2path_testing_config.start_testing_from.clone();
         for i in 0..self.config.ast2path_testing_config.n_tests {
-            let query = Box::new(self.random_query_generator.generate());
+            let query = Box::new(self.random_query_generator.generate().unwrap());
             if i % 1 == 0 {
                 if self.config.main_config.print_progress {
                     print!("{}/{}      \r", i, self.config.ast2path_testing_config.n_tests);
@@ -115,7 +115,7 @@ impl TestAST2Path {
             let generated_query = self.path_query_generator.generate_with_substitute_model_and_value_chooser(
                 Box::new(PathModel::from_path_nodes(&path)),
                 Box::new(DeterministicValueChooser::from_path_nodes(&path))
-            );
+            ).unwrap();
             if *query != generated_query {
                 eprintln!("\nAST -> path -> AST mismatch!\nOriginal  query: {}\nGenerated query: {}", query, generated_query);
                 eprintln!("Path: {:?}", path);
@@ -193,7 +193,7 @@ impl TestAST2Path {
                     let generated_query = path_query_generator.generate_with_substitute_model_and_value_chooser(
                         Box::new(PathModel::from_path_nodes(&path)),
                         Box::new(DeterministicValueChooser::from_path_nodes(&path)),
-                    );
+                    ).unwrap();
                     if *query != generated_query {
                         error_flag.store(true, Ordering::SeqCst);
                         let mut convertion_error_guard = convertion_error.lock().unwrap();
@@ -229,7 +229,7 @@ impl TestAST2Path {
                     std::io::stdout().flush().unwrap();
                 }
             }
-            let query = Box::new(self.random_query_generator.generate());
+            let query = Box::new(self.random_query_generator.generate().unwrap());
             if tx.send((i, query)).is_err() {
                 break; // Exit if the sending channel is closed
             }
