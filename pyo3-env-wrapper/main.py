@@ -12,7 +12,7 @@ class ConstraintMeetingEnvironment(gym.Env):
     def __init__(
             self,
             config_path: str,
-            max_steps: int = 10000,
+            max_steps: int = 1000,
         ):
         super().__init__()
 
@@ -37,18 +37,22 @@ class ConstraintMeetingEnvironment(gym.Env):
         terminated = False
         info = {}
 
+        truncated = self.current_step >= self.max_steps
+        if truncated:  # truncate generation
+            reward = -1.0
+            self.previous_mask, anticall_reward, terminated = self.env.step(None)
+            info['error'] = 'Generation was truncated'
+            return None, reward, terminated, truncated, info
+
         if not self.previous_mask[action]:
             reward = -1.0
-            terminated, truncated = True, False
+            terminated, truncated = False, True
             info['error'] = 'Invalid action: selected index is False in mask'
-            return to_bool_numpy(self.previous_mask), reward, terminated, truncated, info
+            return None, reward, terminated, truncated, info
 
         self.previous_mask, anticall_reward, terminated = self.env.step(action)
         reward = 1.0 + anticall_reward
         self.current_step += 1
-        truncated = self.current_step >= self.max_steps
-        if truncated:  # terminate generation
-            self.env.step(None)
 
         return to_bool_numpy(self.previous_mask), reward, terminated, truncated, info
 

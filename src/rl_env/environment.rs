@@ -10,7 +10,7 @@ use rust_decimal::Decimal;
 use smol_str::SmolStr;
 use sqlparser::ast::{DateTimeField, Ident, ObjectName, Query};
 
-use crate::{config::Config, query_creation::{query_generator::{call_modifiers::WildcardRelationsValue, query_info::{self, ClauseContext, DatabaseSchema, IdentName, Relation}, value_choosers::QueryValueChooser, QueryGenerator}, state_generator::{markov_chain_generator::{markov_chain::NodeParams, StackFrame}, state_choosers::MaxProbStateChooser, subgraph_type::SubgraphType, substitute_models::DeterministicModel, MarkovChainGenerator}}, training::models::{ModelPredictionResult, PathwayGraphModel}};
+use crate::{config::Config, query_creation::{query_generator::{call_modifiers::WildcardRelationsValue, query_info::{self, ClauseContext, DatabaseSchema, IdentName, QueryProps, Relation}, value_choosers::QueryValueChooser, QueryGenerator}, state_generator::{markov_chain_generator::{markov_chain::NodeParams, StackFrame}, state_choosers::MaxProbStateChooser, subgraph_type::SubgraphType, substitute_models::DeterministicModel, MarkovChainGenerator}}, training::models::{ModelPredictionResult, PathwayGraphModel}};
 
 #[derive(Debug, Clone)]
 pub enum ConstraintType {
@@ -42,29 +42,57 @@ pub enum ConstraintType {
 // }
 
 pub struct ConstraintMeetingEnvironment {
-    // config: Config,
+    config: Config,
     // constraint: QueryConstraint,
     query_generator: Option<QueryGenerator<MaxProbStateChooser>>,
     observation_rs: crossbeam_channel::Receiver<Option<Vec<bool>>>,
     decision_sd: crossbeam_channel::Sender<Option<usize>>,
     generator_handle: Option<thread::JoinHandle<((Box<dyn PathwayGraphModel>, sqlparser::ast::Query), QueryGenerator<MaxProbStateChooser>)>>,
     model: Option<Box<dyn PathwayGraphModel>>,
+    truncated: bool,
+    terminated: bool,
 }
 
 impl ConstraintMeetingEnvironment {
     pub fn new(config_path: PathBuf) -> Self {
         let config = Config::read_config(&config_path).unwrap();
         
+        let (
+            query_generator,
+            model,
+            observation_rs,
+            decision_sd,
+        ) = Self::create_model_and_generator(config.clone());
+
+        Self {
+            config,
+            // constraint,
+            query_generator: Some(query_generator),
+            observation_rs,
+            decision_sd,
+            generator_handle: None,
+            model: Some(model),
+            truncated: false,
+            terminated: false,
+        }
+    }
+
+    fn create_model_and_generator(config: Config) -> (
+        QueryGenerator<MaxProbStateChooser>,
+        Box<dyn PathwayGraphModel>,
+        crossbeam_channel::Receiver<Option<Vec<bool>>>,
+        crossbeam_channel::Sender<Option<usize>>
+    ) {
         // when model sends None to the observation channel, we treat this
-        // as the end, but the model and its sd are never dropped
+        // as the end (termination), but the model and its sd are not dropped
         let (
             observation_sd, observation_rs
         ) = crossbeam_channel::bounded::<Option<Vec<bool>>>(1);
-        // when decision is None, means that the model decided to interrupt generation
+        // when decision is None, means that the model decided to interrupt generation (truncation)
         let (
             decision_sd, decision_rs
         ) = crossbeam_channel::bounded::<Option<usize>>(1);
-
+        
         let all_agg_function_names = config.generator_config.aggregate_functions_distribution.get_all_function_names();
 
         let schema = DatabaseSchema::parse_schema(&config.generator_config.table_schema_path);
@@ -73,18 +101,13 @@ impl ConstraintMeetingEnvironment {
 
         let all_chain_states = state_generator.markov_chain_ref().get_all_states();
 
-        Self {
-            // constraint,
-            query_generator: Some(QueryGenerator::from_state_generator_and_config(
+        return (
+            QueryGenerator::from_state_generator_and_config(
                 state_generator,
                 config.generator_config,
                 Box::new(DeterministicModel::empty())
-            )),
-            // config,
-            observation_rs,
-            decision_sd,
-            generator_handle: None,
-            model: Some(Box::new(InteractiveModel::new(
+            ),
+            Box::new(InteractiveModel::new(
                 observation_sd, decision_rs,
                 all_agg_function_names,
                 schema,
@@ -92,24 +115,50 @@ impl ConstraintMeetingEnvironment {
                 100, // TODO: put these in config
                 100,
                 100
-            ))),
-        }
+            )),
+            observation_rs,
+            decision_sd,
+        )
     }
 
-    /// if the query generation has finished, returns the Query \
-    /// and makes the model and query generator available for spawning \
-    /// an another generation process
+    fn replace_model_and_generator(&mut self) {
+        let (
+            query_generator,
+            model,
+            observation_rs,
+            decision_sd,
+        ) = Self::create_model_and_generator(self.config.clone());
+        self.query_generator = Some(query_generator);
+        self.model = Some(model);
+        self.observation_rs = observation_rs;
+        self.decision_sd = decision_sd;
+    }
+
+    /// Returns Ok(None) when the generation is running or has failed, \
+    /// returns the query otherwise. If possible, restores data for the \
+    /// new generation to be started
+    /// - If the generator thread is running, returns Ok(None)
+    /// - If the generator has finished successfully, returns the \
+    ///   generated query and restored the model and QG objects to \
+    ///   start a new generation
+    /// - If the generator has finished with an error, replaces the \
+    ///   model and QG objects with new ones. If the error is actually \
+    ///   the generation being truncated, returns Ok(None), otherwise \
+    ///   returns the error
+    /// - If the generator thread if abcent, returns Ok(None)
     pub fn try_join_generator(&mut self) -> Result<Option<Query>, Box<dyn Any + Send>> {
         if self.generator_handle.is_some() {
-            if !self.generator_handle.as_ref().unwrap().is_finished() {
+            if !self.generator_handle.as_ref().unwrap().is_finished() && !self.truncated && !self.terminated {
                 return Ok(None);
             }
             let ((model, query), qg) = match self.generator_handle.take().unwrap().join() {
                 Ok(r) => r,
                 Err(e) => {
-                    match e.downcast::<String>() {
+                    self.replace_model_and_generator();
+                    match e.downcast::<&str>() {
                         Ok(es) => {
                             if *es == "No decision (got None)" {
+                                assert!(self.truncated);  // sanity check
                                 return Ok(None)
                             } else {
                                 return Err(es);
@@ -129,33 +178,35 @@ impl ConstraintMeetingEnvironment {
 
     /// starts a new generaiton thread, consuming the model and query generator
     fn spawn_generator(&mut self) {
-        if self.generator_handle.is_none() {
-            let mut qg = self.query_generator.take().unwrap();
-            let model = self.model.take().unwrap();
-            self.generator_handle = Some(thread::spawn(
-                move || {
-                    (qg.generate_with_model(model), qg)
-                }
-            ));
-        }
+        assert!(self.generator_handle.is_none());
+        self.truncated = false;
+        self.terminated = false;
+        let mut qg = self.query_generator.take().unwrap();
+        let model = self.model.take().unwrap();
+        self.generator_handle = Some(thread::spawn(
+            move || {
+                (qg.generate_with_model(model), qg)
+            }
+        ));
     }
 
-    /// restarts generation, returns original observation \
-    /// and previous query string if available
+    /// Restarts the generation \
+    /// - If successful, returns original observation \
+    /// - Returns previous query string if available
     pub fn reset(&mut self) -> (Option<Vec<bool>>, Option<String>) {
         let query = match self.try_join_generator() {
             Ok(query) => query,
-            Err(err) => panic!("Failed to join in reset(): {}", err.downcast::<String>().unwrap()),
+            Err(err) => panic!("Failed to join in reset(): {:?}", err.downcast::<&str>()),
         };
 
-        if self.query_generator.is_none() || self.model.is_none() {  // cannot reset twice
+        // the resources were taken by another generation: cannot reset
+        if self.query_generator.is_none() || self.model.is_none() {
             return (None, query.map(|query| format!("{query}")))
         }
 
+        // restart the generation
         self.model.as_mut().unwrap().as_value_chooser().unwrap().reset();
-        
         self.spawn_generator();
-
         let initial_obs = self.observation_rs.recv().unwrap().unwrap();
 
         (Some(initial_obs), query.map(|query| format!("{query}")))
@@ -163,15 +214,22 @@ impl ConstraintMeetingEnvironment {
 
     /// Step the environment. Returns `(mask, anticall_reward, terminated)`.
     pub fn step(&mut self, action: Option<usize>) -> (Option<Vec<bool>>, f32, bool) {
-        assert!(self.generator_handle.is_some());
+        assert!(self.generator_handle.is_some(), "Generator handle is abcent. Try to reset()");
+        assert!(!self.generator_handle.as_ref().unwrap().is_finished(), "Generator is not running. Try to reset()");
+        assert!(!self.truncated, "Generator was truncated. Try to reset()");
 
         self.decision_sd.send(action).unwrap();
 
+        if action.is_none() {  // the generation was truncated
+            self.truncated = true;
+            return (None, 0f32, false)
+        }
+
         let obs = self.observation_rs.recv().unwrap();
 
-        let terminated = obs.is_none();  // TODO: renew query generator and model after termination
+        self.terminated = obs.is_none();  // TODO: renew query generator and model after termination
 
-        (obs, 0f32, terminated)  // TODO: anticall reward
+        (obs, 0f32, self.terminated)  // TODO: anticall reward
     }
 
     /// returns a query if generation has finished
@@ -217,26 +275,27 @@ impl InteractiveModel {
 
         // aggregate function names
         for agg_func_name in all_agg_function_names {
-            add_state(agg_func_name, "AGG_FUNC");
+            add_state(agg_func_name.clone(), "AGG_FUNC");
+            add_state(agg_func_name, "C_NAME");  // can be a column name
         }
-
+        
         // aliases
         for i in 0..n_allocated_aliases {
             add_state(format!("C{i}"), "C_NAME");
             add_state(format!("T{i}"), "R_NAME");
         }
-
+        
         // WARNING: put this in config instead
         let mut client = Client::connect("host=localhost user=mykhailo dbname=tpch", NoTls).unwrap();
 
         // table names
         for table_decl in schema.table_defs {
             let table_name = format!("{}", table_decl.name);
-            add_state(table_name.clone(), "R_NAME");
+            add_state(table_name.to_uppercase(), "R_NAME");
             for column in table_decl.columns {
                 // column names
                 let column_name = format!("{}", column.name);
-                add_state(column_name.clone(), "C_NAME");
+                add_state(column_name.to_uppercase(), "C_NAME");
 
                 let sv_tp = SubgraphType::from_data_type(&column.data_type);
                 let values = match &sv_tp {
@@ -349,10 +408,25 @@ impl InteractiveModel {
             .collect();
         add_random_sample_states(dates, SubgraphType::Date);
 
+        // finalize tp -> sample map
         let mut tp_sample_map: HashMap<SubgraphType, Vec<String>> = HashMap::new();
         for (value, tp) in sample_value_tp_map.into_iter() {
             tp_sample_map.entry(tp).or_default().push(value);
         }
+        
+        // add literal auto aliases
+        for auto_alias in QueryProps::all_auto_aliases() {
+            add_state(auto_alias.to_uppercase(), "C_NAME");
+        }
+
+        // remove empty spaces in ids
+        let mut new_state_id_bimap = BiHashMap::new();
+        let mut free_id = 0usize;
+        for (state, _old_id) in state_id_bimap.into_iter() {
+            new_state_id_bimap.insert(state, free_id);
+            free_id += 1;
+        }
+        let state_id_bimap = new_state_id_bimap;
 
         Self {
             free_select_alias_index: 0,
@@ -386,13 +460,33 @@ impl InteractiveModel {
             .into_iter().map(|v: T| format!("{v}")).collect()
     }
 
-    fn gen_mask(&self, available_states: &Vec<&str>, sections: &[&str]) -> Vec<bool> {
+    /// will panic if some states are unavailable
+    fn gen_mask_strict(&self, available_states: &Vec<&str>, sections: &[&str]) -> Vec<bool> {
+        self.gen_mask(available_states, sections, true)
+    }
+
+    /// when strict is: \
+    ///   - true:  will panic if some states are unavailable \
+    ///   - false: will panic if none of the states are available
+    fn gen_mask(&self, available_states: &Vec<&str>, sections: &[&str], strict: bool) -> Vec<bool> {
         let mut mask = vec![false; self.state_id_bimap.len()];
+        let mut is_empty = true;
         for state in available_states {
             for section in sections {
-                let state_id = self.state_id_bimap.get_by_left(&format!("{section}--{state}")).unwrap();
+                let state_name = format!("{section}--{state}");
+                let Some(state_id) = self.state_id_bimap.get_by_left(&state_name) else {
+                    if strict {
+                        panic!("State not found in bimap: {state_name}");
+                    } else {
+                        continue;
+                    }
+                };
                 mask[*state_id] = true;
+                is_empty = false;
             }
+        }
+        if !strict && is_empty {
+            panic!("None of {:?} with sections {:?} were found", available_states, sections)
         }
         mask
     }
@@ -430,7 +524,8 @@ impl InteractiveModel {
             &[
                 &format!("RANDOM_SAMPLE_{}", tp),
                 &format!("DB_SAMPLE_{}", tp)
-            ]
+            ],
+            false
         )
     }
 }
@@ -453,7 +548,7 @@ impl PathwayGraphModel for InteractiveModel {
             self.start_node_stack.push(
                 call_stack.last().unwrap().function_context.call_params.func_name.to_string()
             );
-            let mask = self.gen_mask(
+            let mask = self.gen_mask_strict(
                 &vec![self.start_node_stack.last().unwrap().as_str()],
                 &["GRAPH"]
             );
@@ -466,7 +561,7 @@ impl PathwayGraphModel for InteractiveModel {
                 params.node_common.name.as_str()
             }
         ).collect_vec();
-        let mask = self.gen_mask(&available_states, &["GRAPH"]);
+        let mask = self.gen_mask_strict(&available_states, &["GRAPH"]);
         let chosen_state = self.send_mask_receive_state_str(mask).to_string();
 
         if call_stack.len() == 1 && chosen_state == current_exit_node_name.as_str() {
@@ -487,10 +582,10 @@ impl PathwayGraphModel for InteractiveModel {
 impl QueryValueChooser for InteractiveModel {
     fn choose_table_name(&mut self, available_table_names: &Vec<ObjectName>) -> ObjectName {
         let state_to_obj = available_table_names.iter().map(
-            |table_name| (format!("{table_name}"), table_name)
+            |table_name| (format!("{table_name}").to_uppercase(), table_name)
         ).collect::<HashMap<_, _>>();
-        let mask = self.gen_mask(
-            &state_to_obj.keys().map(|s|s.as_str()).collect_vec(),
+        let mask = self.gen_mask_strict(
+            &state_to_obj.keys().map(|s| s.as_str()).collect_vec(),
             &["R_NAME"]
         );
         (*state_to_obj.get(self.send_mask_receive_state_str(mask)).unwrap()).clone()
@@ -505,21 +600,21 @@ impl QueryValueChooser for InteractiveModel {
         let mut rstate_to_cstate_to_col: HashMap<String, HashMap<String, (&SubgraphType, [&IdentName; 2])>> = HashMap::new();
         for (tp, [r, c]) in columns {
             rstate_to_cstate_to_col
-                .entry(format!("{r}")).or_default()
-                .insert(format!("{c}"), (tp, [r, c]));
+                .entry(format!("{r}").to_uppercase()).or_default()
+                .insert(format!("{c}").to_uppercase(), (tp, [r, c]));
         }
         // send relation choice to model
         let rstate = self.send_mask_receive_state_str(
-            self.gen_mask(
-                &rstate_to_cstate_to_col.keys().map(|s|s.as_str()).collect_vec(),
+            self.gen_mask_strict(
+                &rstate_to_cstate_to_col.keys().map(|s| s.as_str()).collect_vec(),
                 &["R_NAME"]
             )
         );
         // send column choice to model
         let cstate_to_col = rstate_to_cstate_to_col.get(rstate).unwrap();
         let cstate: &str = self.send_mask_receive_state_str(
-            self.gen_mask(
-                &cstate_to_col.keys().map(|s|s.as_str()).collect_vec(),
+            self.gen_mask_strict(
+                &cstate_to_col.keys().map(|s| s.as_str()).collect_vec(),
                 &["C_NAME"]
             )
         );
@@ -530,9 +625,9 @@ impl QueryValueChooser for InteractiveModel {
 
     fn choose_select_ident_for_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident {
         let state_to_ident = aliases.iter().map(
-            |alias| (format!("{alias}"), *alias)
+            |alias| (format!("{alias}").to_uppercase(), *alias)
         ).collect::<HashMap<_, _>>();
-        let mask = self.gen_mask(
+        let mask = self.gen_mask_strict(
             &state_to_ident.keys().map(|s|s.as_str()).collect_vec(),
             &["C_NAME"]
         );
@@ -540,7 +635,7 @@ impl QueryValueChooser for InteractiveModel {
     }
 
     fn choose_aggregate_function_name(&mut self, func_names: Vec<&String>, _dist: rand::distributions::WeightedIndex<f64>) -> ObjectName {
-        let mask = self.gen_mask(
+        let mask = self.gen_mask_strict(
             &func_names.iter().map(|s| s.as_str()).collect_vec(),
             &["AGG_FUNC"]
         );
@@ -596,9 +691,9 @@ impl QueryValueChooser for InteractiveModel {
         let aliases = wildcard_relations.relation_levels_selectable_by_qualified_wildcard
             .iter().flat_map(|v| v.into_iter()).collect_vec();
         let state_to_ident = aliases.iter().map(
-            |alias| (format!("{alias}"), *alias)
+            |alias| (format!("{alias}").to_uppercase(), *alias)
         ).collect::<HashMap<_, _>>();
-        let mask = self.gen_mask(
+        let mask = self.gen_mask_strict(
             &state_to_ident.keys().map(|s|s.as_str()).collect_vec(),
             &["R_NAME"]
         );
@@ -610,7 +705,7 @@ impl QueryValueChooser for InteractiveModel {
     fn choose_select_alias(&mut self) -> Ident {
         self.free_select_alias_index += 1;
         let c_name = format!("C{}", self.free_select_alias_index);
-        assert!(self.send_mask_receive_state_str(self.gen_mask(
+        assert!(self.send_mask_receive_state_str(self.gen_mask_strict(
             &vec![c_name.as_str()],
             &["C_NAME"]
         )) == c_name);
@@ -620,7 +715,7 @@ impl QueryValueChooser for InteractiveModel {
     fn choose_from_alias(&mut self) -> Ident {
         self.free_from_alias_index += 1;
         let r_name = format!("T{}", self.free_from_alias_index);
-        assert!(self.send_mask_receive_state_str(self.gen_mask(
+        assert!(self.send_mask_receive_state_str(self.gen_mask_strict(
             &vec![r_name.as_str()],
             &["R_NAME"]
         )) == r_name);

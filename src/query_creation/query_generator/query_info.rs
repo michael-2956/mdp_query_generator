@@ -1176,6 +1176,27 @@ impl QueryProps {
         }
     }
 
+    pub fn all_auto_aliases() -> Vec<String> {
+        vec![
+            "timestamp",
+            "numeric",
+            "int4",
+            "interval",
+            "int8",
+            "bool",
+            "text",
+            "date",
+            "case",
+            "btrim",
+            "ltrim",
+            "rtrim",
+            "position",
+            "substring",
+            "extract",
+            "exists"
+        ].into_iter().map(|a| a.to_string()).collect()
+    }
+
     pub fn extract_alias(expr: &Expr) -> Option<IdentName> {
         match &expr.unnested() {
             Expr::Cast { expr, data_type, format: _ } if matches!(**expr, Expr::Value(..)) || matches!(
