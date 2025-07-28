@@ -28,7 +28,7 @@ impl FromItemBuilder {
         // TODO: is this logical for the LLM?
         *alias = match_next_state!(generator, {
             "FROM_item_alias" => Some(TableAlias {
-                name: value_chooser!(generator).choose_from_alias(),
+                name: value_chooser!(generator).choose_from_alias().map_err(|e| e.into())?,
                 columns: vec![]
             }),
             "FROM_item_no_alias" => None,
@@ -42,13 +42,13 @@ impl FromItemBuilder {
                 ).table_names;
 
                 let name = unwrap_pat!(from_item, TableFactor::Table { name, .. }, name);
-                *name = value_chooser!(generator).choose_table_name(available_table_names);
+                *name = value_chooser!(generator).choose_table_name(available_table_names).map_err(|e| e.into())?;
                 let name = name.clone();
 
                 let alias = unwrap_pat!(from_item, TableFactor::Table { alias, .. }, alias);
                 if let Some(table_alias) = alias {
                     let n_columns = generator.clause_context.schema_ref().num_columns_in_table(&name);
-                    table_alias.columns = value_chooser!(generator).choose_from_column_renames(n_columns);
+                    table_alias.columns = value_chooser!(generator).choose_from_column_renames(n_columns).map_err(|e| e.into())?;
                 }
 
                 generator.clause_context.add_from_table_by_name(&name, alias.clone()).unwrap();
@@ -66,7 +66,7 @@ impl FromItemBuilder {
                 let alias = &mut *unwrap_pat!(from_item, TableFactor::Derived { alias, .. }, alias);
                 if let Some(query_alias) = alias {
                     let n_columns = column_idents_and_graph_types.len();
-                    query_alias.columns = value_chooser!(generator).choose_from_column_renames(n_columns);
+                    query_alias.columns = value_chooser!(generator).choose_from_column_renames(n_columns).map_err(|e| e.into())?;
                 }
                 generator.clause_context.top_from_mut().append_query(column_idents_and_graph_types, alias.clone().unwrap());
             },

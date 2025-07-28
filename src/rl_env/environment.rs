@@ -479,7 +479,7 @@ impl InteractiveModel {
     }
 
     /// sends the mask to the model and returns decision id 
-    fn send_mask_receive_decision_id(&mut self, mask: Vec<bool>) -> usize {
+    fn send_mask_receive_decision_id(&mut self, mask: Vec<bool>) -> DecisionResult<usize> {
         self.observation_sd.send(Some(mask.clone())).unwrap();
         let decision_id = match self.decision_rs.recv() {
             Ok(Some(decision_id)) => decision_id,
@@ -487,13 +487,13 @@ impl InteractiveModel {
             Err(err) => panic!("decision_rs.recv() error: {err}")
         };
         assert!(mask[decision_id]);
-        decision_id
+        Ok(decision_id)
     }
 
     /// sends the mask to the model and returns the selected state minus category name
-    fn send_mask_receive_state_str(&mut self, mask: Vec<bool>) -> &str {
-        let decision_id = self.send_mask_receive_decision_id(mask);
-        self.get_state_by_id(&decision_id)
+    fn send_mask_receive_state_str(&mut self, mask: Vec<bool>) -> DecisionResult<&str> {
+        let decision_id = self.send_mask_receive_decision_id(mask)?;
+        Ok(self.get_state_by_id(&decision_id))
     }
 
     fn get_sample_mask_by_type(&self, tp: &SubgraphType) -> Vec<bool> {
@@ -532,7 +532,7 @@ impl PathwayGraphModel for InteractiveModel {
                 &vec![self.start_node_stack.last().unwrap().as_str()],
                 &["GRAPH"]
             );
-            self.send_mask_receive_decision_id(mask);  // no need to return the decision
+            self.send_mask_receive_decision_id(mask)?;  // no need to return the decision
         }
         self.start_node_stack.truncate(call_stack.len());
 
@@ -542,7 +542,7 @@ impl PathwayGraphModel for InteractiveModel {
             }
         ).collect_vec();
         let mask = self.gen_mask_strict(&available_states, &["GRAPH"]);
-        let chosen_state = self.send_mask_receive_state_str(mask).to_string();
+        let chosen_state = self.send_mask_receive_state_str(mask)?.to_string();
 
         if call_stack.len() == 1 && chosen_state == current_exit_node_name.as_str() {
             // as predict() will never be invoked again, send terminating observation
@@ -560,7 +560,7 @@ impl PathwayGraphModel for InteractiveModel {
 
 
 impl QueryValueChooser for InteractiveModel {
-    fn choose_table_name(&mut self, available_table_names: &Vec<ObjectName>) -> ObjectName {
+    fn choose_table_name(&mut self, available_table_names: &Vec<ObjectName>) -> DecisionResult<ObjectName> {
         let state_to_obj = available_table_names.iter().map(
             |table_name| (format!("{table_name}").to_uppercase(), table_name)
         ).collect::<HashMap<_, _>>();
@@ -568,10 +568,10 @@ impl QueryValueChooser for InteractiveModel {
             &state_to_obj.keys().map(|s| s.as_str()).collect_vec(),
             &["R_NAME"]
         );
-        (*state_to_obj.get(self.send_mask_receive_state_str(mask)).unwrap()).clone()
+        Ok((*state_to_obj.get(self.send_mask_receive_state_str(mask)?).unwrap()).clone())
     }
 
-    fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, check_accessibility: query_info::CheckAccessibility, column_retrieval_options: query_info::ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]) {
+    fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, check_accessibility: query_info::CheckAccessibility, column_retrieval_options: query_info::ColumnRetrievalOptions) -> DecisionResult<(SubgraphType, [IdentName; 2])> {
         // all available columns
         let columns = clause_context.get_non_empty_column_levels_by_types(
             column_types.clone(), check_accessibility, column_retrieval_options.clone()
@@ -589,7 +589,7 @@ impl QueryValueChooser for InteractiveModel {
                 &rstate_to_cstate_to_col.keys().map(|s| s.as_str()).collect_vec(),
                 &["R_NAME"]
             )
-        );
+        )?;
         // send column choice to model
         let cstate_to_col = rstate_to_cstate_to_col.get(rstate).unwrap();
         let cstate: &str = self.send_mask_receive_state_str(
@@ -597,13 +597,13 @@ impl QueryValueChooser for InteractiveModel {
                 &cstate_to_col.keys().map(|s| s.as_str()).collect_vec(),
                 &["C_NAME"]
             )
-        );
+        )?;
         // extract data
         let (tp, [r, c]) = *cstate_to_col.get(cstate).unwrap();
-        (tp.clone(), [r.clone(), c.clone()])
+        Ok((tp.clone(), [r.clone(), c.clone()]))
     }
 
-    fn choose_select_ident_for_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident {
+    fn choose_select_ident_for_order_by(&mut self, aliases: &Vec<&IdentName>) -> DecisionResult<Ident> {
         let state_to_ident = aliases.iter().map(
             |alias| (format!("{alias}").to_uppercase(), *alias)
         ).collect::<HashMap<_, _>>();
@@ -611,63 +611,63 @@ impl QueryValueChooser for InteractiveModel {
             &state_to_ident.keys().map(|s|s.as_str()).collect_vec(),
             &["C_NAME"]
         );
-        (*state_to_ident.get(self.send_mask_receive_state_str(mask)).unwrap()).clone().into()
+        Ok((*state_to_ident.get(self.send_mask_receive_state_str(mask)?).unwrap()).clone().into())
     }
 
-    fn choose_aggregate_function_name(&mut self, func_names: Vec<&String>, _dist: rand::distributions::WeightedIndex<f64>) -> ObjectName {
+    fn choose_aggregate_function_name(&mut self, func_names: Vec<&String>, _dist: rand::distributions::WeightedIndex<f64>) -> DecisionResult<ObjectName> {
         let mask = self.gen_mask_strict(
             &func_names.iter().map(|s| s.as_str()).collect_vec(),
             &["AGG_FUNC"]
         );
-        let fname = self.send_mask_receive_state_str(mask).to_string();
-        ObjectName(vec![Ident {
+        let fname = self.send_mask_receive_state_str(mask)?.to_string();
+        Ok(ObjectName(vec![Ident {
             value: fname,
             quote_style: None,
-        }])
+        }]))
     }
 
-    fn choose_bigint(&mut self) -> String {
+    fn choose_bigint(&mut self) -> DecisionResult<String> {
         let mask = self.get_sample_mask_by_type(&SubgraphType::BigInt);
-        self.send_mask_receive_state_str(mask).to_string()
+        Ok(self.send_mask_receive_state_str(mask)?.to_string())
     }
 
-    fn choose_integer(&mut self) -> String {
+    fn choose_integer(&mut self) -> DecisionResult<String> {
         let mask = self.get_sample_mask_by_type(&SubgraphType::Integer);
-        self.send_mask_receive_state_str(mask).to_string()
+        Ok(self.send_mask_receive_state_str(mask)?.to_string())
     }
 
-    fn choose_numeric(&mut self) -> String {
+    fn choose_numeric(&mut self) -> DecisionResult<String> {
         let mask = self.get_sample_mask_by_type(&SubgraphType::Numeric);
-        self.send_mask_receive_state_str(mask).to_string()
+        Ok(self.send_mask_receive_state_str(mask)?.to_string())
     }
 
-    fn choose_text(&mut self) -> String {
+    fn choose_text(&mut self) -> DecisionResult<String> {
         let mask = self.get_sample_mask_by_type(&SubgraphType::Text);
-        self.send_mask_receive_state_str(mask).to_string()
+        Ok(self.send_mask_receive_state_str(mask)?.to_string())
     }
 
-    fn choose_date(&mut self) -> String {
+    fn choose_date(&mut self) -> DecisionResult<String> {
         let mask = self.get_sample_mask_by_type(&SubgraphType::Date);
-        self.send_mask_receive_state_str(mask).to_string()
+        Ok(self.send_mask_receive_state_str(mask)?.to_string())
     }
 
-    fn choose_timestamp(&mut self) -> String {
+    fn choose_timestamp(&mut self) -> DecisionResult<String> {
         let mask = self.get_sample_mask_by_type(&SubgraphType::Timestamp);
-        self.send_mask_receive_state_str(mask).to_string()
+        Ok(self.send_mask_receive_state_str(mask)?.to_string())
     }
 
-    fn choose_interval(&mut self, with_field: bool) -> (String, Option<DateTimeField>) {
+    fn choose_interval(&mut self, with_field: bool) -> DecisionResult<(String, Option<DateTimeField>)> {
         let mask = self.get_sample_mask_by_type(&SubgraphType::Interval);
-        let interval = self.send_mask_receive_state_str(mask).to_string();
-        if with_field {
+        let interval = self.send_mask_receive_state_str(mask)?.to_string();
+        Ok(if with_field {
             (
                 interval.split_once(" seconds").unwrap().0.to_string(),
                 Some(DateTimeField::Second)
             )
-        } else { (interval, None) }
+        } else { (interval, None) })
     }
 
-    fn choose_qualified_wildcard_relation<'a>(&mut self, clause_context: &'a ClauseContext, wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation) {
+    fn choose_qualified_wildcard_relation<'a>(&mut self, clause_context: &'a ClauseContext, wildcard_relations: &WildcardRelationsValue) -> DecisionResult<(Ident, &'a Relation)> {
         let aliases = wildcard_relations.relation_levels_selectable_by_qualified_wildcard
             .iter().flat_map(|v| v.into_iter()).collect_vec();
         let state_to_ident = aliases.iter().map(
@@ -677,33 +677,33 @@ impl QueryValueChooser for InteractiveModel {
             &state_to_ident.keys().map(|s|s.as_str()).collect_vec(),
             &["R_NAME"]
         );
-        let alias = (*state_to_ident.get(self.send_mask_receive_state_str(mask)).unwrap()).clone();
+        let alias = (*state_to_ident.get(self.send_mask_receive_state_str(mask)?).unwrap()).clone();
         let relation = clause_context.get_relation_by_name(&alias);
-        (alias.into(), relation)
+        Ok((alias.into(), relation))
     }
 
-    fn choose_select_alias(&mut self) -> Ident {
+    fn choose_select_alias(&mut self) -> DecisionResult<Ident> {
         self.free_select_alias_index += 1;
         let c_name = format!("C{}", self.free_select_alias_index);
         assert!(self.send_mask_receive_state_str(self.gen_mask_strict(
             &vec![c_name.as_str()],
             &["C_NAME"]
-        )) == c_name);
-        Ident::new(c_name)
+        ))? == c_name);
+        Ok(Ident::new(c_name))
     }
 
-    fn choose_from_alias(&mut self) -> Ident {
+    fn choose_from_alias(&mut self) -> DecisionResult<Ident> {
         self.free_from_alias_index += 1;
         let r_name = format!("T{}", self.free_from_alias_index);
         assert!(self.send_mask_receive_state_str(self.gen_mask_strict(
             &vec![r_name.as_str()],
             &["R_NAME"]
-        )) == r_name);
-        Ident::new(r_name)
+        ))? == r_name);
+        Ok(Ident::new(r_name))
     }
 
-    fn choose_from_column_renames(&mut self, _n_columns: usize) -> Vec<Ident> {
-        vec![]  // do not rename anything
+    fn choose_from_column_renames(&mut self, _n_columns: usize) -> DecisionResult<Vec<Ident>> {
+        Ok(vec![])  // do not rename anything
     }
 
     fn reset(&mut self) {

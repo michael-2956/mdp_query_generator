@@ -122,7 +122,7 @@ impl AggregateFunctionBuilder {
         let (func_names, dist) = generator.config.aggregate_functions_distribution.get_functions_and_dist(&args_type, &return_type);
         let name = unwrap_pat!(expr, Expr::Function(ast::Function{ name, .. }), name);
         *name = ObjectName(vec![highlight_ident()]);
-        *name = value_chooser!(generator).choose_aggregate_function_name(func_names, dist);
+        *name = value_chooser!(generator).choose_aggregate_function_name(func_names, dist).map_err(|e| e.into())?;
 
         generator.expect_state("EXIT_aggregate_function")?;
         Ok(return_type)

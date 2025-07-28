@@ -354,15 +354,15 @@ impl QueryValueChooser for ChatGPTPromptingModel {
        self.value_choice_query_str = Some(format!("{}", unwrap_query_ptr_unsafe(current_query_ast_ptr_opt)));
     }
 
-    fn choose_from_alias(&mut self) -> Ident {
-        Ident::new(self.get_generated_value("from_alias"))
+    fn choose_from_alias(&mut self) -> DecisionResult<Ident> {
+        Ok(Ident::new(self.get_generated_value("from_alias")))
     }
 
-    fn choose_table_name(&mut self, available_table_names: &Vec<ObjectName>) -> ObjectName {
-        self.get_chosen_value("table_name", available_table_names.clone())
+    fn choose_table_name(&mut self, available_table_names: &Vec<ObjectName>) -> DecisionResult<ObjectName> {
+        Ok(self.get_chosen_value("table_name", available_table_names.clone()))
     }
 
-    fn choose_from_column_renames(&mut self, n_columns: usize) -> Vec<Ident> {
+    fn choose_from_column_renames(&mut self, n_columns: usize) -> DecisionResult<Vec<Ident>> {
         let do_rename = self.get_chosen_value("from_column_renames_do_rename", vec!["RENAME COLUMNS", "SKIP THIS STEP"]);
         let mut output = vec![];
         if do_rename == "RENAME COLUMNS" {
@@ -380,14 +380,14 @@ impl QueryValueChooser for ChatGPTPromptingModel {
                 )));
             }
         }
-        output
+        Ok(output)
     }
 
-    fn choose_select_alias(&mut self) -> Ident {
-        Ident::new(self.get_generated_value("select_alias"))
+    fn choose_select_alias(&mut self) -> DecisionResult<Ident> {
+        Ok(Ident::new(self.get_generated_value("select_alias")))
     }
 
-    fn choose_qualified_wildcard_relation<'a>(&mut self, clause_context: &'a ClauseContext, wildcard_relations: &WildcardRelationsValue) -> (Ident, &'a Relation) {
+    fn choose_qualified_wildcard_relation<'a>(&mut self, clause_context: &'a ClauseContext, wildcard_relations: &WildcardRelationsValue) -> DecisionResult<(Ident, &'a Relation)> {
         let available_relations = wildcard_relations.relation_levels_selectable_by_qualified_wildcard
             .iter().filter(|x| !x.is_empty())
             .flat_map(|v| v.iter().cloned()).collect::<Vec<_>>();
@@ -396,47 +396,47 @@ impl QueryValueChooser for ChatGPTPromptingModel {
 
         let relation = clause_context.get_relation_by_name(&rel_name);
 
-        (rel_name.into(), relation)
+        Ok((rel_name.into(), relation))
     }
 
-    fn choose_aggregate_function_name(&mut self, func_names: Vec<&String>, _dist: WeightedIndex<f64>) -> ObjectName {
+    fn choose_aggregate_function_name(&mut self, func_names: Vec<&String>, _dist: WeightedIndex<f64>) -> DecisionResult<ObjectName> {
         let func_name = self.get_chosen_value("aggregate_function_name", func_names);
-        ObjectName(vec![Ident::new(func_name)])
+        Ok(ObjectName(vec![Ident::new(func_name)]))
     }
 
-    fn choose_select_ident_for_order_by(&mut self, aliases: &Vec<&IdentName>) -> Ident {
-        self.get_chosen_value("select_alias_order_by", aliases.clone()).clone().into()
+    fn choose_select_ident_for_order_by(&mut self, aliases: &Vec<&IdentName>) -> DecisionResult<Ident> {
+        Ok(self.get_chosen_value("select_alias_order_by", aliases.clone()).clone().into())
     }
 
-    fn choose_bigint(&mut self) -> String {
-        self.get_generated_value("bigint")
+    fn choose_bigint(&mut self) -> DecisionResult<String> {
+        Ok(self.get_generated_value("bigint"))
     }
 
-    fn choose_integer(&mut self) -> String {
-        self.get_generated_value("integer")
+    fn choose_integer(&mut self) -> DecisionResult<String> {
+        Ok(self.get_generated_value("integer"))
     }
 
-    fn choose_numeric(&mut self) -> String {
-        self.get_generated_value("numeric")
+    fn choose_numeric(&mut self) -> DecisionResult<String> {
+        Ok(self.get_generated_value("numeric"))
     }
 
-    fn choose_text(&mut self) -> String {
-        self.get_generated_value("text")
+    fn choose_text(&mut self) -> DecisionResult<String> {
+        Ok(self.get_generated_value("text"))
     }
 
-    fn choose_date(&mut self) -> String {
-        self.get_generated_value("date")
+    fn choose_date(&mut self) -> DecisionResult<String> {
+        Ok(self.get_generated_value("date"))
     }
 
-    fn choose_timestamp(&mut self) -> String {
-        self.get_generated_value("timestamp")
+    fn choose_timestamp(&mut self) -> DecisionResult<String> {
+        Ok(self.get_generated_value("timestamp"))
     }
 
-    fn choose_interval(&mut self, _with_field: bool) -> (String, Option<DateTimeField>) {
-        (self.get_generated_value("interval"), None)
+    fn choose_interval(&mut self, _with_field: bool) -> DecisionResult<(String, Option<DateTimeField>)> {
+        Ok((self.get_generated_value("interval"), None))
     }
 
-    fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, check_accessibility: CheckAccessibility, column_retrieval_options: ColumnRetrievalOptions) -> (SubgraphType, [IdentName; 2]) {
+    fn choose_column(&mut self, clause_context: &ClauseContext, column_types: Vec<SubgraphType>, check_accessibility: CheckAccessibility, column_retrieval_options: ColumnRetrievalOptions) -> DecisionResult<(SubgraphType, [IdentName; 2])> {
         let columns: Vec<_> = clause_context.get_non_empty_column_levels_by_types(
             column_types.clone(), check_accessibility, column_retrieval_options.clone()
         ).into_iter().flat_map(|v| v.into_iter()).collect();
@@ -452,7 +452,7 @@ impl QueryValueChooser for ChatGPTPromptingModel {
 
         let (tp, [rel_name, col_name]) = column_options_map.get(map_key).unwrap();
 
-        ((**tp).clone(), [(**rel_name).clone(), (**col_name).clone()])
+        Ok(((**tp).clone(), [(**rel_name).clone(), (**col_name).clone()]))
     }
 
     fn reset(&mut self) { }

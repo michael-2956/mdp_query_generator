@@ -44,7 +44,7 @@ impl ColumnSpecBuilder {
         });
         let (selected_type, qualified_column_name) = value_chooser!(generator).choose_column(
             &generator.clause_context, column_types, check_accessibility.clone(), column_retrieval_options
-        );
+        ).map_err(|e| e.into())?;
         *ident_expr = if check_accessibility == CheckAccessibility::QualifiedColumnName {
             Expr::CompoundIdentifier(qualified_column_name.into_iter().map(IdentName::into).collect())
         } else {

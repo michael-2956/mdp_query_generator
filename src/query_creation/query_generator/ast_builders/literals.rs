@@ -35,13 +35,13 @@ impl LiteralsBuilder {
                         // however, int can be cast to bigint (if required), so no problem for now.
                         // - in AST->path, the extracted 'int' path will produce the same query,
                         // even though the intended type could be bigint, if it is too small.
-                        (SubgraphType::BigInt, value_chooser!(generator).choose_bigint())
+                        (SubgraphType::BigInt, value_chooser!(generator).choose_bigint().map_err(|e| e.into())?)
                     },
                     "number_literal_integer" => {
-                        (SubgraphType::Integer, value_chooser!(generator).choose_integer())
+                        (SubgraphType::Integer, value_chooser!(generator).choose_integer().map_err(|e| e.into())?)
                     },
                     "number_literal_numeric" => {
-                        (SubgraphType::Numeric, value_chooser!(generator).choose_numeric())
+                        (SubgraphType::Numeric, value_chooser!(generator).choose_numeric().map_err(|e| e.into())?)
                     },
                     _ => unreachable!(),
                 };
@@ -56,17 +56,17 @@ impl LiteralsBuilder {
             },
             "text_literal" => {
                 *expr = Expr::Value(Value::SingleQuotedString(highlight_str()));
-                *unwrap_pat!(expr, Expr::Value(Value::SingleQuotedString(s)), s) = value_chooser!(generator).choose_text();
+                *unwrap_pat!(expr, Expr::Value(Value::SingleQuotedString(s)), s) = value_chooser!(generator).choose_text().map_err(|e| e.into())?;
                 SubgraphType::Text
             },
             "date_literal" => {
                 *expr = Expr::TypedString { data_type: DataType::Date, value: highlight_str() };
-                *unwrap_pat!(expr, Expr::TypedString { value, .. }, value) = value_chooser!(generator).choose_date();
+                *unwrap_pat!(expr, Expr::TypedString { value, .. }, value) = value_chooser!(generator).choose_date().map_err(|e| e.into())?;
                 SubgraphType::Date
             },
             "timestamp_literal" => {
                 *expr = Expr::TypedString { data_type: DataType::Timestamp(None, TimezoneInfo::None), value: highlight_str() };
-                *unwrap_pat!(expr, Expr::TypedString { value, .. }, value) = value_chooser!(generator).choose_timestamp();
+                *unwrap_pat!(expr, Expr::TypedString { value, .. }, value) = value_chooser!(generator).choose_timestamp().map_err(|e| e.into())?;
                 SubgraphType::Timestamp
             },
             "interval_literal" => {
@@ -88,7 +88,7 @@ impl LiteralsBuilder {
                 ), Expr::Value(Value::SingleQuotedString(s)), s);
 
                 let leading_field;
-                (*value, leading_field) = value_chooser!(generator).choose_interval(with_field);
+                (*value, leading_field) = value_chooser!(generator).choose_interval(with_field).map_err(|e| e.into())?;
 
                 *unwrap_pat!(expr, Expr::Interval(Interval { leading_field, .. }), leading_field) = leading_field;
 

@@ -49,7 +49,7 @@ impl SelectItemBuilder {
                         let wildcard_relations = unwrap_variant!(generator.state_generator.get_named_value::<WildcardRelationsValue>().unwrap(), ValueSetterValue::WildcardRelations);
                         let (alias, relation) = value_chooser!(generator).choose_qualified_wildcard_relation(
                             &generator.clause_context, wildcard_relations
-                        );
+                        ).map_err(|e| e.into())?;
                         *select_item = SelectItem::QualifiedWildcard(
                             ObjectName(vec![alias]),
                             WildcardAdditionalOptions {
@@ -74,7 +74,7 @@ impl SelectItemBuilder {
                             expr: TypesBuilder::highlight(), alias: highlight_ident(),
                         };
                         let alias = unwrap_pat!(select_item, SelectItem::ExprWithAlias { alias, .. }, alias);
-                        *alias = value_chooser!(generator).choose_select_alias();
+                        *alias = value_chooser!(generator).choose_select_alias().map_err(|e| e.into())?;
                         (
                             Some(alias.clone().into()),
                             unwrap_pat!(select_item, SelectItem::ExprWithAlias { expr, .. }, expr)

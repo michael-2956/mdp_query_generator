@@ -317,7 +317,7 @@ impl<StC: StateChooser + Send + Sync> QueryGenerator<StC> {
         &mut self, substitute_model: Box<dyn SubstituteModel>, value_chooser: Box<dyn QueryValueChooser>, model: Box<dyn PathwayGraphModel>
     ) -> Box<dyn PathwayGraphModel> {
         self.train_model = Some(model);
-        self.generate_with_substitute_model_and_value_chooser(substitute_model, value_chooser);
+        self.generate_with_substitute_model_and_value_chooser(substitute_model, value_chooser).unwrap();
         self.train_model.take().unwrap()
     }
 }
