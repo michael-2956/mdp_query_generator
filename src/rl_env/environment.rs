@@ -42,6 +42,7 @@ pub enum ConstraintType {
 // }
 
 pub struct ConstraintMeetingEnvironment {
+    config: Config,
     // constraint: QueryConstraint,
     query_generator: Option<QueryGenerator<MaxProbStateChooser>>,
     observation_rs: crossbeam_channel::Receiver<Option<Vec<bool>>>,
@@ -64,6 +65,7 @@ impl ConstraintMeetingEnvironment {
         ) = Self::create_model_and_generator(config.clone());
 
         Self {
+            config,
             // constraint,
             query_generator: Some(query_generator),
             observation_rs,
@@ -73,6 +75,15 @@ impl ConstraintMeetingEnvironment {
             truncated: false,
             terminated: false,
         }
+    }
+
+    fn restore_generator(&mut self) {
+        let state_generator = MarkovChainGenerator::with_config(&self.config.chain_config).unwrap();
+        self.query_generator = Some(QueryGenerator::from_state_generator_and_config(
+            state_generator,
+            self.config.generator_config.clone(),
+            Box::new(DeterministicModel::empty())
+        ));
     }
 
     fn create_model_and_generator(config: Config) -> (
@@ -138,13 +149,13 @@ impl ConstraintMeetingEnvironment {
             }
             let (qg, model, query) = match self.generator_handle.take().unwrap().join().unwrap() {
                 (Ok((model, query)), qg) => (qg, model, query),
-                (Err((qg_error, model)), qg) => match qg_error {
+                (Err((qg_error, model)), _qg) => match qg_error {
                     QueryGenerationError::StateGeneration(
                         StateGenerationError::ModelDecisionError(DecisionError::Truncated)
                     ) => {
                         assert!(self.truncated);  // sanity check
-                        self.query_generator = Some(qg);
-                        self.model = Some(model);
+                        self.restore_generator();  // reset the generator
+                        self.model = Some(model);  // reuse the model
                         return Ok(None)
                     },
                     any => return Err(any)
@@ -483,7 +494,7 @@ impl InteractiveModel {
         self.observation_sd.send(Some(mask.clone())).unwrap();
         let decision_id = match self.decision_rs.recv() {
             Ok(Some(decision_id)) => decision_id,
-            Ok(None) => panic!("No decision (got None)"),
+            Ok(None) => return Err(DecisionError::Truncated),
             Err(err) => panic!("decision_rs.recv() error: {err}")
         };
         assert!(mask[decision_id]);
