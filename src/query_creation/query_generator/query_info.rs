@@ -1122,6 +1122,8 @@ impl QueryProps {
         self.has_order_by = true;
     }
 
+    /// checks presence of LIMIT in the set expression, \
+    /// as we cannot for example do (select 1 limit 1) limit 2
     pub fn limit_present(&self) -> bool {
         self.has_limit
     }

@@ -41,7 +41,7 @@ pub enum ConstraintType {
 //     }
 // }
 
-pub struct ConstraintMeetingEnvironment {
+pub struct QueryCreationEnvironment {
     config: Config,
     // constraint: QueryConstraint,
     query_generator: Option<QueryGenerator<MaxProbStateChooser>>,
@@ -53,7 +53,7 @@ pub struct ConstraintMeetingEnvironment {
     terminated: bool,
 }
 
-impl ConstraintMeetingEnvironment {
+impl QueryCreationEnvironment {
     pub fn new(config_path: PathBuf) -> Self {
         let config = Config::read_config(&config_path).unwrap();
         

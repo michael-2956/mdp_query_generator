@@ -573,11 +573,11 @@ digraph G {
         limit_not_present -> single_row_true
         single_row_true -> EXIT_LIMIT
 
-        limit_num [label="limit [num]\nmod: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
-        limit_not_present -> limit_num
-        call52_types [TYPES="[compatible]", MODS="[no column spec, no aggregate]", label="TYPES: [compatible(numeric)]\nMODS: [no column spec, no aggregate]", shape=rectangle, style=filled, color=lightblue]
-        limit_num -> call52_types
-        call52_types -> EXIT_LIMIT
+        // limit_num [label="limit [num]\nmod: 'single row' -> OFF", modifier="single row", modifier_mode="off"]
+        // limit_not_present -> limit_num
+        // call52_types [TYPES="[compatible]", MODS="[no column spec, no aggregate]", label="TYPES: [compatible(numeric)]\nMODS: [no column spec, no aggregate]", shape=rectangle, style=filled, color=lightblue]
+        // limit_num -> call52_types
+        // call52_types -> EXIT_LIMIT
     }
 
     subgraph def_types {
